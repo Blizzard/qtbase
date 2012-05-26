@@ -1068,9 +1068,8 @@ bool QAbstractButton::event(QEvent *e)
         case QEvent::HoverEnter:
         case QEvent::HoverLeave:
         case QEvent::ContextMenu:
-#ifndef QT_NO_WHEELEVENT
-        case QEvent::Wheel:
-#endif
+            // QEvent::Wheel is ignored when the button is enabled. It would be
+            // wrong to consume it when the button is disabled.
             return true;
         default:
             break;
