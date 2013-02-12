@@ -573,7 +573,7 @@
 #    if __has_feature(cxx_inheriting_constructors)
 #      define Q_COMPILER_INHERITING_CONSTRUCTORS
 #    endif
-#    if __has_feature(cxx_generalized_initializers)
+#    if __has_feature(cxx_generalized_initializers) && (!defined(Q_OS_MAC) || defined(_LIBCPP_VERSION))
 #      define Q_COMPILER_INITIALIZER_LISTS
 #      define Q_COMPILER_UNIFORM_INIT /* both covered by this feature macro, according to docs */
 #    endif
@@ -598,7 +598,7 @@
 #    if __has_feature(cxx_reference_qualified_functions)
 #      define Q_COMPILER_REF_QUALIFIERS
 #    endif
-#    if __has_feature(cxx_rvalue_references)
+#    if __has_feature(cxx_rvalue_references) && (!defined(Q_OS_MAC) || defined(_LIBCPP_VERSION))
 #      define Q_COMPILER_RVALUE_REFS
 #    endif
 #    if __has_feature(cxx_static_assert)
@@ -951,3 +951,5 @@
 #endif
 
 #endif // QCOMPILERDETECTION_H
+
+#undef Q_COMPILER_INITIALIZER_LISTS
