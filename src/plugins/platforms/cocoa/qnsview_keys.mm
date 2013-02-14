@@ -151,7 +151,7 @@
     bool accepted = true;
     if (m_sendKeyEvent && m_composingText.isEmpty()) {
         QWindowSystemInterface::handleExtendedKeyEvent(window, timestamp, QEvent::Type(eventType), keyCode, modifiers,
-                                                       nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1, false);
+                                                       nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1, false, nsevent);
         accepted = QWindowSystemInterface::flushWindowSystemEvents();
     }
     m_sendKeyEvent = false;
@@ -255,7 +255,11 @@
                                                timestamp,
                                                (lastKnownModifiers & mac_mask) ? QEvent::KeyRelease : QEvent::KeyPress,
                                                qtCode,
-                                               qmodifiers ^ [QNSView convertKeyModifiers:mac_mask]);
+                                               qmodifiers ^ [QNSView convertKeyModifiers:mac_mask],
+                                               QString(),
+                                               false,
+                                               1,
+                                               nsevent);
     }
 }
 

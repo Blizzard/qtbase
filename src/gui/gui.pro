@@ -34,7 +34,15 @@ testcocoon {
 }
 
 osx: LIBS_PRIVATE += -framework AppKit
-darwin: LIBS_PRIVATE += -framework CoreGraphics
+darwin {
+    macos {
+        LIBS_PRIVATE += -framework ApplicationServices
+        LIBS_PRIVATE += -framework CoreServices
+    }
+    LIBS_PRIVATE += -framework CoreGraphics
+    LIBS_PRIVATE += -framework CoreFoundation
+    LIBS_PRIVATE += -framework Foundation
+}
 
 CONFIG += simd optimize_full
 

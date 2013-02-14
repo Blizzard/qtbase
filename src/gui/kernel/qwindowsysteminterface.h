@@ -122,20 +122,22 @@ public:
                                       quint32 nativeVirtualKey, quint32 nativeModifiers, const QString & text = QString(), bool autorep = false, ushort count = 1);
 
     template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
-    static bool handleKeyEvent(QWindow *window, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
+    static bool handleKeyEvent(QWindow *window, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1, void* nativeEvent = nullptr);
     template<typename Delivery = QWindowSystemInterface::DefaultDelivery>
-    static bool handleKeyEvent(QWindow *window, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
+    static bool handleKeyEvent(QWindow *window, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1, void* nativeEvent = nullptr);
 
     static bool handleExtendedKeyEvent(QWindow *window, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                        quint32 nativeScanCode, quint32 nativeVirtualKey,
                                        quint32 nativeModifiers,
                                        const QString& text = QString(), bool autorep = false,
-                                       ushort count = 1, bool tryShortcutOverride = true);
+                                       ushort count = 1, bool tryShortcutOverride = true,
+                                       void* nativeEvent = nullptr);
     static bool handleExtendedKeyEvent(QWindow *window, ulong timestamp, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                        quint32 nativeScanCode, quint32 nativeVirtualKey,
                                        quint32 nativeModifiers,
                                        const QString& text = QString(), bool autorep = false,
-                                       ushort count = 1, bool tryShortcutOverride = true);
+                                       ushort count = 1, bool tryShortcutOverride = true,
+                                       void* nativeEvent = nullptr);
     static bool handleWheelEvent(QWindow *window, const QPointF &local, const QPointF &global,
                                  QPoint pixelDelta, QPoint angleDelta,
                                  Qt::KeyboardModifiers mods = Qt::NoModifier,

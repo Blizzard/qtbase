@@ -491,12 +491,12 @@ bool QWindowSystemInterface::handleShortcutEvent(QWindow *window, ulong timestam
 #endif
 }
 
-QT_DEFINE_QPA_EVENT_HANDLER(bool, handleKeyEvent, QWindow *window, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count) {
+QT_DEFINE_QPA_EVENT_HANDLER(bool, handleKeyEvent, QWindow *window, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count, void* nativeEvent) {
     unsigned long time = QWindowSystemInterfacePrivate::eventTime.elapsed();
-    return handleKeyEvent<Delivery>(window, time, t, k, mods, text, autorep, count);
+    return handleKeyEvent<Delivery>(window, time, t, k, mods, text, autorep, count, nativeEvent);
 }
 
-QT_DEFINE_QPA_EVENT_HANDLER(bool, handleKeyEvent, QWindow *window, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count)
+QT_DEFINE_QPA_EVENT_HANDLER(bool, handleKeyEvent, QWindow *window, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count, void* nativeEvent)
 {
 #if defined(Q_OS_MACOS)
     if (t == QEvent::KeyPress && QWindowSystemInterface::handleShortcutEvent(window, timestamp, k, mods, 0, 0, 0, text, autorep, count))
@@ -504,7 +504,7 @@ QT_DEFINE_QPA_EVENT_HANDLER(bool, handleKeyEvent, QWindow *window, ulong timesta
 #endif
 
     QWindowSystemInterfacePrivate::KeyEvent * e =
-            new QWindowSystemInterfacePrivate::KeyEvent(window, timestamp, t, k, mods, text, autorep, count);
+            new QWindowSystemInterfacePrivate::KeyEvent(window, timestamp, t, k, mods, text, autorep, count, nativeEvent);
     return QWindowSystemInterfacePrivate::handleWindowSystemEvent<Delivery>(e);
 }
 
@@ -512,11 +512,12 @@ bool QWindowSystemInterface::handleExtendedKeyEvent(QWindow *window, QEvent::Typ
                                                     quint32 nativeScanCode, quint32 nativeVirtualKey,
                                                     quint32 nativeModifiers,
                                                     const QString& text, bool autorep,
-                                                    ushort count, bool tryShortcutOverride)
+                                                    ushort count, bool tryShortcutOverride,
+                                                    void* nativeEvent)
 {
     unsigned long time = QWindowSystemInterfacePrivate::eventTime.elapsed();
     return handleExtendedKeyEvent(window, time, type, key, modifiers, nativeScanCode, nativeVirtualKey, nativeModifiers,
-                           text, autorep, count, tryShortcutOverride);
+                           text, autorep, count, tryShortcutOverride, nativeEvent);
 }
 
 bool QWindowSystemInterface::handleExtendedKeyEvent(QWindow *window, ulong timestamp, QEvent::Type type, int key,
@@ -524,7 +525,8 @@ bool QWindowSystemInterface::handleExtendedKeyEvent(QWindow *window, ulong times
                                                     quint32 nativeScanCode, quint32 nativeVirtualKey,
                                                     quint32 nativeModifiers,
                                                     const QString& text, bool autorep,
-                                                    ushort count, bool tryShortcutOverride)
+                                                    ushort count, bool tryShortcutOverride,
+                                                    void* nativeEvent)
 {
 #if defined(Q_OS_MACOS)
     if (tryShortcutOverride && type == QEvent::KeyPress && QWindowSystemInterface::handleShortcutEvent(window,
@@ -537,7 +539,7 @@ bool QWindowSystemInterface::handleExtendedKeyEvent(QWindow *window, ulong times
 
     QWindowSystemInterfacePrivate::KeyEvent * e =
             new QWindowSystemInterfacePrivate::KeyEvent(window, timestamp, type, key, modifiers,
-                nativeScanCode, nativeVirtualKey, nativeModifiers, text, autorep, count);
+                nativeScanCode, nativeVirtualKey, nativeModifiers, text, autorep, count, nativeEvent);
     return QWindowSystemInterfacePrivate::handleWindowSystemEvent(e);
 }
 

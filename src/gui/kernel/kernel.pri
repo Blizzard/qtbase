@@ -161,3 +161,4 @@ qtConfig(opengl) {
 }
 
 win32:HEADERS+=kernel/qwindowdefs_win.h
+macos:OBJECTIVE_SOURCES += kernel/qcocoa_objc.mm
