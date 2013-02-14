@@ -30,6 +30,16 @@ testcocoon {
 
 mac:!ios: LIBS_PRIVATE += -framework Cocoa
 
+mac|darwin {
+	!os {
+		LIBS_PRIVATE += -framework ApplicationServices
+		LIBS_PRIVATE += -framework CoreServices
+		LIBS_PRIVATE += -framework Foundation
+	}
+	LIBS_PRIVATE += -framework CoreFoundation
+}
+		
+
 CONFIG += simd
 
 include(accessible/accessible.pri)

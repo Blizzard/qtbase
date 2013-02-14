@@ -300,10 +300,10 @@ class Q_GUI_EXPORT QKeyEvent : public QInputEvent
 {
 public:
     QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString(),
-              bool autorep = false, ushort count = 1);
+              bool autorep = false, ushort count = 1, void* nativeEvent = 0);
     QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers,
               quint32 nativeScanCode, quint32 nativeVirtualKey, quint32 nativeModifiers,
-              const QString &text = QString(), bool autorep = false, ushort count = 1);
+              const QString &text = QString(), bool autorep = false, ushort count = 1, void* nativeEvent = 0);
     ~QKeyEvent();
 
     int key() const { return k; }
@@ -318,6 +318,7 @@ public:
     inline quint32 nativeScanCode() const { return nScanCode; }
     inline quint32 nativeVirtualKey() const { return nVirtualKey; }
     inline quint32 nativeModifiers() const { return nModifiers; }
+    void* nativeEvent() const { return nEvent; }
 
     // Functions for the extended key event information
 #if QT_DEPRECATED_SINCE(5, 0)
@@ -341,6 +342,7 @@ protected:
     quint32 nScanCode;
     quint32 nVirtualKey;
     quint32 nModifiers;
+    void* nEvent;
     ushort c;
     ushort autor:1;
     // ushort reserved:15;

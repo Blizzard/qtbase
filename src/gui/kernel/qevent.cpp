@@ -891,9 +891,9 @@ QWheelEvent::QWheelEvent(const QPointF &pos, const QPointF& globalPos,
     in the event.
 */
 QKeyEvent::QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers, const QString& text,
-                     bool autorep, ushort count)
+                     bool autorep, ushort count, void* nativeEvent)
     : QInputEvent(type, modifiers), txt(text), k(key),
-      nScanCode(0), nVirtualKey(0), nModifiers(0),
+      nScanCode(0), nVirtualKey(0), nModifiers(0), nEvent(nativeEvent),
       c(count), autor(autorep)
 {
 }
@@ -918,9 +918,9 @@ QKeyEvent::QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers, const 
 */
 QKeyEvent::QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers,
                      quint32 nativeScanCode, quint32 nativeVirtualKey, quint32 nativeModifiers,
-                     const QString &text, bool autorep, ushort count)
+                     const QString &text, bool autorep, ushort count, void* nativeEvent)
     : QInputEvent(type, modifiers), txt(text), k(key),
-      nScanCode(nativeScanCode), nVirtualKey(nativeVirtualKey), nModifiers(nativeModifiers),
+      nScanCode(nativeScanCode), nVirtualKey(nativeVirtualKey), nModifiers(nativeModifiers), nEvent(nativeEvent),
       c(count), autor(autorep)
 {
 }

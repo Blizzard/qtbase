@@ -62,6 +62,11 @@
 
 QT_BEGIN_NAMESPACE
 
+#ifdef Q_OS_MAC
+void qt_mac_retain_event(void* event);
+void qt_mac_release_event(void* event);
+#endif
+
 class Q_GUI_EXPORT QWindowSystemInterfacePrivate {
 public:
     enum EventType {
@@ -235,16 +240,37 @@ public:
 
     class KeyEvent : public InputEvent {
     public:
-        KeyEvent(QWindow *w, ulong time, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1)
+        KeyEvent(QWindow *w, ulong time, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1, void* nEvent = 0)
             :InputEvent(w, time, Key, mods), key(k), unicode(text), repeat(autorep),
              repeatCount(count), keyType(t),
-             nativeScanCode(0), nativeVirtualKey(0), nativeModifiers(0) { }
+             nativeScanCode(0), nativeVirtualKey(0), nativeModifiers(0), nativeEvent(nEvent)
+		{
+#ifdef Q_OS_MAC
+			if (nativeEvent)
+				qt_mac_retain_event(nativeEvent);
+#endif
+		}
         KeyEvent(QWindow *w, ulong time, QEvent::Type t, int k, Qt::KeyboardModifiers mods,
                  quint32 nativeSC, quint32 nativeVK, quint32 nativeMods,
-                 const QString & text = QString(), bool autorep = false, ushort count = 1)
+                 const QString & text = QString(), bool autorep = false, ushort count = 1, void* nEvent = 0)
             :InputEvent(w, time, Key, mods), key(k), unicode(text), repeat(autorep),
              repeatCount(count), keyType(t),
-             nativeScanCode(nativeSC), nativeVirtualKey(nativeVK), nativeModifiers(nativeMods) { }
+		nativeScanCode(nativeSC), nativeVirtualKey(nativeVK), nativeModifiers(nativeMods), nativeEvent(nEvent)
+		{
+#ifdef Q_OS_MAC
+			if (nativeEvent)
+				qt_mac_retain_event(nativeEvent);
+#endif
+		}
+		
+#ifdef Q_OS_MAC
+		virtual ~KeyEvent()
+		{
+			if (nativeEvent)
+				qt_mac_release_event(nativeEvent);
+		}
+#endif
+
         int key;
         QString unicode;
         bool repeat;
@@ -253,6 +279,7 @@ public:
         quint32 nativeScanCode;
         quint32 nativeVirtualKey;
         quint32 nativeModifiers;
+        void* nativeEvent; // BLIZZARD: Used to expose the underlying native event for external modules (CEF)
     };
 
     class TouchEvent : public InputEvent {

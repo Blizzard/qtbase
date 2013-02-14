@@ -123,6 +123,11 @@ SOURCES += \
         kernel/qplatformsystemtrayicon_qpa.cpp \
         kernel/qplatformsessionmanager.cpp
 
+mac {
+    OBJECTIVE_SOURCES += \
+        kernel/qcocoa_objc.mm
+}		
+
 contains(QT_CONFIG, opengl)|contains(QT_CONFIG, opengles2) {
     HEADERS += \
             kernel/qplatformopenglcontext.h \

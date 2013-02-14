@@ -1677,7 +1677,7 @@ void QGuiApplicationPrivate::processKeyEvent(QWindowSystemInterfacePrivate::KeyE
 
     QKeyEvent ev(e->keyType, e->key, e->modifiers,
                  e->nativeScanCode, e->nativeVirtualKey, e->nativeModifiers,
-                 e->unicode, e->repeat, e->repeatCount);
+                 e->unicode, e->repeat, e->repeatCount, e->nativeEvent);
     ev.setTimestamp(e->timestamp);
 
     // only deliver key events when we have a window, and no modal window is blocking this window

@@ -254,15 +254,15 @@ bool QWindowSystemInterface::tryHandleExtendedShortcutEvent(QWindow *w, ulong ti
 }
 
 
-void QWindowSystemInterface::handleKeyEvent(QWindow *w, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count) {
+void QWindowSystemInterface::handleKeyEvent(QWindow *w, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count, void* nativeEvent) {
     unsigned long time = QWindowSystemInterfacePrivate::eventTime.elapsed();
-    handleKeyEvent(w, time, t, k, mods, text, autorep, count);
+    handleKeyEvent(w, time, t, k, mods, text, autorep, count, nativeEvent);
 }
 
-void QWindowSystemInterface::handleKeyEvent(QWindow *tlw, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count)
+void QWindowSystemInterface::handleKeyEvent(QWindow *tlw, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text, bool autorep, ushort count, void* nativeEvent)
 {
     QWindowSystemInterfacePrivate::KeyEvent * e =
-            new QWindowSystemInterfacePrivate::KeyEvent(tlw, timestamp, t, k, mods, text, autorep, count);
+            new QWindowSystemInterfacePrivate::KeyEvent(tlw, timestamp, t, k, mods, text, autorep, count, nativeEvent);
     QWindowSystemInterfacePrivate::handleWindowSystemEvent(e);
 }
 
@@ -270,11 +270,11 @@ void QWindowSystemInterface::handleExtendedKeyEvent(QWindow *w, QEvent::Type typ
                                                     quint32 nativeScanCode, quint32 nativeVirtualKey,
                                                     quint32 nativeModifiers,
                                                     const QString& text, bool autorep,
-                                                    ushort count)
+                                                    ushort count, void* nativeEvent)
 {
     unsigned long time = QWindowSystemInterfacePrivate::eventTime.elapsed();
     handleExtendedKeyEvent(w, time, type, key, modifiers, nativeScanCode, nativeVirtualKey, nativeModifiers,
-                           text, autorep, count);
+                           text, autorep, count, nativeEvent);
 }
 
 void QWindowSystemInterface::handleExtendedKeyEvent(QWindow *tlw, ulong timestamp, QEvent::Type type, int key,
@@ -282,11 +282,12 @@ void QWindowSystemInterface::handleExtendedKeyEvent(QWindow *tlw, ulong timestam
                                                     quint32 nativeScanCode, quint32 nativeVirtualKey,
                                                     quint32 nativeModifiers,
                                                     const QString& text, bool autorep,
-                                                    ushort count)
+                                                    ushort count,
+													void* nativeEvent)
 {
     QWindowSystemInterfacePrivate::KeyEvent * e =
             new QWindowSystemInterfacePrivate::KeyEvent(tlw, timestamp, type, key, modifiers,
-                nativeScanCode, nativeVirtualKey, nativeModifiers, text, autorep, count);
+                nativeScanCode, nativeVirtualKey, nativeModifiers, text, autorep, count, nativeEvent);
     QWindowSystemInterfacePrivate::handleWindowSystemEvent(e);
 }
 

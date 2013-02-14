@@ -90,19 +90,19 @@ public:
                                                           quint32 nativeScanCode, quint32 nativeVirtualKey, quint32 nativeModifiers,
                                                           const QString & text = QString(), bool autorep = false, ushort count = 1);
 
-    static void handleKeyEvent(QWindow *w, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
-    static void handleKeyEvent(QWindow *w, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1);
+    static void handleKeyEvent(QWindow *w, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1, void* nativeEvent = 0);
+    static void handleKeyEvent(QWindow *w, ulong timestamp, QEvent::Type t, int k, Qt::KeyboardModifiers mods, const QString & text = QString(), bool autorep = false, ushort count = 1, void* nativeEvent = 0);
 
     static void handleExtendedKeyEvent(QWindow *w, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                        quint32 nativeScanCode, quint32 nativeVirtualKey,
                                        quint32 nativeModifiers,
                                        const QString& text = QString(), bool autorep = false,
-                                       ushort count = 1);
+                                       ushort count = 1, void* nativeEvent = 0);
     static void handleExtendedKeyEvent(QWindow *w, ulong timestamp, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                        quint32 nativeScanCode, quint32 nativeVirtualKey,
                                        quint32 nativeModifiers,
                                        const QString& text = QString(), bool autorep = false,
-                                       ushort count = 1);
+                                       ushort count = 1, void* nativeEvent = 0);
     static void handleWheelEvent(QWindow *w, const QPointF & local, const QPointF & global, QPoint pixelDelta, QPoint angleDelta, Qt::KeyboardModifiers mods = Qt::NoModifier, Qt::ScrollPhase phase = Qt::ScrollUpdate);
     static void handleWheelEvent(QWindow *w, ulong timestamp, const QPointF & local, const QPointF & global, QPoint pixelDelta, QPoint angleDelta, Qt::KeyboardModifiers mods = Qt::NoModifier, Qt::ScrollPhase phase = Qt::ScrollUpdate);
 

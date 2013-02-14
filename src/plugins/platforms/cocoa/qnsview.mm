@@ -1264,7 +1264,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
 
     if (m_sendKeyEvent && m_composingText.isEmpty())
         QWindowSystemInterface::handleExtendedKeyEvent(focusWindow, timestamp, QEvent::Type(eventType), keyCode, modifiers,
-                                                       nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat]);
+                                                       nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1, nsevent);
 
     m_sendKeyEvent = false;
 }
@@ -1333,7 +1333,11 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
                                                timestamp,
                                                (lastKnownModifiers & mac_mask) ? QEvent::KeyRelease : QEvent::KeyPress,
                                                modifier_key_symbols[i].qt_code,
-                                               qmodifiers ^ [QNSView convertKeyModifiers:mac_mask]);
+                                               qmodifiers ^ [QNSView convertKeyModifiers:mac_mask],
+                                               QString(),
+                                               false,
+                                               1,
+                                               nsevent);
     }
 }
 
