@@ -2206,17 +2206,27 @@ QMenu *QLineEdit::createStandardContextMenu()
     QAction *action = nullptr;
 
     if (!isReadOnly()) {
-        action = popup->addAction(QLineEdit::tr("&Undo") + ACCEL_KEY(QKeySequence::Undo));
-        action->setEnabled(d->control->isUndoAvailable());
-        setActionIcon(action, QStringLiteral("edit-undo"));
-        connect(action, SIGNAL(triggered()), SLOT(undo()));
+        // If undo/redo are not available then do not add a grayed out item or separator.
+        bool addedUndoOrRedo = false;
+        if (d->control->isUndoAvailable()) {
+            action = popup->addAction(QLineEdit::tr("&Undo") + ACCEL_KEY(QKeySequence::Undo));
+            action->setEnabled(d->control->isUndoAvailable());
+            setActionIcon(action, QStringLiteral("edit-undo"));
+            connect(action, SIGNAL(triggered()), SLOT(undo()));
+            addedUndoOrRedo = true;
+        }
 
-        action = popup->addAction(QLineEdit::tr("&Redo") + ACCEL_KEY(QKeySequence::Redo));
-        action->setEnabled(d->control->isRedoAvailable());
-        setActionIcon(action, QStringLiteral("edit-redo"));
-        connect(action, SIGNAL(triggered()), SLOT(redo()));
+        if (d->control->isRedoAvailable()) {
+            action = popup->addAction(QLineEdit::tr("&Redo") + ACCEL_KEY(QKeySequence::Redo));
+            action->setEnabled(d->control->isRedoAvailable());
+            setActionIcon(action, QStringLiteral("edit-redo"));
+            connect(action, SIGNAL(triggered()), SLOT(redo()));
+            addedUndoOrRedo = true;
+        }
 
-        popup->addSeparator();
+        if (addedUndoOrRedo) {
+            popup->addSeparator();
+        }
     }
 
 #ifndef QT_NO_CLIPBOARD

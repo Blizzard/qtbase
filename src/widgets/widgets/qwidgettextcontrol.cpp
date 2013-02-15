@@ -2320,15 +2320,26 @@ QMenu *QWidgetTextControl::createStandardContextMenu(const QPointF &pos, QWidget
     QAction *a;
 
     if (d->interactionFlags & Qt::TextEditable) {
-        a = menu->addAction(tr("&Undo") + ACCEL_KEY(QKeySequence::Undo), this, SLOT(undo()));
-        a->setEnabled(d->doc->isUndoAvailable());
-        a->setObjectName(QStringLiteral("edit-undo"));
-        setActionIcon(a, QStringLiteral("edit-undo"));
-        a = menu->addAction(tr("&Redo") + ACCEL_KEY(QKeySequence::Redo), this, SLOT(redo()));
-        a->setEnabled(d->doc->isRedoAvailable());
-        a->setObjectName(QStringLiteral("edit-redo"));
-        setActionIcon(a, QStringLiteral("edit-redo"));
-        menu->addSeparator();
+        // If undo/redo are not available then do not add a grayed out item or separator.
+        bool addedUndoOrRedo = false;
+
+        if (d->doc->isUndoAvailable()) {
+            a = menu->addAction(tr("&Undo") + ACCEL_KEY(QKeySequence::Undo), this, SLOT(undo()));
+            a->setEnabled(d->doc->isUndoAvailable());
+            a->setObjectName(QStringLiteral("edit-undo"));
+            setActionIcon(a, QStringLiteral("edit-undo"));
+            addedUndoOrRedo = true;
+        }
+        if (d->doc->isRedoAvailable()) {
+            a = menu->addAction(tr("&Redo") + ACCEL_KEY(QKeySequence::Redo), this, SLOT(redo()));
+            a->setEnabled(d->doc->isRedoAvailable());
+            a->setObjectName(QStringLiteral("edit-redo"));
+            setActionIcon(a, QStringLiteral("edit-redo"));
+            addedUndoOrRedo = true;
+        }
+        if (addedUndoOrRedo) {
+            menu->addSeparator();
+        }
 
 #ifndef QT_NO_CLIPBOARD
         a = menu->addAction(tr("Cu&t") + ACCEL_KEY(QKeySequence::Cut), this, SLOT(cut()));
