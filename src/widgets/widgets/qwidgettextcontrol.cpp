@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#define QT_BLIZZARD_HIDE_UNDO_REDO
+
 #include "qwidgettextcontrol_p.h"
 #include "qwidgettextcontrol_p_p.h"
 
@@ -2150,6 +2152,22 @@ QMenu *QWidgetTextControl::createStandardContextMenu(const QPointF &pos, QWidget
     QAction *a;
 
     if (d->interactionFlags & Qt::TextEditable) {
+#if defined(QT_BLIZZARD_HIDE_UNDO_REDO)
+        // If Redo/Undo is not available then do not add a grayed out item or separator, it looks bad.
+        bool addedUndoOrRedo = false;
+        if (d->doc->isUndoAvailable()) {
+            a = menu->addAction(tr("&Undo") + ACCEL_KEY(QKeySequence::Undo), this, SLOT(undo()));
+            a->setEnabled(true);
+            addedUndoOrRedo = true;
+        }
+        if (d->doc->isRedoAvailable()) {
+            a = menu->addAction(tr("&Redo") + ACCEL_KEY(QKeySequence::Redo), this, SLOT(redo()));
+            a->setEnabled(true);
+            addedUndoOrRedo = true;
+        }
+        if (addedUndoOrRedo)
+            menu->addSeparator();
+#else
         a = menu->addAction(tr("&Undo") + ACCEL_KEY(QKeySequence::Undo), this, SLOT(undo()));
         a->setEnabled(d->doc->isUndoAvailable());
         setActionIcon(a, QStringLiteral("edit-undo"));
@@ -2157,6 +2175,7 @@ QMenu *QWidgetTextControl::createStandardContextMenu(const QPointF &pos, QWidget
         a->setEnabled(d->doc->isRedoAvailable());
         setActionIcon(a, QStringLiteral("edit-redo"));
         menu->addSeparator();
+#endif
 
 #ifndef QT_NO_CLIPBOARD
         a = menu->addAction(tr("Cu&t") + ACCEL_KEY(QKeySequence::Cut), this, SLOT(cut()));

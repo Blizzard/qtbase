@@ -39,6 +39,8 @@
 **
 ****************************************************************************/
 
+#define QT_BLIZZARD_HIDE_UNDO_REDO
+
 #include "qlineedit.h"
 #include "qlineedit_p.h"
 
@@ -2097,6 +2099,24 @@ QMenu *QLineEdit::createStandardContextMenu()
     QAction *action = 0;
 
     if (!isReadOnly()) {
+#if defined(QT_BLIZZARD_HIDE_UNDO_REDO)
+        // If Redo/Undo is not available then do not add a grayed out item or separator, it looks bad.
+        bool addedUndoOrRedo = false;
+        if (d->control->isUndoAvailable()) {
+            action = popup->addAction(QLineEdit::tr("&Undo") + ACCEL_KEY(QKeySequence::Undo));
+            action->setEnabled(true);
+            connect(action, SIGNAL(triggered()), SLOT(undo()));
+            addedUndoOrRedo = true;
+        }
+        if (d->control->isRedoAvailable()) {
+            action = popup->addAction(QLineEdit::tr("&Redo") + ACCEL_KEY(QKeySequence::Redo));
+            action->setEnabled(true);
+            connect(action, SIGNAL(triggered()), SLOT(redo()));
+            addedUndoOrRedo = true;
+        }
+        if (addedUndoOrRedo)
+            popup->addSeparator();
+#else
         action = popup->addAction(QLineEdit::tr("&Undo") + ACCEL_KEY(QKeySequence::Undo));
         action->setEnabled(d->control->isUndoAvailable());
         setActionIcon(action, QStringLiteral("edit-undo"));
@@ -2108,6 +2128,7 @@ QMenu *QLineEdit::createStandardContextMenu()
         connect(action, SIGNAL(triggered()), SLOT(redo()));
 
         popup->addSeparator();
+#endif
     }
 
 #ifndef QT_NO_CLIPBOARD
