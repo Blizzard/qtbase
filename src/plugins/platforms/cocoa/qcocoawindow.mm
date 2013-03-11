@@ -881,7 +881,7 @@ NSWindow * QCocoaWindow::createNSWindow()
     // and dialogs
     if ((type & Qt::Popup) == Qt::Popup || (type & Qt::Dialog) == Qt::Dialog) {
         QNSPanel *window;
-        window  = [[QNSPanel alloc] initWithContentRect:frame
+        window  = [[QCocoaWindowBuilder createQNSPanel] initWithContentRect:frame
                                          styleMask: styleMask
                                          backing:NSBackingStoreBuffered
                                          defer:NO]; // Deferring window creation breaks OpenGL (the GL context is set up
@@ -903,7 +903,7 @@ NSWindow * QCocoaWindow::createNSWindow()
         createdWindow = window;
     } else {
         QNSWindow *window;
-        window  = [[QNSWindow alloc] initWithContentRect:frame
+        window  = [[QCocoaWindowBuilder createQNSWindow] initWithContentRect:frame
                                          styleMask: styleMask
                                          backing:NSBackingStoreBuffered
                                          defer:NO]; // Deferring window creation breaks OpenGL (the GL context is set up
@@ -1206,3 +1206,16 @@ void QCocoaWindow::setFrameStrutEventsEnabled(bool enabled)
 {
     m_frameStrutEventsEnabled = enabled;
 }
+
+// QCocoaWindowBuilder
+@implementation QCocoaWindowBuilder
++ (QNSWindow *)createQNSWindow
+{
+    return [QNSWindow alloc];
+}
+
++ (QNSPanel *)createQNSPanel
+{
+    return [QNSPanel alloc];
+}
+@end

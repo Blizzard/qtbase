@@ -223,5 +223,15 @@ public: // for QNSView
 
 QT_END_NAMESPACE
 
-#endif // QCOCOAWINDOW_H
+// QCocoaWindowBuilder
+//
+// QCocoaWindowBuilder is a class that provides factory methods for creating instances of
+// QNSWindow and QNSPanel classes. This approach allows the client to inherit from QNSWindow
+// or QNSPanel by overriding the class methods of QCocoaWindowBuilder
+@interface QCocoaWindowBuilder : NSObject {
+}
++ (QNSWindow *)createQNSWindow;
++ (QNSPanel *)createQNSPanel;
+@end
 
+#endif // QCOCOAWINDOW_H
