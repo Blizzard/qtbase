@@ -1598,7 +1598,7 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
     }
 
     // Create NSWindow
-    Class windowClass = shouldBePanel ? [QNSPanel class] : [QNSWindow class];
+    Class windowClass = [QCocoaWindowBuilder getWindowClass:shouldBePanel];
     QCocoaNSWindow *nsWindow = [[windowClass alloc] initWithContentRect:contentRect
         // Mask will be updated in setWindowFlags if not the final mask
         styleMask:styleMask
@@ -1930,6 +1930,24 @@ QDebug operator<<(QDebug debug, const QCocoaWindow *window)
     return debug;
 }
 #endif // !QT_NO_DEBUG_STREAM
+
+// QCocoaWindowBuilder
+@implementation QCocoaWindowBuilder
++ (QNSWindow *)createQNSWindow
+{
+    return [QNSWindow alloc];
+}
+
++ (QNSPanel *)createQNSPanel
+{
+    return [QNSPanel alloc];
+}
+
++ (Class)getWindowClass:(bool) shouldBePanel
+{
+    return shouldBePanel ? [QNSPanel class] : [QNSWindow class];
+}
+@end
 
 #include "moc_qcocoawindow.cpp"
 
