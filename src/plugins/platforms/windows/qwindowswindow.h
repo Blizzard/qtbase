@@ -86,6 +86,7 @@ struct QWindowsGeometryHint
     QSize minimumSize;
     QSize maximumSize;
     QMargins customMargins;
+    const QWindow *window;
 };
 
 struct QWindowCreationContext
@@ -137,7 +138,8 @@ public:
         AlertState = 0x8000,
         Exposed = 0x10000,
         WithinCreate = 0x20000,
-        WithinMaximize = 0x40000
+        WithinMaximize = 0x40000,
+        EmptyFrameMargins = 0x8000,
     };
 
     struct WindowData

@@ -177,6 +177,16 @@ QDebug operator<<(QDebug d, const NCCALCSIZE_PARAMS &p)
 }
 #endif // !Q_OS_WINCE
 
+static bool testAncestorFlags(const QWindowsWindow *window, unsigned flag)
+{
+    while (window) {
+        if (window->testFlag(flag))
+            return true;
+        window = static_cast<QWindowsWindow *>(window->parent());
+    }
+    return false;
+}
+
 // Return the frame geometry relative to the parent
 // if there is one.
 static inline QRect frameGeometry(HWND hwnd, bool topLevel)
@@ -683,7 +693,8 @@ void WindowCreationData::initialize(HWND hwnd, bool frameChange, qreal opacityLe
 QWindowsGeometryHint::QWindowsGeometryHint(const QWindow *w, const QMargins &cm) :
      minimumSize(w->minimumSize()),
      maximumSize(w->maximumSize()),
-     customMargins(cm)
+     customMargins(cm),
+     window(w)
 {
 }
 
@@ -755,7 +766,13 @@ void QWindowsGeometryHint::applyToMinMaxInfo(DWORD style, DWORD exStyle, MINMAXI
                            << " max=" << maximumSize.width() << ',' << maximumSize.height()
                            << " in " << *mmi;
 
-    const QMargins margins = QWindowsGeometryHint::frame(style, exStyle);
+    QMargins margins;
+    const QWindowsWindow *ww = static_cast<const QWindowsWindow *>(window->handle());
+    if (!testAncestorFlags(ww, QWindowsWindow::EmptyFrameMargins)) {
+        margins = QWindowsGeometryHint::frame(style, exStyle);
+    }
+
+
     const int frameWidth = margins.left() + margins.right() + customMargins.left() + customMargins.right();
     const int frameHeight = margins.top() + margins.bottom() + customMargins.top() + customMargins.bottom();
     if (minimumSize.width() > 0)
@@ -1376,6 +1393,16 @@ QRect QWindowsWindow::frameGeometry_sys() const
 {
     // Warning: Returns bogus values when minimized.
     bool isRealTopLevel = window()->isTopLevel() && !m_data.embedded;
+    if (testAncestorFlags(this, EmptyFrameMargins)) {
+        RECT cr;
+        ::GetClientRect(m_data.hwnd, &cr);
+        // one cannot trust cr.left and cr.top, use a correction POINT instead.
+        POINT pt;
+        pt.x = 0;
+        pt.y = 0;
+        ::ClientToScreen(m_data.hwnd, &pt);
+        return QRect(QPoint(pt.x, pt.y), QPoint(pt.x + cr.right - 1, pt.y + cr.bottom - 1));
+    }
     return frameGeometry(m_data.hwnd, isRealTopLevel);
 }
 
@@ -1745,7 +1772,10 @@ QMargins QWindowsWindow::frameMargins() const
     // event sequences, introduce a dirty flag mechanism to be able
     // to cache results.
     if (testFlag(FrameDirty)) {
-        m_data.frame = QWindowsGeometryHint::frame(style(), exStyle());
+        if (!testAncestorFlags(this, EmptyFrameMargins))
+            m_data.frame = QWindowsGeometryHint::frame(style(), exStyle());
+        else
+            m_data.frame = QMargins(0, 0, 0, 0);
         clearFlag(FrameDirty);
     }
     return m_data.frame + m_data.customMargins;
