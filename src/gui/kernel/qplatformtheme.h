@@ -108,7 +108,8 @@ public:
         PasswordMaskCharacter,
         DialogSnapToDefaultButton,
         ContextMenuOnMouseRelease,
-        MousePressAndHoldInterval
+        MousePressAndHoldInterval,
+        MouseDoubleClickDistance
     };
 
     enum DialogType {
@@ -129,6 +130,7 @@ public:
         ComboBoxPalette,
         ItemViewPalette,
         MessageBoxLabelPelette,
+        MessageBoxLabelPalette = MessageBoxLabelPelette,
         TabBarPalette,
         LabelPalette,
         GroupBoxPalette,

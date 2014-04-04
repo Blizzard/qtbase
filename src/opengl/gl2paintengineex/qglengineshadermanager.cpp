@@ -163,7 +163,7 @@ QGLEngineSharedShaders::QGLEngineSharedShaders(const QGLContext* context)
         code[NonPremultipliedImageSrcFragmentShader] = qglslNonPremultipliedImageSrcFragmentShader;
         code[CustomImageSrcFragmentShader] = qglslCustomSrcFragmentShader; // Calls "customShader", which must be appended
         code[SolidBrushSrcFragmentShader] = qglslSolidBrushSrcFragmentShader;
-        if (!QOpenGLFunctions::isES())
+        if (!context->contextHandle()->isES())
             code[TextureBrushSrcFragmentShader] = qglslTextureBrushSrcFragmentShader_desktop;
         else
             code[TextureBrushSrcFragmentShader] = qglslTextureBrushSrcFragmentShader_ES;
@@ -534,7 +534,8 @@ GLuint QGLEngineShaderManager::getUniformLocation(Uniform id)
         "invertedTextureSize",
         "brushTransform",
         "brushTexture",
-        "matrix"
+        "matrix",
+        "translateZ"
     };
 
     if (uniformLocations.at(id) == GLuint(-1))

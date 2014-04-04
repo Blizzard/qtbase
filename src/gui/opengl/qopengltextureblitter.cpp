@@ -45,6 +45,7 @@
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLVertexArrayObject>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 
 QT_BEGIN_NAMESPACE
 
@@ -67,11 +68,8 @@ static const char fragment_shader150[] =
     "uniform sampler2D textureSampler;"
     "uniform bool swizzle;"
     "void main() {"
-    "   if (swizzle) {"
-    "       fragcolor = texture(textureSampler, uv).bgra;"
-    "   } else {"
-    "       fragcolor = texture(textureSampler,uv);"
-    "   }"
+    "   vec4 tmpFragColor = texture(textureSampler, uv);"
+    "   fragcolor = swizzle ? tmpFragColor.bgra : tmpFragColor;"
     "}";
 
 static const char vertex_shader[] =
@@ -90,11 +88,8 @@ static const char fragment_shader[] =
     "uniform sampler2D textureSampler;"
     "uniform bool swizzle;"
     "void main() {"
-    "   if (swizzle) {"
-    "       gl_FragColor = texture2D(textureSampler, uv).bgra;"
-    "   } else {"
-    "       gl_FragColor = texture2D(textureSampler,uv);"
-    "   }"
+    "   highp vec4 tmpFragColor = texture2D(textureSampler,uv);"
+    "   gl_FragColor = swizzle ? tmpFragColor.bgra : tmpFragColor;"
     "}";
 
 static const GLfloat vertex_buffer_data[] = {
@@ -120,11 +115,11 @@ class TextureBinder
 public:
     TextureBinder(GLuint textureId)
     {
-        glBindTexture(GL_TEXTURE_2D, textureId);
+        QOpenGLContext::currentContext()->functions()->glBindTexture(GL_TEXTURE_2D, textureId);
     }
     ~TextureBinder()
     {
-        glBindTexture(GL_TEXTURE_2D, 0);
+        QOpenGLContext::currentContext()->functions()->glBindTexture(GL_TEXTURE_2D, 0);
     }
 };
 
@@ -196,7 +191,7 @@ void QOpenGLTextureBlitterPrivate::blit(GLuint texture,
     program->setUniformValue(textureTransformUniformPos, textureTransform);
     textureMatrixUniformState = User;
 
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    QOpenGLContext::currentContext()->functions()->glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 void QOpenGLTextureBlitterPrivate::blit(GLuint texture,
@@ -219,7 +214,7 @@ void QOpenGLTextureBlitterPrivate::blit(GLuint texture,
         textureMatrixUniformState = Identity;
     }
 
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    QOpenGLContext::currentContext()->functions()->glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 QOpenGLTextureBlitter::QOpenGLTextureBlitter()

@@ -82,7 +82,7 @@ int QPageSetupDialog::exec()
     // we need a temp DEVMODE struct if we don't have a global DEVMODE
     HGLOBAL hDevMode = 0;
     int devModeSize = 0;
-    if (!ep->globalDevMode) {
+    if (!engine->globalDevMode()) {
         devModeSize = sizeof(DEVMODE) + ep->devMode->dmDriverExtra;
         hDevMode = GlobalAlloc(GHND, devModeSize);
         if (hDevMode) {
@@ -92,10 +92,10 @@ int QPageSetupDialog::exec()
         }
         psd.hDevMode = hDevMode;
     } else {
-        psd.hDevMode = ep->devMode;
+        psd.hDevMode = engine->globalDevMode();
     }
 
-    HGLOBAL *tempDevNames = ep->createDevNames();
+    HGLOBAL *tempDevNames = engine->createGlobalDevNames();
     psd.hDevNames = tempDevNames;
 
     QWidget *parent = parentWidget();
@@ -106,55 +106,50 @@ int QPageSetupDialog::exec()
     psd.hwndOwner = parentWindow ? (HWND)QGuiApplication::platformNativeInterface()->nativeResourceForWindow("handle", parentWindow) : 0;
 
     psd.Flags = PSD_MARGINS;
-    double multiplier = 1;
-    switch (QLocale::system().measurementSystem()) {
-    case QLocale::MetricSystem:
-        psd.Flags |= PSD_INHUNDREDTHSOFMILLIMETERS;
-        multiplier = 1;
+    QPageLayout layout = d->printer->pageLayout();
+    switch (layout.units()) {
+    case QPageLayout::Millimeter:
+    case QPageLayout::Inch:
         break;
-    case QLocale::ImperialSystem:
-    case QLocale::ImperialUKSystem:
-        psd.Flags |= PSD_INTHOUSANDTHSOFINCHES;
-        multiplier = 25.4/10;
+    case QPageLayout::Point:
+    case QPageLayout::Pica:
+    case QPageLayout::Didot:
+    case QPageLayout::Cicero:
+        layout.setUnits(QLocale::system().measurementSystem() == QLocale::MetricSystem ? QPageLayout::Millimeter
+                                                                                       : QPageLayout::Inch);
         break;
     }
-
-    QRect marginRect = ep->getPageMargins();
-    psd.rtMargin.left   = marginRect.left()   / multiplier;
-    psd.rtMargin.top    = marginRect.top()    / multiplier;
-    psd.rtMargin.right  = marginRect.width()  / multiplier;;
-    psd.rtMargin.bottom = marginRect.height() / multiplier;;
+    qreal multiplier = 1.0;
+    if (layout.units() == QPageLayout::Millimeter) {
+        psd.Flags |= PSD_INHUNDREDTHSOFMILLIMETERS;
+        multiplier = 100.0;
+    } else { // QPageLayout::Inch)
+        psd.Flags |= PSD_INTHOUSANDTHSOFINCHES;
+        multiplier = 1000.0;
+    }
+    psd.rtMargin.left   = layout.margins().left() * multiplier;
+    psd.rtMargin.top    = layout.margins().top() * multiplier;
+    psd.rtMargin.right  = layout.margins().right() * multiplier;
+    psd.rtMargin.bottom = layout.margins().bottom() * multiplier;
 
     QDialog::setVisible(true);
     bool result = PageSetupDlg(&psd);
     QDialog::setVisible(false);
     if (result) {
-        ep->readDevnames(psd.hDevNames);
-        ep->readDevmode(psd.hDevMode);
-
-        QRect theseMargins = QRect(psd.rtMargin.left   * multiplier,
-                                   psd.rtMargin.top    * multiplier,
-                                   psd.rtMargin.right  * multiplier,
-                                   psd.rtMargin.bottom * multiplier);
-
-        if (theseMargins != marginRect) {
-            ep->setPageMargins(psd.rtMargin.left   * multiplier,
-                               psd.rtMargin.top    * multiplier,
-                               psd.rtMargin.right  * multiplier,
-                               psd.rtMargin.bottom * multiplier);
-        }
-
-        ep->updateCustomPaperSize();
+        engine->setGlobalDevMode(psd.hDevNames, psd.hDevMode);
+        d->printer->setPageMargins(QMarginsF(psd.rtMargin.left / multiplier, psd.rtMargin.right / multiplier,
+                                             psd.rtMargin.top / multiplier, psd.rtMargin.bottom / multiplier),
+                                   layout.units());
 
         // copy from our temp DEVMODE struct
-        if (!ep->globalDevMode && hDevMode) {
+        if (!engine->globalDevMode() && hDevMode) {
             void *src = GlobalLock(hDevMode);
             memcpy(ep->devMode, src, devModeSize);
             GlobalUnlock(hDevMode);
         }
     }
 
-    if (!ep->globalDevMode && hDevMode)
+    if (!engine->globalDevMode() && hDevMode)
         GlobalFree(hDevMode);
     GlobalFree(tempDevNames);
     done(result);

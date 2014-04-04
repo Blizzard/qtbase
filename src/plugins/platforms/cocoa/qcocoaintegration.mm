@@ -52,7 +52,7 @@
 #include "qcocoafiledialoghelper.h"
 #include "qcocoatheme.h"
 #include "qcocoainputcontext.h"
-#include "qmacmime.h"
+#include "qcocoamimetypes.h"
 #include "qcocoaaccessibility.h"
 
 #include <qpa/qplatformaccessibility.h>
@@ -274,6 +274,7 @@ QCocoaIntegration::QCocoaIntegration()
     updateScreens();
 
     QMacInternalPasteboardMime::initializeMimeTypes();
+    QCocoaMimeTypes::initializeMimeTypes();
 }
 
 QCocoaIntegration::~QCocoaIntegration()
@@ -374,6 +375,7 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
     case WindowMasks:
     case MultipleWindows:
     case ForeignWindows:
+    case RasterGLSurface:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -463,6 +465,11 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
     return QPlatformIntegration::styleHint(hint);
 }
 
+Qt::KeyboardModifiers QCocoaIntegration::queryKeyboardModifiers() const
+{
+    return QCocoaKeyMapper::queryKeyboardModifiers();
+}
+
 QList<int> QCocoaIntegration::possibleKeys(const QKeyEvent *event) const
 {
     return mKeyboardMapper->possibleKeys(event);
@@ -487,6 +494,7 @@ void QCocoaIntegration::clearToolbars()
     QHash<QWindow *, NSToolbar *>::const_iterator it = mToolbars.constBegin();
     while (it != mToolbars.constEnd()) {
         [it.value() release];
+        ++it;
     }
     mToolbars.clear();
 }

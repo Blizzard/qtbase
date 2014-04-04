@@ -59,6 +59,7 @@ Q_WIDGETS_EXPORT extern bool qt_tab_all_widgets();
 
 QWidget *qt_button_down = 0; // widget got last button-down
 static QWidget *qt_tablet_target = 0;
+static QWidget *qt_tablet_target_window = 0;
 
 // popup control
 QWidget *qt_popup_down = 0; // popup that contains the pressed widget
@@ -99,12 +100,15 @@ QWidgetWindow::QWidgetWindow(QWidget *widget)
         setSurfaceType(QSurface::RasterGLSurface);
     }
     connect(m_widget, &QObject::objectNameChanged, this, &QWidgetWindow::updateObjectName);
+    connect(this, SIGNAL(screenChanged(QScreen*)), this, SLOT(repaintWindow()));
 }
 
 QWidgetWindow::~QWidgetWindow()
 {
-    if (m_widget == qt_tablet_target)
+    if (m_widget == qt_tablet_target_window) {
         qt_tablet_target = 0;
+        qt_tablet_target_window = 0;
+    }
 }
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -407,6 +411,7 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
                 widgetPos = receiver->mapFromGlobal(event->globalPos());
             QWidget *alien = m_widget->childAt(m_widget->mapFromGlobal(event->globalPos()));
             QMouseEvent e(event->type(), widgetPos, event->windowPos(), event->screenPos(), event->button(), event->buttons(), event->modifiers());
+            QGuiApplicationPrivate::setMouseEventSource(&e, QGuiApplicationPrivate::mouseEventSource(event));
             e.setTimestamp(event->timestamp());
             QApplicationPrivate::sendMouseEvent(receiver, &e, alien, m_widget, &qt_button_down, qt_last_mouse_receiver);
         } else {
@@ -442,6 +447,7 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
                     if (win && win->geometry().contains(event->globalPos())) {
                         const QPoint localPos = win->mapFromGlobal(event->globalPos());
                         QMouseEvent e(QEvent::MouseButtonPress, localPos, localPos, event->globalPos(), event->button(), event->buttons(), event->modifiers());
+                        QGuiApplicationPrivate::setMouseEventSource(&e, QGuiApplicationPrivate::mouseEventSource(event));
                         e.setTimestamp(event->timestamp());
                         QApplication::sendSpontaneousEvent(win, &e);
                     }
@@ -498,6 +504,7 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         // creation of a MouseButtonDblClick event. QTBUG-25831
         QMouseEvent translated(event->type(), mapped, event->windowPos(), event->screenPos(),
                                event->button(), event->buttons(), event->modifiers());
+        QGuiApplicationPrivate::setMouseEventSource(&translated, QGuiApplicationPrivate::mouseEventSource(event));
         translated.setTimestamp(event->timestamp());
         QApplicationPrivate::sendMouseEvent(receiver, &translated, widget, m_widget,
                                             &qt_button_down, qt_last_mouse_receiver);
@@ -552,6 +559,19 @@ void QWidgetWindow::updateGeometry()
     te->posIncludesFrame= false;
     te->frameStrut.setCoords(margins.left(), margins.top(), margins.right(), margins.bottom());
     m_widget->data->fstrut_dirty = false;
+}
+
+// Invalidates the backing store buffer and repaints immediately.
+// ### Qt 5.4: replace with QUpdateWindowRequestEvent.
+void QWidgetWindow::repaintWindow()
+{
+    if (!m_widget->isVisible() || !m_widget->updatesEnabled())
+        return;
+
+    QTLWExtra *tlwExtra = m_widget->window()->d_func()->maybeTopData();
+    if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
+        tlwExtra->backingStoreTracker->markDirty(m_widget->rect(), m_widget,
+                                                 QWidgetBackingStore::UpdateNow, QWidgetBackingStore::BufferInvalid);
 }
 
 Qt::WindowState effectiveState(Qt::WindowStates state);
@@ -771,6 +791,7 @@ void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
             widget = m_widget;
 
         qt_tablet_target = widget;
+        qt_tablet_target_window = m_widget;
     }
 
     if (qt_tablet_target) {
@@ -783,8 +804,10 @@ void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
         QGuiApplication::sendSpontaneousEvent(qt_tablet_target, &ev);
     }
 
-    if (event->type() == QEvent::TabletRelease)
+    if (event->type() == QEvent::TabletRelease) {
         qt_tablet_target = 0;
+        qt_tablet_target_window = 0;
+    }
 }
 #endif // QT_NO_TABLETEVENT
 

@@ -11,6 +11,8 @@ DEFINES   += QT_NO_USING_NAMESPACE
 win32-msvc*|win32-icc:QMAKE_LFLAGS += /BASE:0x67000000
 irix-cc*:QMAKE_CXXFLAGS += -no_prelink -ptused
 
+CONFIG += optimize_full
+
 # otherwise mingw headers do not declare common functions like putenv
 mingw:QMAKE_CXXFLAGS_CXX11 = -std=gnu++0x
 
@@ -24,6 +26,9 @@ ANDROID_LIB_DEPENDENCIES = \
 ANDROID_BUNDLED_JAR_DEPENDENCIES = \
     jar/QtAndroid-bundled.jar \
     jar/QtAndroidAccessibility-bundled.jar
+ANDROID_PERMISSIONS = \
+    android.permission.INTERNET \
+    android.permission.WRITE_EXTERNAL_STORAGE
 
 load(qt_module)
 

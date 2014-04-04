@@ -1691,7 +1691,6 @@ void Configure::applySpecSpecifics()
         dictionary[ "REDUCE_RELOCATIONS" ]  = "yes";
         dictionary[ "QT_GETIFADDRS" ]       = "no";
         dictionary[ "QT_XKBCOMMON" ]        = "no";
-        dictionary[ "JAVASCRIPTCORE_JIT" ]  = "no";
     }
 }
 
@@ -2744,12 +2743,6 @@ void Configure::generateOutputVars()
     if (!dictionary["QT_LFLAGS_SQLITE"].isEmpty())
         qmakeVars += "QT_LFLAGS_SQLITE += " + dictionary["QT_LFLAGS_SQLITE"];
 
-    if (dictionary["JAVASCRIPTCORE_JIT"] == "no")
-        qmakeVars += "JAVASCRIPTCORE_JIT = no";
-    else if (dictionary["JAVASCRIPTCORE_JIT"] == "yes")
-        qmakeVars += "JAVASCRIPTCORE_JIT = yes";
-    // else let JavaScriptCore decide
-
     if (dictionary[ "OPENGL" ] == "yes")
         qtConfig += "opengl";
 
@@ -2956,9 +2949,6 @@ void Configure::generateCachefile()
                                     " = " << dictionary["QT_CPU_FEATURES"] << endl;
         moduleStream << "}" << endl;
         moduleStream << "QT_COORD_TYPE += " << dictionary["QREAL"] << endl;
-
-        if (dictionary["QT_EDITION"] != "QT_EDITION_OPENSOURCE")
-            moduleStream << "DEFINES        *= QT_EDITION=QT_EDITION_DESKTOP" << endl;
 
         if (dictionary["QT_XKBCOMMON"] == "no")
             moduleStream << "DEFINES += QT_NO_XKBCOMMON" << endl;
@@ -3303,10 +3293,6 @@ void Configure::generateQConfigPri()
             configStream << "    QMAKE_DEFAULT_INCDIRS = /usr/include /usr/local/include" << endl;
         }
         configStream << "}" << endl;
-        if (dictionary["QT_EDITION"].contains("OPENSOURCE"))
-            configStream << "QT_EDITION = " << QLatin1String("OpenSource") << endl;
-        else
-            configStream << "QT_EDITION = " << dictionary["EDITION"] << endl;
         configStream << "QT_CONFIG += " << qtConfig.join(' ') << endl;
 
         configStream << "#versioning " << endl
@@ -3404,11 +3390,6 @@ void Configure::generateConfigfiles()
         tmpStream << "/* License information */" << endl;
         tmpStream << "#define QT_PRODUCT_LICENSEE \"" << licenseInfo[ "LICENSEE" ] << "\"" << endl;
         tmpStream << "#define QT_PRODUCT_LICENSE \"" << dictionary[ "EDITION" ] << "\"" << endl;
-        tmpStream << endl;
-        tmpStream << "// Qt Edition" << endl;
-        tmpStream << "#ifndef QT_EDITION" << endl;
-        tmpStream << "#  define QT_EDITION " << dictionary["QT_EDITION"] << endl;
-        tmpStream << "#endif" << endl;
         tmpStream << endl;
         if (dictionary["BUILDDEV"] == "yes") {
             dictionary["QMAKE_INTERNAL"] = "yes";
@@ -3522,23 +3503,6 @@ void Configure::generateConfigfiles()
 
         tmpStream << "#define QT_QPA_DEFAULT_PLATFORM_NAME \"" << qpaPlatformName() << "\"" << endl
                   << "#define QT_QPA_DEFAULT_PRINTSUPPORTPLUGIN_NAME \"" << qpaPrintSupportPluginName() << "\"" << endl;
-
-        if (!tmpStream.flush())
-            dictionary[ "DONE" ] = "error";
-    }
-
-    {
-        FileWriter tmpStream(buildPath + "/include/QtCore/qconfig.h");
-
-        tmpStream << "#include \"../../src/corelib/global/qconfig.h\"" << endl;
-
-        if (!tmpStream.flush())
-            dictionary[ "DONE" ] = "error";
-    }
-    {
-        FileWriter tmpStream(buildPath + "/include/QtCore/QtConfig");
-
-        tmpStream << "#include \"qconfig.h\"" << endl;
 
         if (!tmpStream.flush())
             dictionary[ "DONE" ] = "error";
@@ -4062,9 +4026,6 @@ void Configure::buildQmake()
                 } else {
                     stream << "QMAKESPEC = " << dictionary["QMAKESPEC"] << endl;
                 }
-                if (dictionary["EDITION"] == "OpenSource" ||
-                    dictionary["QT_EDITION"].contains("OPENSOURCE"))
-                    stream << "EXTRA_CPPFLAGS = -DQMAKE_OPENSOURCE_EDITION" << endl;
 
                 stream << "\n\n";
 
@@ -4239,7 +4200,7 @@ bool Configure::showLicense(QString orgLicenseFile)
     QString licenseFile = orgLicenseFile;
     QString theLicense;
     if (dictionary["EDITION"] == "OpenSource" || dictionary["EDITION"] == "Snapshot") {
-        haveGpl3 = QFile::exists(orgLicenseFile + "/LICENSE.GPL3");
+        haveGpl3 = QFile::exists(orgLicenseFile + "/LICENSE.GPL");
         theLicense = "GNU Lesser General Public License (LGPL) version 2.1";
         if (haveGpl3)
             theLicense += "\nor the GNU General Public License (GPL) version 3";
@@ -4279,7 +4240,7 @@ bool Configure::showLicense(QString orgLicenseFile)
         } else {
             if (dictionary["EDITION"] == "OpenSource" || dictionary["EDITION"] == "Snapshot") {
                 if (accept == '3')
-                    licenseFile = orgLicenseFile + "/LICENSE.GPL3";
+                    licenseFile = orgLicenseFile + "/LICENSE.GPL";
                 else
                     licenseFile = orgLicenseFile + "/LICENSE.LGPL";
             }
@@ -4316,7 +4277,7 @@ void Configure::readLicense()
     dictionary["LICENSE FILE"] = sourcePath;
 
     bool openSource = false;
-    bool hasOpenSource = QFile::exists(dictionary["LICENSE FILE"] + "/LICENSE.GPL3") || QFile::exists(dictionary["LICENSE FILE"] + "/LICENSE.LGPL");
+    bool hasOpenSource = QFile::exists(dictionary["LICENSE FILE"] + "/LICENSE.GPL") || QFile::exists(dictionary["LICENSE FILE"] + "/LICENSE.LGPL");
     if (dictionary["BUILDTYPE"] == "commercial") {
         openSource = false;
     } else if (dictionary["BUILDTYPE"] == "opensource") {
@@ -4343,7 +4304,6 @@ void Configure::readLicense()
         cout << endl << "This is the " << dictionary["PLATFORM NAME"] << " Open Source Edition." << endl;
         licenseInfo["LICENSEE"] = "Open Source";
         dictionary["EDITION"] = "OpenSource";
-        dictionary["QT_EDITION"] = "QT_EDITION_OPENSOURCE";
         cout << endl;
         if (!showLicense(dictionary["LICENSE FILE"])) {
             cout << "Configuration aborted since license was not accepted";

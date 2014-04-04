@@ -51,10 +51,12 @@ struct AndroidAssetDir
 {
     AndroidAssetDir(AAssetDir* ad)
     {
-        const char *fileName;
-        while ((fileName = AAssetDir_getNextFileName(ad)))
-            m_items.push_back(QString::fromUtf8(fileName));
-        AAssetDir_close(ad);
+        if (ad) {
+            const char *fileName;
+            while ((fileName = AAssetDir_getNextFileName(ad)))
+                m_items.push_back(QString::fromUtf8(fileName));
+            AAssetDir_close(ad);
+        }
     }
     FilesList m_items;
 };
@@ -82,7 +84,10 @@ public:
     {
         if (m_index < 0 || m_index >= m_items.size())
             return QString();
-        return m_items[m_index];
+        QString fileName = m_items[m_index];
+        if (fileName.endsWith(QLatin1Char('/')))
+            fileName.chop(1);
+        return fileName;
     }
 
     virtual QString currentFilePath() const
@@ -254,7 +259,10 @@ private:
 };
 
 
-AndroidAssetsFileEngineHandler::AndroidAssetsFileEngineHandler():m_assetsCache(std::max(5, qgetenv("QT_ANDROID_MAX_ASSETS_CACHE_SIZE").toInt()))
+AndroidAssetsFileEngineHandler::AndroidAssetsFileEngineHandler()
+    : m_assetsCache(std::max(5, qgetenv("QT_ANDROID_MAX_ASSETS_CACHE_SIZE").toInt()))
+    , m_hasPrepopulatedCache(false)
+    , m_hasTriedPrepopulatingCache(false)
 {
     m_assetManager = QtAndroid::assetManager();
 }
@@ -263,44 +271,122 @@ AndroidAssetsFileEngineHandler::~AndroidAssetsFileEngineHandler()
 {
 }
 
+void AndroidAssetsFileEngineHandler::prepopulateCache() const
+{
+    Q_ASSERT(!m_hasTriedPrepopulatingCache);
+    m_hasTriedPrepopulatingCache = true;
+
+    Q_ASSERT(m_assetsCache.isEmpty());
+
+    // Failsafe: Don't read cache files that are larger than 1MB
+    static qint64 maxPrepopulatedCacheSize = qMax(1024LL * 1024LL,
+                                                  qgetenv("QT_ANDROID_MAX_PREPOPULATED_ASSETS_CACHE_SIZE").toLongLong());
+
+    const char *fileName = "--Added-by-androiddeployqt--/qt_cache_pregenerated_file_list";
+    AAsset *asset = AAssetManager_open(m_assetManager, fileName, AASSET_MODE_BUFFER);
+    if (asset) {
+        m_hasPrepopulatedCache = true;
+        AndroidAbstractFileEngine fileEngine(asset, QString::fromLatin1(fileName));
+        if (fileEngine.open(QIODevice::ReadOnly)) {
+            qint64 size = fileEngine.size();
+
+            if (size <= maxPrepopulatedCacheSize) {
+                QByteArray bytes(size, Qt::Uninitialized);
+                qint64 read = fileEngine.read(bytes.data(), size);
+                if (read != size) {
+                    qWarning("Failed to read prepopulated cache");
+                    return;
+                }
+
+                QDataStream stream(&bytes, QIODevice::ReadOnly);
+                stream.setVersion(QDataStream::Qt_5_3);
+                if (stream.status() != QDataStream::Ok) {
+                    qWarning("Failed to read prepopulated cache");
+                    return;
+                }
+
+                while (!stream.atEnd()) {
+                    QString directoryName;
+                    stream >> directoryName;
+
+                    int fileCount;
+                    stream >> fileCount;
+
+                    QVector<QString> fileList;
+                    fileList.reserve(fileCount);
+                    while (fileCount--) {
+                        QString fileName;
+                        stream >> fileName;
+                        fileList.append(fileName);
+                    }
+
+                    QSharedPointer<AndroidAssetDir> *aad = new QSharedPointer<AndroidAssetDir>(new AndroidAssetDir(0));
+                    (*aad)->m_items = fileList;
+
+                    // Cost = 0, because we should always cache everything if there's a prepopulated cache
+                    QByteArray key = directoryName != QLatin1String("/")
+                            ? QByteArray("assets:/") + directoryName.toUtf8()
+                            : QByteArray("assets:");
+
+                    bool ok = m_assetsCache.insert(key, aad, 0);
+                    if (!ok)
+                        qWarning("Failed to insert in cache: %s", qPrintable(directoryName));
+                }
+            } else {
+                qWarning("Prepopulated cache is too large to read.\n"
+                         "Use environment variable QT_ANDROID_MAX_PREPOPULATED_ASSETS_CACHE_SIZE to adjust size.");
+            }
+        }
+    }
+}
+
 QAbstractFileEngine * AndroidAssetsFileEngineHandler::create(const QString &fileName) const
 {
     if (fileName.isEmpty())
         return 0;
 
-    if (!fileName.startsWith(QLatin1String("assets:/")))
+    static QLatin1String assetsPrefix("assets:");
+    if (!fileName.startsWith(assetsPrefix))
         return 0;
 
-    int prefixSize=8;
+    static int prefixSize = assetsPrefix.size() + 1;
 
     QByteArray path;
     if (!fileName.endsWith(QLatin1Char('/'))) {
         path = fileName.toUtf8();
-        AAsset *asset = AAssetManager_open(m_assetManager,
-                                           path.constData() + prefixSize,
-                                           AASSET_MODE_BUFFER);
-        if (asset)
-            return new AndroidAbstractFileEngine(asset, fileName);
+        if (path.size() > prefixSize) {
+            AAsset *asset = AAssetManager_open(m_assetManager,
+                                               path.constData() + prefixSize,
+                                               AASSET_MODE_BUFFER);
+            if (asset)
+                return new AndroidAbstractFileEngine(asset, fileName);
+        }
     }
 
     if (!path.size())
          path = fileName.left(fileName.length() - 1).toUtf8();
 
+
     m_assetsCacheMutext.lock();
+    if (!m_hasTriedPrepopulatingCache)
+        prepopulateCache();
+
     QSharedPointer<AndroidAssetDir> *aad = m_assetsCache.object(path);
     m_assetsCacheMutext.unlock();
     if (!aad) {
-        AAssetDir *assetDir = AAssetManager_openDir(m_assetManager, path.constData() + prefixSize);
-        if (assetDir) {
-            if (AAssetDir_getNextFileName(assetDir)) {
-                AAssetDir_rewind(assetDir);
-                aad = new QSharedPointer<AndroidAssetDir>(new AndroidAssetDir(assetDir));
-                m_assetsCacheMutext.lock();
-                m_assetsCache.insert(path, aad);
-                m_assetsCacheMutext.unlock();
-                return new AndroidAbstractFileEngine(*aad, fileName);
-            } else {
-                AAssetDir_close(assetDir);
+        if (!m_hasPrepopulatedCache && path.size() > prefixSize) {
+            AAssetDir *assetDir = AAssetManager_openDir(m_assetManager, path.constData() + prefixSize);
+            if (assetDir) {
+                if (AAssetDir_getNextFileName(assetDir)) {
+                    AAssetDir_rewind(assetDir);
+                    aad = new QSharedPointer<AndroidAssetDir>(new AndroidAssetDir(assetDir));
+                    m_assetsCacheMutext.lock();
+                    m_assetsCache.insert(path, aad);
+                    m_assetsCacheMutext.unlock();
+                    return new AndroidAbstractFileEngine(*aad, fileName);
+                } else {
+                    AAssetDir_close(assetDir);
+                }
             }
         }
     } else {

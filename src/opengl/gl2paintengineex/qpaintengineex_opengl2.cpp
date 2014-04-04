@@ -539,7 +539,7 @@ void QGL2PaintEngineEx::beginNativePainting()
         d->funcs.glDisableVertexAttribArray(i);
 
 #ifndef QT_OPENGL_ES_2
-    if (!QOpenGLFunctions::isES()) {
+    if (!d->ctx->contextHandle()->isES()) {
         const QGLContext *ctx = d->ctx;
         const QGLFormat &fmt = d->device->format();
         if (fmt.majorVersion() < 3 || (fmt.majorVersion() == 3 && fmt.minorVersion() < 1)
@@ -597,7 +597,7 @@ void QGL2PaintEngineExPrivate::resetGLState()
     ctx->d_func()->setVertexAttribArrayEnabled(QT_VERTEX_COORDS_ATTR, false);
     ctx->d_func()->setVertexAttribArrayEnabled(QT_OPACITY_ATTR, false);
 #ifndef QT_OPENGL_ES_2
-    if (!QOpenGLFunctions::isES()) {
+    if (!ctx->contextHandle()->isES()) {
         // gl_Color, corresponding to vertex attribute 3, may have been changed
         float color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
         funcs.glVertexAttrib4fv(3, color);
@@ -1158,6 +1158,7 @@ bool QGL2PaintEngineExPrivate::prepareForDraw(bool srcPixelsAreOpaque)
         brushUniformsDirty = true;
         opacityUniformDirty = true;
         matrixUniformDirty = true;
+        translateZUniformDirty = true;
     }
 
     if (brushUniformsDirty && mode != ImageDrawingMode && mode != ImageArrayDrawingMode)
@@ -1172,6 +1173,12 @@ bool QGL2PaintEngineExPrivate::prepareForDraw(bool srcPixelsAreOpaque)
         shaderManager->currentProgram()->setUniformValue(location(QGLEngineShaderManager::Matrix),
                                                          pmvMatrix);
         matrixUniformDirty = false;
+    }
+
+    if (translateZUniformDirty && shaderManager->hasComplexGeometry()) {
+        shaderManager->currentProgram()->setUniformValue(location(QGLEngineShaderManager::TranslateZ),
+                                                         translateZ);
+        translateZUniformDirty = false;
     }
 
     return changed;
@@ -1353,10 +1360,11 @@ void QGL2PaintEngineEx::compositionModeChanged()
 
 void QGL2PaintEngineEx::renderHintsChanged()
 {
+    Q_D(QGL2PaintEngineEx);
     state()->renderHintsChanged = true;
 
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLFunctions::isES()) {
+    if (!d->ctx->contextHandle()->isES()) {
         if ((state()->renderHints & QPainter::Antialiasing)
             || (state()->renderHints & QPainter::HighQualityAntialiasing))
             glEnable(GL_MULTISAMPLE);
@@ -1365,7 +1373,6 @@ void QGL2PaintEngineEx::renderHintsChanged()
     }
 #endif
 
-    Q_D(QGL2PaintEngineEx);
     d->lastTextureUsed = GLuint(-1);
     d->brushTextureDirty = true;
 //    qDebug("QGL2PaintEngineEx::renderHintsChanged() not implemented!");
@@ -2011,6 +2018,7 @@ bool QGL2PaintEngineEx::begin(QPaintDevice *pdev)
     d->matrixDirty = true;
     d->compositionModeDirty = true;
     d->opacityUniformDirty = true;
+    d->translateZUniformDirty = true;
     d->needsSync = true;
     d->useSystemClip = !systemClip().isEmpty();
     d->currentBrush = QBrush();
@@ -2032,14 +2040,14 @@ bool QGL2PaintEngineEx::begin(QPaintDevice *pdev)
     glDisable(GL_SCISSOR_TEST);
 
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLFunctions::isES())
+    if (!d->ctx->contextHandle()->isES())
         glDisable(GL_MULTISAMPLE);
 #endif
 
     d->glyphCacheFormat = QFontEngine::Format_A8;
 
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLFunctions::isES()) {
+    if (!d->ctx->contextHandle()->isES()) {
         d->glyphCacheFormat = QFontEngine::Format_A32;
         d->multisamplingAlwaysEnabled = false;
     } else {
@@ -2372,6 +2380,15 @@ void QGL2PaintEngineExPrivate::systemStateChanged()
         writeClip(qtVectorPathForPath(q->state()->matrix.inverted().map(path)), 1);
         q->state()->currentClip = 1;
         q->state()->clipTestEnabled = true;
+    }
+}
+
+void QGL2PaintEngineEx::setTranslateZ(GLfloat z)
+{
+    Q_D(QGL2PaintEngineEx);
+    if (d->translateZ != z) {
+        d->translateZ = z;
+        d->translateZUniformDirty = true;
     }
 }
 

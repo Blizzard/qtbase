@@ -377,6 +377,8 @@ void QHttpNetworkConnectionPrivate::emitReplyError(QAbstractSocket *socket,
         // Clean the channel
         channels[i].close();
         channels[i].reply = 0;
+        if (channels[i].protocolHandler)
+            channels[i].protocolHandler->setReply(0);
         channels[i].request = QHttpNetworkRequest();
         if (socket)
             channels[i].requeueCurrentlyPipelinedRequests();
@@ -826,6 +828,8 @@ void QHttpNetworkConnectionPrivate::removeReply(QHttpNetworkReply *reply)
         // is the reply associated the currently processing of this channel?
         if (channels[i].reply == reply) {
             channels[i].reply = 0;
+            if (channels[i].protocolHandler)
+                channels[i].protocolHandler->setReply(0);
             channels[i].request = QHttpNetworkRequest();
             channels[i].resendCurrent = false;
 
@@ -864,6 +868,19 @@ void QHttpNetworkConnectionPrivate::removeReply(QHttpNetworkReply *reply)
                return;
             }
         }
+#ifndef QT_NO_SSL
+        // is the reply inside the SPDY pipeline of this channel already?
+        QMultiMap<int, HttpMessagePair>::iterator it = channels[i].spdyRequestsToSend.begin();
+        QMultiMap<int, HttpMessagePair>::iterator end = channels[i].spdyRequestsToSend.end();
+        for (; it != end; ++it) {
+            if (it.value().second == reply) {
+                channels[i].spdyRequestsToSend.remove(it.key());
+
+                QMetaObject::invokeMethod(q, "_q_startNextRequest", Qt::QueuedConnection);
+                return;
+            }
+        }
+#endif
     }
     // remove from the high priority queue
     if (!highPriorityQueue.isEmpty()) {

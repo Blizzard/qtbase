@@ -53,6 +53,7 @@ void qt_registerFont(const QString &familyname, const QString &stylename,
                      bool scalable, int pixelSize, bool fixedPitch,
                      const QSupportedWritingSystems &writingSystems, void *hanlde);
 
+void qt_registerFontFamily(const QString &familyName);
 void qt_registerAliasToFontFamily(const QString &familyName, const QString &alias);
 
 /*!
@@ -118,7 +119,7 @@ void QPlatformFontDatabase::registerQPF2Font(const QByteArray &dataArray, void *
     The writing systems supported by the font are specified by the
     \a writingSystems argument.
 
-    \sa registerQPF2Font()
+    \sa registerQPF2Font(), registerFontFamily()
 */
 void QPlatformFontDatabase::registerFont(const QString &familyname, const QString &stylename,
                                          const QString &foundryname, QFont::Weight weight,
@@ -132,6 +133,18 @@ void QPlatformFontDatabase::registerFont(const QString &familyname, const QStrin
     qt_registerFont(familyname, stylename, foundryname, weight, style,
                     stretch, antialiased, scalable, pixelSize,
                     fixedPitch, writingSystems, usrPtr);
+}
+
+/*!
+    Registers a font family with the font database. The font will be
+    lazily populated by a callback to populateFamily() when the font
+    database determines that the family needs population.
+
+    \sa populateFamily(), registerFont()
+*/
+void QPlatformFontDatabase::registerFontFamily(const QString &familyName)
+{
+    qt_registerFontFamily(familyName);
 }
 
 class QWritingSystemsPrivate
@@ -249,6 +262,11 @@ QPlatformFontDatabase::~QPlatformFontDatabase()
   Reimplement this function in a subclass for a convenient place to initialize
   the internal font database.
 
+  You may lazily populate the database by calling registerFontFamily() instead
+  of registerFont(), in which case you'll get a callback to populateFamily()
+  when the required family needs population. You then call registerFont() to
+  finish population of the family.
+
   The default implementation looks in the fontDir() location and registers all
   QPF2 fonts.
 */
@@ -273,6 +291,28 @@ void QPlatformFontDatabase::populateFontDatabase()
             registerQPF2Font(fileData, fileDataPtr);
         }
     }
+}
+
+/*!
+    This function is called whenever a lazily populated family, populated
+    through registerFontFamily(), needs full population.
+
+    You are expected to fully populate the family by calling registerFont()
+    for each font that matches the family name.
+*/
+void QPlatformFontDatabase::populateFamily(const QString &familyName)
+{
+    Q_UNUSED(familyName);
+}
+
+/*!
+    This function is called whenever the font database is invalidated.
+
+    Reimplement this function to clear any internal data structures that
+    will need to be rebuilt at the next call to populateFontDatabase().
+*/
+void QPlatformFontDatabase::invalidate()
+{
 }
 
 /*!
@@ -500,58 +540,60 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
             }
         }
     }
-    if (codePageRange[0] & ((1 << Latin1CsbBit) | (1 << CentralEuropeCsbBit) | (1 << TurkishCsbBit) | (1 << BalticCsbBit))) {
-        writingSystems.setSupported(QFontDatabase::Latin);
-        hasScript = true;
-        //qDebug("font %s supports Latin", familyName.latin1());
+    if (!hasScript) {
+        if (codePageRange[0] & ((1 << Latin1CsbBit) | (1 << CentralEuropeCsbBit) | (1 << TurkishCsbBit) | (1 << BalticCsbBit))) {
+            writingSystems.setSupported(QFontDatabase::Latin);
+            hasScript = true;
+            //qDebug("font %s supports Latin", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << CyrillicCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Cyrillic);
+            hasScript = true;
+            //qDebug("font %s supports Cyrillic", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << GreekCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Greek);
+            hasScript = true;
+            //qDebug("font %s supports Greek", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << HebrewCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Hebrew);
+            hasScript = true;
+            //qDebug("font %s supports Hebrew", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << ArabicCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Arabic);
+            hasScript = true;
+            //qDebug("font %s supports Arabic", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << VietnameseCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Vietnamese);
+            hasScript = true;
+            //qDebug("font %s supports Vietnamese", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << SimplifiedChineseCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::SimplifiedChinese);
+            hasScript = true;
+            //qDebug("font %s supports Simplified Chinese", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << TraditionalChineseCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::TraditionalChinese);
+            hasScript = true;
+            //qDebug("font %s supports Traditional Chinese", familyName.latin1());
+        }
+        if (codePageRange[0] & (1 << JapaneseCsbBit)) {
+            writingSystems.setSupported(QFontDatabase::Japanese);
+            hasScript = true;
+            //qDebug("font %s supports Japanese", familyName.latin1());
+        }
+        if (codePageRange[0] & ((1 << KoreanCsbBit) | (1 << KoreanJohabCsbBit))) {
+            writingSystems.setSupported(QFontDatabase::Korean);
+            hasScript = true;
+            //qDebug("font %s supports Korean", familyName.latin1());
+        }
+        if (!hasScript)
+            writingSystems.setSupported(QFontDatabase::Symbol);
     }
-    if (codePageRange[0] & (1 << CyrillicCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Cyrillic);
-        hasScript = true;
-        //qDebug("font %s supports Cyrillic", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << GreekCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Greek);
-        hasScript = true;
-        //qDebug("font %s supports Greek", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << HebrewCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Hebrew);
-        hasScript = true;
-        //qDebug("font %s supports Hebrew", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << ArabicCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Arabic);
-        hasScript = true;
-        //qDebug("font %s supports Arabic", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << VietnameseCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Vietnamese);
-        hasScript = true;
-        //qDebug("font %s supports Vietnamese", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << SimplifiedChineseCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::SimplifiedChinese);
-        hasScript = true;
-        //qDebug("font %s supports Simplified Chinese", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << TraditionalChineseCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::TraditionalChinese);
-        hasScript = true;
-        //qDebug("font %s supports Traditional Chinese", familyName.latin1());
-    }
-    if (codePageRange[0] & (1 << JapaneseCsbBit)) {
-        writingSystems.setSupported(QFontDatabase::Japanese);
-        hasScript = true;
-        //qDebug("font %s supports Japanese", familyName.latin1());
-    }
-    if (codePageRange[0] & ((1 << KoreanCsbBit) | (1 << KoreanJohabCsbBit))) {
-        writingSystems.setSupported(QFontDatabase::Korean);
-        hasScript = true;
-        //qDebug("font %s supports Korean", familyName.latin1());
-    }
-    if (!hasScript)
-        writingSystems.setSupported(QFontDatabase::Symbol);
 
     return writingSystems;
 }

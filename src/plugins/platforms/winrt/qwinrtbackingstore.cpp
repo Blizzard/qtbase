@@ -49,8 +49,6 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
-#include <dxgi.h>
-
 // Generated shader headers
 #include "blitps.h"
 #include "blitvs.h"
@@ -60,10 +58,7 @@ namespace { // Utility namespace for writing out an ANGLE-compatible binary blob
 // Must match packaged ANGLE
 enum : quint32 {
     AngleMajorVersion = 1,
-    AngleMinorVersion = 2,
-    AngleBuildRevision = 2446,
-    AngleVersion = ((AngleMajorVersion << 24) | (AngleMinorVersion << 16) | AngleBuildRevision),
-    AngleOptimizationLevel = (1 << 14)
+    AngleMinorVersion = 3
 };
 
 struct ShaderString
@@ -145,8 +140,8 @@ static const QByteArray createAngleBinary(
     stream.setByteOrder(QDataStream::LittleEndian);
 
     stream << quint32(GL_PROGRAM_BINARY_ANGLE)
-           << quint32(AngleVersion)
-           << quint32(AngleOptimizationLevel);
+           << qint32(AngleMajorVersion)
+           << qint32(AngleMinorVersion);
 
     // Vertex attributes
     for (int i = 0; i < 16; ++i) {
@@ -190,25 +185,6 @@ static const QByteArray createAngleBinary(
            << quint32(vertexShader.size())
            << quint32(geometryShader.size());
 
-    // ANGLE requires that we query the adapter for its LUID. Later on, it may be useful
-    // for checking feature level support, picking the best adapter on the system, etc.
-    IDXGIFactory1 *dxgiFactory;
-    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)))) {
-        qCritical("QWinRTBackingStore: failed to create DXGI factory.");
-        return QByteArray();
-    }
-    IDXGIAdapter *dxgiAdapter;
-    if (FAILED(dxgiFactory->EnumAdapters(0, &dxgiAdapter))) {
-        qCritical("QWinRTBackingStore:: failed to enumerate adapter.");
-        dxgiFactory->Release();
-        return QByteArray();
-    }
-    DXGI_ADAPTER_DESC desc;
-    dxgiAdapter->GetDesc(&desc);
-    dxgiAdapter->Release();
-    QByteArray guid(sizeof(GUID), '\0');
-    memcpy(guid.data(), &desc.AdapterLuid, sizeof(LUID));
-    stream.writeRawData(guid.constData(), guid.size());
     stream.writeRawData(pixelShader.constData(), pixelShader.size());
     stream.writeRawData(vertexShader.constData(), vertexShader.size());
     if (!geometryShader.isEmpty())
@@ -231,14 +207,24 @@ QWinRTBackingStore::QWinRTBackingStore(QWindow *window)
     , m_fbo(0)
     , m_texture(0)
     , m_screen(static_cast<QWinRTScreen*>(window->screen()->handle()))
+    , m_initialized(false)
 {
     window->setSurfaceType(QSurface::OpenGLSurface); // Required for flipping, but could be done in the swap
+}
 
-    m_context->setFormat(window->requestedFormat());
-    m_context->setScreen(window->screen());
-    m_context->create();
+bool QWinRTBackingStore::initialize()
+{
+    if (m_initialized)
+        return true;
 
-    m_context->makeCurrent(window);
+    m_context->setFormat(window()->requestedFormat());
+    m_context->setScreen(window()->screen());
+    if (!m_context->create())
+        return false;
+
+    if (!m_context->makeCurrent(window()))
+        return false;
+
     glGenFramebuffers(1, &m_fbo);
     glGenRenderbuffers(1, &m_rbo);
     glGenTextures(1, &m_texture);
@@ -282,11 +268,14 @@ QWinRTBackingStore::QWinRTBackingStore(QWindow *window)
     glProgramBinaryOES(m_shaderProgram, GL_PROGRAM_BINARY_ANGLE, binary.constData(), binary.size());
 #endif
     m_context->doneCurrent();
-    resize(window->size(), QRegion());
+    m_initialized = true;
+    return true;
 }
 
 QWinRTBackingStore::~QWinRTBackingStore()
 {
+    if (!m_initialized)
+        return;
     glDeleteBuffers(1, &m_fbo);
     glDeleteRenderbuffers(1, &m_rbo);
     glDeleteTextures(1, &m_texture);
@@ -301,6 +290,8 @@ QPaintDevice *QWinRTBackingStore::paintDevice()
 void QWinRTBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
 {
     Q_UNUSED(offset)
+    if (m_size.isEmpty())
+        return;
 
     const QImage *image = static_cast<QImage *>(m_paintDevice.data());
 
@@ -358,10 +349,16 @@ void QWinRTBackingStore::flush(QWindow *window, const QRegion &region, const QPo
 void QWinRTBackingStore::resize(const QSize &size, const QRegion &staticContents)
 {
     Q_UNUSED(staticContents)
+    if (!initialize())
+        return;
+
     if (m_size == size)
         return;
 
     m_size = size;
+    if (m_size.isEmpty())
+        return;
+
     m_paintDevice.reset(new QImage(m_size, QImage::Format_ARGB32_Premultiplied));
 
     m_context->makeCurrent(window());
@@ -384,6 +381,7 @@ void QWinRTBackingStore::resize(const QSize &size, const QRegion &staticContents
 void QWinRTBackingStore::beginPaint(const QRegion &region)
 {
     Q_UNUSED(region)
+    resize(window()->size(), QRegion());
 }
 
 void QWinRTBackingStore::endPaint()

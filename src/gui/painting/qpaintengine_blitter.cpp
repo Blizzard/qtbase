@@ -494,11 +494,12 @@ void QBlitterPaintEngine::clipEnabledChanged()
 
 bool QBlitterPaintEngine::begin(QPaintDevice *pdev)
 {
+    Q_D(QBlitterPaintEngine);
     bool ok = QRasterPaintEngine::begin(pdev);
 #ifdef QT_BLITTER_RASTEROVERLAY
-    Q_D(QBlitterPaintEngine);
     d->pmData->unmergeOverlay();
 #endif
+    d->pdev = pdev;
     return ok;
 }
 
@@ -690,7 +691,7 @@ void QBlitterPaintEngine::drawPixmap(const QRectF &r, const QPixmap &pm, const Q
     }
 }
 
-// Overriden methods to lock the graphics memory
+// Overridden methods to lock the graphics memory
 void QBlitterPaintEngine::drawPolygon(const QPointF *points, int pointCount, PolygonDrawMode mode)
 {
     Q_D(QBlitterPaintEngine);

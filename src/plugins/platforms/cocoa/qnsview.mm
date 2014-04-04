@@ -49,7 +49,6 @@
 #include "qcocoaautoreleasepool.h"
 #include "qmultitouch_mac_p.h"
 #include "qcocoadrag.h"
-#include "qmacmime.h"
 #include <qpa/qplatformintegration.h>
 
 #include <qpa/qwindowsysteminterface.h>
@@ -563,9 +562,11 @@ static QTouchDevice *touchDevice = 0;
     QPointF qtWindowPoint;
     QPointF qtScreenPoint;
     QNSView *targetView = self;
-    if (m_platformWindow && m_platformWindow->m_forwardWindow
-        && (theEvent.type == NSLeftMouseDragged || theEvent.type == NSLeftMouseUp)) {
-        targetView = m_platformWindow->m_forwardWindow->m_qtView;
+    if (m_platformWindow && m_platformWindow->m_forwardWindow) {
+        if (theEvent.type == NSLeftMouseDragged || theEvent.type == NSLeftMouseUp)
+            targetView = m_platformWindow->m_forwardWindow->m_qtView;
+        else
+            m_platformWindow->m_forwardWindow = 0;
     }
 
     [targetView convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&qtWindowPoint andScreenPoint:&qtScreenPoint];
@@ -651,7 +652,7 @@ static QTouchDevice *touchDevice = 0;
 {
     if (m_window->flags() & Qt::WindowTransparentForInput)
         return [super mouseDragged:theEvent];
-    if (!(m_buttons & Qt::LeftButton))
+    if (!(m_buttons & (m_sendUpAsRightButton ? Qt::RightButton : Qt::LeftButton)))
         qWarning("QNSView mouseDragged: Internal mouse button tracking invalid (missing Qt::LeftButton)");
     [self handleMouseEvent:theEvent];
 }
@@ -859,14 +860,9 @@ Q_GLOBAL_STATIC(QCocoaTabletDeviceDataHash, tabletDeviceDataHash)
 
     uint deviceId = [theEvent deviceID];
     if (!tabletDeviceDataHash->contains(deviceId)) {
-        // 10.6 sends tablet events for trackpad interaction, but
-        // not proximity events. Silence the warning to prevent
-        // flooding the console.
-        if (QSysInfo::QSysInfo::MacintoshVersion == QSysInfo::MV_10_6)
-            return;
-
-        qWarning("QNSView handleTabletEvent: This tablet device is unknown"
-                 " (received no proximity event for it). Discarding event.");
+        // Error: Unknown tablet device. Qt also gets into this state
+        // when running on a VM. This appears to be harmless; don't
+        // print a warning.
         return;
     }
     const QCocoaTabletDeviceData &deviceData = tabletDeviceDataHash->value(deviceId);
@@ -1729,7 +1725,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
 
 // keep our state, and QGuiApplication state (buttons member) in-sync,
 // or future mouse events will be processed incorrectly
-    m_buttons &= ~Qt::LeftButton;
+    m_buttons &= ~(m_sendUpAsRightButton ? Qt::RightButton : Qt::LeftButton);
 
     NSPoint windowPoint = [self convertPoint: point fromView: nil];
     QPoint qtWindowPoint(windowPoint.x, windowPoint.y);

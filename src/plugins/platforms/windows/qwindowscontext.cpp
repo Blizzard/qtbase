@@ -341,6 +341,16 @@ QWindowsContext::~QWindowsContext()
     m_instance = 0;
 }
 
+void QWindowsContext::setTabletAbsoluteRange(int a)
+{
+#if !defined(QT_NO_TABLETEVENT) && !defined(Q_OS_WINCE)
+    if (!d->m_tabletSupport.isNull())
+        d->m_tabletSupport->setAbsoluteRange(a);
+#else
+    Q_UNUSED(a)
+#endif
+}
+
 QWindowsContext *QWindowsContext::instance()
 {
     return m_instance;
@@ -961,8 +971,10 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
 #if !defined(Q_OS_WINCE) && !defined(QT_NO_SESSIONMANAGER)
     case QtWindows::QueryEndSessionApplicationEvent: {
         QWindowsSessionManager *sessionManager = platformSessionManager();
-        if (sessionManager->isActive()) // bogus message from windows
+        if (sessionManager->isActive()) { // bogus message from windows
+            *result = sessionManager->wasCanceled() ? 0 : 1;
             return true;
+        }
 
         sessionManager->setActive(true);
         sessionManager->blocksInteraction();

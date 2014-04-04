@@ -64,9 +64,7 @@
 #include <xcb/xcb_icccm.h>
 #undef class
 #include <xcb/xfixes.h>
-#ifndef QT_NO_SHAPE
-#  include <xcb/shape.h>
-#endif // QT_NO_SHAPE
+#include <xcb/shape.h>
 
 // xcb-icccm 3.8 support
 #ifdef XCB_ICCCM_NUM_WM_SIZE_HINTS_ELEMENTS
@@ -1825,23 +1823,21 @@ void QXcbWindow::handlePropertyNotifyEvent(const xcb_property_notify_event_t *ev
     connection()->setTime(event->time);
 
     const bool propertyDeleted = event->state == XCB_PROPERTY_DELETE;
-    const xcb_atom_t netWmStateAtom = atom(QXcbAtom::_NET_WM_STATE);
-    const xcb_atom_t wmStateAtom = atom(QXcbAtom::WM_STATE);
 
-    if (event->atom == netWmStateAtom || event->atom == wmStateAtom) {
+    if (event->atom == atom(QXcbAtom::_NET_WM_STATE) || event->atom == atom(QXcbAtom::WM_STATE)) {
         if (propertyDeleted)
             return;
 
         Qt::WindowState newState = Qt::WindowNoState;
-        if (event->atom == wmStateAtom) { // WM_STATE: Quick check for 'Minimize'.
+        if (event->atom == atom(QXcbAtom::_NET_WM_STATE)) { // WM_STATE: Quick check for 'Minimize'.
             const xcb_get_property_cookie_t get_cookie =
-                xcb_get_property(xcb_connection(), 0, m_window, wmStateAtom,
+            xcb_get_property(xcb_connection(), 0, m_window, atom(QXcbAtom::_NET_WM_STATE),
                                  XCB_ATOM_ANY, 0, 1024);
 
             xcb_get_property_reply_t *reply =
                 xcb_get_property_reply(xcb_connection(), get_cookie, NULL);
 
-            if (reply && reply->format == 32 && reply->type == wmStateAtom) {
+            if (reply && reply->format == 32 && reply->type == atom(QXcbAtom::_NET_WM_STATE)) {
                 const quint32 *data = (const quint32 *)xcb_get_property_value(reply);
                 if (reply->length != 0 && XCB_WM_STATE_ICONIC == data[0])
                     newState = Qt::WindowMinimized;
@@ -1859,8 +1855,11 @@ void QXcbWindow::handlePropertyNotifyEvent(const xcb_property_notify_event_t *ev
         if (m_lastWindowStateEvent != newState) {
             QWindowSystemInterface::handleWindowStateChanged(window(), newState);
             m_lastWindowStateEvent = newState;
+            m_windowState = newState;
         }
         return;
+    } else if (event->atom == atom(QXcbAtom::_NET_WORKAREA) && event->window == m_screen->root()) {
+        m_screen->updateGeometry(event->time);
     }
 }
 
@@ -2076,8 +2075,6 @@ void QXcbWindow::handleXEmbedMessage(const xcb_client_message_event_t *event)
     }
 }
 
-#if !defined(QT_NO_SHAPE)
-
 static inline xcb_rectangle_t qRectToXCBRectangle(const QRect &r)
 {
     xcb_rectangle_t result;
@@ -2121,8 +2118,6 @@ void QXcbWindow::setMask(const QRegion &region)
                              xcb_window(), 0, 0, rects.size(), &rects[0]);
     }
 }
-
-#endif // !QT_NO_SHAPE
 
 void QXcbWindow::setAlertState(bool enabled)
 {

@@ -57,6 +57,8 @@
 #include <private/qopenglcontext_p.h>
 #include <qopenglshaderprogram.h>
 #include <qopenglfunctions.h>
+#include <qopenglbuffer.h>
+#include <qopenglvertexarrayobject.h>
 
 // #define QT_GL_TEXTURE_GLYPH_CACHE_DEBUG
 
@@ -87,9 +89,9 @@ public:
         qDebug("~QOpenGLGlyphTexture() %p for context %p.", this, ctx);
 #endif
         if (!ctx->d_func()->workaround_brokenFBOReadBack)
-            QOpenGLFunctions(ctx).glDeleteFramebuffers(1, &m_fbo);
+            ctx->functions()->glDeleteFramebuffers(1, &m_fbo);
         if (m_width || m_height)
-            glDeleteTextures(1, &m_texture);
+            ctx->functions()->glDeleteTextures(1, &m_texture);
     }
 
     void invalidateResource()
@@ -152,6 +154,8 @@ public:
     void clear();
 
 private:
+    void setupVertexAttribs();
+
     QOpenGLGlyphTexture *m_textureResource;
 
     QOpenGL2PaintEngineExPrivate *pex;
@@ -162,6 +166,9 @@ private:
     GLfloat m_textureCoordinateArray[8];
 
     int m_serialNumber;
+
+    QOpenGLBuffer m_buffer;
+    QOpenGLVertexArrayObject m_vao;
 };
 
 QT_END_NAMESPACE

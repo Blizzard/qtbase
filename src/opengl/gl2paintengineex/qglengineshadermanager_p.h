@@ -90,7 +90,7 @@
         qglslMainVertexShader
         qglslMainWithTexCoordsVertexShader
 
-    And the the following position vertex shaders:
+    And the following position vertex shaders:
         qglslPositionOnlyVertexShader
         qglslPositionWithTextureBrushVertexShader
         qglslPositionWithPatternBrushVertexShader
@@ -444,6 +444,7 @@ public:
         BrushTransform,
         BrushTexture,
         Matrix,
+        TranslateZ,
         NumUniforms
     };
 

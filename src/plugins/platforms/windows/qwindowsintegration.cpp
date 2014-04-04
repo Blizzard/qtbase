@@ -83,6 +83,7 @@
 #  include "qwindowssessionmanager.h"
 #endif
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/qpa/qplatforminputcontextfactory_p.h>
 
 #include <QtCore/private/qeventdispatcher_win_p.h>
 #include <QtCore/QDebug>
@@ -143,7 +144,7 @@ struct QWindowsIntegrationPrivate
     explicit QWindowsIntegrationPrivate(const QStringList &paramList);
     ~QWindowsIntegrationPrivate();
 
-    const unsigned m_options;
+    unsigned m_options;
     QWindowsContext m_context;
     QPlatformFontDatabase *m_fontDatabase;
 #ifndef QT_NO_CLIPBOARD
@@ -158,14 +159,15 @@ struct QWindowsIntegrationPrivate
 #if !defined(QT_NO_OPENGL) && !defined(QT_OPENGL_ES_2)
     QOpenGLStaticContextPtr m_staticOpenGLContext;
 #endif
-    QWindowsInputContext m_inputContext;
+    QScopedPointer<QPlatformInputContext> m_inputContext;
 #ifndef QT_NO_ACCESSIBILITY
     QWindowsAccessibility m_accessibility;
 #endif
     QWindowsServices m_services;
 };
 
-static inline unsigned parseOptions(const QStringList &paramList)
+static inline unsigned parseOptions(const QStringList &paramList,
+                                    int *tabletAbsoluteRange)
 {
     unsigned options = 0;
     foreach (const QString &param, paramList) {
@@ -187,15 +189,21 @@ static inline unsigned parseOptions(const QStringList &paramList)
             options |= QWindowsIntegration::DontPassOsMouseEventsSynthesizedFromTouch;
         } else if (param.startsWith(QLatin1String("verbose="))) {
             QWindowsContext::verbose = param.right(param.size() - 8).toInt();
+        } else if (param.startsWith(QLatin1String("tabletabsoluterange="))) {
+            *tabletAbsoluteRange = param.rightRef(param.size() - 20).toInt();
         }
     }
     return options;
 }
 
 QWindowsIntegrationPrivate::QWindowsIntegrationPrivate(const QStringList &paramList)
-    : m_options(parseOptions(paramList))
+    : m_options(0)
     , m_fontDatabase(0)
 {
+    int tabletAbsoluteRange = -1;
+    m_options = parseOptions(paramList, &tabletAbsoluteRange);
+    if (tabletAbsoluteRange >= 0)
+        m_context.setTabletAbsoluteRange(tabletAbsoluteRange);
 }
 
 QWindowsIntegrationPrivate::~QWindowsIntegrationPrivate()
@@ -217,6 +225,14 @@ QWindowsIntegration::~QWindowsIntegration()
 {
 }
 
+void QWindowsIntegration::initialize()
+{
+    if (QPlatformInputContext *pluginContext = QPlatformInputContextFactory::create())
+        d->m_inputContext.reset(pluginContext);
+    else
+        d->m_inputContext.reset(new QWindowsInputContext);
+}
+
 bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 {
     switch (cap) {
@@ -227,7 +243,8 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
         return true;
     case ThreadedOpenGL:
 #if defined(QT_OPENGL_ES_2) || defined(QT_OPENGL_DYNAMIC)
-        return QOpenGLFunctions::isES() ? QWindowsEGLContext::hasThreadedOpenGLCapability() : true;
+        return QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL
+            ? QWindowsEGLContext::hasThreadedOpenGLCapability() : true;
 #  else
         return true;
 #  endif // QT_OPENGL_ES_2
@@ -237,6 +254,8 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
     case MultipleWindows:
         return true;
     case ForeignWindows:
+        return true;
+    case RasterGLSurface:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -289,7 +308,7 @@ QPlatformOpenGLContext
 {
     qCDebug(lcQpaGl) << __FUNCTION__ << context->format();
 #if defined(QT_OPENGL_ES_2) || defined(QT_OPENGL_DYNAMIC)
-    if (QOpenGLFunctions::isES()){
+    if (QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL) {
         if (d->m_staticEGLContext.isNull()) {
             QWindowsEGLStaticContext *staticContext = QWindowsEGLStaticContext::create();
             if (!staticContext)
@@ -300,7 +319,7 @@ QPlatformOpenGLContext
     }
 #endif
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLFunctions::isES()) {
+    if (QOpenGLContext::openGLModuleType() == QOpenGLContext::DesktopGL) {
         if (d->m_staticOpenGLContext.isNull())
             d->m_staticOpenGLContext =
                 QSharedPointer<QOpenGLStaticContext>(QOpenGLStaticContext::create());
@@ -372,7 +391,7 @@ QVariant QWindowsIntegration::styleHint(QPlatformIntegration::StyleHint hint) co
     switch (hint) {
     case QPlatformIntegration::CursorFlashTime:
         if (const unsigned timeMS = GetCaretBlinkTime())
-            return QVariant(int(timeMS));
+            return QVariant(int(timeMS) * 2);
         break;
 #ifdef SPI_GETKEYBOARDSPEED
     case KeyboardAutoRepeatRate:
@@ -431,7 +450,7 @@ QPlatformDrag *QWindowsIntegration::drag() const
 
 QPlatformInputContext * QWindowsIntegration::inputContext() const
 {
-    return &d->m_inputContext;
+    return d->m_inputContext.data();
 }
 
 #ifndef QT_NO_ACCESSIBILITY

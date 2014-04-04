@@ -626,14 +626,7 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
             anim->paint(painter, option);
         } else {
             QPainter *p = painter;
-            QWidget *parentWidget = 0;
-            if (widget) {
-                parentWidget = widget->parentWidget();
-                if (parentWidget)
-                    parentWidget = parentWidget->parentWidget();
-            }
-            if (widget && widget->inherits("QLineEdit")
-                && parentWidget && parentWidget->inherits("QAbstractItemView")) {
+            if (QWindowsXPStylePrivate::isItemViewDelegateLineEdit(widget)) {
                 // we try to check if this lineedit is a delegate on a QAbstractItemView-derived class.
                 QPen oldPen = p->pen();
                 // Inner white border
@@ -1206,11 +1199,13 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             if (!proxy()->styleHint(SH_UnderlineShortcut, mbi, widget))
                 alignment |= Qt::TextHideMnemonic;
 
-            //The rect adjustment is a workaround for the menu not really filling its background.
-            XPThemeData theme(widget, painter,
-                              QWindowsXPStylePrivate::MenuTheme,
-                              MENU_BARBACKGROUND, 0, option->rect.adjusted(-1, 0, 2, 1));
-            d->drawBackground(theme);
+            if (widget) { // Not needed for QtQuick Controls
+                //The rect adjustment is a workaround for the menu not really filling its background.
+                XPThemeData theme(widget, painter,
+                                  QWindowsXPStylePrivate::MenuTheme,
+                                  MENU_BARBACKGROUND, 0, option->rect.adjusted(-1, 0, 2, 1));
+                d->drawBackground(theme);
+            }
 
             int stateId = MBI_NORMAL;
             if (disabled)
@@ -1271,7 +1266,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                 QPoint p1 = QPoint(x + checkcol, yoff);
                 QPoint p2 = QPoint(x + w + 6 , yoff);
                 stateId = MBI_HOT;
-                QRect subRect(p1.x(), p1.y(), p2.x() - p1.x(), 6);
+                QRect subRect(p1.x() + (3 - menuitem->rect.x()), p1.y(), p2.x() - p1.x(), 6);
                 subRect  = QStyle::visualRect(option->direction, option->rect, subRect );
                 XPThemeData theme2(widget, painter,
                                    QWindowsXPStylePrivate::MenuTheme,
@@ -1281,7 +1276,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             }
 
             QRect vCheckRect = visualRect(option->direction, menuitem->rect, QRect(menuitem->rect.x(),
-                                          menuitem->rect.y(), checkcol - 6, menuitem->rect.height()));
+                                          menuitem->rect.y(), checkcol - (3 + menuitem->rect.x()), menuitem->rect.height()));
 
             if (act) {
                 stateId = dis ? MBI_DISABLED : MBI_HOT;
@@ -1346,7 +1341,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             if (dis)
                 painter->setPen(textColor);
 
-            int xm = windowsItemFrame + checkcol + windowsItemHMargin;
+            int xm = windowsItemFrame + checkcol + windowsItemHMargin + (3 - menuitem->rect.x()) - 1;
             int xpos = menuitem->rect.x() + xm;
             QRect textRect(xpos, y + windowsItemVMargin, w - xm - windowsRightBorder - tab + 1, h - 2 * windowsItemVMargin);
             QRect vTextRect = visualRect(option->direction, menuitem->rect, textRect);

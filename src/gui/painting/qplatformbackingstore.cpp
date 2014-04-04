@@ -186,6 +186,28 @@ void QPlatformTextureList::clear()
 */
 
 #ifndef QT_NO_OPENGL
+
+static QRect deviceRect(const QRect &rect, QWindow *window)
+{
+    QRect deviceRect(rect.topLeft() * window->devicePixelRatio(),
+                     rect.size() * window->devicePixelRatio());
+    return deviceRect;
+}
+
+static QRegion deviceRegion(const QRegion &region, QWindow *window)
+{
+    if (!(window->devicePixelRatio() > 1))
+        return region;
+
+    QVector<QRect> rects;
+    foreach (QRect rect, region.rects())
+        rects.append(deviceRect(rect, window));
+
+    QRegion deviceRegion;
+    deviceRegion.setRects(rects.constData(), rects.count());
+    return deviceRegion;
+}
+
 /*!
     Flushes the given \a region from the specified \a window onto the
     screen, and composes it with the specified \a textures.
@@ -204,7 +226,8 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
     Q_UNUSED(offset);
 
     context->makeCurrent(window);
-    glViewport(0, 0, window->width(), window->height());
+    QOpenGLFunctions *funcs = context->functions();
+    funcs->glViewport(0, 0, window->width() * window->devicePixelRatio(), window->height() * window->devicePixelRatio());
 
     if (!d_ptr->blitter) {
         d_ptr->blitter = new QOpenGLTextureBlitter;
@@ -213,28 +236,30 @@ void QPlatformBackingStore::composeAndFlush(QWindow *window, const QRegion &regi
 
     d_ptr->blitter->bind();
 
-    QRect windowRect(QPoint(), window->size());
+    QRect windowRect(QPoint(), window->size() * window->devicePixelRatio());
+
     for (int i = 0; i < textures->count(); ++i) {
         GLuint textureId = textures->textureId(i);
-        glBindTexture(GL_TEXTURE_2D, textureId);
+        funcs->glBindTexture(GL_TEXTURE_2D, textureId);
 
-        QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), windowRect);
+        QRect targetRect = deviceRect(textures->geometry(i), window);
+        QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(targetRect, windowRect);
         d_ptr->blitter->blit(textureId, target, QOpenGLTextureBlitter::OriginBottomLeft);
     }
 
-    GLuint textureId = toTexture(region);
+    GLuint textureId = toTexture(deviceRegion(region, window));
     if (!textureId)
         return;
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    funcs->glEnable(GL_BLEND);
+    funcs->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(windowRect, windowRect);
     d_ptr->blitter->setSwizzleRB(true);
     d_ptr->blitter->blit(textureId, target, QOpenGLTextureBlitter::OriginTopLeft);
     d_ptr->blitter->setSwizzleRB(false);
 
-    glDisable(GL_BLEND);
+    funcs->glDisable(GL_BLEND);
     d_ptr->blitter->release();
     context->swapBuffers(window);
 }
@@ -280,29 +305,38 @@ GLuint QPlatformBackingStore::toTexture(const QRegion &dirtyRegion) const
     if (image.format() != QImage::Format_RGB32 && image.format() != QImage::Format_RGBA8888)
         image = image.convertToFormat(QImage::Format_RGBA8888);
 
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+
     if (resized) {
         if (d_ptr->textureId)
-            glDeleteTextures(1, &d_ptr->textureId);
-        glGenTextures(1, &d_ptr->textureId);
-        glBindTexture(GL_TEXTURE_2D, d_ptr->textureId);
+            funcs->glDeleteTextures(1, &d_ptr->textureId);
+        funcs->glGenTextures(1, &d_ptr->textureId);
+        funcs->glBindTexture(GL_TEXTURE_2D, d_ptr->textureId);
 #ifndef QT_OPENGL_ES_2
-        if (!QOpenGLFunctions::isES()) {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+        if (!QOpenGLContext::currentContext()->isES()) {
+            funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+            funcs->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         }
 #endif
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageSize.width(), imageSize.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     const_cast<uchar*>(image.constBits()));
+        funcs->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageSize.width(), imageSize.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                            const_cast<uchar*>(image.constBits()));
         d_ptr->textureSize = imageSize;
     } else {
-        glBindTexture(GL_TEXTURE_2D, d_ptr->textureId);
+        funcs->glBindTexture(GL_TEXTURE_2D, d_ptr->textureId);
         QRect imageRect = image.rect();
         QRect rect = dirtyRegion.boundingRect() & imageRect;
+
+#ifndef QT_OPENGL_ES_2
+        funcs->glPixelStorei(GL_UNPACK_ROW_LENGTH, image.width());
+        funcs->glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                               image.constScanLine(rect.y()) + rect.x() * 4);
+        funcs->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#else
         // if the rect is wide enough it's cheaper to just
         // extend it instead of doing an image copy
         if (rect.width() >= imageRect.width() / 2) {
@@ -314,12 +348,13 @@ GLuint QPlatformBackingStore::toTexture(const QRegion &dirtyRegion) const
         // OpenGL instead of copying, since there's no gap between scanlines
 
         if (rect.width() == imageRect.width()) {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                            image.constScanLine(rect.y()));
+            funcs->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                                   image.constScanLine(rect.y()));
         } else {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                            image.copy(rect).constBits());
+            funcs->glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                                   image.copy(rect).constBits());
         }
+#endif
     }
 
     return d_ptr->textureId;
