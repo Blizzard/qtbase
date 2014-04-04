@@ -98,6 +98,7 @@
 #  define Q_UNREACHABLE_IMPL() __assume(0)
 #  define Q_NORETURN __declspec(noreturn)
 #  define Q_DECL_DEPRECATED __declspec(deprecated)
+#  define Q_DECL_DEPRECATED_X(text) __declspec(deprecated(text))
 #  define Q_DECL_EXPORT __declspec(dllexport)
 #  define Q_DECL_IMPORT __declspec(dllimport)
 /* Intel C++ disguising as Visual C++: the `using' keyword avoids warnings */
@@ -152,6 +153,9 @@
 #    define Q_CC_INTEL
 #    define Q_ASSUME_IMPL(expr)  __assume(expr)
 #    define Q_UNREACHABLE_IMPL() __builtin_unreachable()
+#    if __INTEL_COMPILER >= 1300 && !defined(__APPLE__)
+#      define Q_DECL_DEPRECATED_X(text) __attribute__ ((__deprecated__(text)))
+#    endif
 #  elif defined(__clang__)
 /* Clang also masquerades as GCC */
 #    define Q_CC_CLANG
@@ -173,6 +177,7 @@
 #    if (__GNUC__ * 100 + __GNUC_MINOR__) >= 405
 #      define Q_ASSUME_IMPL(expr)  if (expr){} else __builtin_unreachable()
 #      define Q_UNREACHABLE_IMPL() __builtin_unreachable()
+#      define Q_DECL_DEPRECATED_X(text) __attribute__ ((__deprecated__(text)))
 #    endif
 #  endif
 
@@ -251,7 +256,7 @@
 #  if defined(__EDG__)
 #    define Q_CC_EDG
 #  endif
-/* Compaq have disabled EDG's _BOOL macro and use _BOOL_EXISTS instead
+/* Compaq has disabled EDG's _BOOL macro and uses _BOOL_EXISTS instead
    - observed on Compaq C++ V6.3-002.
    In any case versions prior to Compaq C++ V6.0-005 do not have bool. */
 #  if !defined(_BOOL_EXISTS)
@@ -469,14 +474,31 @@
  *  N2544           Q_COMPILER_UNRESTRICTED_UNIONS
  *  N1653           Q_COMPILER_VARIADIC_MACROS
  *  N2242 N2555     Q_COMPILER_VARIADIC_TEMPLATES
+ *
+ * C++1y proposed features
+ *
+ *  N3472           Q_COMPILER_BINARY_LITERALS
+ *  N3649           Q_COMPILER_GENERIC_LAMBDA
+ *  N3638           Q_COMPILER_LAMBDA_CAPTURES
+ *  N3652           Q_COMPILER_RELAXED_CONSTEXPR_FUNCTIONS
+ *  N3386 N3638     Q_COMPILER_RETURN_TYPE_DEDUCTION
+ *  N3651           Q_COMPILER_VARIABLE_TEMPLATES
+ *  N3639           Q_COMPILER_VLA  (see also Q_COMPILER_RESTRICTED_VLA)
+ *
  */
 
 #ifdef Q_CC_INTEL
+#  define Q_COMPILER_RESTRICTED_VLA
+#  define Q_COMPILER_VARIADIC_MACROS // C++11 feature supported as an extension in other modes, too
 #  if __INTEL_COMPILER < 1200
 #    define Q_NO_TEMPLATE_FRIENDS
 #  endif
+#  if __INTEL_COMPILER >= 1310 && !defined(_WIN32)
+//    ICC supports C++14 binary literals in C, C++98, and C++11 modes
+//    at least since 13.1, but I can't test further back
+#     define Q_COMPILER_BINARY_LITERALS
+#  endif
 #  if __cplusplus >= 201103L
-#    define Q_COMPILER_VARIADIC_MACROS
 #    if __INTEL_COMPILER >= 1200
 #      define Q_COMPILER_AUTO_TYPE
 #      define Q_COMPILER_CLASS_ENUM
@@ -487,7 +509,6 @@
 #      define Q_COMPILER_LAMBDA
 #      define Q_COMPILER_RVALUE_REFS
 #      define Q_COMPILER_STATIC_ASSERT
-#      define Q_COMPILER_THREAD_LOCAL
 #      define Q_COMPILER_VARIADIC_MACROS
 #    endif
 #    if __INTEL_COMPILER >= 1210
@@ -518,8 +539,9 @@
 #  endif
 #endif
 
-#ifdef Q_CC_CLANG
+#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 /* General C++ features */
+#  define Q_COMPILER_RESTRICTED_VLA
 #  if !__has_feature(cxx_exceptions)
 #    ifndef QT_NO_EXCEPTIONS
 #      define QT_NO_EXCEPTIONS
@@ -527,6 +549,24 @@
 #  endif
 #  if !__has_feature(cxx_rtti)
 #    define QT_NO_RTTI
+#  endif
+#  if __has_feature(attribute_deprecated_with_message)
+#    define Q_DECL_DEPRECATED_X(text) __attribute__ ((__deprecated__(text)))
+#  endif
+
+// Clang supports binary literals in C, C++98 and C++11 modes
+// It's been supported "since the dawn of time itself" (cf. commit 179883)
+#  if __has_extension(cxx_binary_literals)
+#    define Q_COMPILER_BINARY_LITERALS
+#  endif
+
+// Variadic macros are supported for gnu++98, c++11, c99 ... since 2.9
+#  if ((__clang_major__ * 100) + __clang_minor__) >= 209
+#    if !defined(__STRICT_ANSI__) || defined(__GXX_EXPERIMENTAL_CXX0X__) \
+      || (defined(__cplusplus) && (__cplusplus >= 201103L)) \
+      || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L))
+#      define Q_COMPILER_VARIADIC_MACROS
+#    endif
 #  endif
 
 /* C++11 features, see http://clang.llvm.org/cxx_status.html */
@@ -625,19 +665,54 @@
     /* Features that have no __has_feature() check */
 #    if ((__clang_major__ * 100) + __clang_minor__) >= 209 /* since clang 2.9 */
 #      define Q_COMPILER_EXTERN_TEMPLATES
-#      define Q_COMPILER_VARIADIC_MACROS
+#    endif
+#  endif
+
+/* C++1y features, see http://clang.llvm.org/cxx_status.html and
+ * http://clang.llvm.org/docs/LanguageExtensions.html#checks-for-standard-language-features */
+#  if __cplusplus > 201103L
+//#    if __has_feature(cxx_binary_literals)
+//#      define Q_COMPILER_BINARY_LITERALS  // see above
+//#    endif
+#    if __has_feature(cxx_generic_lambda)
+#      define Q_COMPILER_GENERIC_LAMBDA
+#    endif
+#    if __has_feature(cxx_init_capture)
+#      define Q_COMPILER_LAMBDA_CAPTURES
+#    endif
+#    if __has_feature(cxx_relaxed_constexpr)
+#      define Q_COMPILER_RELAXED_CONSTEXPR_FUNCTIONS
+#    endif
+#    if __has_feature(cxx_decltype_auto) && __has_feature(cxx_return_type_deduction)
+#      define Q_COMPILER_RETURN_TYPE_DEDUCTION
+#    endif
+#    if __has_feature(cxx_variable_templates)
+#      define Q_COMPILER_VARIABLE_TEMPLATES
+#    endif
+#    if __has_feature(cxx_runtime_array)
+#      define Q_COMPILER_VLA
 #    endif
 #  endif
 #endif // Q_CC_CLANG
 
 #if defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
+#  define Q_COMPILER_RESTRICTED_VLA
+#  if (__GNUC__ * 100 + __GNUC_MINOR__) >= 403
+//   GCC supports binary literals in C, C++98 and C++11 modes
+#    define Q_COMPILER_BINARY_LITERALS
+#  endif
+#  if !defined(__STRICT_ANSI__) || defined(__GXX_EXPERIMENTAL_CXX0X__) \
+    || (defined(__cplusplus) && (__cplusplus >= 201103L)) \
+    || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L))
+     // Variadic macros are supported for gnu++98, c++11, C99 ... since forever (gcc 2.97)
+#    define Q_COMPILER_VARIADIC_MACROS
+#  endif
 #  if defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L
 #    if (__GNUC__ * 100 + __GNUC_MINOR__) >= 403
        /* C++11 features supported in GCC 4.3: */
 #      define Q_COMPILER_DECLTYPE
 #      define Q_COMPILER_RVALUE_REFS
 #      define Q_COMPILER_STATIC_ASSERT
-#      define Q_COMPILER_VARIADIC_MACROS
 #    endif
 #    if (__GNUC__ * 100 + __GNUC_MINOR__) >= 404
        /* C++11 features supported in GCC 4.4: */
@@ -693,6 +768,15 @@
 #    endif
      /* C++11 features are complete as of GCC 4.8.1 */
 #  endif
+#  if __cplusplus > 201103L
+#    if (__GNUC__ * 100 + __GNUC_MINOR__) >= 409
+     /* C++1y features in GCC 4.9 */
+//#    define Q_COMPILER_BINARY_LITERALS   // already supported since GCC 4.3 as an extension
+#      define Q_COMPILER_LAMBDA_CAPTURES
+#      define Q_COMPILER_RETURN_TYPE_DEDUCTION
+#      define Q_COMPILER_VLA
+#    endif
+#  endif
 #endif
 
 #if defined(Q_CC_MSVC) && !defined(Q_CC_INTEL)
@@ -722,13 +806,13 @@
 #      define Q_COMPILER_DECLTYPE
 #      define Q_COMPILER_RVALUE_REFS
 #      define Q_COMPILER_STATIC_ASSERT
-//  MSVC's library has std::initilizer_list, but the compiler does not support the braces initialization
+//  MSVC's library has std::initializer_list, but the compiler does not support the braces initialization
 //#      define Q_COMPILER_INITIALIZER_LISTS
 //#      define Q_COMPILER_UNIFORM_INIT
 #    endif
 #    if _MSC_VER >= 1700
        /* C++11 features supported in VC11 = VC2012: */
-#       undef Q_DECL_OVERRIDE               /* undo 2005/2098 settings... */
+#       undef Q_DECL_OVERRIDE               /* undo 2005/2008 settings... */
 #       undef Q_DECL_FINAL                  /* undo 2005/2008 settings... */
 #      define Q_COMPILER_EXPLICIT_OVERRIDES /* ...and use std C++11 now   */
 #      define Q_COMPILER_RANGE_FOR
@@ -796,8 +880,10 @@
 
 #ifdef Q_COMPILER_CONSTEXPR
 # define Q_DECL_CONSTEXPR constexpr
+# define Q_CONSTEXPR constexpr
 #else
 # define Q_DECL_CONSTEXPR
+# define Q_CONSTEXPR const
 #endif
 
 #ifdef Q_COMPILER_EXPLICIT_OVERRIDES
@@ -860,6 +946,9 @@
 #endif
 #ifndef Q_DECL_VARIABLE_DEPRECATED
 #  define Q_DECL_VARIABLE_DEPRECATED Q_DECL_DEPRECATED
+#endif
+#ifndef Q_DECL_DEPRECATED_X
+#  define Q_DECL_DEPRECATED_X(text) Q_DECL_DEPRECATED
 #endif
 #ifndef Q_DECL_EXPORT
 #  define Q_DECL_EXPORT
@@ -943,7 +1032,6 @@
 #endif
 #if !defined(Q_PROCESSOR_ARM)
 #  undef QT_COMPILER_SUPPORTS_IWMMXT
-#  undef QT_COMPILER_SUPPORTS_NEON
 #endif
 #if !defined(Q_PROCESSOR_MIPS)
 #  undef QT_COMPILER_SUPPORTS_MIPS_DSP

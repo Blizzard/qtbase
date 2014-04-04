@@ -40,12 +40,48 @@
 ****************************************************************************/
 
 #include "qjnihelpers_p.h"
+#include "qmutex.h"
+#include "qlist.h"
 
 QT_BEGIN_NAMESPACE
 
 static JavaVM *g_javaVM = Q_NULLPTR;
 static jobject g_jActivity = Q_NULLPTR;
 static jobject g_jClassLoader = Q_NULLPTR;
+static jint g_androidSdkVersion = 0;
+
+namespace {
+    class ActivityResultListeners
+    {
+    public:
+        QMutex mutex;
+        QList<QtAndroidPrivate::ActivityResultListener *> listeners;
+    };
+}
+
+Q_GLOBAL_STATIC(ActivityResultListeners, g_activityResultListeners)
+
+void QtAndroidPrivate::registerActivityResultListener(ActivityResultListener *listener)
+{
+    QMutexLocker locker(&g_activityResultListeners()->mutex);
+    g_activityResultListeners()->listeners.append(listener);
+}
+
+void QtAndroidPrivate::unregisterActivityResultListener(ActivityResultListener *listener)
+{
+    QMutexLocker locker(&g_activityResultListeners()->mutex);
+    g_activityResultListeners()->listeners.removeAll(listener);
+}
+
+void QtAndroidPrivate::handleActivityResult(jint requestCode, jint resultCode, jobject data)
+{
+    QMutexLocker locker(&g_activityResultListeners()->mutex);
+    const QList<QtAndroidPrivate::ActivityResultListener *> &listeners = g_activityResultListeners()->listeners;
+    for (int i=0; i<listeners.size(); ++i) {
+        if (listeners.at(i)->handleActivityResult(requestCode, resultCode, data))
+            break;
+    }
+}
 
 static inline bool exceptionCheck(JNIEnv *env)
 {
@@ -58,6 +94,19 @@ static inline bool exceptionCheck(JNIEnv *env)
     }
 
     return false;
+}
+
+static void setAndroidSdkVersion(JNIEnv *env)
+{
+    jclass androidVersionClass = env->FindClass("android/os/Build$VERSION");
+    if (exceptionCheck(env))
+        return;
+
+    jfieldID androidSDKFieldID = env->GetStaticFieldID(androidVersionClass, "SDK_INT", "I");
+    if (exceptionCheck(env))
+        return;
+
+    g_androidSdkVersion = env->GetStaticIntField(androidVersionClass, androidSDKFieldID);
 }
 
 jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
@@ -93,6 +142,8 @@ jint QtAndroidPrivate::initJNI(JavaVM *vm, JNIEnv *env)
     if (exceptionCheck(env))
         return JNI_ERR;
 
+    setAndroidSdkVersion(env);
+
     g_jClassLoader = env->NewGlobalRef(classLoader);
     env->DeleteLocalRef(classLoader);
     g_jActivity = env->NewGlobalRef(activity);
@@ -116,6 +167,11 @@ JavaVM *QtAndroidPrivate::javaVM()
 jobject QtAndroidPrivate::classLoader()
 {
     return g_jClassLoader;
+}
+
+jint QtAndroidPrivate::androidSdkVersion()
+{
+    return g_androidSdkVersion;
 }
 
 QT_END_NAMESPACE

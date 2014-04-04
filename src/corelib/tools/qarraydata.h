@@ -135,14 +135,14 @@ struct QTypedArrayData
     public:
         T *i;
         typedef std::random_access_iterator_tag  iterator_category;
-        typedef qptrdiff difference_type;
+        typedef int difference_type;
         typedef T value_type;
         typedef T *pointer;
         typedef T &reference;
 
         inline iterator() : i(0) {}
         inline iterator(T *n) : i(n) {}
-        inline iterator(const iterator &o): i(o.i){}
+        inline iterator(const iterator &o): i(o.i){} // #### Qt 6: remove, the implicit version is fine
         inline T &operator*() const { return *i; }
         inline T *operator->() const { return i; }
         inline T &operator[](int j) const { return *(i + j); }
@@ -169,14 +169,14 @@ struct QTypedArrayData
     public:
         const T *i;
         typedef std::random_access_iterator_tag  iterator_category;
-        typedef qptrdiff difference_type;
+        typedef int difference_type;
         typedef T value_type;
         typedef const T *pointer;
         typedef const T &reference;
 
         inline const_iterator() : i(0) {}
         inline const_iterator(const T *n) : i(n) {}
-        inline const_iterator(const const_iterator &o): i(o.i) {}
+        inline const_iterator(const const_iterator &o): i(o.i) {} // #### Qt 6: remove, the default version is fine
         inline explicit const_iterator(const iterator &o): i(o.i) {}
         inline const T &operator*() const { return *i; }
         inline const T *operator->() const { return i; }

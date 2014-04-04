@@ -199,7 +199,6 @@ public:
         return o->d_func();
     }
 
-    int senderSignalIndex() const;
     int signalIndex(const char *signalName, const QMetaObject **meta = 0) const;
     inline bool isSignalConnected(uint signalIdx) const;
 
@@ -248,7 +247,7 @@ public:
 
   Returns \c true if the signal with index \a signal_index from object \a sender is connected.
   Signals with indices above a certain range are always considered connected (see connectedSignals
-  in QObjectPrivate). If a signal spy is installed, all signals are considered connected.
+  in QObjectPrivate).
 
   \a signal_index must be the index returned by QObjectPrivate::signalIndex;
 */
@@ -257,9 +256,7 @@ inline bool QObjectPrivate::isSignalConnected(uint signal_index) const
     return signal_index >= sizeof(connectedSignals) * 8
         || (connectedSignals[signal_index >> 5] & (1 << (signal_index & 0x1f))
         || (declarativeData && QAbstractDeclarativeData::isSignalConnected
-            && QAbstractDeclarativeData::isSignalConnected(declarativeData, q_func(), signal_index))
-        || qt_signal_spy_callback_set.signal_begin_callback
-        || qt_signal_spy_callback_set.signal_end_callback);
+            && QAbstractDeclarativeData::isSignalConnected(declarativeData, q_func(), signal_index)));
 }
 
 inline QObjectPrivate::Sender *QObjectPrivate::setCurrentSender(QObject *receiver,
@@ -341,7 +338,7 @@ inline QMetaObject::Connection QObjectPrivate::connect(const typename QtPrivate:
         types = QtPrivate::ConnectionTypes<typename SignalType::Arguments>::types();
 
     return QObject::connectImpl(sender, reinterpret_cast<void **>(&signal),
-        receiverPrivate->q_func(), reinterpret_cast<void **>(&slot),
+        receiverPrivate->q_ptr, reinterpret_cast<void **>(&slot),
         new QtPrivate::QPrivateSlotObject<Func2, typename QtPrivate::List_Left<typename SignalType::Arguments, SlotType::ArgumentCount>::Value,
                                         typename SignalType::ReturnType>(slot),
         type, types, &SignalType::Object::staticMetaObject);
@@ -359,7 +356,7 @@ bool QObjectPrivate::disconnect(const typename QtPrivate::FunctionPointer< Func1
     Q_STATIC_ASSERT_X((QtPrivate::CheckCompatibleArguments<typename SignalType::Arguments, typename SlotType::Arguments>::value),
                       "Signal and slot arguments are not compatible.");
     return QObject::disconnectImpl(sender, reinterpret_cast<void **>(&signal),
-                          receiverPrivate->q_func(), reinterpret_cast<void **>(&slot),
+                          receiverPrivate->q_ptr, reinterpret_cast<void **>(&slot),
                           &SignalType::Object::staticMetaObject);
 }
 

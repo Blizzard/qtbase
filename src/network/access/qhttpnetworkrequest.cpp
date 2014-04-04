@@ -49,8 +49,8 @@ QT_BEGIN_NAMESPACE
 QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(QHttpNetworkRequest::Operation op,
         QHttpNetworkRequest::Priority pri, const QUrl &newUrl)
     : QHttpNetworkHeaderPrivate(newUrl), operation(op), priority(pri), uploadByteDevice(0),
-      autoDecompress(false), pipeliningAllowed(false), withCredentials(true),
-      preConnect(false)
+      autoDecompress(false), pipeliningAllowed(false), spdyAllowed(false),
+      withCredentials(true), preConnect(false)
 {
 }
 
@@ -62,6 +62,7 @@ QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(const QHttpNetworkRequest
     uploadByteDevice = other.uploadByteDevice;
     autoDecompress = other.autoDecompress;
     pipeliningAllowed = other.pipeliningAllowed;
+    spdyAllowed = other.spdyAllowed;
     customVerb = other.customVerb;
     withCredentials = other.withCredentials;
     ssl = other.ssl;
@@ -80,6 +81,7 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (uploadByteDevice == other.uploadByteDevice)
         && (autoDecompress == other.autoDecompress)
         && (pipeliningAllowed == other.pipeliningAllowed)
+        && (spdyAllowed == other.spdyAllowed)
         // we do not clear the customVerb in setOperation
         && (operation != QHttpNetworkRequest::Custom || (customVerb == other.customVerb))
         && (withCredentials == other.withCredentials)
@@ -87,9 +89,9 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (preConnect == other.preConnect);
 }
 
-QByteArray QHttpNetworkRequestPrivate::methodName() const
+QByteArray QHttpNetworkRequest::methodName() const
 {
-    switch (operation) {
+    switch (d->operation) {
     case QHttpNetworkRequest::Get:
         return "GET";
     case QHttpNetworkRequest::Head:
@@ -107,24 +109,24 @@ QByteArray QHttpNetworkRequestPrivate::methodName() const
     case QHttpNetworkRequest::Connect:
         return "CONNECT";
     case QHttpNetworkRequest::Custom:
-        return customVerb;
+        return d->customVerb;
     default:
         break;
     }
     return QByteArray();
 }
 
-QByteArray QHttpNetworkRequestPrivate::uri(bool throughProxy) const
+QByteArray QHttpNetworkRequest::uri(bool throughProxy) const
 {
     QUrl::FormattingOptions format(QUrl::RemoveFragment | QUrl::RemoveUserInfo | QUrl::FullyEncoded);
 
     // for POST, query data is send as content
-    if (operation == QHttpNetworkRequest::Post && !uploadByteDevice)
+    if (d->operation == QHttpNetworkRequest::Post && !d->uploadByteDevice)
         format |= QUrl::RemoveQuery;
     // for requests through proxy, the Request-URI contains full url
     if (!throughProxy)
         format |= QUrl::RemoveScheme | QUrl::RemoveAuthority;
-    QUrl copy = url;
+    QUrl copy = d->url;
     if (copy.path().isEmpty())
         copy.setPath(QStringLiteral("/"));
     QByteArray uri = copy.toEncoded(format);
@@ -137,9 +139,9 @@ QByteArray QHttpNetworkRequestPrivate::header(const QHttpNetworkRequest &request
     QByteArray ba;
     ba.reserve(40 + fields.length()*25); // very rough lower bound estimation
 
-    ba += request.d->methodName();
+    ba += request.methodName();
     ba += ' ';
-    ba += request.d->uri(throughProxy);
+    ba += request.uri(throughProxy);
 
     ba += " HTTP/";
     ba += QByteArray::number(request.majorVersion());
@@ -297,6 +299,16 @@ bool QHttpNetworkRequest::isPipeliningAllowed() const
 void QHttpNetworkRequest::setPipeliningAllowed(bool b)
 {
     d->pipeliningAllowed = b;
+}
+
+bool QHttpNetworkRequest::isSPDYAllowed() const
+{
+    return d->spdyAllowed;
+}
+
+void QHttpNetworkRequest::setSPDYAllowed(bool b)
+{
+    d->spdyAllowed = b;
 }
 
 bool QHttpNetworkRequest::withCredentials() const

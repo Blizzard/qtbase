@@ -224,14 +224,11 @@ Type Moc::parseType()
             ;
         }
         if (test(LANGLE)) {
-            QByteArray templ = lexemUntil(RANGLE);
-            for (int i = 0; i < templ.size(); ++i) {
-                type.name += templ.at(i);
-                if ((templ.at(i) == '<' && i+1 < templ.size() && templ.at(i+1) == ':')
-                    || (templ.at(i) == '>' && i+1 < templ.size() && templ.at(i+1) == '>')) {
-                    type.name += ' ';
-                }
+            if (type.name.isEmpty()) {
+                // '<' cannot start a type
+                return type;
             }
+            type.name += lexemUntil(RANGLE);
         }
         if (test(SCOPE)) {
             type.name += lexem();
@@ -608,21 +605,27 @@ void Moc::parse()
                     continue;
 
                 while (inClass(&def) && hasNext()) {
-                    if (next() == Q_OBJECT_TOKEN) {
+                    switch (next()) {
+                    case Q_OBJECT_TOKEN:
                         def.hasQObject = true;
                         break;
+                    case Q_GADGET_TOKEN:
+                        def.hasQGadget = true;
+                        break;
+                    default: break;
                     }
                 }
 
-                if (!def.hasQObject)
+                if (!def.hasQObject && !def.hasQGadget)
                     continue;
 
                 for (int i = namespaceList.size() - 1; i >= 0; --i)
                     if (inNamespace(&namespaceList.at(i)))
                         def.qualified.prepend(namespaceList.at(i).name + "::");
 
-                knownQObjectClasses.insert(def.classname);
-                knownQObjectClasses.insert(def.qualified);
+                QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+                classHash.insert(def.classname, def.qualified);
+                classHash.insert(def.qualified, def.qualified);
 
                 continue; }
             default: break;
@@ -795,8 +798,9 @@ void Moc::parse()
             checkProperties(&def);
 
             classList += def;
-            knownQObjectClasses.insert(def.classname);
-            knownQObjectClasses.insert(def.qualified);
+            QHash<QByteArray, QByteArray> &classHash = def.hasQObject ? knownQObjectClasses : knownGadgets;
+            classHash.insert(def.classname, def.qualified);
+            classHash.insert(def.qualified, def.qualified);
         }
     }
 }
@@ -896,7 +900,7 @@ void Moc::generate(FILE *out)
     fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
 
     for (i = 0; i < classList.size(); ++i) {
-        Generator generator(&classList[i], metaTypes, knownQObjectClasses, out);
+        Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out);
         generator.generateCode();
     }
 
@@ -1395,10 +1399,14 @@ QByteArray Moc::lexemUntil(Token target)
     QByteArray s;
     while (from <= index) {
         QByteArray n = symbols.at(from++-1).lexem();
-        if (s.size() && n.size()
-            && is_ident_char(s.at(s.size()-1))
-            && is_ident_char(n.at(0)))
-            s += ' ';
+        if (s.size() && n.size()) {
+            char prev = s.at(s.size()-1);
+            char next = n.at(0);
+            if ((is_ident_char(prev) && is_ident_char(next))
+                || (prev == '<' && next == ':')
+                || (prev == '>' && next == '>'))
+                s += ' ';
+        }
         s += n;
     }
     return s;
@@ -1433,9 +1441,20 @@ bool Moc::until(Token target) {
         case RBRACK: --brackCount; break;
         case LPAREN: ++parenCount; break;
         case RPAREN: --parenCount; break;
-        case LANGLE: ++angleCount; break;
-        case RANGLE: --angleCount; break;
-        case GTGT: angleCount -= 2; t = RANGLE; break;
+        case LANGLE:
+            if (parenCount == 0 && braceCount == 0 && parenCount == 0)
+                ++angleCount;
+          break;
+        case RANGLE:
+            if (parenCount == 0 && braceCount == 0)
+                --angleCount;
+          break;
+        case GTGT:
+            if (parenCount == 0 && braceCount == 0) {
+                angleCount -= 2;
+                t = RANGLE;
+            }
+            break;
         default: break;
         }
         if (t == target

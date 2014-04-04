@@ -372,9 +372,22 @@
     IP_MULTICAST_LOOP (multicast loopback) socket option.
 
     \value TypeOfServiceOption This option is not supported on
-    Windows. This maps to the IP_TOS socket option.
+    Windows. This maps to the IP_TOS socket option. For possible values,
+    see table below.
 
-    Possible values for the \e{TypeOfServiceOption} are:
+    \value SendBufferSizeSocketOption Sets the socket send buffer size
+    in bytes at the OS level. This maps to the SO_SNDBUF socket option.
+    This option does not affect the QIODevice or QAbstractSocket buffers.
+    This enum value has been introduced in Qt 5.3.
+
+    \value ReceiveBufferSizeSocketOption Sets the socket receive
+    buffer size in bytes at the OS level.
+    This maps to the SO_RCVBUF socket option.
+    This option does not affect the QIODevice or QAbstractSocket buffers
+    (see \l{QAbstractSocket::}{setReadBufferSize()}).
+    This enum value has been introduced in Qt 5.3.
+
+    Possible values for \e{TypeOfServiceOption} are:
 
     \table
     \header \li Value \li Description
@@ -578,8 +591,7 @@ QAbstractSocketPrivate::~QAbstractSocketPrivate()
 
 /*! \internal
 
-    Resets the socket layer, clears the read and write buffers and
-    deletes any socket notifiers.
+    Resets the socket layer and deletes any socket notifiers.
 */
 void QAbstractSocketPrivate::resetSocketLayer()
 {
@@ -736,8 +748,8 @@ bool QAbstractSocketPrivate::canReadNotification()
         return true;
     }
 
-    if (!hasData && socketEngine)
-        socketEngine->setReadNotificationEnabled(true);
+    if (isBuffered && socketEngine)
+        socketEngine->setReadNotificationEnabled(readBufferMaxSize == 0 || readBufferMaxSize > q->bytesAvailable());
 
     // reset the read socket notifier state if we reentered inside the
     // readyRead() connected slot.
@@ -1821,6 +1833,7 @@ qintptr QAbstractSocket::socketDescriptor() const
     as a valid socket descriptor; otherwise returns \c false.
     The socket is opened in the mode specified by \a openMode, and
     enters the socket state specified by \a socketState.
+    Read and write buffers are cleared, discarding any pending data.
 
     \b{Note:} It is not possible to initialize two abstract sockets
     with the same native socket descriptor.
@@ -1833,6 +1846,8 @@ bool QAbstractSocket::setSocketDescriptor(qintptr socketDescriptor, SocketState 
     Q_D(QAbstractSocket);
 
     d->resetSocketLayer();
+    d->writeBuffer.clear();
+    d->buffer.clear();
     d->socketEngine = QAbstractSocketEngine::createSocketEngine(socketDescriptor, this);
     if (!d->socketEngine) {
         d->socketError = UnsupportedSocketOperationError;
@@ -1902,6 +1917,14 @@ void QAbstractSocket::setSocketOption(QAbstractSocket::SocketOption option, cons
         case TypeOfServiceOption:
             d_func()->socketEngine->setOption(QAbstractSocketEngine::TypeOfServiceOption, value.toInt());
             break;
+
+        case SendBufferSizeSocketOption:
+            d_func()->socketEngine->setOption(QAbstractSocketEngine::SendBufferSocketOption, value.toInt());
+            break;
+
+        case ReceiveBufferSizeSocketOption:
+            d_func()->socketEngine->setOption(QAbstractSocketEngine::ReceiveBufferSocketOption, value.toInt());
+            break;
     }
 }
 
@@ -1935,6 +1958,14 @@ QVariant QAbstractSocket::socketOption(QAbstractSocket::SocketOption option)
 
         case TypeOfServiceOption:
                 ret = d_func()->socketEngine->option(QAbstractSocketEngine::TypeOfServiceOption);
+                break;
+
+        case SendBufferSizeSocketOption:
+                ret = d_func()->socketEngine->option(QAbstractSocketEngine::SendBufferSocketOption);
+                break;
+
+        case ReceiveBufferSizeSocketOption:
+                ret = d_func()->socketEngine->option(QAbstractSocketEngine::ReceiveBufferSocketOption);
                 break;
     }
     if (ret == -1)
@@ -2190,7 +2221,7 @@ bool QAbstractSocket::waitForBytesWritten(int msecs)
         if (readyToWrite) {
             if (d->canWriteNotification()) {
 #if defined (QABSTRACTSOCKET_DEBUG)
-                qDebug("QAbstractSocket::waitForBytesWritten returns \c true");
+                qDebug("QAbstractSocket::waitForBytesWritten returns true");
 #endif
                 return true;
             }
@@ -2281,6 +2312,7 @@ void QAbstractSocket::abort()
 #if defined (QABSTRACTSOCKET_DEBUG)
     qDebug("QAbstractSocket::abort()");
 #endif
+    d->writeBuffer.clear();
     if (d->state == UnconnectedState)
         return;
 #ifndef QT_NO_SSL
@@ -2295,7 +2327,6 @@ void QAbstractSocket::abort()
         d->connectTimer = 0;
     }
 
-    d->writeBuffer.clear();
     d->abortCalled = true;
     close();
 }

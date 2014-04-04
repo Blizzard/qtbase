@@ -92,6 +92,7 @@ private slots:
 
     void filterTable();
     void filterCurrent();
+    void filter_qtbug30662();
 
     void changeSourceLayout();
     void removeSourceRows_data();
@@ -1480,6 +1481,33 @@ void tst_QSortFilterProxyModel::filterCurrent()
     QCOMPARE(spy.count(), 2);
 }
 
+void tst_QSortFilterProxyModel::filter_qtbug30662()
+{
+    QStringListModel model;
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+
+    // make sure the filter does not match any entry
+    proxy.setFilterRegExp(QRegExp("[0-9]+"));
+
+    QStringList slSource;
+    slSource << "z" << "x" << "a" << "b";
+
+    proxy.setDynamicSortFilter(true);
+    proxy.sort(0);
+    model.setStringList(slSource);
+
+    // without fix for QTBUG-30662 this will make all entries visible - but unsorted
+    proxy.setFilterRegExp(QRegExp("[a-z]+"));
+
+    QStringList slResult;
+    for (int i = 0; i < proxy.rowCount(); ++i)
+      slResult.append(proxy.index(i, 0).data().toString());
+
+    slSource.sort();
+    QCOMPARE(slResult, slSource);
+}
+
 void tst_QSortFilterProxyModel::changeSourceLayout()
 {
     QStandardItemModel model(2, 1);
@@ -2740,9 +2768,9 @@ void tst_QSortFilterProxyModel::mapFromToSource()
     QCOMPARE(proxy.mapToSource(QModelIndex()), QModelIndex());
 
 #ifdef QT_NO_DEBUG  //if Qt is compiled in debug mode, this will assert
-    QTest::ignoreMessage(QtWarningMsg, "QSortFilterProxyModel: index from wrong model passed to mapToSource ");
+    QTest::ignoreMessage(QtWarningMsg, "QSortFilterProxyModel: index from wrong model passed to mapToSource");
     QCOMPARE(proxy.mapToSource(source.index(2, 3)), QModelIndex());
-    QTest::ignoreMessage(QtWarningMsg, "QSortFilterProxyModel: index from wrong model passed to mapFromSource ");
+    QTest::ignoreMessage(QtWarningMsg, "QSortFilterProxyModel: index from wrong model passed to mapFromSource");
     QCOMPARE(proxy.mapFromSource(proxy.index(6, 2)), QModelIndex());
 #endif
 }

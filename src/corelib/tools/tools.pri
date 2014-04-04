@@ -1,5 +1,7 @@
 # Qt tools module
 
+intel_icc: QMAKE_CXXFLAGS += -fp-model strict
+
 HEADERS +=  \
         tools/qalgorithms.h \
         tools/qarraydata.h \
@@ -7,6 +9,7 @@ HEADERS +=  \
         tools/qarraydatapointer.h \
         tools/qbitarray.h \
         tools/qbytearray.h \
+        tools/qbytearraylist.h \
         tools/qbytearraymatcher.h \
         tools/qbytedata_p.h \
         tools/qcache.h \
@@ -56,6 +59,7 @@ HEADERS +=  \
         tools/qstack.h \
         tools/qstring.h \
         tools/qstringbuilder.h \
+        tools/qstringiterator_p.h \
         tools/qstringlist.h \
         tools/qstringmatcher.h \
         tools/qtextboundaryfinder.h \
@@ -74,6 +78,7 @@ SOURCES += \
         tools/qarraydata.cpp \
         tools/qbitarray.cpp \
         tools/qbytearray.cpp \
+        tools/qbytearraylist.cpp \
         tools/qbytearraymatcher.cpp \
         tools/qcollator.cpp \
         tools/qcommandlineoption.cpp \
@@ -114,6 +119,10 @@ SOURCES += \
         tools/qvector.cpp \
         tools/qvsnprintf.cpp
 
+NO_PCH_SOURCES = tools/qstring_compat.cpp
+msvc: NO_PCH_SOURCES += tools/qvector_msvc.cpp
+false: SOURCES += $$NO_PCH_SOURCES # Hack for QtCreator
+
 !nacl:mac: {
     SOURCES += tools/qelapsedtimer_mac.cpp
     OBJECTIVE_SOURCES += tools/qlocale_mac.mm \
@@ -125,8 +134,11 @@ else:blackberry {
     HEADERS += tools/qlocale_blackberry.h
 }
 else:unix:SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp tools/qtimezoneprivate_tz.cpp
-else:win32:SOURCES += tools/qelapsedtimer_win.cpp tools/qlocale_win.cpp tools/qtimezoneprivate_win.cpp
-else:integrity:SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp
+else:win32 {
+    SOURCES += tools/qelapsedtimer_win.cpp tools/qlocale_win.cpp
+    !winrt: SOURCES += tools/qtimezoneprivate_win.cpp
+    winphone: LIBS_PRIVATE += -lWindowsPhoneGlobalizationUtil
+} else:integrity:SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp
 else:SOURCES += tools/qelapsedtimer_generic.cpp
 
 contains(QT_CONFIG, zlib) {
@@ -192,3 +204,7 @@ INCLUDEPATH += ../3rdparty/md5 \
 !macx-icc:!vxworks:unix:LIBS_PRIVATE += -lm
 
 TR_EXCLUDE += ../3rdparty/*
+
+# MIPS DSP
+MIPS_DSP_ASM += tools/qstring_mips_dsp_asm.S
+MIPS_DSP_HEADERS += ../gui/painting/qt_mips_asm_dsp_p.h

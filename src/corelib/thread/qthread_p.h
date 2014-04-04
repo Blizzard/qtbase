@@ -66,6 +66,10 @@
 #include <algorithm>
 
 
+#ifdef Q_OS_WINRT
+#include <thread>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class QAbstractEventDispatcher;
@@ -173,8 +177,13 @@ public:
     static unsigned int __stdcall start(void *);
     static void finish(void *, bool lockAnyway=true);
 
+#  ifndef Q_OS_WINRT
     Qt::HANDLE handle;
     unsigned int id;
+#  else
+    std::thread *handle;
+    std::thread::id id;
+#  endif
     int waiters;
     bool terminationEnabled, terminatePending;
 # endif
@@ -223,7 +232,7 @@ public:
     QThreadData(int initialRefCount = 1);
     ~QThreadData();
 
-    static QThreadData *current();
+    static QThreadData *current(bool createIfNecessary = true);
     static void clearCurrentThreadData();
     static QThreadData *get2(QThread *thread)
     { Q_ASSERT_X(thread != 0, "QThread", "internal error"); return thread->d_func()->data; }

@@ -117,7 +117,11 @@ static QTextLine currentTextLine(const QTextCursor &cursor)
 
 QWidgetTextControlPrivate::QWidgetTextControlPrivate()
     : doc(0), cursorOn(false), cursorIsFocusIndicator(false),
+#ifndef Q_OS_ANDROID
       interactionFlags(Qt::TextEditorInteraction),
+#else
+      interactionFlags(Qt::TextEditable),
+#endif
       dragEnabled(true),
 #ifndef QT_NO_DRAGANDDROP
       mousePressed(false), mightStartDrag(false),
@@ -2026,7 +2030,7 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
         emit q->microFocusChanged();
 }
 
-QVariant QWidgetTextControl::inputMethodQuery(Qt::InputMethodQuery property) const
+QVariant QWidgetTextControl::inputMethodQuery(Qt::InputMethodQuery property, QVariant argument) const
 {
     Q_D(const QWidgetTextControl);
     QTextBlock block = d->cursor.block();
@@ -2045,6 +2049,47 @@ QVariant QWidgetTextControl::inputMethodQuery(Qt::InputMethodQuery property) con
         return QVariant(); // No limit.
     case Qt::ImAnchorPosition:
         return QVariant(d->cursor.anchor() - block.position());
+    case Qt::ImAbsolutePosition:
+        return QVariant(d->cursor.position());
+    case Qt::ImTextAfterCursor:
+    {
+        int maxLength = argument.isValid() ? argument.toInt() : 1024;
+        QTextCursor tmpCursor = d->cursor;
+        int localPos = d->cursor.position() - block.position();
+        QString result = block.text().mid(localPos);
+        while (result.length() < maxLength) {
+            int currentBlock = tmpCursor.blockNumber();
+            tmpCursor.movePosition(QTextCursor::NextBlock);
+            if (tmpCursor.blockNumber() == currentBlock)
+                break;
+            result += QLatin1Char('\n') + tmpCursor.block().text();
+        }
+        return QVariant(result);
+    }
+    case Qt::ImTextBeforeCursor:
+    {
+        int maxLength = argument.isValid() ? argument.toInt() : 1024;
+        QTextCursor tmpCursor = d->cursor;
+        int localPos = d->cursor.position() - block.position();
+        int numBlocks = 0;
+        int resultLen = localPos;
+        while (resultLen < maxLength) {
+            int currentBlock = tmpCursor.blockNumber();
+            tmpCursor.movePosition(QTextCursor::PreviousBlock);
+            if (tmpCursor.blockNumber() == currentBlock)
+                break;
+            numBlocks++;
+            resultLen += tmpCursor.block().length();
+        }
+        QString result;
+        while (numBlocks) {
+            result += tmpCursor.block().text() + QLatin1Char('\n');
+            tmpCursor.movePosition(QTextCursor::NextBlock);
+            --numBlocks;
+        }
+        result += block.text().mid(0,localPos);
+        return QVariant(result);
+    }
     default:
         return QVariant();
     }
@@ -2977,6 +3022,19 @@ bool QWidgetTextControl::find(const QString &exp, QTextDocument::FindFlags optio
     return true;
 }
 
+#ifndef QT_NO_REGEXP
+bool QWidgetTextControl::find(const QRegExp &exp, QTextDocument::FindFlags options)
+{
+    Q_D(QWidgetTextControl);
+    QTextCursor search = d->doc->find(exp, d->cursor, options);
+    if (search.isNull())
+        return false;
+
+    setTextCursor(search);
+    return true;
+}
+#endif
+
 QString QWidgetTextControl::toPlainText() const
 {
     return document()->toPlainText();
@@ -3145,7 +3203,7 @@ QRectF QWidgetTextControl::blockBoundingRect(const QTextBlock &block) const
 }
 
 #ifndef QT_NO_CONTEXTMENU
-#define NUM_CONTROL_CHARACTERS 10
+#define NUM_CONTROL_CHARACTERS 14
 const struct QUnicodeControlCharacter {
     const char *text;
     ushort character;
@@ -3160,6 +3218,10 @@ const struct QUnicodeControlCharacter {
     { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "LRO Start of left-to-right override"), 0x202d },
     { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "RLO Start of right-to-left override"), 0x202e },
     { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "PDF Pop directional formatting"), 0x202c },
+    { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "LRI Left-to-right isolate"), 0x2066 },
+    { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "RLI Right-to-left isolate"), 0x2067 },
+    { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "FSI First strong isolate"), 0x2068 },
+    { QT_TRANSLATE_NOOP("QUnicodeControlCharacterMenu", "PDI Pop directional isolate"), 0x2069 }
 };
 
 QUnicodeControlCharacterMenu::QUnicodeControlCharacterMenu(QObject *_editWidget, QWidget *parent)

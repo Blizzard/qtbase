@@ -627,7 +627,8 @@ void QFileDialogPrivate::helperPrepareShow(QPlatformDialogHelper *)
     options->setInitialDirectory(directory.exists() ?
                                  QUrl::fromLocalFile(directory.absolutePath()) :
                                  QUrl());
-    options->setInitiallySelectedNameFilter(q->selectedNameFilter());
+    if (options->initiallySelectedNameFilter().isEmpty())
+        options->setInitiallySelectedNameFilter(q->selectedNameFilter());
     if (options->initiallySelectedFiles().isEmpty())
         options->setInitiallySelectedFiles(userSelectedFiles());
 }
@@ -1450,6 +1451,7 @@ QStringList QFileDialog::nameFilters() const
 void QFileDialog::selectNameFilter(const QString &filter)
 {
     Q_D(QFileDialog);
+    d->options->setInitiallySelectedNameFilter(filter);
     if (!d->usingWidgets()) {
         d->selectNameFilter_sys(filter);
         return;
@@ -1727,7 +1729,7 @@ int QFileDialogPrivate::maxNameLength(const QString &path)
 {
 #if defined(Q_OS_UNIX)
     return ::pathconf(QFile::encodeName(path).data(), _PC_NAME_MAX);
-#elif defined(Q_OS_WINCE)
+#elif defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
     Q_UNUSED(path);
     return MAX_PATH;
 #elif defined(Q_OS_WIN)
@@ -2625,9 +2627,8 @@ void QFileDialog::accept()
     // special case for ".."
     if (lineEditText == QLatin1String("..")) {
         d->_q_navigateToParent();
-        bool block = d->qFileDialogUi->fileNameEdit->blockSignals(true);
+        const QSignalBlocker blocker(d->qFileDialogUi->fileNameEdit);
         d->lineEdit()->selectAll();
-        d->qFileDialogUi->fileNameEdit->blockSignals(block);
         return;
     }
 
@@ -2738,9 +2739,8 @@ void QFileDialogPrivate::init(const QString &directory, const QString &nameFilte
     q->selectFile(initialSelection(directory));
 
 #ifndef QT_NO_SETTINGS
-    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    settings.beginGroup(QLatin1String("Qt"));
-    q->restoreState(settings.value(QLatin1String("filedialog")).toByteArray());
+    const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+    q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
 #endif
 
 #if defined(Q_EMBEDDED_SMALLSCREEN)
@@ -2886,6 +2886,11 @@ void QFileDialogPrivate::createWidgets()
 
     createToolButtons();
     createMenuActions();
+
+#ifndef QT_NO_SETTINGS
+    const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+    q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
+#endif
 
     // Initial widget states from options
     q->setFileMode(static_cast<QFileDialog::FileMode>(options->fileMode()));

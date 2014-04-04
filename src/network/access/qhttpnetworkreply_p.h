@@ -132,6 +132,8 @@ public:
     bool isFinished() const;
 
     bool isPipeliningUsed() const;
+    bool isSpdyUsed() const;
+    void setSpdyWasUsed(bool spdy);
 
     QHttpNetworkConnection* connection();
 
@@ -164,6 +166,8 @@ private:
     friend class QHttpNetworkConnection;
     friend class QHttpNetworkConnectionPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QHttpProtocolHandler;
+    friend class QSpdyProtocolHandler;
 };
 
 
@@ -204,7 +208,11 @@ public:
         ReadingStatusState,
         ReadingHeaderState,
         ReadingDataState,
-        AllDoneState
+        AllDoneState,
+        SPDYSYNSent,
+        SPDYUploading,
+        SPDYHalfClosed,
+        SPDYClosed
     } state;
 
     QHttpNetworkRequest request;
@@ -225,6 +233,11 @@ public:
     qint64 currentChunkSize;
     qint64 currentChunkRead;
     qint64 readBufferMaxSize;
+    qint32 windowSizeDownload; // only for SPDY
+    qint32 windowSizeUpload; // only for SPDY
+    qint32 currentlyReceivedDataInWindow; // only for SPDY
+    qint32 currentlyUploadedDataInWindow; // only for SPDY
+    qint64 totallyUploadedData; // only for SPDY
     QPointer<QHttpNetworkConnection> connection;
     QPointer<QHttpNetworkConnectionChannel> connectionChannel;
 
@@ -235,12 +248,14 @@ public:
     bool requestIsPrepared;
 
     bool pipeliningUsed;
+    bool spdyUsed;
     bool downstreamLimited;
 
     char* userProvidedDownloadBuffer;
 
 #ifndef QT_NO_COMPRESS
     z_stream_s *inflateStrm;
+    int initializeInflateStream();
     qint64 uncompressBodyData(QByteDataBuffer *in, QByteDataBuffer *out);
 #endif
 };

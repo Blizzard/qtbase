@@ -55,10 +55,13 @@
 #include <QtSql/private/qsqldriver_p.h>
 #include <QtTest/QtTest>
 
-#if defined (Q_OS_WIN) || defined (Q_OS_WIN32)
+#if defined(Q_OS_WIN)
 #  include <qt_windows.h>
-#  if defined (Q_OS_WINCE)
+#  if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
 #    include <winsock2.h>
+#  endif
+#  if defined(Q_OS_WINRT) && !defined(Q_OS_WINPHONE)
+static inline int gethostname(char *name, int len) { qstrcpy(name, "localhost"); return 9; }
 #  endif
 #else
 #include <unistd.h>
@@ -299,8 +302,8 @@ public:
 
 //      use in-memory database to prevent local files
 //         addDb("QSQLITE", ":memory:");
-         addDb( "QSQLITE", QDir::toNativeSeparators(QDir::tempPath()+"/foo.db") );
-//         addDb( "QSQLITE2", QDir::toNativeSeparators(QDir::tempPath()+"/foo2.db") );
+         addDb( "QSQLITE", QDir::toNativeSeparators(dbDir.path() + "/foo.db") );
+//         addDb( "QSQLITE2", QDir::toNativeSeparators(dbDir.path() + "/foo2.db") );
 //         addDb( "QODBC3", "DRIVER={SQL SERVER};SERVER=iceblink.qt-project.org\\ICEBLINK", "troll", "trond", "" );
 //         addDb( "QODBC3", "DRIVER={SQL Native Client};SERVER=silence.qt-project.org\\SQLEXPRESS", "troll", "trond", "" );
 
@@ -512,8 +515,8 @@ public:
     static QByteArray printError( const QSqlError& err )
     {
         QString result;
-        if(err.number() > 0)
-            result += '(' + QString::number(err.number()) + ") ";
+        if (!err.nativeErrorCode().isEmpty())
+            result += '(' + err.nativeErrorCode() + ") ";
         result += '\'';
         if(!err.driverText().isEmpty())
             result += err.driverText() + "' || '";
@@ -524,8 +527,8 @@ public:
     static QByteArray printError( const QSqlError& err, const QSqlDatabase& db )
     {
         QString result(dbToString(db) + ": ");
-        if(err.number() > 0)
-            result += '(' + QString::number(err.number()) + ") ";
+        if (!err.nativeErrorCode().isEmpty())
+            result += '(' + err.nativeErrorCode() + ") ";
         result += '\'';
         if(!err.driverText().isEmpty())
             result += err.driverText() + "' || '";
@@ -586,6 +589,7 @@ public:
 
     QStringList     dbNames;
     int      counter;
+    QTemporaryDir dbDir;
 };
 
 #endif

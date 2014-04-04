@@ -52,7 +52,7 @@
 #include <sys/types.h>
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_BLACKBERRY)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_BLACKBERRY) && !defined(Q_OS_ANDROID)
 #define Q_XDG_PLATFORM
 #endif
 
@@ -77,6 +77,7 @@ private slots:
     void testAllWritableLocations_data();
     void testAllWritableLocations();
     void testCleanPath();
+    void testXdgPathCleanup();
 
 private:
 #ifdef Q_XDG_PLATFORM
@@ -289,9 +290,9 @@ void tst_qstandardpaths::testDataLocation()
 {
     // On all platforms, DataLocation should be GenericDataLocation / organization name / app name
     // This allows one app to access the data of another app.
-    // Blackberry OS is an exception to this case, owing to the fact that
+    // Blackberry OS, Android and WinRT are an exception to this case, owing to the fact that
     // applications are sandboxed.
-#ifndef Q_OS_BLACKBERRY
+#if !defined(Q_OS_BLACKBERRY) && !defined(Q_OS_ANDROID) && !defined(Q_OS_WINRT)
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     QCOMPARE(QStandardPaths::writableLocation(QStandardPaths::DataLocation), base + "/tst_qstandardpaths");
     QCoreApplication::instance()->setOrganizationName("Qt");
@@ -335,6 +336,7 @@ void tst_qstandardpaths::testFindExecutable_data()
     QTest::addColumn<QString>("needle");
     QTest::addColumn<QString>("expected");
 #ifdef Q_OS_WIN
+# ifndef Q_OS_WINRT
     const QFileInfo cmdFi = QFileInfo(QDir::cleanPath(QString::fromLocal8Bit(qgetenv("COMSPEC"))));
     const QString cmdPath = cmdFi.absoluteFilePath();
 
@@ -358,6 +360,7 @@ void tst_qstandardpaths::testFindExecutable_data()
         QTest::newRow("win8-logo-nosuffix")
             << QString() << logo << logoPath;
     }
+# endif // Q_OS_WINRT
 #else
     const QFileInfo shFi = findSh();
     Q_ASSERT(shFi.exists());
@@ -475,6 +478,8 @@ void tst_qstandardpaths::testAllWritableLocations()
     QString loc = QStandardPaths::writableLocation(location);
     if (loc.size() > 1)  // workaround for unlikely case of locations that return '/'
         QCOMPARE(loc.endsWith(QLatin1Char('/')), false);
+    QVERIFY(loc.contains(QLatin1Char('/')));
+    QVERIFY(!loc.contains(QLatin1Char('\\')));
 }
 
 void tst_qstandardpaths::testCleanPath()
@@ -487,6 +492,19 @@ void tst_qstandardpaths::testCleanPath()
                  qPrintable(QString::fromLatin1("Backslash found in %1 %2")
                             .arg(i).arg(paths.join(QLatin1Char(',')))));
     }
+}
+
+void tst_qstandardpaths::testXdgPathCleanup()
+{
+#ifdef Q_XDG_PLATFORM
+    setCustomLocations();
+    const QString uncleanGlobalAppDir = "/./" + QFile::encodeName(m_globalAppDir);
+    qputenv("XDG_DATA_DIRS", QFile::encodeName(uncleanGlobalAppDir) + "::relative/path");
+    const QStringList appsDirs = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    QVERIFY(!appsDirs.contains("/applications"));
+    QVERIFY(!appsDirs.contains(uncleanGlobalAppDir + "/applications"));
+    QVERIFY(!appsDirs.contains("relative/path/applications"));
+#endif
 }
 
 QTEST_MAIN(tst_qstandardpaths)

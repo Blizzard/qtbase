@@ -68,10 +68,12 @@ void *qt_mac_QStringListToNSMutableArrayVoid(const QStringList &list);
 inline NSMutableArray *qt_mac_QStringListToNSMutableArray(const QStringList &qstrlist)
 { return reinterpret_cast<NSMutableArray *>(qt_mac_QStringListToNSMutableArrayVoid(qstrlist)); }
 
-CGImageRef qt_mac_image_to_cgimage(const QImage &image);
 NSImage *qt_mac_cgimage_to_nsimage(CGImageRef iamge);
 NSImage *qt_mac_create_nsimage(const QPixmap &pm);
 NSImage *qt_mac_create_nsimage(const QIcon &icon);
+CGImageRef qt_mac_toCGImage(const QImage &qImage);
+CGImageRef qt_mac_toCGImageMask(const QImage &qImage);
+QImage qt_mac_toQImage(CGImageRef image);
 
 NSSize qt_mac_toNSSize(const QSize &qtSize);
 NSRect qt_mac_toNSRect(const QRect &rect);
@@ -116,6 +118,7 @@ inline NSPoint qt_mac_flipPoint(const QPoint &p)
 inline NSPoint qt_mac_flipPoint(const QPointF &p)
 { return NSMakePoint(p.x(), qt_mac_flipYCoordinate(p.y())); }
 
+NSRect qt_mac_flipRect(const QRect &rect);
 NSRect qt_mac_flipRect(const QRect &rect, QWindow *window);
 
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum);
@@ -158,9 +161,40 @@ public:
 };
 
 CGContextRef qt_mac_cg_context(QPaintDevice *pdev);
-CGImageRef qt_mac_toCGImage(const QImage &qImage, bool isMask, uchar **dataCopy);
-QImage qt_mac_toQImage(CGImageRef image);
 
+template<typename T>
+T qt_mac_resolveOption(const T &fallback, const QByteArray &environment)
+{
+    // check for environment variable
+    if (!environment.isEmpty()) {
+        QByteArray env = qgetenv(environment);
+        if (!env.isEmpty())
+            return T(env.toInt()); // works when T is bool, int.
+    }
+
+    return fallback;
+}
+
+template<typename T>
+T qt_mac_resolveOption(const T &fallback, QWindow *window, const QByteArray &property, const QByteArray &environment)
+{
+    // check for environment variable
+    if (!environment.isEmpty()) {
+        QByteArray env = qgetenv(environment);
+        if (!env.isEmpty())
+            return T(env.toInt()); // works when T is bool, int.
+    }
+
+    // check for window property
+    if (window && !property.isNull()) {
+        QVariant windowProperty = window->property(property);
+        if (windowProperty.isValid())
+            return windowProperty.value<T>();
+    }
+
+    // return default value.
+    return fallback;
+}
 QT_END_NAMESPACE
 
 #endif //QCOCOAHELPERS_H

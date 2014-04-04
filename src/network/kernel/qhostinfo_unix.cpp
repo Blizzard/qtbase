@@ -63,7 +63,7 @@
 #  include <resolv.h>
 #endif
 
-#ifdef __GNU_LIBRARY__
+#if defined(__GNU_LIBRARY__) && !defined(__UCLIBC__)
 #  include <gnu/lib-names.h>
 #endif
 
@@ -259,10 +259,10 @@ QHostInfo QHostInfoAgent::fromName(const QString &hostName)
     } else if (result == EAI_NONAME
                || result ==  EAI_FAIL
 #ifdef EAI_NODATA
-	       // EAI_NODATA is deprecated in RFC 3493
-	       || result == EAI_NODATA
+               // EAI_NODATA is deprecated in RFC 3493
+               || result == EAI_NODATA
 #endif
-	       ) {
+               ) {
         results.setError(QHostInfo::HostNotFound);
         results.setErrorString(tr("Host not found"));
     } else {

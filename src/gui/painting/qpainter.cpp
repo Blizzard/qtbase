@@ -62,6 +62,7 @@
 #include "qglyphrun.h"
 
 #include <qpa/qplatformtheme.h>
+#include <qpa/qplatformintegration.h>
 
 #include <private/qfontengine_p.h>
 #include <private/qpaintengine_p.h>
@@ -155,7 +156,9 @@ static bool qt_painter_thread_test(int devType, const char *what)
         // can be drawn onto these devices safely from any thread
         break;
     default:
-        if (QThread::currentThread() != qApp->thread()) {
+        if (QThread::currentThread() != qApp->thread()
+                && (devType!=QInternal::Pixmap || !QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ThreadedPixmaps))
+                && (devType!=QInternal::OpenGL || !QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ThreadedOpenGL))) {
             qWarning("QPainter: It is not safe to use %s outside the GUI thread", what);
             return false;
         }
@@ -168,9 +171,6 @@ static bool qt_painter_thread_test(int devType, const char *what)
 void QPainterPrivate::checkEmulation()
 {
     Q_ASSERT(extended);
-    if (extended->flags() & QPaintEngineEx::DoNotEmulate)
-        return;
-
     bool doEmulation = false;
     if (state->bgMode == Qt::OpaqueMode)
         doEmulation = true;
@@ -182,6 +182,9 @@ void QPainterPrivate::checkEmulation()
     const QGradient *pg = qpen_brush(state->pen).gradient();
     if (pg && pg->coordinateMode() > QGradient::LogicalMode)
         doEmulation = true;
+
+    if (doEmulation && extended->flags() & QPaintEngineEx::DoNotEmulate)
+        return;
 
     if (doEmulation) {
         if (extended != emulationEngine) {
@@ -5614,8 +5617,7 @@ void QPainterPrivate::drawGlyphs(const quint32 *glyphArray, QFixedPoint *positio
         textItem.glyphs.numGlyphs = glyphCount;
         textItem.glyphs.glyphs = const_cast<glyph_t *>(glyphArray);
         textItem.glyphs.offsets = positions;
-        textItem.glyphs.advances_x = advances.data();
-        textItem.glyphs.advances_y = advances.data();
+        textItem.glyphs.advances = advances.data();
         textItem.glyphs.justifications = glyphJustifications.data();
         textItem.glyphs.attributes = glyphAttributes.data();
 
@@ -5843,11 +5845,8 @@ void QPainter::drawText(const QPointF &p, const QString &str, int tf, int justif
         int numGlyphs = len;
         QVarLengthGlyphLayoutArray glyphs(len);
         QFontEngine *fontEngine = d->state->font.d->engineForScript(QChar::Script_Common);
-        if (!fontEngine->stringToCMap(str.data(), len, &glyphs, &numGlyphs, 0)) {
-            glyphs.resize(numGlyphs);
-            if (!fontEngine->stringToCMap(str.data(), len, &glyphs, &numGlyphs, 0))
-                Q_ASSERT_X(false, Q_FUNC_INFO, "stringToCMap shouldn't fail twice");
-        }
+        if (!fontEngine->stringToCMap(str.data(), len, &glyphs, &numGlyphs, 0))
+            Q_UNREACHABLE();
 
         QTextItemInt gf(glyphs, &d->state->font, str.data(), len, fontEngine);
         drawTextItem(p, gf);
@@ -6351,7 +6350,7 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
     QTextItemInt &ti = const_cast<QTextItemInt &>(static_cast<const QTextItemInt &>(_ti));
 
     if (!extended && state->bgMode == Qt::OpaqueMode) {
-        QRectF rect(p.x(), p.y() - ti.ascent.toReal(), ti.width.toReal(), (ti.ascent + ti.descent + 1).toReal());
+        QRectF rect(p.x(), p.y() - ti.ascent.toReal(), ti.width.toReal(), (ti.ascent + ti.descent).toReal());
         q->fillRect(rect, state->bgBrush);
     }
 

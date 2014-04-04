@@ -193,6 +193,8 @@ private slots:
 
     void isReadable();
 
+    void cdNonreadable();
+
     void cdBelowRoot();
 
 private:
@@ -1096,6 +1098,10 @@ void tst_QDir::absoluteFilePath_data()
     QTest::newRow("2") << "/" << "passwd" << "/passwd";
     QTest::newRow("3") << "relative" << "path" << QDir::currentPath() + "/relative/path";
     QTest::newRow("4") << "" << "" << QDir::currentPath();
+#ifdef Q_OS_WIN
+    QTest::newRow("5") << "//machine" << "share" << "//machine/share";
+#endif
+
     QTest::newRow("resource") << ":/prefix" << "foo.bar" << ":/prefix/foo.bar";
 }
 
@@ -1987,6 +1993,23 @@ void tst_QDir::isReadable()
     QVERIFY(!QDir("nonreadabledir").isReadable());
     QVERIFY(0 == ::chmod("nonreadabledir", S_IRUSR | S_IWUSR | S_IXUSR));
     QVERIFY(dir.rmdir("nonreadabledir"));
+#endif
+}
+
+void tst_QDir::cdNonreadable()
+{
+#ifdef Q_OS_UNIX
+    if (::getuid() == 0)
+        QSKIP("Running this test as root doesn't make sense");
+
+    QDir dir;
+    QVERIFY(dir.mkdir("nonreadabledir2"));
+    QVERIFY(0 == ::chmod("nonreadabledir2", S_IWUSR | S_IXUSR));
+    QVERIFY(dir.cd("nonreadabledir2"));
+    QVERIFY(!dir.isReadable());
+    QVERIFY(dir.cd(".."));
+    QVERIFY(0 == ::chmod("nonreadabledir2", S_IRUSR | S_IWUSR | S_IXUSR));
+    QVERIFY(dir.rmdir("nonreadabledir2"));
 #endif
 }
 

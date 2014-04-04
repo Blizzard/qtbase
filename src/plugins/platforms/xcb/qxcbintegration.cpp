@@ -145,18 +145,15 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
     if (argc) {
         int j = 1;
         for (int i = 1; i < argc; i++) {
-            char *arg = argv[i];
-            if (arg) {
-                if (!strcmp(arg, "-display") && i < argc - 1) {
-                    displayName = argv[++i];
-                    arg = 0;
-                } else if (!strcmp(arg, "-name") && i < argc - 1) {
-                    m_instanceName = argv[++i];
-                    arg = 0;
-                }
-            }
-            if (arg)
-                argv[j++] = arg;
+            QByteArray arg(argv[i]);
+            if (arg.startsWith("--"))
+                arg.remove(0, 1);
+            if (arg == "-display" && i < argc - 1)
+                displayName = argv[++i];
+            else if (arg == "-name" && i < argc - 1)
+                m_instanceName = argv[++i];
+            else
+                argv[j++] = argv[i];
         }
         argc = j;
     } // argc
@@ -256,7 +253,18 @@ QPlatformBackingStore *QXcbIntegration::createPlatformBackingStore(QWindow *wind
 QPlatformOffscreenSurface *QXcbIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
 {
 #if defined(XCB_USE_GLX)
-    return new QGLXPbuffer(surface);
+    static bool vendorChecked = false;
+    static bool glxPbufferUsable = true;
+    if (!vendorChecked) {
+        vendorChecked = true;
+        const char *glxvendor = glXGetClientString(glXGetCurrentDisplay(), GLX_VENDOR);
+        if (glxvendor && !strcmp(glxvendor, "ATI"))
+            glxPbufferUsable = false;
+    }
+    if (glxPbufferUsable)
+        return new QGLXPbuffer(surface);
+    else
+        return 0; // trigger fallback to hidden QWindow
 #elif defined(XCB_USE_EGL)
     QXcbScreen *screen = static_cast<QXcbScreen *>(surface->screen()->handle());
     return new QEGLPbuffer(screen->connection()->egl_display(), surface->requestedFormat(), surface);
@@ -287,6 +295,7 @@ bool QXcbIntegration::hasCapability(QPlatformIntegration::Capability cap) const
     case MultipleWindows: return true;
     case ForeignWindows: return true;
     case SyncState: return true;
+    case RasterGLSurface: return true;
     default: return QPlatformIntegration::hasCapability(cap);
     }
 }

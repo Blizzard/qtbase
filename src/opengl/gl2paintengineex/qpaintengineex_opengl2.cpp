@@ -539,33 +539,35 @@ void QGL2PaintEngineEx::beginNativePainting()
         d->funcs.glDisableVertexAttribArray(i);
 
 #ifndef QT_OPENGL_ES_2
-    const QGLContext *ctx = d->ctx;
-    const QGLFormat &fmt = d->device->format();
-    if (fmt.majorVersion() < 3 || (fmt.majorVersion() == 3 && fmt.minorVersion() < 1)
-        || (fmt.majorVersion() == 3 && fmt.minorVersion() == 1 && ctx->contextHandle()->hasExtension(QByteArrayLiteral("GL_ARB_compatibility")))
-        || fmt.profile() == QGLFormat::CompatibilityProfile)
-    {
-        // be nice to people who mix OpenGL 1.x code with QPainter commands
-        // by setting modelview and projection matrices to mirror the GL 1
-        // paint engine
-        const QTransform& mtx = state()->matrix;
-
-        float mv_matrix[4][4] =
+    if (!QOpenGLFunctions::isES()) {
+        const QGLContext *ctx = d->ctx;
+        const QGLFormat &fmt = d->device->format();
+        if (fmt.majorVersion() < 3 || (fmt.majorVersion() == 3 && fmt.minorVersion() < 1)
+            || (fmt.majorVersion() == 3 && fmt.minorVersion() == 1 && ctx->contextHandle()->hasExtension(QByteArrayLiteral("GL_ARB_compatibility")))
+            || fmt.profile() == QGLFormat::CompatibilityProfile)
         {
-            { float(mtx.m11()), float(mtx.m12()),     0, float(mtx.m13()) },
-            { float(mtx.m21()), float(mtx.m22()),     0, float(mtx.m23()) },
-            {                0,                0,     1,                0 },
-            {  float(mtx.dx()),  float(mtx.dy()),     0, float(mtx.m33()) }
-        };
+            // be nice to people who mix OpenGL 1.x code with QPainter commands
+            // by setting modelview and projection matrices to mirror the GL 1
+            // paint engine
+            const QTransform& mtx = state()->matrix;
 
-        const QSize sz = d->device->size();
+            float mv_matrix[4][4] =
+                {
+                    { float(mtx.m11()), float(mtx.m12()),     0, float(mtx.m13()) },
+                    { float(mtx.m21()), float(mtx.m22()),     0, float(mtx.m23()) },
+                    {                0,                0,     1,                0 },
+                    {  float(mtx.dx()),  float(mtx.dy()),     0, float(mtx.m33()) }
+                };
 
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0, sz.width(), sz.height(), 0, -999999, 999999);
+            const QSize sz = d->device->size();
 
-        glMatrixMode(GL_MODELVIEW);
-        glLoadMatrixf(&mv_matrix[0][0]);
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            glOrtho(0, sz.width(), sz.height(), 0, -999999, 999999);
+
+            glMatrixMode(GL_MODELVIEW);
+            glLoadMatrixf(&mv_matrix[0][0]);
+        }
     }
 #endif
 
@@ -595,9 +597,11 @@ void QGL2PaintEngineExPrivate::resetGLState()
     ctx->d_func()->setVertexAttribArrayEnabled(QT_VERTEX_COORDS_ATTR, false);
     ctx->d_func()->setVertexAttribArrayEnabled(QT_OPACITY_ATTR, false);
 #ifndef QT_OPENGL_ES_2
-    // gl_Color, corresponding to vertex attribute 3, may have been changed
-    float color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    funcs.glVertexAttrib4fv(3, color);
+    if (!QOpenGLFunctions::isES()) {
+        // gl_Color, corresponding to vertex attribute 3, may have been changed
+        float color[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        funcs.glVertexAttrib4fv(3, color);
+    }
 #endif
 }
 
@@ -1352,11 +1356,13 @@ void QGL2PaintEngineEx::renderHintsChanged()
     state()->renderHintsChanged = true;
 
 #if !defined(QT_OPENGL_ES_2)
-    if ((state()->renderHints & QPainter::Antialiasing)
-        || (state()->renderHints & QPainter::HighQualityAntialiasing))
-        glEnable(GL_MULTISAMPLE);
-    else
-        glDisable(GL_MULTISAMPLE);
+    if (!QOpenGLFunctions::isES()) {
+        if ((state()->renderHints & QPainter::Antialiasing)
+            || (state()->renderHints & QPainter::HighQualityAntialiasing))
+            glEnable(GL_MULTISAMPLE);
+        else
+            glDisable(GL_MULTISAMPLE);
+    }
 #endif
 
     Q_D(QGL2PaintEngineEx);
@@ -1476,20 +1482,21 @@ void QGL2PaintEngineEx::drawStaticTextItem(QStaticTextItem *textItem)
     // don't try to cache huge fonts or vastly transformed fonts
     QFontEngine *fontEngine = textItem->fontEngine();
     if (shouldDrawCachedGlyphs(fontEngine, s->matrix)) {
-        QFontEngineGlyphCache::Type glyphType = fontEngine->glyphFormat >= 0
-                                                ? QFontEngineGlyphCache::Type(textItem->fontEngine()->glyphFormat)
-                                                : d->glyphCacheType;
-        if (glyphType == QFontEngineGlyphCache::Raster_RGBMask) {
+
+        QFontEngine::GlyphFormat glyphFormat = fontEngine->glyphFormat != QFontEngine::Format_None
+                                                ? fontEngine->glyphFormat : d->glyphCacheFormat;
+
+        if (glyphFormat == QFontEngine::Format_A32) {
             if (!QGLFramebufferObject::hasOpenGLFramebufferObjects()
                 || d->device->alphaRequested() || s->matrix.type() > QTransform::TxTranslate
                 || (s->composition_mode != QPainter::CompositionMode_Source
                 && s->composition_mode != QPainter::CompositionMode_SourceOver))
             {
-                glyphType = QFontEngineGlyphCache::Raster_A8;
+                glyphFormat = QFontEngine::Format_A8;
             }
         }
 
-        d->drawCachedGlyphs(glyphType, textItem);
+        d->drawCachedGlyphs(glyphFormat, textItem);
     } else {
         QPaintEngineEx::drawStaticTextItem(textItem);
     }
@@ -1526,18 +1533,16 @@ void QGL2PaintEngineEx::drawTextItem(const QPointF &p, const QTextItem &textItem
 
     QTransform::TransformationType txtype = s->matrix.type();
 
-    QFontEngineGlyphCache::Type glyphType = ti.fontEngine->glyphFormat >= 0
-                                            ? QFontEngineGlyphCache::Type(ti.fontEngine->glyphFormat)
-                                            : d->glyphCacheType;
+    QFontEngine::GlyphFormat glyphFormat = ti.fontEngine->glyphFormat != QFontEngine::Format_None
+                                                ? ti.fontEngine->glyphFormat : d->glyphCacheFormat;
 
-
-    if (glyphType == QFontEngineGlyphCache::Raster_RGBMask) {
+    if (glyphFormat == QFontEngine::Format_A32) {
         if (!QGLFramebufferObject::hasOpenGLFramebufferObjects()
             || d->device->alphaRequested() || txtype > QTransform::TxTranslate
             || (state()->composition_mode != QPainter::CompositionMode_Source
             && state()->composition_mode != QPainter::CompositionMode_SourceOver))
         {
-            glyphType = QFontEngineGlyphCache::Raster_A8;
+            glyphFormat = QFontEngine::Format_A8;
         }
     }
 
@@ -1556,7 +1561,7 @@ void QGL2PaintEngineEx::drawTextItem(const QPointF &p, const QTextItem &textItem
             staticTextItem.numGlyphs = glyphs.size();
             staticTextItem.glyphPositions = positions.data();
 
-            d->drawCachedGlyphs(glyphType, &staticTextItem);
+            d->drawCachedGlyphs(glyphFormat, &staticTextItem);
         }
         return;
     }
@@ -1581,7 +1586,7 @@ namespace {
         QSize cacheSize;
         QGL2PEXVertexArray vertexCoordinateArray;
         QGL2PEXVertexArray textureCoordinateArray;
-        QFontEngineGlyphCache::Type glyphType;
+        QFontEngine::GlyphFormat glyphFormat;
         int cacheSerialNumber;
     };
 
@@ -1590,7 +1595,7 @@ namespace {
 
 // #define QT_OPENGL_DRAWCACHEDGLYPHS_INDEX_ARRAY_VBO
 
-void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyphType,
+void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngine::GlyphFormat glyphFormat,
                                                 QStaticTextItem *staticTextItem)
 {
     Q_Q(QGL2PaintEngineEx);
@@ -1614,9 +1619,9 @@ void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyp
     }
 
     QGLTextureGlyphCache *cache =
-            (QGLTextureGlyphCache *) fe->glyphCache(cacheKey, glyphType, glyphCacheTransform);
-    if (!cache || cache->cacheType() != glyphType || cache->contextGroup() == 0) {
-        cache = new QGLTextureGlyphCache(glyphType, glyphCacheTransform);
+            (QGLTextureGlyphCache *) fe->glyphCache(cacheKey, glyphFormat, glyphCacheTransform);
+    if (!cache || cache->glyphFormat() != glyphFormat || cache->contextGroup() == 0) {
+        cache = new QGLTextureGlyphCache(glyphFormat, glyphCacheTransform);
         fe->setGlyphCache(cacheKey, cache);
         recreateVertexArrays = true;
     }
@@ -1629,7 +1634,7 @@ void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyp
         recreateVertexArrays = true;
     } else {
         QOpenGLStaticTextUserData *userData = static_cast<QOpenGLStaticTextUserData *>(staticTextItem->userData());
-        if (userData->glyphType != glyphType) {
+        if (userData->glyphFormat != glyphFormat) {
             recreateVertexArrays = true;
         } else if (userData->cacheSerialNumber != cache->serialNumber()) {
             recreateVertexArrays = true;
@@ -1656,7 +1661,7 @@ void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyp
 
     transferMode(TextDrawingMode);
 
-    int margin = fe->glyphMargin(glyphType);
+    int margin = fe->glyphMargin(glyphFormat);
 
     GLfloat dx = 1.0 / cache->width();
     GLfloat dy = 1.0 / cache->height();
@@ -1678,7 +1683,7 @@ void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyp
             userData = static_cast<QOpenGLStaticTextUserData*>(staticTextItem->userData());
         }
 
-        userData->glyphType = glyphType;
+        userData->glyphFormat = glyphFormat;
         userData->cacheSerialNumber = cache->serialNumber();
 
         // Use cache if backend optimizations is turned on
@@ -1761,7 +1766,7 @@ void QGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngineGlyphCache::Type glyp
     QBrush pensBrush = q->state()->pen.brush();
     setBrush(pensBrush);
 
-    if (glyphType == QFontEngineGlyphCache::Raster_RGBMask) {
+    if (glyphFormat == QFontEngine::Format_A32) {
 
         // Subpixel antialiasing without gamma correction
 
@@ -2027,21 +2032,23 @@ bool QGL2PaintEngineEx::begin(QPaintDevice *pdev)
     glDisable(GL_SCISSOR_TEST);
 
 #if !defined(QT_OPENGL_ES_2)
-    glDisable(GL_MULTISAMPLE);
+    if (!QOpenGLFunctions::isES())
+        glDisable(GL_MULTISAMPLE);
 #endif
 
-    d->glyphCacheType = QFontEngineGlyphCache::Raster_A8;
+    d->glyphCacheFormat = QFontEngine::Format_A8;
 
 #if !defined(QT_OPENGL_ES_2)
-        d->glyphCacheType = QFontEngineGlyphCache::Raster_RGBMask;
-#endif
-
-#if defined(QT_OPENGL_ES_2)
+    if (!QOpenGLFunctions::isES()) {
+        d->glyphCacheFormat = QFontEngine::Format_A32;
+        d->multisamplingAlwaysEnabled = false;
+    } else {
+        d->multisamplingAlwaysEnabled = d->device->format().sampleBuffers();
+    }
+#else
     // OpenGL ES can't switch MSAA off, so if the gl paint device is
     // multisampled, it's always multisampled.
     d->multisamplingAlwaysEnabled = d->device->format().sampleBuffers();
-#else
-    d->multisamplingAlwaysEnabled = false;
 #endif
 
     return true;

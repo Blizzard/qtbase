@@ -102,6 +102,7 @@ private slots:
 #ifndef QT_NO_PROCESS
     void recursiveSignalEmission();
 #endif
+    void signalBlocking();
     void blockingQueuedConnection();
     void childEvents();
     void installEventFilter();
@@ -146,6 +147,7 @@ private slots:
     void connectFunctorOverloads();
     void connectFunctorQueued();
     void connectFunctorWithContext();
+    void connectFunctorDeadlock();
     void connectStaticSlotWithObject();
     void disconnectDoesNotLeakFunctor();
     void contextDoesNotLeakFunctor();
@@ -454,7 +456,7 @@ void tst_QObject::connectSlotsByName()
     sender.setObjectName("Sender");
 
     QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: No matching signal for on_child_signal()");
-    QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: Connecting slot on_Sender_signalManyParams() with the first of the following compatible signals: (\"signalManyParams(int,int,int,QString,bool)\", \"signalManyParams(int,int,int,QString,bool,bool)\") ");
+    QTest::ignoreMessage(QtWarningMsg, "QMetaObject::connectSlotsByName: Connecting slot on_Sender_signalManyParams() with the first of the following compatible signals: (\"signalManyParams(int,int,int,QString,bool)\", \"signalManyParams(int,int,int,QString,bool,bool)\")");
     QMetaObject::connectSlotsByName(&receiver);
 
     receiver.called_slots.clear();
@@ -2949,6 +2951,9 @@ void tst_QObject::dynamicProperties()
     QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
     QCOMPARE(obj.changedDynamicProperties.count(), 1);
     QCOMPARE(obj.changedDynamicProperties.first(), QByteArray("myuserproperty"));
+    //check if there is no redundant DynamicPropertyChange events
+    QVERIFY(!obj.setProperty("myuserproperty", "Hello"));
+    QCOMPARE(obj.changedDynamicProperties.count(), 1);
     obj.changedDynamicProperties.clear();
 
     QCOMPARE(obj.property("myuserproperty").toString(), QString("Hello"));
@@ -2980,6 +2985,30 @@ void tst_QObject::recursiveSignalEmission()
     QCOMPARE(proc.exitCode(), 0);
 }
 #endif
+
+void tst_QObject::signalBlocking()
+{
+    SenderObject sender;
+    ReceiverObject receiver;
+
+    receiver.connect(&sender, SIGNAL(signal1()), SLOT(slot1()));
+
+    sender.emitSignal1();
+    QVERIFY(receiver.called(1));
+    receiver.reset();
+
+    sender.blockSignals(true);
+
+    sender.emitSignal1();
+    QVERIFY(!receiver.called(1));
+    receiver.reset();
+
+    sender.blockSignals(false);
+
+    sender.emitSignal1();
+    QVERIFY(receiver.called(1));
+    receiver.reset();
+}
 
 void tst_QObject::blockingQueuedConnection()
 {
@@ -4731,6 +4760,9 @@ class LotsOfSignalsAndSlots: public QObject
         #endif*/
         static void static_slot_vPFvvE(fptr) {}
 
+        void slot_vcRQObject(const QObject &) {}
+        void slot_vRQObject(QObject &) {}
+
     signals:
         void signal_v();
         void signal_vi(int);
@@ -4747,6 +4779,9 @@ class LotsOfSignalsAndSlots: public QObject
 
         void const_signal_v() const;
         void const_signal_vi(int) const;
+
+        void signal_vcRQObject(const QObject &);
+        void signal_vRQObject(QObject &);
 
         void signal(short&, short, long long, short);
         void otherSignal(const char *);
@@ -4865,6 +4900,14 @@ void tst_QObject::connectCxx0xTypeMatching()
     QVERIFY(QObject::connect(&obj, &Foo::const_signal_vi, &obj, &Foo::slot_vi));
     QVERIFY(QObject::connect(&obj, &Foo::signal_vi, &obj, &Foo::const_slot_vi));
     QVERIFY(QObject::connect(&obj, &Foo::signal_vi, &obj, &Foo::const_slot_v));
+
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vcRQObject, &obj, &Foo::slot_vcRQObject));
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRQObject, &obj, &Foo::slot_vRQObject));
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRQObject, &obj, &Foo::slot_vcRQObject));
+    // QVERIFY(QObject::connect(&obj, &Foo::signal_vcRQObject, &obj, &Foo::slot_vRQObject)); // Should be an error  (const& -> &)
+
+    QVERIFY(QObject::connect(&obj, &Foo::signal_vRi, &obj, &Foo::slot_vs));
+
 }
 
 class StringVariant : public QObject
@@ -5522,8 +5565,8 @@ public:
 };
 
 class ConnectToPrivateSlotPrivate : public QObjectPrivate {
-public:
     Q_DECLARE_PUBLIC(ConnectToPrivateSlot)
+public:
     int receivedCount;
     QVariant receivedValue;
 
@@ -5696,6 +5739,47 @@ void tst_QObject::connectFunctorWithContext()
 
     // Free
     context->deleteLater();
+}
+
+class MyFunctor
+{
+public:
+    explicit MyFunctor(QObject *objectToDisconnect)
+        : m_objectToDisconnect(objectToDisconnect)
+    {}
+
+    ~MyFunctor() {
+        // Do operations that will lock the internal signalSlotLock mutex on many QObjects.
+        // The more QObjects, the higher the chance that the signalSlotLock mutex used
+        // is already in use. If the number of objects is higher than the number of mutexes in
+        // the pool (currently 131), the deadlock should always trigger. Use an even higher number
+        // to be on the safe side.
+        const int objectCount = 1024;
+        SenderObject lotsOfObjects[objectCount];
+        for (int i = 0; i < objectCount; ++i) {
+            QObject::connect(&lotsOfObjects[i], &SenderObject::signal1,
+                             &lotsOfObjects[i], &SenderObject::aPublicSlot);
+        }
+    }
+
+    void operator()() {
+        // This will cause the slot object associated with this functor to be destroyed after
+        // this function returns. That in turn will destroy this functor.
+        // If our dtor runs with the signalSlotLock held, the bunch of connect()
+        // performed there will deadlock trying to lock that lock again.
+        m_objectToDisconnect->disconnect();
+    }
+
+private:
+    QObject *m_objectToDisconnect;
+};
+
+void tst_QObject::connectFunctorDeadlock()
+{
+    SenderObject sender;
+    MyFunctor functor(&sender);
+    QObject::connect(&sender, &SenderObject::signal1, functor);
+    sender.emitSignal1();
 }
 
 static int s_static_slot_checker = 1;

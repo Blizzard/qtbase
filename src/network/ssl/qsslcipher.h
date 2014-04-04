@@ -57,6 +57,7 @@ class Q_NETWORK_EXPORT QSslCipher
 {
 public:
     QSslCipher();
+    explicit QSslCipher(const QString &name);
     QSslCipher(const QString &name, QSsl::SslProtocol protocol);
     QSslCipher(const QSslCipher &other);
     ~QSslCipher();

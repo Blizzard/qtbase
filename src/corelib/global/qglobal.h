@@ -45,11 +45,11 @@
 
 #include <stddef.h>
 
-#define QT_VERSION_STR   "5.2.1"
+#define QT_VERSION_STR   "5.3.0"
 /*
    QT_VERSION is (major << 16) + (minor << 8) + patch.
 */
-#define QT_VERSION 0x050201
+#define QT_VERSION 0x050300
 /*
    can be used like #if (QT_VERSION >= QT_VERSION_CHECK(4, 4, 0))
 */
@@ -191,7 +191,7 @@ typedef qint64 qlonglong;
 typedef quint64 qulonglong;
 
 #ifndef QT_POINTER_SIZE
-#  if defined(Q_OS_WIN64)
+#  if defined(Q_OS_WIN64) || (defined(Q_OS_WINRT) && defined(_M_X64))
 #   define QT_POINTER_SIZE 8
 #  elif defined(Q_OS_WIN32) || defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
 #   define QT_POINTER_SIZE 4
@@ -221,11 +221,14 @@ typedef double qreal;
 
 #if defined(QT_NO_DEPRECATED)
 #  undef QT_DEPRECATED
+#  undef QT_DEPRECATED_X
 #  undef QT_DEPRECATED_VARIABLE
 #  undef QT_DEPRECATED_CONSTRUCTOR
 #elif defined(QT_DEPRECATED_WARNINGS)
 #  undef QT_DEPRECATED
 #  define QT_DEPRECATED Q_DECL_DEPRECATED
+#  undef QT_DEPRECATED_X
+#  define QT_DEPRECATED_X(text) Q_DECL_DEPRECATED_X(text)
 #  undef QT_DEPRECATED_VARIABLE
 #  define QT_DEPRECATED_VARIABLE Q_DECL_VARIABLE_DEPRECATED
 #  undef QT_DEPRECATED_CONSTRUCTOR
@@ -233,6 +236,8 @@ typedef double qreal;
 #else
 #  undef QT_DEPRECATED
 #  define QT_DEPRECATED
+#  undef QT_DEPRECATED_X
+#  define QT_DEPRECATED_X(text)
 #  undef QT_DEPRECATED_VARIABLE
 #  define QT_DEPRECATED_VARIABLE
 #  undef QT_DEPRECATED_CONSTRUCTOR
@@ -432,6 +437,8 @@ template <>    struct QIntegerForSize<2> { typedef quint16 Unsigned; typedef qin
 template <>    struct QIntegerForSize<4> { typedef quint32 Unsigned; typedef qint32 Signed; };
 template <>    struct QIntegerForSize<8> { typedef quint64 Unsigned; typedef qint64 Signed; };
 template <class T> struct QIntegerForSizeof: QIntegerForSize<sizeof(T)> { };
+typedef QIntegerForSize<Q_PROCESSOR_WORDSIZE>::Signed qregisterint;
+typedef QIntegerForSize<Q_PROCESSOR_WORDSIZE>::Unsigned qregisteruint;
 typedef QIntegerForSizeof<void*>::Unsigned quintptr;
 typedef QIntegerForSizeof<void*>::Signed qptrdiff;
 typedef qptrdiff qintptr;
@@ -527,12 +534,12 @@ Q_DECL_CONSTEXPR inline const T &qBound(const T &min, const T &val, const T &max
 
 #ifdef Q_OS_DARWIN
 #  define QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(osx, ios) \
-    (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= osx) || \
-    (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= ios)
+    ((defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= osx) || \
+     (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= ios))
 
 #  define QT_MAC_DEPLOYMENT_TARGET_BELOW(osx, ios) \
-    (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && osx != __MAC_NA && __MAC_OS_X_VERSION_MIN_REQUIRED < osx) || \
-    (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MIN_REQUIRED < ios)
+    ((defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && osx != __MAC_NA && __MAC_OS_X_VERSION_MIN_REQUIRED < osx) || \
+     (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MIN_REQUIRED < ios))
 
 #  define QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(ios) \
       QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_NA, ios)
@@ -559,7 +566,12 @@ class QDataStream;
 #endif
 
 #if defined(Q_OS_WINRT)
+#  define QT_NO_FILESYSTEMWATCHER
+#  define QT_NO_GETADDRINFO
+#  define QT_NO_NETWORKPROXY
 #  define QT_NO_PROCESS
+#  define QT_NO_SOCKETNOTIFIER
+#  define QT_NO_SOCKS5
 #endif
 
 inline void qt_noop(void) {}
@@ -826,9 +838,13 @@ Q_CORE_EXPORT void qFreeAligned(void *ptr);
 #    pragma warning(disable: 4800) /* 'type' : forcing value to bool 'true' or 'false' (performance warning) */
 #    pragma warning(disable: 4097) /* typedef-name 'identifier1' used as synonym for class-name 'identifier2' */
 #    pragma warning(disable: 4706) /* assignment within conditional expression */
-#    pragma warning(disable: 4786) /* 'identifier' : identifier was truncated to 'number' characters in the debug information */
+#    if _MSC_VER <= 1310 // MSVC 2003
+#      pragma warning(disable: 4786) /* 'identifier' : identifier was truncated to 'number' characters in the debug information */
+#    endif
 #    pragma warning(disable: 4355) /* 'this' : used in base member initializer list */
-#    pragma warning(disable: 4231) /* nonstandard extension used : 'identifier' before template explicit instantiation */
+#    if _MSC_VER < 1800 // MSVC 2013
+#      pragma warning(disable: 4231) /* nonstandard extension used : 'identifier' before template explicit instantiation */
+#    endif
 #    pragma warning(disable: 4710) /* function not inlined */
 #    pragma warning(disable: 4530) /* C++ exception handler used, but unwind semantics are not enabled. Specify /EHsc */
 #  elif defined(Q_CC_BOR)
@@ -854,7 +870,7 @@ public:
 };
 
 #define Q_FOREACH(variable, container)                                \
-for (QForeachContainer<__typeof__(container)> _container_(container); \
+for (QForeachContainer<__typeof__((container))> _container_((container)); \
      !_container_.brk && _container_.i != _container_.e;              \
      __extension__  ({ ++_container_.brk; ++_container_.i; }))                       \
     for (variable = *_container_.i;; __extension__ ({--_container_.brk; break;}))
@@ -1013,6 +1029,9 @@ namespace QtPrivate {
 //like std::enable_if
 template <bool B, typename T = void> struct QEnableIf;
 template <typename T> struct QEnableIf<true, T> { typedef T Type; };
+
+template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
+template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
 }
 
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
@@ -1030,14 +1049,18 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
 #endif
 
 QT_END_NAMESPACE
-// Q_GLOBAL_STATIC
-#include <QtCore/qglobalstatic.h>
 
-// qDebug and friends
-#include <QtCore/qlogging.h>
-#include <QtCore/qflags.h>
-#include <QtCore/qsysinfo.h>
+// We need to keep QTypeInfo, QSysInfo, QFlags, qDebug & family in qglobal.h for compatibility with Qt 4.
+// Be careful when changing the order of these files.
 #include <QtCore/qtypeinfo.h>
+#include <QtCore/qsysinfo.h>
+#include <QtCore/qlogging.h>
+
+#include <QtCore/qflags.h>
+
+#include <QtCore/qatomic.h>
+#include <QtCore/qglobalstatic.h>
+#include <QtCore/qnumeric.h>
 
 #endif /* __cplusplus */
 

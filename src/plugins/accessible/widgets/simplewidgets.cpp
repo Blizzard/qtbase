@@ -57,6 +57,8 @@
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtextdocument.h>
+#include <qwindow.h>
+#include <private/qwindowcontainer_p.h>
 #include <QtCore/qvarlengtharray.h>
 
 #ifdef Q_OS_MAC
@@ -505,8 +507,10 @@ QString QAccessibleGroupBox::text(QAccessible::Text t) const
         switch (t) {
         case QAccessible::Name:
             txt = qt_accStripAmp(groupBox()->title());
+            break;
         case QAccessible::Description:
-            txt = qt_accStripAmp(groupBox()->title());
+            txt = qt_accStripAmp(groupBox()->toolTip());
+            break;
         default:
             break;
         }
@@ -845,7 +849,38 @@ QProgressBar *QAccessibleProgressBar::progressBar() const
 }
 #endif
 
+
+QAccessibleWindowContainer::QAccessibleWindowContainer(QWidget *w)
+    : QAccessibleWidget(w)
+{
+}
+
+int QAccessibleWindowContainer::childCount() const
+{
+    if (container()->containedWindow())
+        return 1;
+    return 0;
+}
+
+int QAccessibleWindowContainer::indexOfChild(const QAccessibleInterface *child) const
+{
+    if (child->object() == container()->containedWindow())
+        return 0;
+    return -1;
+}
+
+QAccessibleInterface *QAccessibleWindowContainer::child(int i) const
+{
+    if (i == 0)
+        return QAccessible::queryAccessibleInterface(container()->containedWindow());
+    return 0;
+}
+
+QWindowContainer *QAccessibleWindowContainer::container() const
+{
+    return static_cast<QWindowContainer *>(widget());
+}
+
 #endif // QT_NO_ACCESSIBILITY
 
 QT_END_NAMESPACE
-

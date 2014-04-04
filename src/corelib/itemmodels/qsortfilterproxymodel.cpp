@@ -458,10 +458,21 @@ void QSortFilterProxyModelPrivate::sort()
 */
 bool QSortFilterProxyModelPrivate::update_source_sort_column()
 {
-    Q_Q(QSortFilterProxyModel);
-    QModelIndex proxy_index = q->index(0, proxy_sort_column, QModelIndex());
     int old_source_sort_column = source_sort_column;
-    source_sort_column = q->mapToSource(proxy_index).column();
+
+    if (proxy_sort_column == -1) {
+        source_sort_column = -1;
+    } else {
+        // We cannot use index mapping here because in case of a still-empty
+        // proxy model there's no valid proxy index we could map to source.
+        // So always use the root mapping directly instead.
+        Mapping *m = create_mapping(QModelIndex()).value();
+        if (proxy_sort_column < m->source_columns.size())
+            source_sort_column = m->source_columns.at(proxy_sort_column);
+        else
+            source_sort_column = -1;
+    }
+
     return old_source_sort_column != source_sort_column;
 }
 
@@ -949,8 +960,8 @@ void QSortFilterProxyModelPrivate::updateChildrenMapping(const QModelIndex &sour
             // update mapping
             Mapping *cm = source_index_mapping.take(source_child_index);
             Q_ASSERT(cm);
-	    // we do not reinsert right away, because the new index might be identical with another, old index
-	    moved_source_index_mappings.append(QPair<QModelIndex, Mapping*>(new_index, cm));
+            // we do not reinsert right away, because the new index might be identical with another, old index
+            moved_source_index_mappings.append(QPair<QModelIndex, Mapping*>(new_index, cm));
         }
     }
 
@@ -1128,7 +1139,7 @@ QSet<int> QSortFilterProxyModelPrivate::handle_filter_changed(
 }
 
 void QSortFilterProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &source_top_left,
-							const QModelIndex &source_bottom_right)
+                                                        const QModelIndex &source_bottom_right)
 {
     Q_Q(QSortFilterProxyModel);
     if (!source_top_left.isValid() || !source_bottom_right.isValid())
@@ -1200,8 +1211,8 @@ void QSortFilterProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &sourc
                             source_parent, Qt::Vertical, false);
         update_persistent_indexes(source_indexes);
         emit q->layoutChanged(parents, QAbstractItemModel::VerticalSortHint);
-	// Make sure we also emit dataChanged for the rows
-	source_rows_change += source_rows_resort;
+        // Make sure we also emit dataChanged for the rows
+        source_rows_change += source_rows_resort;
     }
 
     if (!source_rows_change.isEmpty()) {
@@ -2595,16 +2606,16 @@ void QSortFilterProxyModel::invalidateFilter()
     the following QVariant types:
 
     \list
-    \li QVariant::Int
-    \li QVariant::UInt
-    \li QVariant::LongLong
-    \li QVariant::ULongLong
-    \li QVariant::Double
-    \li QVariant::Char
-    \li QVariant::Date
-    \li QVariant::Time
-    \li QVariant::DateTime
-    \li QVariant::String
+    \li QMetaType::Int
+    \li QMetaType::UInt
+    \li QMetaType::LongLong
+    \li QMetaType::ULongLong
+    \li QMetaType::Double
+    \li QMetaType::QChar
+    \li QMetaType::QDate
+    \li QMetaType::QTime
+    \li QMetaType::QDateTime
+    \li QMetaType::QString
     \endlist
 
     Any other type will be converted to a QString using

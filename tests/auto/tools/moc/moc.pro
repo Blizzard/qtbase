@@ -24,7 +24,11 @@ HEADERS += using-namespaces.h no-keywords.h task87883.h c-comments.h backslash-n
            parse-defines.h \
            function-with-attributes.h \
            plugin_metadata.h \
-           single-quote-digit-separator-n3781.h
+           single-quote-digit-separator-n3781.h \
+           related-metaobjects-in-namespaces.h \
+           qtbug-35657-gadget.h \
+           related-metaobjects-in-gadget.h \
+           related-metaobjects-name-conflict.h
 
 
 if(*-g++*|*-icc*|*-clang*|*-llvm):!irix-*:!win32-*: HEADERS += os9-newlines.h win-newlines.h
@@ -41,4 +45,7 @@ DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0
 # tst_Moc::specifyMetaTagsFromCmdline()
 # Ensure that plugin_metadata.h are moc-ed with some extra -M arguments:
 QMAKE_MOC_OPTIONS += -Muri=com.company.app -Muri=com.company.app.private
+
+# Define macro on the command lines used in  parse-defines.h
+QMAKE_MOC_OPTIONS += "-DDEFINE_CMDLINE_EMPTY="  "\"-DDEFINE_CMDLINE_SIGNAL=void cmdlineSignal(const QMap<int, int> &i)\""
 

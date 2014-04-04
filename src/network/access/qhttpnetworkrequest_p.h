@@ -114,6 +114,9 @@ public:
     bool isPipeliningAllowed() const;
     void setPipeliningAllowed(bool b);
 
+    bool isSPDYAllowed() const;
+    void setSPDYAllowed(bool b);
+
     bool withCredentials() const;
     void setWithCredentials(bool b);
 
@@ -126,11 +129,16 @@ public:
     void setUploadByteDevice(QNonContiguousByteDevice *bd);
     QNonContiguousByteDevice* uploadByteDevice() const;
 
+    QByteArray methodName() const;
+    QByteArray uri(bool throughProxy) const;
+
 private:
     QSharedDataPointer<QHttpNetworkRequestPrivate> d;
     friend class QHttpNetworkRequestPrivate;
     friend class QHttpNetworkConnectionPrivate;
     friend class QHttpNetworkConnectionChannel;
+    friend class QHttpProtocolHandler;
+    friend class QSpdyProtocolHandler;
 };
 
 class QHttpNetworkRequestPrivate : public QHttpNetworkHeaderPrivate
@@ -141,8 +149,6 @@ public:
     QHttpNetworkRequestPrivate(const QHttpNetworkRequestPrivate &other);
     ~QHttpNetworkRequestPrivate();
     bool operator==(const QHttpNetworkRequestPrivate &other) const;
-    QByteArray methodName() const;
-    QByteArray uri(bool throughProxy) const;
 
     static QByteArray header(const QHttpNetworkRequest &request, bool throughProxy);
 
@@ -152,6 +158,7 @@ public:
     mutable QNonContiguousByteDevice* uploadByteDevice;
     bool autoDecompress;
     bool pipeliningAllowed;
+    bool spdyAllowed;
     bool withCredentials;
     bool ssl;
     bool preConnect;

@@ -720,14 +720,14 @@ QString QFileSystemEngine::tempPath()
         temp = QFile::decodeName(qgetenv("TMPDIR"));
 
     if (temp.isEmpty()) {
-        qWarning("Neither the TEMP nor the TMPDIR environment variable is set, falling back to /tmp.");
-        temp = QLatin1String("/tmp/");
+        qWarning("Neither the TEMP nor the TMPDIR environment variable is set, falling back to /var/tmp.");
+        temp = QLatin1String("/var/tmp");
     }
     return QDir::cleanPath(temp);
 #else
     QString temp = QFile::decodeName(qgetenv("TMPDIR"));
     if (temp.isEmpty())
-        temp = QLatin1String("/tmp/");
+        temp = QLatin1String("/tmp");
     return QDir::cleanPath(temp);
 #endif
 }

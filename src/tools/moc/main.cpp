@@ -258,7 +258,7 @@ int runMoc(int argc, char **argv)
     parser.addOption(pathPrefixOption);
 
     QCommandLineOption forceIncludeOption(QStringLiteral("f"));
-    forceIncludeOption.setDescription(QStringLiteral("Force #include [optional <file>] (overwrite default)."));
+    forceIncludeOption.setDescription(QStringLiteral("Force #include <file> (overwrite default)."));
     forceIncludeOption.setValueName(QStringLiteral("file"));
     parser.addOption(forceIncludeOption);
 
@@ -295,7 +295,7 @@ int runMoc(int argc, char **argv)
 
     const QStringList files = parser.positionalArguments();
     if (files.count() > 1) {
-        error("Too many input files specified");
+        error(qPrintable(QStringLiteral("Too many input files specified: '") + files.join(QStringLiteral("' '")) + QLatin1Char('\'')));
         parser.showHelp(1);
     } else if (!files.isEmpty()) {
         filename = files.first();
@@ -343,7 +343,8 @@ int runMoc(int argc, char **argv)
             parser.showHelp(1);
         }
         Macro macro;
-        macro.symbols += Symbol(0, PP_IDENTIFIER, value);
+        macro.symbols = Preprocessor::tokenize(value, 1, Preprocessor::TokenizeDefine);
+        macro.symbols.removeLast(); // remove the EOF symbol
         pp.macros.insert(name, macro);
     }
     foreach (const QString &arg, parser.values(undefineOption)) {

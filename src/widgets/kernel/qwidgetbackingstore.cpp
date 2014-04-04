@@ -57,6 +57,8 @@
 #include <private/qpaintengine_raster_p.h>
 #include <private/qgraphicseffect_p.h>
 
+#include <qpa/qplatformbackingstore.h>
+
 #if defined(Q_OS_WIN) && !defined(QT_NO_PAINT_DEBUG)
 #  include <QtCore/qt_windows.h>
 #  include <qpa/qplatformnativeinterface.h>
@@ -71,11 +73,16 @@ extern QRegion qt_dirtyRegion(QWidget *);
  * \a tlwOffset is the position of the top level widget relative to the window surface.
  * \a region is the region to be updated in \a widget coordinates.
  */
-static inline void qt_flush(QWidget *widget, const QRegion &region, QBackingStore *backingStore,
-                            QWidget *tlw, const QPoint &tlwOffset)
+void QWidgetBackingStore::qt_flush(QWidget *widget, const QRegion &region, QBackingStore *backingStore,
+                            QWidget *tlw, const QPoint &tlwOffset, QPlatformTextureList *widgetTextures)
 {
-    Q_ASSERT(widget);
+#ifdef QT_NO_OPENGL
+    Q_UNUSED(widgetTextures);
     Q_ASSERT(!region.isEmpty());
+#else
+    Q_ASSERT(!region.isEmpty() || (widgetTextures && widgetTextures->count()));
+#endif
+    Q_ASSERT(widget);
     Q_ASSERT(backingStore);
     Q_ASSERT(tlw);
 
@@ -104,14 +111,20 @@ static inline void qt_flush(QWidget *widget, const QRegion &region, QBackingStor
     if (tlw->testAttribute(Qt::WA_DontShowOnScreen) || widget->testAttribute(Qt::WA_DontShowOnScreen))
         return;
 
+    QPoint offset = tlwOffset;
     if (widget != tlw)
-        backingStore->flush(region, widget->windowHandle(), tlwOffset + widget->mapTo(tlw, QPoint()));
+        offset += widget->mapTo(tlw, QPoint());
+
+#ifndef QT_NO_OPENGL
+    if (widgetTextures)
+        backingStore->handle()->composeAndFlush(widget->windowHandle(), region, offset, widgetTextures, tlw->d_func()->shareContext());
     else
-        backingStore->flush(region, widget->windowHandle(), tlwOffset);
+#endif
+        backingStore->flush(region, widget->windowHandle(), offset);
 }
 
 #ifndef QT_NO_PAINT_DEBUG
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 
 static void showYellowThing_win(QWidget *widget, const QRegion &region, int msec)
 {
@@ -151,7 +164,7 @@ static void showYellowThing_win(QWidget *widget, const QRegion &region, int msec
     QGuiApplication::platformNativeInterface()->nativeResourceForWindow(QByteArrayLiteral("releaseDC"), nativeWindow);
     ::Sleep(msec);
 }
-#endif //  Q_OS_WIN
+#endif //  defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 
 void QWidgetBackingStore::showYellowThing(QWidget *widget, const QRegion &toBePainted, int msec, bool unclipped)
 {
@@ -166,7 +179,7 @@ void QWidgetBackingStore::showYellowThing(QWidget *widget, const QRegion &toBePa
         widget = nativeParent;
     }
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     Q_UNUSED(unclipped);
     showYellowThing_win(widget, paintRegion, msec);
 #else
@@ -430,7 +443,7 @@ QRegion QWidgetBackingStore::staticContents(QWidget *parent, const QRect &within
     return region;
 }
 
-static inline void sendUpdateRequest(QWidget *widget, bool updateImmediately)
+void QWidgetBackingStore::sendUpdateRequest(QWidget *widget, bool updateImmediately)
 {
     if (!widget)
         return;
@@ -439,6 +452,7 @@ static inline void sendUpdateRequest(QWidget *widget, bool updateImmediately)
         QEvent event(QEvent::UpdateRequest);
         QApplication::sendEvent(widget, &event);
     } else {
+        updateRequestSent = true;
         QApplication::postEvent(widget, new QEvent(QEvent::UpdateRequest), Qt::LowEventPriority);
     }
 }
@@ -488,6 +502,7 @@ void QWidgetBackingStore::markDirty(const QRegion &rgn, QWidget *widget, bool up
         return;
     }
 
+    //### FIXME fullUpdatePending seems to be always false????
     if (fullUpdatePending) {
         if (updateImmediately)
             sendUpdateRequest(tlw, updateImmediately);
@@ -495,6 +510,13 @@ void QWidgetBackingStore::markDirty(const QRegion &rgn, QWidget *widget, bool up
     }
 
     const QPoint offset = widget->mapTo(tlw, QPoint());
+
+    if (QWidgetPrivate::get(widget)->renderToTexture) {
+        if (!updateRequestSent || updateImmediately)
+            sendUpdateRequest(tlw, updateImmediately);
+        return;
+    }
+
     const QRect widgetRect = widget->d_func()->effectiveRectFor(widget->rect());
     if (qt_region_strictContains(dirty, widgetRect.translated(offset))) {
         if (updateImmediately)
@@ -503,7 +525,7 @@ void QWidgetBackingStore::markDirty(const QRegion &rgn, QWidget *widget, bool up
     }
 
     if (invalidateBuffer) {
-        const bool eventAlreadyPosted = !dirty.isEmpty();
+        const bool eventAlreadyPosted = !dirty.isEmpty() || updateRequestSent;
 #ifndef QT_NO_GRAPHICSEFFECT
         if (widget->d_func()->graphicsEffect)
             dirty += widget->d_func()->effectiveRectFor(rgn.boundingRect()).translated(offset);
@@ -582,6 +604,13 @@ void QWidgetBackingStore::markDirty(const QRect &rect, QWidget *widget, bool upd
             sendUpdateRequest(tlw, updateImmediately);
         return;
     }
+
+    if (QWidgetPrivate::get(widget)->renderToTexture) {
+        if (!updateRequestSent || updateImmediately)
+            sendUpdateRequest(tlw, updateImmediately);
+        return;
+    }
+
 
     const QRect widgetRect = widget->d_func()->effectiveRectFor(rect);
     const QRect translatedRect(widgetRect.translated(widget->mapTo(tlw, QPoint())));
@@ -703,7 +732,12 @@ void QWidgetBackingStore::updateLists(QWidget *cur)
 }
 
 QWidgetBackingStore::QWidgetBackingStore(QWidget *topLevel)
-    : tlw(topLevel), dirtyOnScreenWidgets(0), fullUpdatePending(0)
+    : tlw(topLevel),
+      dirtyOnScreenWidgets(0),
+      widgetTextures(0),
+      fullUpdatePending(0),
+      updateRequestSent(0),
+      textureListWatcher(0)
 {
     store = tlw->backingStore();
     Q_ASSERT(store);
@@ -717,8 +751,9 @@ QWidgetBackingStore::~QWidgetBackingStore()
     for (int c = 0; c < dirtyWidgets.size(); ++c) {
         resetWidget(dirtyWidgets.at(c));
     }
-
+#ifndef QT_NO_OPENGL
     delete dirtyOnScreenWidgets;
+#endif
     dirtyOnScreenWidgets = 0;
 }
 
@@ -892,17 +927,17 @@ static inline bool discardSyncRequest(QWidget *tlw, QTLWExtra *tlwExtra)
 void QWidgetBackingStore::sync(QWidget *exposedWidget, const QRegion &exposedRegion)
 {
     QTLWExtra *tlwExtra = tlw->d_func()->maybeTopData();
-    if (discardSyncRequest(tlw, tlwExtra) || tlwExtra->inTopLevelResize)
+    if (!tlw->isVisible() || !tlwExtra || tlwExtra->inTopLevelResize)
         return;
 
-    if (!exposedWidget || !exposedWidget->internalWinId() || !exposedWidget->isVisible()
+    if (!exposedWidget || !exposedWidget->internalWinId() || !exposedWidget->isVisible() || !exposedWidget->testAttribute(Qt::WA_Mapped)
         || !exposedWidget->updatesEnabled() || exposedRegion.isEmpty()) {
         return;
     }
 
     // Nothing to repaint.
     if (!isDirty()) {
-        qt_flush(exposedWidget, exposedRegion, store, tlw, tlwOffset);
+        qt_flush(exposedWidget, exposedRegion, store, tlw, tlwOffset, widgetTextures);
         return;
     }
 
@@ -910,14 +945,50 @@ void QWidgetBackingStore::sync(QWidget *exposedWidget, const QRegion &exposedReg
         markDirtyOnScreen(exposedRegion, exposedWidget, exposedWidget->mapTo(tlw, QPoint()));
     else
         markDirtyOnScreen(exposedRegion, exposedWidget, QPoint());
-    sync();
+
+    doSync();
 }
+
+#ifndef QT_NO_OPENGL
+static void findTextureWidgetsRecursively(QWidget *tlw, QWidget *widget, QPlatformTextureList *widgetTextures)
+{
+    QWidgetPrivate *wd = QWidgetPrivate::get(widget);
+    if (wd->renderToTexture)
+        widgetTextures->appendTexture(wd->textureId(), QRect(widget->mapTo(tlw, QPoint()), widget->size()));
+
+    for (int i = 0; i < wd->children.size(); ++i) {
+        QWidget *w = qobject_cast<QWidget *>(wd->children.at(i));
+        if (w && !w->isWindow() && !w->isHidden() && QWidgetPrivate::get(w)->textureChildSeen)
+            findTextureWidgetsRecursively(tlw, w, widgetTextures);
+    }
+}
+
+QPlatformTextureListWatcher::QPlatformTextureListWatcher(QWidgetBackingStore *backingStore)
+    : m_locked(false),
+      m_backingStore(backingStore)
+{
+}
+
+void QPlatformTextureListWatcher::watch(QPlatformTextureList *textureList)
+{
+    connect(textureList, SIGNAL(locked(bool)), SLOT(onLockStatusChanged(bool)));
+    m_locked = textureList->isLocked();
+}
+
+void QPlatformTextureListWatcher::onLockStatusChanged(bool locked)
+{
+    m_locked = locked;
+    if (!locked)
+        m_backingStore->sync();
+}
+#endif // QT_NO_OPENGL
 
 /*!
     Synchronizes the backing store, i.e. dirty areas are repainted and flushed.
 */
 void QWidgetBackingStore::sync()
 {
+    updateRequestSent = false;
     QTLWExtra *tlwExtra = tlw->d_func()->maybeTopData();
     if (discardSyncRequest(tlw, tlwExtra)) {
         // If the top-level is minimized, it's not visible on the screen so we can delay the
@@ -935,10 +1006,28 @@ void QWidgetBackingStore::sync()
         return;
     }
 
+#ifndef QT_NO_OPENGL
+    if (textureListWatcher && !textureListWatcher->isLocked()) {
+        textureListWatcher->deleteLater();
+        textureListWatcher = 0;
+    } else if (widgetTextures && widgetTextures->isLocked()) {
+        if (!textureListWatcher)
+            textureListWatcher = new QPlatformTextureListWatcher(this);
+        if (!textureListWatcher->isLocked())
+            textureListWatcher->watch(widgetTextures);
+        return;
+    }
+#endif
+
+    doSync();
+}
+
+void QWidgetBackingStore::doSync()
+{
     const bool updatesDisabled = !tlw->updatesEnabled();
     bool repaintAllWidgets = false;
 
-    const bool inTopLevelResize = tlwExtra->inTopLevelResize;
+    const bool inTopLevelResize = tlw->d_func()->maybeTopData()->inTopLevelResize;
     const QRect tlwRect(topLevelRect());
     const QRect surfaceGeometry(tlwRect.topLeft(), store->size());
     if ((fullUpdatePending || inTopLevelResize || surfaceGeometry.size() != tlwRect.size()) && !updatesDisabled) {
@@ -1018,7 +1107,15 @@ void QWidgetBackingStore::sync()
     }
     dirtyWidgets.clear();
 
+#ifndef QT_NO_OPENGL
+    delete widgetTextures;
+    widgetTextures = 0;
+    if (tlw->d_func()->textureChildSeen) {
+        widgetTextures = new QPlatformTextureList;
+        findTextureWidgetsRecursively(tlw, tlw, widgetTextures);
+    }
     fullUpdatePending = false;
+#endif
 
     if (toClean.isEmpty()) {
         // Nothing to repaint. However, we might have newly exposed areas on the
@@ -1032,6 +1129,7 @@ void QWidgetBackingStore::sync()
     if (tlw->d_func()->extra->proxyWidget) {
         updateStaticContentsSize();
         dirty = QRegion();
+        updateRequestSent = false;
         const QVector<QRect> rects(toClean.rects());
         for (int i = 0; i < rects.size(); ++i)
             tlw->d_func()->extra->proxyWidget->update(rects.at(i));
@@ -1045,6 +1143,7 @@ void QWidgetBackingStore::sync()
         for (int i = 0; i < opaqueNonOverlappedWidgets.size(); ++i)
             resetWidget(opaqueNonOverlappedWidgets[i]);
         dirty = QRegion();
+        updateRequestSent = false;
         return;
     }
 
@@ -1053,6 +1152,7 @@ void QWidgetBackingStore::sync()
     updateStaticContentsSize();
     const QRegion dirtyCopy(dirty);
     dirty = QRegion();
+    updateRequestSent = false;
 
     // Paint opaque non overlapped widgets.
     for (int i = 0; i < opaqueNonOverlappedWidgets.size(); ++i) {
@@ -1093,12 +1193,19 @@ void QWidgetBackingStore::flush(QWidget *widget)
 {
     if (!dirtyOnScreen.isEmpty()) {
         QWidget *target = widget ? widget : tlw;
-        qt_flush(target, dirtyOnScreen, store, tlw, tlwOffset);
+        qt_flush(target, dirtyOnScreen, store, tlw, tlwOffset, widgetTextures);
         dirtyOnScreen = QRegion();
     }
 
-    if (!dirtyOnScreenWidgets || dirtyOnScreenWidgets->isEmpty())
+    if (!dirtyOnScreenWidgets || dirtyOnScreenWidgets->isEmpty()) {
+#ifndef QT_NO_OPENGL
+        if (widgetTextures && widgetTextures->count()) {
+            QWidget *target = widget ? widget : tlw;
+            qt_flush(target, QRegion(), store, tlw, tlwOffset, widgetTextures);
+        }
+#endif
         return;
+    }
 
     for (int i = 0; i < dirtyOnScreenWidgets->size(); ++i) {
         QWidget *w = dirtyOnScreenWidgets->at(i);

@@ -1057,9 +1057,10 @@ QRect QAccessibleTableCell::rect() const
     QRect r;
     r = view->visualRect(m_index);
 
-    if (!r.isNull())
+    if (!r.isNull()) {
         r.translate(view->viewport()->mapTo(view, QPoint(0,0)));
         r.translate(view->mapToGlobal(QPoint(0, 0)));
+    }
     return r;
 }
 
@@ -1068,7 +1069,6 @@ QString QAccessibleTableCell::text(QAccessible::Text t) const
     QAbstractItemModel *model = view->model();
     QString value;
     switch (t) {
-    case QAccessible::Value:
     case QAccessible::Name:
         value = model->data(m_index, Qt::AccessibleTextRole).toString();
         if (value.isEmpty())
@@ -1160,7 +1160,6 @@ QString QAccessibleTableHeaderCell::text(QAccessible::Text t) const
     QAbstractItemModel *model = view->model();
     QString value;
     switch (t) {
-    case QAccessible::Value:
     case QAccessible::Name:
         value = model->headerData(index, orientation, Qt::AccessibleTextRole).toString();
         if (value.isEmpty())

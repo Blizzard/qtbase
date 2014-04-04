@@ -716,11 +716,12 @@ QString QDir::absoluteFilePath(const QString &fileName) const
         return fileName;
 
     d->resolveAbsoluteEntry();
+    const QString absoluteDirPath = d->absoluteDirEntry.filePath();
     if (fileName.isEmpty())
-        return d->absoluteDirEntry.filePath();
-    if (!d->absoluteDirEntry.isRoot())
-        return d->absoluteDirEntry.filePath() % QLatin1Char('/') % fileName;
-    return d->absoluteDirEntry.filePath() % fileName;
+        return absoluteDirPath;
+    if (!absoluteDirPath.endsWith(QLatin1Char('/')))
+        return absoluteDirPath % QLatin1Char('/') % fileName;
+    return absoluteDirPath % fileName;
 }
 
 /*!
@@ -855,7 +856,7 @@ QString QDir::fromNativeSeparators(const QString &pathName)
 /*!
     Changes the QDir's directory to \a dirName.
 
-    Returns \c true if the new directory exists and is readable;
+    Returns \c true if the new directory exists;
     otherwise returns \c false. Note that the logical cd() operation is
     not performed if the new directory does not exist.
 
@@ -923,7 +924,7 @@ bool QDir::cd(const QString &dirName)
     Changes directory by moving one directory up from the QDir's
     current directory.
 
-    Returns \c true if the new directory exists and is readable;
+    Returns \c true if the new directory exists;
     otherwise returns \c false. Note that the logical cdUp() operation is
     not performed if the new directory does not exist.
 
@@ -1943,8 +1944,9 @@ QString QDir::homePath()
     On Unix/Linux systems this is the path in the \c TMPDIR environment
     variable or \c{/tmp} if \c TMPDIR is not defined. On Windows this is
     usually the path in the \c TEMP or \c TMP environment
-    variable. Whether a directory separator is added to the end or
-    not, depends on the operating system.
+    variable.
+    The path returned by this method doesn't end with a directory separator
+    unless it is the root directory (of a drive).
 
     \sa temp(), currentPath(), homePath(), rootPath()
 */
@@ -2144,7 +2146,7 @@ QString QDir::cleanPath(const QString &path)
        name.replace(dir_separator, QLatin1Char('/'));
 
     bool allowUncPaths = false;
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) //allow unc paths
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT) //allow unc paths
     allowUncPaths = true;
 #endif
 

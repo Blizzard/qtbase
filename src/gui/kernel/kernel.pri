@@ -121,7 +121,8 @@ SOURCES += \
         kernel/qplatformservices.cpp \
         kernel/qplatformscreenpageflipper.cpp \
         kernel/qplatformsystemtrayicon_qpa.cpp \
-        kernel/qplatformsessionmanager.cpp
+        kernel/qplatformsessionmanager.cpp \
+        kernel/qplatformmenu.cpp
 
 mac {
     OBJECTIVE_SOURCES += \

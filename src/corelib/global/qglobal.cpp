@@ -115,7 +115,35 @@ Q_STATIC_ASSERT_X(UCHAR_MAX == 255, "Qt assumes that char is 8 bits");
 */
 
 /*!
+    \fn QFlag::QFlag(uint value)
+    \since Qt 5.3
+
+    Constructs a QFlag object that stores the given \a value.
+*/
+
+/*!
+    \fn QFlag::QFlag(short value)
+    \since 5.3
+
+    Constructs a QFlag object that stores the given \a value.
+*/
+
+/*!
+    \fn QFlag::QFlag(ushort value)
+    \since Qt 5.3
+
+    Constructs a QFlag object that stores the given \a value.
+*/
+
+/*!
     \fn QFlag::operator int() const
+
+    Returns the value stored by the QFlag object.
+*/
+
+/*!
+    \fn QFlag::operator uint() const
+    \since Qt 5.3
 
     Returns the value stored by the QFlag object.
 */
@@ -715,7 +743,7 @@ Q_STATIC_ASSERT_X(UCHAR_MAX == 255, "Qt assumes that char is 8 bits");
     \relates <QtGlobal>
 
     This enum describes the messages that can be sent to a message
-    handler (QtMsgHandler). You can use the enum to identify and
+    handler (QtMessageHandler). You can use the enum to identify and
     associate the various message types with the appropriate
     actions.
 
@@ -1960,7 +1988,7 @@ const QSysInfo::WinVersion QSysInfo::WindowsVersion = QSysInfo::windowsVersion()
     conditions that it would not otherwise know about. However, there is no
     guarantee that the compiler will actually use those hints.
 
-    This macro could be considered a "lighter" version of \l{Q_ASSERT}. While
+    This macro could be considered a "lighter" version of \l{Q_ASSERT()}. While
     Q_ASSERT will abort the program's execution if the condition is false,
     Q_ASSUME will tell the compiler not to generate code for those conditions.
     Therefore, it is important that the assumptions always hold, otherwise
@@ -2186,7 +2214,9 @@ QString qt_error_string(int errorCode)
         s = QT_TRANSLATE_NOOP("QIODevice", "No space left on device");
         break;
     default: {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN)
+        // Retrieve the system error message for the last-error code.
+#  ifndef Q_OS_WINRT
         wchar_t *string = 0;
         FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
                       NULL,
@@ -2197,6 +2227,17 @@ QString qt_error_string(int errorCode)
                       NULL);
         ret = QString::fromWCharArray(string);
         LocalFree((HLOCAL)string);
+#  else // !Q_OS_WINRT
+        __declspec(thread) static wchar_t errorString[4096];
+        FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                      NULL,
+                      errorCode,
+                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                      errorString,
+                      ARRAYSIZE(errorString),
+                      NULL);
+        ret = QString::fromWCharArray(errorString);
+#  endif // Q_OS_WINRT
 
         if (ret.isEmpty() && errorCode == ERROR_MOD_NOT_FOUND)
             ret = QString::fromLatin1("The specified module could not be found.");
@@ -2769,12 +2810,17 @@ int qrand()
 
     The char pointer will be invalid after the statement in which
     qPrintable() is used. This is because the array returned by
-    toLocal8Bit() will fall out of scope.
+    QString::toLocal8Bit() will fall out of scope.
 
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 37
 
+    \note qDebug(), qWarning(), qCritical(), qFatal() expect %s
+    arguments to be UTF-8 encoded, while qPrintable() converts to
+    local 8-bit encoding. Therefore using qPrintable for logging
+    strings is only safe if the argument contains only ASCII
+    characters.
 
     \sa qDebug(), qWarning(), qCritical(), qFatal()
 */
@@ -3318,7 +3364,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     If you need C++11 noexcept semantics, don't use this macro, use
     Q_DECL_NOEXCEPT/Q_DECL_NOEXCEPT_EXPR instead.
 
-    \sa Q_DECL_NOEXCEPT, Q_DECL_NOEXCEPT_EXPR
+    \sa Q_DECL_NOEXCEPT, Q_DECL_NOEXCEPT_EXPR()
 */
 
 /*!
@@ -3372,7 +3418,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     function can't possibly throw, don't use this macro, use
     Q_DECL_NOTHROW instead.
 
-    \sa Q_DECL_NOTHROW, Q_DECL_NOEXCEPT_EXPR
+    \sa Q_DECL_NOTHROW, Q_DECL_NOEXCEPT_EXPR()
 */
 
 /*!
@@ -3394,7 +3440,7 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     function can't possibly throw, don't use this macro, use
     Q_DECL_NOTHROW instead.
 
-    \sa Q_DECL_NOTHROW, Q_DECL_NOEXCEPT_EXPR
+    \sa Q_DECL_NOTHROW, Q_DECL_NOEXCEPT
 */
 
 /*!

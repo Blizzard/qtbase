@@ -43,7 +43,9 @@
 #include <QtCore/qglobal.h>
 #ifdef Q_OS_WIN
 # include <QtCore/qt_windows.h>
+#ifndef Q_OS_WINRT
 # include <oleacc.h>
+#endif
 # include <servprov.h>
 # include <winuser.h>
 # ifdef QT_SUPPORTS_IACCESSIBLE2
@@ -70,6 +72,8 @@
 #endif
 
 #include "QtTest/qtestaccessible.h"
+
+#include <algorithm>
 
 // Make a widget frameless to prevent size constraints of title bars
 // from interfering (Windows).
@@ -2190,7 +2194,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
     for (int i = 0; i < iface->childCount(); ++i)
         buttons <<  iface->child(i);
 
-    qSort(buttons.begin(), buttons.end(), accessibleInterfaceLeftOf);
+    std::sort(buttons.begin(), buttons.end(), accessibleInterfaceLeftOf);
 
     for (int i = 0; i < buttons.count(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
@@ -2241,7 +2245,7 @@ void tst_QAccessibility::dialogButtonBoxTest()
     for (int i = 0; i < iface->childCount(); ++i)
         buttons <<  iface->child(i);
 
-    qSort(buttons.begin(), buttons.end(), accessibleInterfaceAbove);
+    std::sort(buttons.begin(), buttons.end(), accessibleInterfaceAbove);
 
     for (int i = 0; i < buttons.count(); ++i)
         actualOrder << buttons.at(i)->text(QAccessible::Name);
@@ -3366,7 +3370,7 @@ void tst_QAccessibility::bridgeTest()
 {
     // For now this is a simple test to see if the bridge is working at all.
     // Ideally it should be extended to test all aspects of the bridge.
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     // First, test MSAA part of bridge
     QWidget *window = new QWidget;
     QVBoxLayout *lay = new QVBoxLayout(window);

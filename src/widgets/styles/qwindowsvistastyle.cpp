@@ -1236,7 +1236,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
     case CE_MenuItem:
         if (const QStyleOptionMenuItem *menuitem = qstyleoption_cast<const QStyleOptionMenuItem *>(option)) {
             // windows always has a check column, regardless whether we have an icon or not
-            int checkcol = 28;
+            int checkcol = 25;
             {
                 SIZE    size;
                 MARGINS margins;
@@ -1244,11 +1244,13 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                                   MENU_POPUPCHECKBACKGROUND, MBI_HOT);
                 pGetThemePartSize(theme.handle(), NULL, MENU_POPUPCHECK, 0, NULL,TS_TRUE, &size);
                 pGetThemeMargins(theme.handle(), NULL, MENU_POPUPCHECK, 0, TMT_CONTENTMARGINS, NULL, &margins);
-                checkcol = qMax(menuitem->maxIconWidth, int(6 + size.cx + margins.cxLeftWidth + margins.cxRightWidth));
+                checkcol = qMax(menuitem->maxIconWidth, int(3 + size.cx + margins.cxLeftWidth + margins.cxRightWidth));
             }
             QRect rect = option->rect;
 
             //draw vertical menu line
+            if (option->direction == Qt::LeftToRight)
+                checkcol += rect.x();
             QPoint p1 = QStyle::visualPos(option->direction, menuitem->rect, QPoint(checkcol, rect.top()));
             QPoint p2 = QStyle::visualPos(option->direction, menuitem->rect, QPoint(checkcol, rect.bottom()));
             QRect gutterRect(p1.x(), p1.y(), 3, p2.y() - p1.y() + 1);
@@ -1340,11 +1342,9 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
 
             painter->setPen(menuitem->palette.buttonText().color());
 
-            QColor discol;
-            if (dis) {
-                discol = menuitem->palette.text().color();
-                painter->setPen(discol);
-            }
+            const QColor textColor = menuitem->palette.text().color();
+            if (dis)
+                painter->setPen(textColor);
 
             int xm = windowsItemFrame + checkcol + windowsItemHMargin;
             int xpos = menuitem->rect.x() + xm;
@@ -1368,7 +1368,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                 if (menuitem->menuItemType == QStyleOptionMenuItem::DefaultItem)
                     font.setBold(true);
                 painter->setFont(font);
-                painter->setPen(discol);
+                painter->setPen(textColor);
                 painter->drawText(vTextRect, text_flags, s.left(t));
                 painter->restore();
             }
@@ -1879,7 +1879,11 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
                 XPThemeData ftheme(widget, painter,
                                    QWindowsXPStylePrivate::EditTheme,
                                    partId, stateId, r);
-                ftheme.noContent = true;
+                // The spinbox in Windows QStyle is drawn with frameless QLineEdit inside it
+                // That however breaks with QtQuickControls where this results in transparent
+                // spinbox background, so if there's no "widget" passed (QtQuickControls case),
+                // let ftheme.noContent be false, which fixes the spinbox rendering in QQC
+                ftheme.noContent = (widget != NULL);
                 d->drawBackground(ftheme);
             }
             if (sub & SC_SpinBoxUp) {

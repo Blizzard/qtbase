@@ -44,6 +44,8 @@
 #include <qhash.h>
 #include <qmap.h>
 
+#include <algorithm>
+
 class tst_QHash : public QObject
 {
     Q_OBJECT
@@ -64,6 +66,7 @@ private slots:
     void rehash_isnt_quadratic();
     void dont_need_default_constructor();
     void qhash();
+    void fp_qhash_of_zero_is_zero();
     void qmultihash_specific();
 
     void compare();
@@ -1043,6 +1046,20 @@ void tst_QHash::qhash()
     }
 }
 
+void tst_QHash::fp_qhash_of_zero_is_zero()
+{
+    QCOMPARE(qHash(-0.0f), 0U);
+    QCOMPARE(qHash( 0.0f), 0U);
+
+    QCOMPARE(qHash(-0.0 ), 0U);
+    QCOMPARE(qHash( 0.0 ), 0U);
+
+#ifndef Q_OS_DARWIN
+    QCOMPARE(qHash(-0.0L), 0U);
+    QCOMPARE(qHash( 0.0L), 0U);
+#endif
+}
+
 void tst_QHash::qmultihash_specific()
 {
     QMultiHash<int, int> hash1;
@@ -1152,7 +1169,7 @@ template <typename T>
 QList<T> sorted(const QList<T> &list)
 {
     QList<T> res = list;
-    qSort(res);
+    std::sort(res.begin(), res.end());
     return res;
 }
 

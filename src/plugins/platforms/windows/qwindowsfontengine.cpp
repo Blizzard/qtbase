@@ -219,44 +219,11 @@ inline unsigned int getChar(const QChar *str, int &i, const int len)
     return uc;
 }
 
-int QWindowsFontEngine::getGlyphIndexes(const QChar *str, int numChars, QGlyphLayout *glyphs, bool mirrored) const
+int QWindowsFontEngine::getGlyphIndexes(const QChar *str, int numChars, QGlyphLayout *glyphs) const
 {
     int i = 0;
     int glyph_pos = 0;
-    if (mirrored) {
-#if defined(Q_OS_WINCE)
-        {
-#else
-        if (symbol) {
-            for (; i < numChars; ++i, ++glyph_pos) {
-                unsigned int uc = getChar(str, i, numChars);
-                glyphs->glyphs[glyph_pos] = getTrueTypeGlyphIndex(cmap, uc);
-                if (!glyphs->glyphs[glyph_pos] && uc < 0x100)
-                    glyphs->glyphs[glyph_pos] = getTrueTypeGlyphIndex(cmap, uc + 0xf000);
-            }
-        } else if (ttf) {
-            for (; i < numChars; ++i, ++glyph_pos) {
-                unsigned int uc = getChar(str, i, numChars);
-                glyphs->glyphs[glyph_pos] = getTrueTypeGlyphIndex(cmap, QChar::mirroredChar(uc));
-            }
-        } else {
-#endif
-            wchar_t first = tm.tmFirstChar;
-            wchar_t last = tm.tmLastChar;
-
-            for (; i < numChars; ++i, ++glyph_pos) {
-                uint ucs = QChar::mirroredChar(getChar(str, i, numChars));
-                if (
-#ifdef Q_WS_WINCE
-                    tm.tmFirstChar > 60000 ||
-#endif
-                         ucs >= first && ucs <= last)
-                    glyphs->glyphs[glyph_pos] = ucs;
-                else
-                    glyphs->glyphs[glyph_pos] = 0;
-            }
-        }
-    } else {
+    {
 #if defined(Q_OS_WINCE)
         {
 #else
@@ -325,8 +292,7 @@ QWindowsFontEngine::QWindowsFontEngine(const QString &name,
     designAdvances(0),
     designAdvancesSize(0)
 {
-    if (QWindowsContext::verboseFonts)
-        qDebug("%s: font='%s', size=%ld", __FUNCTION__, qPrintable(name), lf.lfHeight);
+    qCDebug(lcQpaFonts) << __FUNCTION__ << name << lf.lfHeight;
     HDC hdc = m_fontEngineData->hdc;
     SelectObject(hdc, hfont);
     fontDef.pixelSize = -lf.lfHeight;
@@ -366,9 +332,7 @@ QWindowsFontEngine::~QWindowsFontEngine()
         if (!DeleteObject(hfont))
             qErrnoWarning("%s: QFontEngineWin: failed to delete non-stock font... failed", __FUNCTION__);
     }
-    if (QWindowsContext::verboseFonts)
-        if (QWindowsContext::verboseFonts)
-            qDebug("%s: font='%s", __FUNCTION__, qPrintable(_name));
+    qCDebug(lcQpaFonts) << __FUNCTION__ << _name;
 
     if (!uniqueFamilyName.isEmpty()) {
         QPlatformFontDatabase *pfdb = QWindowsIntegration::instance()->fontDatabase();
@@ -393,7 +357,7 @@ bool QWindowsFontEngine::stringToCMap(const QChar *str, int len, QGlyphLayout *g
     }
 
     glyphs->numGlyphs = *nglyphs;
-    *nglyphs = getGlyphIndexes(str, len, glyphs, flags & RightToLeft);
+    *nglyphs = getGlyphIndexes(str, len, glyphs);
 
     if (!(flags & GlyphIndicesOnly))
         recalcAdvances(glyphs, flags);
@@ -434,16 +398,13 @@ void QWindowsFontEngine::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::Shape
                 calculateTTFGlyphWidth(hdc, glyph, width);
                 designAdvances[glyph] = QFixed(width) / designToDevice;
             }
-            glyphs->advances_x[i] = designAdvances[glyph];
-            glyphs->advances_y[i] = 0;
+            glyphs->advances[i] = designAdvances[glyph];
         }
         if(oldFont)
             DeleteObject(SelectObject(hdc, oldFont));
     } else {
         for(int i = 0; i < glyphs->numGlyphs; i++) {
             unsigned int glyph = glyphs->glyphs[i];
-
-            glyphs->advances_y[i] = 0;
 
             if (glyph >= widthCacheSize) {
                 int newSize = (glyph + 256) >> 8 << 8;
@@ -452,9 +413,9 @@ void QWindowsFontEngine::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::Shape
                 memset(widthCache + widthCacheSize, 0, newSize - widthCacheSize);
                 widthCacheSize = newSize;
             }
-            glyphs->advances_x[i] = widthCache[glyph];
+            glyphs->advances[i] = widthCache[glyph];
             // font-width cache failed
-            if (glyphs->advances_x[i] == 0) {
+            if (glyphs->advances[i].value() == 0) {
                 int width = 0;
                 if (!oldFont)
                     oldFont = SelectObject(hdc, hfont);
@@ -473,7 +434,7 @@ void QWindowsFontEngine::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::Shape
                 } else {
                     calculateTTFGlyphWidth(hdc, glyph, width);
                 }
-                glyphs->advances_x[i] = width;
+                glyphs->advances[i] = width;
                 // if glyph's within cache range, store it for later
                 if (width > 0 && width < 0x100)
                     widthCache[glyph] = width;
@@ -1187,7 +1148,7 @@ glyph_metrics_t QWindowsFontEngine::alphaMapBoundingBox(glyph_t glyph, QFixed, c
 {
     int margin = 0;
     if (format == QFontEngine::Format_A32 || format == QFontEngine::Format_ARGB)
-        margin = glyphMargin(QFontEngineGlyphCache::Raster_RGBMask);
+        margin = glyphMargin(QFontEngine::Format_A32);
     glyph_metrics_t gm = boundingBox(glyph, matrix);
     gm.width += margin * 2;
     gm.height += margin * 2;
@@ -1260,7 +1221,7 @@ QImage QWindowsFontEngine::alphaRGBMapForGlyph(glyph_t glyph, QFixed, const QTra
     SystemParametersInfo(SPI_GETFONTSMOOTHINGCONTRAST, 0, &contrast, 0);
     SystemParametersInfo(SPI_SETFONTSMOOTHINGCONTRAST, 0, (void *) 1000, 0);
 
-    int margin = glyphMargin(QFontEngineGlyphCache::Raster_RGBMask);
+    int margin = glyphMargin(QFontEngine::Format_A32);
     QWindowsNativeImage *mask = drawGDIGlyph(font, glyph, margin, t, QImage::Format_RGB32);
     SystemParametersInfo(SPI_SETFONTSMOOTHINGCONTRAST, 0, (void *) quintptr(contrast), 0);
 
@@ -1347,8 +1308,7 @@ QWindowsMultiFontEngine::QWindowsMultiFontEngine(QFontEngine *first, const QStri
         : QFontEngineMulti(fallbacks.size()+1),
           fallbacks(fallbacks)
 {
-    if (QWindowsContext::verboseFonts)
-        qDebug() <<  __FUNCTION__ << engines.size() << first << first->fontDef.family << fallbacks;
+    qCDebug(lcQpaFonts) << __FUNCTION__ << engines.size() << first << first->fontDef.family << fallbacks;
     engines[0] = first;
     first->ref.ref();
     fontDef = engines[0]->fontDef;
@@ -1357,8 +1317,7 @@ QWindowsMultiFontEngine::QWindowsMultiFontEngine(QFontEngine *first, const QStri
 
 QWindowsMultiFontEngine::~QWindowsMultiFontEngine()
 {
-    if (QWindowsContext::verboseFonts)
-        qDebug("%s", __FUNCTION__);
+    qCDebug(lcQpaFonts) << __FUNCTION__;
 }
 
 void QWindowsMultiFontEngine::loadEngine(int at)
@@ -1409,9 +1368,7 @@ void QWindowsMultiFontEngine::loadEngine(int at)
                 fedw->ref.ref();
                 engines[at] = fedw;
 
-                if (QWindowsContext::verboseFonts)
-                    qDebug("%s %d %s", __FUNCTION__, at, qPrintable(fam));
-
+                qCDebug(lcQpaFonts) << __FUNCTION__ << at << fam;
                 return;
             } else {
                 qErrnoWarning("%s: CreateFontFace failed", __FUNCTION__);
@@ -1433,9 +1390,7 @@ void QWindowsMultiFontEngine::loadEngine(int at)
     engines[at] = new QWindowsFontEngine(fam, hfont, stockFont, lf, data);
     engines[at]->ref.ref();
     engines[at]->fontDef = fontDef;
-    if (QWindowsContext::verboseFonts)
-        qDebug("%s %d %s", __FUNCTION__, at, qPrintable(fam));
-
+    qCDebug(lcQpaFonts) << __FUNCTION__ << at << fam;
 
     // TODO: increase cost in QFontCache for the font engine loaded here
 }

@@ -59,6 +59,8 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/private/qthread_p.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qlibraryinfo.h>
+#include <QtCore/qnumeric.h>
 #include <QtDebug>
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -110,7 +112,7 @@ Q_GUI_EXPORT bool qt_is_gui_used = true;
 Qt::MouseButtons QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
 Qt::KeyboardModifiers QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
 
-QPointF QGuiApplicationPrivate::lastCursorPosition(0.0, 0.0);
+QPointF QGuiApplicationPrivate::lastCursorPosition(qInf(), qInf());
 
 bool QGuiApplicationPrivate::tabletState = false;
 QWindow *QGuiApplicationPrivate::tabletPressTarget = 0;
@@ -130,6 +132,8 @@ enum ApplicationResourceFlags
 };
 
 static unsigned applicationResourceFlags = 0;
+
+QIcon *QGuiApplicationPrivate::app_icon = 0;
 
 QString *QGuiApplicationPrivate::platform_name = 0;
 QString *QGuiApplicationPrivate::displayName = 0;
@@ -460,18 +464,65 @@ static QWindowGeometrySpecification windowGeometrySpecification;
     \note \a argc and \a argv might be changed as Qt removes command line
     arguments that it recognizes.
 
+    \section1 Supported Command Line Options
+
     All Qt programs automatically support the following command line options:
     \list
-        \li  -reverse, sets the application's layout direction to
-            Qt::RightToLeft
-        \li  -qmljsdebugger=, activates the QML/JS debugger with a specified port.
-            The value must be of format port:1234[,block], where block is optional
+
+        \li \c{-platform} \e {platformName[:options]}, specifies the
+            \l{Qt Platform Abstraction} (QPA) plugin.
+
+            Overridden by the \c QT_QPA_PLATFORM environment variable.
+        \li \c{-platformpluginpath} \e path, specifies the path to platform
+            plugins.
+
+            Overridden by the \c QT_QPA_PLATFORM_PLUGIN_PATH environment
+            variable.
+
+        \li \c{-platformtheme} \e platformTheme, specifies the platform theme.
+
+            Overridden by the \c QT_QPA_PLATFORMTHEME environment variable.
+        \li \c{-qmljsdebugger=}, activates the QML/JS debugger with a specified port.
+            The value must be of format \c{port:1234}\e{[,block]}, where
+            \e block is optional
             and will make the application wait until a debugger connects to it.
-        \li  -session \e session, restores the application from an earlier
+        \li \c {-qwindowgeometry} \e geometry, specifies window geometry for
+            the main window using the X11-syntax. For example:
+            \c {-qwindowgeometry 100x100+50+50}
+        \li \c{-reverse}, sets the application's layout direction to
+            Qt::RightToLeft
+        \li \c{-session} \e session, restores the application from an earlier
             \l{Session Management}{session}.
+        \li  -qwindowgeometry, sets the geometry of the first window
+        \li  -qwindowtitle, sets the title of the first window
     \endlist
 
-    \sa arguments()
+    The following standard command line options are available for X11:
+
+    \list
+        \li \c {-display} \e {hostname:screen_number}, switches displays on X11.
+        \li \c {-geometry} \e geometry, same as \c {-qwindowgeometry}.
+    \endlist
+
+    \section1 Platform-Specific Arguments
+
+    You can specify platform-specific arguments for the \c{-platform} option.
+    Place them after the platform plugin name following a colon as a
+    comma-separated list. For example,
+    \c{-platform windows:dialogs=xp,fontengine=freetype}.
+
+    The following parameters are available for \c {-platform windows}:
+
+    \list
+        \li \c {dialogs=[xp|none]}, \c xp uses XP-style native dialogs and
+            \c none disables them.
+        \li \c {fontengine=freetype}, uses the FreeType font engine.
+    \endlist
+
+    For more information about the platform-specific arguments available for
+    embedded Linux platforms, see \l{Qt for Embedded Linux}.
+
+    \sa arguments() QGuiApplication::platformName
 */
 #ifdef Q_QDOC
 QGuiApplication::QGuiApplication(int &argc, char **argv)
@@ -519,6 +570,8 @@ QGuiApplication::~QGuiApplication()
     d->cursor_list.clear();
 #endif
 
+    delete QGuiApplicationPrivate::app_icon;
+    QGuiApplicationPrivate::app_icon = 0;
     delete QGuiApplicationPrivate::platform_name;
     QGuiApplicationPrivate::platform_name = 0;
     delete QGuiApplicationPrivate::displayName;
@@ -877,8 +930,35 @@ QWindow *QGuiApplication::topLevelAt(const QPoint &pos)
     \property QGuiApplication::platformName
     \brief The name of the underlying platform plugin.
 
-    Examples: "xcb" (for X11), "Cocoa" (for Mac OS X), "windows", "qnx",
-       "directfb", "kms", "MinimalEgl", "LinuxFb", "EglFS", "OpenWFD"...
+    The QPA platform plugins are located in \c {qtbase\src\plugins\platforms}.
+    At the time of writing, the following platform plugin names are supported:
+
+    \list
+        \li \c android
+        \li \c cocoa is a platform plugin for Mac OS X.
+        \li \c directfb
+        \li \c eglfs is a platform plugin for running Qt5 applications on top of
+            EGL and  OpenGL ES 2.0 without an actual windowing system (like X11
+            or Wayland). For more information, see \l{EGLFS}.
+        \li \c ios
+        \li \c kms is an experimental platform plugin using kernel modesetting
+            and \l{http://dri.freedesktop.org/wiki/DRM}{DRM} (Direct Rendering
+            Manager).
+        \li \c linuxfb writes directly to the framebuffer. For more information,
+            see \l{LinuxFB}.
+        \li \c minimal is provided as an examples for developers who want to
+            write their own platform plugins. However, you can use the plugin to
+            run GUI applications in environments without a GUI, such as servers.
+        \li \c minimalegl is an example plugin.
+        \li \c offscreen
+        \li \c openwfd
+        \li \c qnx
+        \li \c windows
+        \li \c xcb is the X11 plugin used on regular desktop Linux platforms.
+    \endlist
+
+    For more information about the platform plugins for embedded Linux devices,
+    see \l{Qt for Embedded Linux}.
 */
 
 QString QGuiApplication::platformName()
@@ -887,11 +967,14 @@ QString QGuiApplication::platformName()
            *QGuiApplicationPrivate::platform_name : QString();
 }
 
-static void init_platform(const QString &pluginArgument, const QString &platformPluginPath, int &argc, char **argv)
+static void init_platform(const QString &pluginArgument, const QString &platformPluginPath, const QString &platformThemeName, int &argc, char **argv)
 {
     // Split into platform name and arguments
     QStringList arguments = pluginArgument.split(QLatin1Char(':'));
     const QString name = arguments.takeFirst().toLower();
+    QString argumentsKey = name;
+    argumentsKey[0] = argumentsKey.at(0).toUpper();
+    arguments.append(QLibraryInfo::platformPluginArguments(argumentsKey));
 
    // Create the platform integration.
     QGuiApplicationPrivate::platform_integration = QPlatformIntegrationFactory::create(name, arguments, argc, argv, platformPluginPath);
@@ -918,15 +1001,21 @@ static void init_platform(const QString &pluginArgument, const QString &platform
     }
 
     // Create the platform theme:
-    // 1) Ask the platform integration for a list of names.
-    const QStringList themeNames = QGuiApplicationPrivate::platform_integration->themeNames();
+
+    // 1) Fetch the platform name from the environment if present.
+    QStringList themeNames;
+    if (!platformThemeName.isEmpty())
+        themeNames.append(platformThemeName);
+
+    // 2) Ask the platform integration for a list of names and try loading them.
+    themeNames += QGuiApplicationPrivate::platform_integration->themeNames();
     foreach (const QString &themeName, themeNames) {
         QGuiApplicationPrivate::platform_theme = QPlatformThemeFactory::create(themeName, platformPluginPath);
         if (QGuiApplicationPrivate::platform_theme)
             break;
     }
 
-    // 2) If none found, look for a theme plugin. Theme plugins are located in the
+    // 3) If none found, look for a theme plugin. Theme plugins are located in the
     // same directory as platform plugins.
     if (!QGuiApplicationPrivate::platform_theme) {
         foreach (const QString &themeName, themeNames) {
@@ -937,7 +1026,7 @@ static void init_platform(const QString &pluginArgument, const QString &platform
         // No error message; not having a theme plugin is allowed.
     }
 
-    // 3) Fall back on the built-in "null" platform theme.
+    // 4) Fall back on the built-in "null" platform theme.
     if (!QGuiApplicationPrivate::platform_theme)
         QGuiApplicationPrivate::platform_theme = new QPlatformTheme;
 
@@ -997,6 +1086,8 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         platformName = platformNameEnv;
     }
 
+    QString platformThemeName = QString::fromLocal8Bit(qgetenv("QT_QPA_PLATFORMTHEME"));
+
     // Get command line params
 
     int j = argc ? 1 : 0;
@@ -1006,15 +1097,23 @@ void QGuiApplicationPrivate::createPlatformIntegration()
             continue;
         }
         QByteArray arg = argv[i];
+        if (arg.startsWith("--"))
+            arg.remove(0, 1);
         if (arg == "-platformpluginpath") {
             if (++i < argc)
                 platformPluginPath = QLatin1String(argv[i]);
         } else if (arg == "-platform") {
             if (++i < argc)
                 platformName = argv[i];
+        } else if (arg == "-platformtheme") {
+            if (++i < argc)
+                platformThemeName = QString::fromLocal8Bit(argv[i]);
         } else if (arg == "-qwindowgeometry" || (platformName == "xcb" && arg == "-geometry")) {
             if (++i < argc)
                 windowGeometrySpecification = QWindowGeometrySpecification::fromArgument(argv[i]);
+        } else if (arg == "-qwindowtitle" || (platformName == "xcb" && arg == "-title")) {
+            if (++i < argc)
+                firstWindowTitle = QString::fromLocal8Bit(argv[i]);
         } else {
             argv[j++] = argv[i];
         }
@@ -1025,7 +1124,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         argc = j;
     }
 
-    init_platform(QLatin1String(platformName), platformPluginPath, argc, argv);
+    init_platform(QLatin1String(platformName), platformPluginPath, platformThemeName, argc, argv);
 
 }
 
@@ -1083,6 +1182,8 @@ void QGuiApplicationPrivate::init()
             continue;
         }
         QByteArray arg = argv[i];
+        if (arg.startsWith("--"))
+            arg.remove(0, 1);
         if (arg == "-plugin") {
             if (++i < argc)
                 pluginList << argv[i];
@@ -1571,6 +1672,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
 
     QMouseEvent ev(type, localPoint, localPoint, globalPoint, button, buttons, e->modifiers);
     ev.setTimestamp(e->timestamp);
+    setMouseEventSource(&ev, e->source);
 #ifndef QT_NO_CURSOR
     if (!e->synthetic) {
         if (const QScreen *screen = window->screen())
@@ -1582,6 +1684,11 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
     if (window->d_func()->blockedByModalWindow) {
         // a modal window is blocking this window, don't allow mouse events through
         return;
+    }
+
+    if (doubleClick && (ev.type() == QEvent::MouseButtonPress)) {
+        // QtBUG-25831, used to suppress delivery in qwidgetwindow.cpp
+        setMouseEventFlags(&ev, ev.flags() | Qt::MouseEventCreatedDoubleClick);
     }
 
     QGuiApplication::sendSpontaneousEvent(window, &ev);
@@ -1621,11 +1728,14 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
     }
     if (doubleClick) {
         mousePressButton = Qt::NoButton;
-        const QEvent::Type doubleClickType = frameStrut ? QEvent::NonClientAreaMouseButtonDblClick : QEvent::MouseButtonDblClick;
-        QMouseEvent dblClickEvent(doubleClickType, localPoint, localPoint, globalPoint,
-                                  button, buttons, e->modifiers);
-        dblClickEvent.setTimestamp(e->timestamp);
-        QGuiApplication::sendSpontaneousEvent(window, &dblClickEvent);
+        if (!e->window.isNull()) { // QTBUG-36364, check if window closed in response to press
+            const QEvent::Type doubleClickType = frameStrut ? QEvent::NonClientAreaMouseButtonDblClick : QEvent::MouseButtonDblClick;
+            QMouseEvent dblClickEvent(doubleClickType, localPoint, localPoint, globalPoint,
+                                      button, buttons, e->modifiers);
+            dblClickEvent.setTimestamp(e->timestamp);
+            setMouseEventSource(&dblClickEvent, e->source);
+            QGuiApplication::sendSpontaneousEvent(window, &dblClickEvent);
+        }
     }
 }
 
@@ -2041,7 +2151,8 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
                                                                synthIt->pos,
                                                                synthIt->screenPos,
                                                                Qt::NoButton,
-                                                               e->modifiers);
+                                                               e->modifiers,
+                                                               Qt::MouseEventSynthesizedByQt);
                 fake.synthetic = true;
                 processMouseEvent(&fake);
             }
@@ -2561,6 +2672,35 @@ void QGuiApplicationPrivate::notifyActiveWindowChange(QWindow *)
 {
 }
 
+/*!
+    \property QGuiApplication::windowIcon
+    \brief the default window icon
+
+    \sa QWindow::setIcon(), {Setting the Application Icon}
+*/
+QIcon QGuiApplication::windowIcon()
+{
+    return QGuiApplicationPrivate::app_icon ? *QGuiApplicationPrivate::app_icon : QIcon();
+}
+
+void QGuiApplication::setWindowIcon(const QIcon &icon)
+{
+    if (!QGuiApplicationPrivate::app_icon)
+        QGuiApplicationPrivate::app_icon = new QIcon();
+    *QGuiApplicationPrivate::app_icon = icon;
+    if (QGuiApplicationPrivate::is_app_running && !QGuiApplicationPrivate::is_app_closing)
+        QGuiApplicationPrivate::self->notifyWindowIconChanged();
+}
+
+void QGuiApplicationPrivate::notifyWindowIconChanged()
+{
+    QEvent ev(QEvent::ApplicationWindowIconChange);
+    const QWindowList list = QGuiApplication::topLevelWindows();
+    for (int i = 0; i < list.size(); ++i)
+        QCoreApplication::sendEvent(list.at(i), &ev);
+}
+
+
 
 /*!
     \property QGuiApplication::quitOnLastWindowClosed
@@ -2624,6 +2764,27 @@ bool QGuiApplicationPrivate::shouldQuitInternal(const QWindowList &processedWind
             continue;
         if (w->isVisible() && !w->transientParent())
             return false;
+    }
+    return true;
+}
+
+bool QGuiApplicationPrivate::tryCloseAllWindows()
+{
+    return tryCloseRemainingWindows(QWindowList());
+}
+
+bool QGuiApplicationPrivate::tryCloseRemainingWindows(QWindowList processedWindows)
+{
+    QWindowList list = QGuiApplication::topLevelWindows();
+    for (int i = 0; i < list.size(); ++i) {
+        QWindow *w = list.at(i);
+        if (w->isVisible() && !processedWindows.contains(w)) {
+            if (!w->close())
+                return false;
+            processedWindows.append(w);
+            list = QGuiApplication::topLevelWindows();
+            i = -1;
+        }
     }
     return true;
 }
@@ -2834,23 +2995,8 @@ void QGuiApplicationPrivate::commitData()
     Q_Q(QGuiApplication);
     is_saving_session = true;
     emit q->commitDataRequest(*session_manager);
-    if (session_manager->allowsInteraction()) {
-        QWindowList done;
-        QWindowList list = QGuiApplication::topLevelWindows();
-        bool cancelled = false;
-        for (int i = 0; !cancelled && i < list.size(); ++i) {
-            QWindow* w = list.at(i);
-            if (w->isVisible() && !done.contains(w)) {
-                cancelled = !w->close();
-                if (!cancelled)
-                    done.append(w);
-                list = QGuiApplication::topLevelWindows();
-                i = -1;
-            }
-        }
-        if (cancelled)
-            session_manager->cancel();
-    }
+    if (session_manager->allowsInteraction() && !tryCloseAllWindows())
+        session_manager->cancel();
     is_saving_session = false;
 }
 
@@ -3146,9 +3292,18 @@ void QGuiApplicationPrivate::_q_updateFocusObject(QObject *object)
     emit q->focusObjectChanged(object);
 }
 
+enum {
+    MouseCapsMask = 0xFF,
+    MouseSourceMaskDst = 0xFF00,
+    MouseSourceMaskSrc = MouseCapsMask,
+    MouseSourceShift = 8,
+    MouseFlagsCapsMask = 0xFF0000,
+    MouseFlagsShift = 16
+};
+
 int QGuiApplicationPrivate::mouseEventCaps(QMouseEvent *event)
 {
-    return event->caps;
+    return event->caps & MouseCapsMask;
 }
 
 QVector2D QGuiApplicationPrivate::mouseEventVelocity(QMouseEvent *event)
@@ -3158,16 +3313,40 @@ QVector2D QGuiApplicationPrivate::mouseEventVelocity(QMouseEvent *event)
 
 void QGuiApplicationPrivate::setMouseEventCapsAndVelocity(QMouseEvent *event, int caps, const QVector2D &velocity)
 {
-    event->caps = caps;
+    Q_ASSERT(caps <= MouseCapsMask);
+    event->caps &= ~MouseCapsMask;
+    event->caps |= caps & MouseCapsMask;
     event->velocity = velocity;
 }
 
-void QGuiApplicationPrivate::setMouseEventCapsAndVelocity(QMouseEvent *event, QMouseEvent *other)
+Qt::MouseEventSource QGuiApplicationPrivate::mouseEventSource(const QMouseEvent *event)
 {
-    event->caps = other->caps;
-    event->velocity = other->velocity;
+    return Qt::MouseEventSource((event->caps & MouseSourceMaskDst) >> MouseSourceShift);
 }
 
+void QGuiApplicationPrivate::setMouseEventSource(QMouseEvent *event, Qt::MouseEventSource source)
+{
+    // Mouse event synthesization status is encoded in the caps field because
+    // QTouchDevice::CapabilityFlag uses only 6 bits from it.
+    int value = source;
+    Q_ASSERT(value <= MouseSourceMaskSrc);
+    event->caps &= ~MouseSourceMaskDst;
+    event->caps |= (value & MouseSourceMaskSrc) << MouseSourceShift;
+}
+
+Qt::MouseEventFlags QGuiApplicationPrivate::mouseEventFlags(const QMouseEvent *event)
+{
+    return Qt::MouseEventFlags((event->caps & MouseFlagsCapsMask) >> MouseFlagsShift);
+}
+
+void QGuiApplicationPrivate::setMouseEventFlags(QMouseEvent *event, Qt::MouseEventFlags flags)
+{
+    // use the 0x00FF0000 byte from caps (containing up to 7 mouse event flags)
+    unsigned int value = flags;
+    Q_ASSERT(value <= Qt::MouseEventFlagMask);
+    event->caps &= ~MouseFlagsCapsMask;
+    event->caps |= (value & Qt::MouseEventFlagMask) << MouseFlagsShift;
+}
 
 #include "moc_qguiapplication.cpp"
 

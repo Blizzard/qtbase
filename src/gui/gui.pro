@@ -13,10 +13,12 @@ MODULE_PLUGIN_TYPES = \
     imageformats
 
 # This is here only because the platform plugin is no module, obviously.
-win32:contains(QT_CONFIG, angle) {
+win32:contains(QT_CONFIG, angle)|contains(QT_CONFIG, dynamicgl) {
     MODULE_AUX_INCLUDES = \
         \$\$QT_MODULE_INCLUDE_BASE/QtANGLE
 }
+
+contains(QT_CONFIG, dynamicgl): DEFINES += QT_OPENGL_DYNAMIC_IN_GUI
 
 load(qt_module)
 
@@ -91,7 +93,7 @@ contains(QT_CONFIG, angle) {
         !isEmpty(QMAKE_LIBDIR_OPENGL_ES2): CMAKE_OPENGL_LIBDIR = $$cmakePortablePaths($$QMAKE_LIBDIR_OPENGL_ES2)
         CMAKE_GL_HEADER_NAME = GLES2/gl2.h
         CMAKE_QT_OPENGL_IMPLEMENTATION = GLESv2
-    } else {
+    } else:contains(QT_CONFIG, opengl) {
         !isEmpty(QMAKE_INCDIR_OPENGL): CMAKE_GL_INCDIRS = $$cmakeTargetPaths($$QMAKE_INCDIR_OPENGL)
         CMAKE_OPENGL_INCDIRS = $$cmakePortablePaths($$QMAKE_INCDIR_OPENGL)
         CMAKE_OPENGL_LIBS = $$cmakeProcessLibs($$QMAKE_LIBS_OPENGL)
