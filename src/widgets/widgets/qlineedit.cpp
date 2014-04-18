@@ -40,6 +40,7 @@
 ****************************************************************************/
 
 #define QT_BLIZZARD_HIDE_UNDO_REDO
+#define QT_BLIZZARD_DISABLE_CONTROL_CHARACTER_MENU
 
 #include "qlineedit.h"
 #include "qlineedit_p.h"
@@ -2182,11 +2183,13 @@ QMenu *QLineEdit::createStandardContextMenu()
     d->selectAllAction = action;
     connect(action, SIGNAL(triggered()), SLOT(selectAll()));
 
+#if !defined(QT_BLIZZARD_DISABLE_CONTROL_CHARACTER_MENU)
     if (!d->control->isReadOnly() && qApp->styleHints()->useRtlExtensions()) {
         popup->addSeparator();
         QUnicodeControlCharacterMenu *ctrlCharacterMenu = new QUnicodeControlCharacterMenu(this, popup);
         popup->addMenu(ctrlCharacterMenu);
     }
+#endif // !defined QT_BLIZZARD_DISABLE_CONTROL_CHARACTER_MENU
     return popup;
 }
 #endif // QT_NO_CONTEXTMENU
