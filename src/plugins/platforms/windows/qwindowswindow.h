@@ -93,6 +93,7 @@ struct QWindowCreationContext
 {
     QWindowCreationContext(const QWindow *w, const QRect &r,
                            const QMargins &customMargins,
+                           bool emptyDefaultMargins,
                            DWORD style, DWORD exStyle);
 #ifndef Q_OS_WINCE //MinMax maybe define struct if not available
     void applyToMinMaxInfo(MINMAXINFO *mmi) const
@@ -106,6 +107,7 @@ struct QWindowCreationContext
     QRect obtainedGeometry;
     QMargins margins;
     QMargins customMargins;  // User-defined, additional frame for WM_NCCALCSIZE
+    bool emptyDefaultMargins; // User-defined, zero out default margins
     int frameX; // Passed on to CreateWindowEx(), including frame.
     int frameY;
     int frameWidth;
@@ -114,14 +116,17 @@ struct QWindowCreationContext
 
 struct QWindowsWindowData
 {
-    QWindowsWindowData() : hwnd(0), embedded(false) {}
+    QWindowsWindowData() : hwnd(0), embedded(false), emptyDefaultMargins(false),
+        marginsApplied(false) {}
 
     Qt::WindowFlags flags;
     QRect geometry;
     QMargins frame; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins; // User-defined, additional frame for NCCALCSIZE
+    bool emptyDefaultMargins; // User-defined, zero out default margins
     HWND hwnd;
     bool embedded;
+    bool marginsApplied;
 
     static QWindowsWindowData create(const QWindow *w,
                                      const QWindowsWindowData &parameters,
@@ -155,7 +160,6 @@ public:
         Exposed = 0x10000,
         WithinCreate = 0x20000,
         WithinMaximize = 0x40000,
-        EmptyFrameMargins = 0x8000,
     };
 
     QWindowsWindow(QWindow *window, const QWindowsWindowData &data);
@@ -207,6 +211,9 @@ public:
 
     QMargins customMargins() const { return m_data.customMargins; }
     void setCustomMargins(const QMargins &m);
+
+    bool emptyDefaultMargins() const { return m_data.emptyDefaultMargins; }
+    void setEmptyDefaultMargins(bool empty);
 
 #if defined(QT_OPENGL_ES_2) || defined(QT_OPENGL_DYNAMIC)
     EGLSurface eglSurfaceHandle() const { return m_eglSurface;}

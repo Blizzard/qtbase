@@ -87,12 +87,15 @@ void *QWindowsNativeInterface::nativeResourceForWindow(const QByteArray &resourc
 }
 
 static const char customMarginPropertyC[] = "WindowsCustomMargins";
+static const char emptyDefaultMarginsPropertyC[] = "WindowsEmptyDefaultMargins";
 
 QVariant QWindowsNativeInterface::windowProperty(QPlatformWindow *window, const QString &name) const
 {
     QWindowsWindow *platformWindow = static_cast<QWindowsWindow *>(window);
     if (name == QLatin1String(customMarginPropertyC))
         return qVariantFromValue(platformWindow->customMargins());
+    if (name == QLatin1String(emptyDefaultMarginsPropertyC))
+        return qVariantFromValue(platformWindow->emptyDefaultMargins());
     return QVariant();
 }
 
@@ -107,6 +110,8 @@ void QWindowsNativeInterface::setWindowProperty(QPlatformWindow *window, const Q
     QWindowsWindow *platformWindow = static_cast<QWindowsWindow *>(window);
     if (name == QLatin1String(customMarginPropertyC))
         platformWindow->setCustomMargins(qvariant_cast<QMargins>(value));
+    if (name == QLatin1String(emptyDefaultMarginsPropertyC))
+        platformWindow->setEmptyDefaultMargins(qvariant_cast<bool>(value));
 }
 
 QVariantMap QWindowsNativeInterface::windowProperties(QPlatformWindow *window) const
@@ -114,6 +119,8 @@ QVariantMap QWindowsNativeInterface::windowProperties(QPlatformWindow *window) c
     QVariantMap result;
     const QString customMarginProperty = QLatin1String(customMarginPropertyC);
     result.insert(customMarginProperty, windowProperty(window, customMarginProperty));
+    const QString emptyDefaultMarginProperty = QLatin1String(emptyDefaultMarginsPropertyC);
+    result.insert(emptyDefaultMarginProperty, windowProperty(window, emptyDefaultMarginProperty));
     return result;
 }
 

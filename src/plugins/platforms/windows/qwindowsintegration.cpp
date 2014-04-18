@@ -272,6 +272,9 @@ QWindowsWindowData QWindowsIntegration::createWindowData(QWindow *window) const
     const QVariant customMarginsV = window->property("_q_windowsCustomMargins");
     if (customMarginsV.isValid())
         requested.customMargins = qvariant_cast<QMargins>(customMarginsV);
+    const QVariant defaultMarginsV = window->property("_q_windowsEmptyDefaultMargins");
+    if (defaultMarginsV.isValid())
+        requested.emptyDefaultMargins = qvariant_cast<bool>(defaultMarginsV);
 
     const QWindowsWindowData obtained
             = QWindowsWindowData::create(window, requested, window->title());

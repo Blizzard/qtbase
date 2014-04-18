@@ -586,7 +586,8 @@ QWindowsWindowData
 
     // Capture events before CreateWindowEx() returns. The context is cleared in
     // the QWindowsWindow constructor.
-    const QWindowCreationContextPtr context(new QWindowCreationContext(w, rect, data.customMargins, style, exStyle));
+    const QWindowCreationContextPtr context(new QWindowCreationContext(w, rect, data.customMargins,
+                                            data.emptyDefaultMargins, style, exStyle));
     QWindowsContext::instance()->setWindowCreationContext(context);
 
     qCDebug(lcQpaWindows).nospace()
@@ -594,7 +595,8 @@ QWindowsWindowData
         << "\nrequested: " << rect << ": "
         << context->frameWidth << 'x' <<  context->frameHeight
         << '+' << context->frameX << '+' << context->frameY
-        << " custom margins: " << context->customMargins;
+        << " custom margins: " << context->customMargins
+        << " empty default margins: " << context->emptyDefaultMargins;
 
     result.hwnd = CreateWindowEx(exStyle, classNameUtf16, titleUtf16,
                                  style,
@@ -759,10 +761,9 @@ void QWindowsGeometryHint::applyToMinMaxInfo(DWORD style, DWORD exStyle, MINMAXI
 
     QMargins margins;
     const QWindowsWindow *ww = static_cast<const QWindowsWindow *>(window->handle());
-    if (!testAncestorFlags(ww, QWindowsWindow::EmptyFrameMargins)) {
+    if (!ww->emptyDefaultMargins()) {
         margins = QWindowsGeometryHint::frame(style, exStyle);
     }
-
 
     const int frameWidth = margins.left() + margins.right() + customMargins.left() + customMargins.right();
     const int frameHeight = margins.top() + margins.bottom() + customMargins.top() + customMargins.bottom();
@@ -813,11 +814,12 @@ bool QWindowsGeometryHint::positionIncludesFrame(const QWindow *w)
 
 QWindowCreationContext::QWindowCreationContext(const QWindow *w,
                                                const QRect &geometry,
-                                               const QMargins &cm,
+                                               const QMargins &cm, bool edm,
                                                DWORD style_, DWORD exStyle_) :
     geometryHint(w, cm), style(style_), exStyle(exStyle_),
     requestedGeometry(geometry), obtainedGeometry(geometry),
     margins(QWindowsGeometryHint::frame(style, exStyle)), customMargins(cm),
+    emptyDefaultMargins(edm),
     frameX(CW_USEDEFAULT), frameY(CW_USEDEFAULT),
     frameWidth(CW_USEDEFAULT), frameHeight(CW_USEDEFAULT)
 {
@@ -1425,7 +1427,7 @@ QRect QWindowsWindow::frameGeometry_sys() const
 {
     // Warning: Returns bogus values when minimized.
     bool isRealTopLevel = window()->isTopLevel() && !m_data.embedded;
-    if (testAncestorFlags(this, EmptyFrameMargins)) {
+    if (m_data.emptyDefaultMargins) {
         RECT cr;
         ::GetClientRect(m_data.hwnd, &cr);
         // one cannot trust cr.left and cr.top, use a correction POINT instead.
@@ -1792,7 +1794,7 @@ QMargins QWindowsWindow::frameMargins() const
     // event sequences, introduce a dirty flag mechanism to be able
     // to cache results.
     if (testFlag(FrameDirty)) {
-        if (!testAncestorFlags(this, EmptyFrameMargins))
+        if (!m_data.emptyDefaultMargins)
             m_data.frame = QWindowsGeometryHint::frame(style(), exStyle());
         else
             m_data.frame = QMargins(0, 0, 0, 0);
@@ -2277,7 +2279,8 @@ void QWindowsWindow::setWindowIcon(const QIcon &icon)
 
 void QWindowsWindow::setCustomMargins(const QMargins &newCustomMargins)
 {
-    if (newCustomMargins != m_data.customMargins) {
+    if (newCustomMargins != m_data.customMargins || !m_data.marginsApplied) {
+        m_data.marginsApplied = true;
         const QMargins oldCustomMargins = m_data.customMargins;
         m_data.customMargins = newCustomMargins;
          // Re-trigger WM_NCALCSIZE with wParam=1 by passing SWP_FRAMECHANGED
@@ -2289,6 +2292,21 @@ void QWindowsWindow::setCustomMargins(const QMargins &newCustomMargins)
         qCDebug(lcQpaWindows) << __FUNCTION__ << oldCustomMargins << "->" << newCustomMargins
             << currentFrameGeometry << "->" << newFrame;
         SetWindowPos(m_data.hwnd, 0, newFrame.x(), newFrame.y(), newFrame.width(), newFrame.height(), SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+}
+
+/*
+    \brief Sets default window margins to zero, effectively removing non-client
+    area. Will force a call to setCustomMargins to update the WM_NCCALCSIZE message.
+*/
+
+void QWindowsWindow::setEmptyDefaultMargins(bool empty)
+{
+    if (empty != m_data.emptyDefaultMargins) {
+        m_data.marginsApplied = false;
+        m_data.emptyDefaultMargins = true;
+        // Retrigger margin refresh
+        setCustomMargins(QMargins());
     }
 }
 
