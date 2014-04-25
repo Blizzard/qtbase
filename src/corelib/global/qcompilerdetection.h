@@ -637,7 +637,7 @@
 #    if __has_feature(cxx_raw_string_literals)
 #      define Q_COMPILER_RAW_STRINGS
 #    endif
-#    if __has_feature(cxx_reference_qualified_functions)
+#    if __has_feature(cxx_reference_qualified_functions) && (!defined(Q_OS_MAC) || defined(_LIBCPP_VERSION))
 #      define Q_COMPILER_REF_QUALIFIERS
 #    endif
 #    if __has_feature(cxx_rvalue_references) && (!defined(Q_OS_MAC) || defined(_LIBCPP_VERSION))

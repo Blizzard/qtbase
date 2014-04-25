@@ -11451,6 +11451,9 @@ QDebug operator<<(QDebug debug, QGraphicsItem::GraphicsItemFlag flag)
     case QGraphicsItem::ItemStopsFocusHandling:
         str = "ItemStopsFocusHandling";
         break;
+    case QGraphicsItem::ItemHasCustomTooltip:
+        str = "ItemHasCustomTooltip";
+        break;
     }
     debug << str;
     return debug;
