@@ -903,7 +903,7 @@ QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data)
     if (aWindow->surfaceType() == QWindow::OpenGLSurface) {
         setFlag(OpenGLSurface);
 #if defined(QT_OPENGL_ES_2) || defined(QT_OPENGL_DYNAMIC)
-        if (QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL)
+        if (QOpenGLContext::openGLModuleType() != QOpenGLContext::LibGL)
             setFlag(OpenGL_ES2);
 #endif
     }
@@ -1382,9 +1382,10 @@ void QWindowsWindow::handleResized(int wParam)
         handleGeometryChange();
         break;
     case SIZE_RESTORED:
-        bool fullScreen = isFullScreen_sys();
-        if ((m_windowState != Qt::WindowNoState) || fullScreen)
-            handleWindowStateChange(fullScreen ? Qt::WindowFullScreen : Qt::WindowNoState);
+        if (isFullScreen_sys())
+            handleWindowStateChange(Qt::WindowFullScreen);
+        else if (m_windowState != Qt::WindowNoState && !testFlag(MaximizeToFullScreen))
+            handleWindowStateChange(Qt::WindowNoState);
         handleGeometryChange();
         break;
     }
@@ -1650,8 +1651,11 @@ void QWindowsWindow::setWindowState_sys(Qt::WindowState newState)
     if ((oldState == Qt::WindowMaximized) != (newState == Qt::WindowMaximized)) {
         if (visible && !(newState == Qt::WindowMinimized)) {
             setFlag(WithinMaximize);
+            if (newState == Qt::WindowFullScreen)
+                setFlag(MaximizeToFullScreen);
             ShowWindow(m_data.hwnd, (newState == Qt::WindowMaximized) ? SW_MAXIMIZE : SW_SHOWNOACTIVATE);
             clearFlag(WithinMaximize);
+            clearFlag(MaximizeToFullScreen);
         }
     }
 

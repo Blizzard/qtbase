@@ -122,20 +122,9 @@ private:
             return;
         const int end = start + length;
         for (int i = start + 1; i < end; ++i) {
-            // According to the unicode spec we should be treating characters in the Common script
-            // (punctuation, spaces, etc) as being the same script as the surrounding text for the
-            // purpose of splitting up text. This is important because, for example, a fullstop
-            // (0x2E) can be used to indicate an abbreviation and so must be treated as part of a
-            // word.  Thus it must be passed along with the word in languages that have to calculate
-            // word breaks.  For example the thai word "ครม." has no word breaks but the word "ครม"
-            // does.
-            // Unfortuntely because we split up the strings for both wordwrapping and for setting
-            // the font and because Japanese and Chinese are also aliases of the script "Common",
-            // doing this would break too many things.  So instead we only pass the full stop
-            // along, and nothing else.
             if (m_analysis[i].bidiLevel == m_analysis[start].bidiLevel
                 && m_analysis[i].flags == m_analysis[start].flags
-                && (m_analysis[i].script == m_analysis[start].script || m_string[i] == QLatin1Char('.'))
+                && m_analysis[i].script == m_analysis[start].script
                 && m_analysis[i].flags < QScriptAnalysis::SpaceTabOrObject
                 && i - start < MaxItemLength)
                 continue;
@@ -1515,26 +1504,22 @@ void QTextEngine::itemize() const
     while (uc < e) {
         switch (*uc) {
         case QChar::ObjectReplacementCharacter:
-            analysis->script = QChar::Script_Common;
             analysis->flags = QScriptAnalysis::Object;
             break;
         case QChar::LineSeparator:
             if (analysis->bidiLevel % 2)
                 --analysis->bidiLevel;
-            analysis->script = QChar::Script_Common;
             analysis->flags = QScriptAnalysis::LineOrParagraphSeparator;
             if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
                 *const_cast<ushort*>(uc) = 0x21B5; // visual line separator
             break;
         case QChar::Tabulation:
-            analysis->script = QChar::Script_Common;
             analysis->flags = QScriptAnalysis::Tab;
             analysis->bidiLevel = control.baseLevel();
             break;
         case QChar::Space:
         case QChar::Nbsp:
             if (option.flags() & QTextOption::ShowTabsAndSpaces) {
-                analysis->script = QChar::Script_Common;
                 analysis->flags = QScriptAnalysis::Space;
                 analysis->bidiLevel = control.baseLevel();
                 break;
@@ -1556,8 +1541,10 @@ void QTextEngine::itemize() const
 #ifdef QT_ENABLE_HARFBUZZ_NG
     analysis = scriptAnalysis.data();
     if (useHarfbuzzNG) {
+        // ### pretend HB-old behavior for now
         for (int i = 0; i < length; ++i) {
             switch (analysis[i].script) {
+            case QChar::Script_Latin:
             case QChar::Script_Han:
             case QChar::Script_Hiragana:
             case QChar::Script_Katakana:
@@ -2070,7 +2057,7 @@ void QTextEngine::justify(const QScriptLine &line)
     // subtract one char more, as we can't justfy after the last character
     --line_length;
 
-    if (!line_length)
+    if (line_length <= 0)
         return;
 
     int firstItem = findItem(line.from);
@@ -3138,11 +3125,12 @@ int QTextEngine::positionInLigature(const QScriptItem *si, int end,
 int QTextEngine::previousLogicalPosition(int oldPos) const
 {
     const QCharAttributes *attrs = attributes();
-    if (!attrs || oldPos < 0)
+    int len = block.isValid() ? block.length() - 1
+                              : layoutData->string.length();
+    Q_ASSERT(len <= layoutData->string.length());
+    if (!attrs || oldPos <= 0 || oldPos > len)
         return oldPos;
 
-    if (oldPos <= 0)
-        return 0;
     oldPos--;
     while (oldPos && !attrs[oldPos].graphemeBoundary)
         oldPos--;
@@ -3181,23 +3169,22 @@ int QTextEngine::lineNumberForTextPosition(int pos)
 void QTextEngine::insertionPointsForLine(int lineNum, QVector<int> &insertionPoints)
 {
     QTextLineItemIterator iterator(this, lineNum);
-    bool rtl = isRightToLeft();
+
+    insertionPoints.reserve(iterator.line.length);
+
     bool lastLine = lineNum >= lines.size() - 1;
 
     while (!iterator.atEnd()) {
-        iterator.next();
-        const QScriptItem *si = &layoutData->items[iterator.item];
-        if (si->analysis.bidiLevel % 2) {
-            int i = iterator.itemEnd - 1, min = iterator.itemStart;
-            if (lastLine && (rtl ? iterator.atBeginning() : iterator.atEnd()))
-                i++;
-            for (; i >= min; i--)
+        const QScriptItem &si = iterator.next();
+
+        int end = iterator.itemEnd;
+        if (lastLine && iterator.item == iterator.lastItem)
+            ++end; // the last item in the last line -> insert eol position
+        if (si.analysis.bidiLevel % 2) {
+            for (int i = end - 1; i >= iterator.itemStart; --i)
                 insertionPoints.push_back(i);
         } else {
-            int i = iterator.itemStart, max = iterator.itemEnd;
-            if (lastLine && (rtl ? iterator.atBeginning() : iterator.atEnd()))
-                max++;
-            for (; i < max; i++)
+            for (int i = iterator.itemStart; i < end; ++i)
                 insertionPoints.push_back(i);
         }
     }
@@ -3225,8 +3212,7 @@ int QTextEngine::beginningOfLine(int lineNum)
 
 int QTextEngine::positionAfterVisualMovement(int pos, QTextCursor::MoveOperation op)
 {
-    if (!layoutData)
-        itemize();
+    itemize();
 
     bool moveRight = (op == QTextCursor::Right);
     bool alignRight = isRightToLeft();
@@ -3234,7 +3220,8 @@ int QTextEngine::positionAfterVisualMovement(int pos, QTextCursor::MoveOperation
         return moveRight ^ alignRight ? nextLogicalPosition(pos) : previousLogicalPosition(pos);
 
     int lineNum = lineNumberForTextPosition(pos);
-    Q_ASSERT(lineNum >= 0);
+    if (lineNum < 0)
+        return pos;
 
     QVector<int> insertionPoints;
     insertionPointsForLine(lineNum, insertionPoints);
@@ -3257,6 +3244,8 @@ int QTextEngine::positionAfterVisualMovement(int pos, QTextCursor::MoveOperation
                 if (lineNum > 0)
                     return alignRight ? beginningOfLine(lineNum - 1) : endOfLine(lineNum - 1);
             }
+
+            break;
         }
 
     return pos;
@@ -3520,7 +3509,12 @@ QScriptItem &QTextLineItemIterator::next()
     if (!si->num_glyphs)
         eng->shape(item);
 
+    itemStart = qMax(line.from, si->position);
+    itemEnd = qMin(lineEnd, si->position + itemLength);
+
     if (si->analysis.flags >= QScriptAnalysis::TabOrObject) {
+        glyphsStart = 0;
+        glyphsEnd = 1;
         itemWidth = si->width;
         return *si;
     }
@@ -3528,15 +3522,9 @@ QScriptItem &QTextLineItemIterator::next()
     unsigned short *logClusters = eng->logClusters(si);
     QGlyphLayout glyphs = eng->shapedGlyphs(si);
 
-    itemStart = qMax(line.from, si->position);
     glyphsStart = logClusters[itemStart - si->position];
-    if (lineEnd < si->position + itemLength) {
-        itemEnd = lineEnd;
-        glyphsEnd = logClusters[itemEnd-si->position];
-    } else {
-        itemEnd = si->position + itemLength;
-        glyphsEnd = si->num_glyphs;
-    }
+    glyphsEnd = (itemEnd == si->position + itemLength) ? si->num_glyphs : logClusters[itemEnd - si->position];
+
     // show soft-hyphen at line-break
     if (si->position + itemLength >= lineEnd
         && eng->layoutData->string.at(lineEnd - 1).unicode() == QChar::SoftHyphen)

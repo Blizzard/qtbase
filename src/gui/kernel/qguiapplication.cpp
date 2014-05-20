@@ -1609,14 +1609,17 @@ void QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePriv
 void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::MouseEvent *e)
 {
     QEvent::Type type;
-    // move first
     Qt::MouseButtons stateChange = e->buttons ^ buttons;
-    const bool frameStrut = e->type == QWindowSystemInterfacePrivate::FrameStrutMouse;
     if (e->globalPos != QGuiApplicationPrivate::lastCursorPosition && (stateChange != Qt::NoButton)) {
-        QWindowSystemInterfacePrivate::MouseEvent * newMouseEvent =
-                new QWindowSystemInterfacePrivate::MouseEvent(e->window.data(), e->timestamp, e->type, e->localPos, e->globalPos, e->buttons, e->modifiers);
-        QWindowSystemInterfacePrivate::windowSystemEventQueue.prepend(newMouseEvent); // just in case the move triggers a new event loop
-        stateChange = Qt::NoButton;
+        // A mouse event should not change both position and buttons at the same time. Instead we
+        // should first send a move event followed by a button changed event. Since this is not the case
+        // with the current event, we fake a move-only event that we recurse and process first. This
+        // will update the global mouse position and cause the second event to be a button only event.
+        QWindowSystemInterfacePrivate::MouseEvent moveEvent(e->window.data(),
+                e->timestamp, e->type, e->localPos, e->globalPos, buttons, e->modifiers);
+        processMouseEvent(&moveEvent);
+        Q_ASSERT(e->globalPos == QGuiApplicationPrivate::lastCursorPosition);
+        // continue with processing mouse button change event
     }
 
     QWindow *window = e->window.data();
@@ -1635,6 +1638,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
 
     Qt::MouseButton button = Qt::NoButton;
     bool doubleClick = false;
+    const bool frameStrut = e->type == QWindowSystemInterfacePrivate::FrameStrutMouse;
 
     if (QGuiApplicationPrivate::lastCursorPosition != globalPoint) {
         type = frameStrut ? QEvent::NonClientAreaMouseMove : QEvent::MouseMove;
@@ -1868,7 +1872,11 @@ void QGuiApplicationPrivate::processActivatedEvent(QWindowSystemInterfacePrivate
         return;
 
     if (previous) {
-        QFocusEvent focusOut(QEvent::FocusOut, e->reason);
+        Qt::FocusReason r = e->reason;
+        if ((r == Qt::OtherFocusReason || r == Qt::ActiveWindowFocusReason) &&
+                newFocus && (newFocus->flags() & Qt::Popup) == Qt::Popup)
+            r = Qt::PopupFocusReason;
+        QFocusEvent focusOut(QEvent::FocusOut, r);
         QCoreApplication::sendSpontaneousEvent(previous, &focusOut);
         QObject::disconnect(previous, SIGNAL(focusObjectChanged(QObject*)),
                             qApp, SLOT(_q_updateFocusObject(QObject*)));
@@ -1877,7 +1885,11 @@ void QGuiApplicationPrivate::processActivatedEvent(QWindowSystemInterfacePrivate
     }
 
     if (QGuiApplicationPrivate::focus_window) {
-        QFocusEvent focusIn(QEvent::FocusIn, e->reason);
+        Qt::FocusReason r = e->reason;
+        if ((r == Qt::OtherFocusReason || r == Qt::ActiveWindowFocusReason) &&
+                previous && (previous->flags() & Qt::Popup) == Qt::Popup)
+            r = Qt::PopupFocusReason;
+        QFocusEvent focusIn(QEvent::FocusIn, r);
         QCoreApplication::sendSpontaneousEvent(QGuiApplicationPrivate::focus_window, &focusIn);
         QObject::connect(QGuiApplicationPrivate::focus_window, SIGNAL(focusObjectChanged(QObject*)),
                          qApp, SLOT(_q_updateFocusObject(QObject*)));
@@ -3002,6 +3014,7 @@ void QGuiApplication::sync()
             && QGuiApplicationPrivate::platform_integration->hasCapability(QPlatformIntegration::SyncState)) {
         QGuiApplicationPrivate::platform_integration->sync();
         QCoreApplication::processEvents();
+        QWindowSystemInterface::flushWindowSystemEvents();
     }
 }
 

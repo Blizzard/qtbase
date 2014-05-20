@@ -81,12 +81,16 @@ QCocoaScreen::~QCocoaScreen()
 
 NSScreen *QCocoaScreen::osScreen() const
 {
-    return [[NSScreen screens] objectAtIndex:m_screenIndex];
+    NSArray *screens = [NSScreen screens];
+    return ((NSUInteger)m_screenIndex < [screens count]) ? [screens objectAtIndex:m_screenIndex] : nil;
 }
 
 void QCocoaScreen::updateGeometry()
 {
     NSScreen *nsScreen = osScreen();
+    if (!nsScreen)
+        return;
+
     NSRect frameRect = [nsScreen frame];
 
     if (m_screenIndex == 0) {
@@ -143,12 +147,31 @@ qreal QCocoaScreen::devicePixelRatio() const
 {
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
     if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) {
-        return qreal([osScreen() backingScaleFactor]);
+        NSScreen * screen = osScreen();
+        return qreal(screen ? [screen backingScaleFactor] : 1.0);
     } else
 #endif
     {
         return 1.0;
     }
+}
+
+QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
+{
+    // Get a z-ordered list of windows. Iterate through it until
+    // we find a window which contains the point.
+    for (NSWindow *nsWindow in [NSApp orderedWindows]) {
+        QCocoaWindow *cocoaWindow = QCocoaIntegration::instance()->window(nsWindow);
+        if (!cocoaWindow)
+            continue;
+        QWindow *window = cocoaWindow->window();
+        if (!window->isTopLevel())
+             continue;
+        if (window->geometry().contains(point))
+            return window;
+    }
+
+    return QPlatformScreen::topLevelAt(point);
 }
 
 extern CGContextRef qt_mac_cg_context(const QPaintDevice *pdev);
@@ -316,11 +339,17 @@ QCocoaIntegration *QCocoaIntegration::instance()
 */
 void QCocoaIntegration::updateScreens()
 {
-    NSArray *screens = [NSScreen screens];
+    NSArray *scrs = [NSScreen screens];
+    NSMutableArray *screens = [NSMutableArray arrayWithArray:scrs];
+    if ([screens count] == 0)
+        if ([NSScreen mainScreen])
+           [screens addObject:[NSScreen mainScreen]];
+    if ([screens count] == 0)
+        return;
     QSet<QCocoaScreen*> remainingScreens = QSet<QCocoaScreen*>::fromList(mScreens);
     QList<QPlatformScreen *> siblings;
     for (uint i = 0; i < [screens count]; i++) {
-        NSScreen* scr = [[NSScreen screens] objectAtIndex:i];
+        NSScreen* scr = [screens objectAtIndex:i];
         CGDirectDisplayID dpy = [[[scr deviceDescription] objectForKey:@"NSScreenNumber"] unsignedIntValue];
         // If this screen is a mirror and is not the primary one of the mirror set, ignore it.
         if (CGDisplayIsInMirrorSet(dpy)) {
@@ -487,6 +516,16 @@ void QCocoaIntegration::setToolbar(QWindow *window, NSToolbar *toolbar)
 NSToolbar *QCocoaIntegration::toolbar(QWindow *window) const
 {
     return mToolbars.value(window);
+}
+
+void QCocoaIntegration::setWindow(NSWindow* nsWindow, QCocoaWindow *window)
+{
+    mWindows.insert(nsWindow, window);
+}
+
+QCocoaWindow *QCocoaIntegration::window(NSWindow *window)
+{
+    return mWindows.value(window);
 }
 
 void QCocoaIntegration::clearToolbars()

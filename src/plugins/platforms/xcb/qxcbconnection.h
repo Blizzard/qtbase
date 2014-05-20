@@ -54,7 +54,7 @@
 #include <qpa/qwindowsysteminterface.h>
 
 // This is needed to make Qt compile together with XKB. xkb.h is using a variable
-// which is called 'explicit', this is a reserved keyword in c++ */
+// which is called 'explicit', this is a reserved keyword in c++
 #ifndef QT_NO_XKB
 #define explicit dont_use_cxx_explicit
 #include <xcb/xkb.h>
@@ -402,6 +402,12 @@ public:
 #elif defined(XCB_USE_XINPUT2)
     void xi2Select(xcb_window_t window);
 #endif
+#ifdef XCB_USE_XINPUT21
+    bool isUsingXInput21() { return m_xi2Enabled && m_xi2Minor >= 1; }
+#else
+    bool isUsingXInput21() { return false; }
+#endif
+
 
     void sync();
     void flush() { xcb_flush(m_connection); }
@@ -453,6 +459,10 @@ public:
     QXcbNativeInterface *nativeInterface() const { return m_nativeInterface; }
 
     QXcbSystemTrayTracker *systemTrayTracker();
+
+#ifdef XCB_USE_XINPUT2
+    void handleEnterEvent(const xcb_enter_notify_event_t *);
+#endif
 
 private slots:
     void processXcbEvents();
@@ -507,11 +517,12 @@ private:
     QVector<TabletData> m_tabletData;
 #endif
     struct ScrollingDevice {
-        ScrollingDevice() : deviceId(0), verticalIndex(0), horizontalIndex(0), orientations(0) { }
+        ScrollingDevice() : deviceId(0), verticalIndex(0), horizontalIndex(0), orientations(0), legacyOrientations(0) { }
         int deviceId;
         int verticalIndex, horizontalIndex;
         double verticalIncrement, horizontalIncrement;
         Qt::Orientations orientations;
+        Qt::Orientations legacyOrientations;
         QPointF lastScrollPosition;
     };
     void xi2HandleScrollEvent(void *event, ScrollingDevice &scrollingDevice);

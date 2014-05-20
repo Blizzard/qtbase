@@ -616,7 +616,7 @@ CFG_EGL=auto
 CFG_EGL_X=auto
 CFG_FONTCONFIG=auto
 CFG_FREETYPE=auto
-CFG_HARFBUZZ=no
+CFG_HARFBUZZ=auto
 CFG_SQL_AVAILABLE=
 QT_ALL_BUILD_PARTS=" libs tools examples tests "
 QT_DEFAULT_BUILD_PARTS="libs tools examples"
@@ -781,8 +781,6 @@ QT_LIBS_GLIB=
 
 # default qpa platform
 QT_QPA_DEFAULT_PLATFORM=
-# default print support plugin
-QT_PRINTSUPPORT_DEFAULT_PLUGIN=
 
 # Android vars
 CFG_DEFAULT_ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT
@@ -2270,9 +2268,6 @@ Configure options:
 
     -system-sqlite ..... Use sqlite from the operating system.
 
-    -no-javascript-jit . Do not build the JavaScriptCore JIT compiler.
- +  -javascript-jit .... Build the JavaScriptCore JIT compiler.
-
     -no-qml-debug ...... Do not build the in-process QML debugging support.
  +  -qml-debug ......... Build the QML debugging support.
 
@@ -2418,6 +2413,9 @@ Additional options:
 
     -no-iconv .......... Do not compile support for iconv(3).
  *  -iconv ............. Compile support for iconv(3).
+
+    -no-evdev .......... Do not compile support for evdev.
+ *  -evdev ............. Compile support for evdev.
 
     -no-icu ............ Do not compile support for ICU libraries.
  +  -icu ............... Compile support for ICU libraries.
@@ -2766,203 +2764,26 @@ if [ "$COMMERCIAL_USER" = "ask" ]; then
     done
 fi
 
-CFG_RTOS_ENABLED=yes
-EditionString=Commercial
 if [ -f "$relpath"/LICENSE.PREVIEW.COMMERCIAL ] && [ $COMMERCIAL_USER = "yes" ]; then
     # Commercial preview release
     Licensee="Preview"
     Edition="Preview"
-    LicenseType="Technology Preview"
+    EditionString="Technology Preview"
 elif [ $COMMERCIAL_USER = "yes" ]; then
-    # one of commercial editions
-
-    # read in the license file
-    [ -z "$LICENSE_FILE" ] && LICENSE_FILE="$QT_LICENSE_FILE"
-    [ -z "$LICENSE_FILE" ] && LICENSE_FILE="$HOME/.qt-license"
-    if [ -f "$LICENSE_FILE" ]; then
-        tr -d '\r' <"$LICENSE_FILE" >"${LICENSE_FILE}.tmp"
-        diff "${LICENSE_FILE}.tmp" "${LICENSE_FILE}" >/dev/null 2>&1 || LICENSE_FILE="${LICENSE_FILE}.tmp"
-        . "$LICENSE_FILE" >/dev/null 2>&1
-        if [ -z "$LicenseKeyExt" ]; then
-            echo
-            echo "You are using an old license file."
-            echo
-            echo "Please install the license file supplied by Digia,"
-            echo "or install the Qt Open Source Edition if you intend to"
-            echo "develop free software."
+    if test -x "$relpath/bin/licheck"; then
+        LicheckOutput=`$relpath/bin/licheck $OPT_CONFIRM_LICENSE $relpath $outpath\
+                       $PLATFORM $XPLATFORM`
+        if [ $? -ne 0 ]; then
             exit 1
-        fi
-        if [ -z "$Licensee" ]; then
-            echo
-            echo "Invalid license key. Please check the license key."
-            exit 1
+        else
+            eval "$LicheckOutput"
         fi
     else
-        if [ -z "$LicenseKeyExt" ]; then
-            echo
-            echo $ECHO_N "Please enter your license key: $ECHO_C"
-            read LicenseKeyExt
-            Licensee="Unknown user"
-        fi
-    fi
-
-    # Key verification
-    echo "$LicenseKeyExt" | grep ".....*-....*-....*-....*-.....*-.....*-...." >/dev/null 2>&1 \
-        && LicenseValid="yes" \
-        || LicenseValid="no"
-    if [ "$LicenseValid" != "yes" ]; then
         echo
-        echo "Invalid license key. Please check the license key."
-        exit 1
-    fi
-    ProductCode=`echo $LicenseKeyExt | cut -f 1 -d - | cut -b 1`
-    PlatformCode=`echo $LicenseKeyExt | cut -f 2 -d -`
-    LicenseTypeCode=`echo $LicenseKeyExt | cut -f 3 -d -`
-    LicenseFeatureCode=`echo $LicenseKeyExt | cut -f 4 -d - | cut -b 1`
-
-    # determine which edition we are licensed to use
-    case "$LicenseTypeCode" in
-    F4M)
-        LicenseType="Commercial"
-        case $ProductCode in
-        F)
-            Edition="Universal"
-            ;;
-        B)
-            Edition="FullFramework"
-            EditionString="Full Framework"
-            ;;
-        L)
-            Edition="GUIFramework"
-            EditionString="GUI Framework"
-            ;;
-        esac
-        ;;
-    Z4M|R4M|Q4M)
-        LicenseType="Evaluation"
-        QMakeVar add DEFINES QT_EVAL
-        case $ProductCode in
-        B)
-            Edition="Evaluation"
-            ;;
-        esac
-        ;;
-    esac
-    if [ -z "$LicenseType" -o -z "$Edition" ]; then
-        echo
-        echo "Invalid license key. Please check the license key."
-        exit 1
-    fi
-
-    # verify that we are licensed to use Qt on this platform
-    LICENSE_EXTENSION=
-    case "$PlatformCode" in
-    *L)
-        CFG_RTOS_ENABLED=yes
-        PlatformCode=`echo "$PlatformCode" | sed 'h;y/8NPQRTZ/UCWX9M7/;x;G;s/\(.\)....\(.\)./\1\2/'`
-        ;;
-    *)
-        CFG_RTOS_ENABLED=no
-        PlatformCode=`echo "$PlatformCode" | sed 's/.$//'`
-        ;;
-    esac
-    ### EMBEDDED_QPA logic missing ###
-    case "$PlatformCode,$XPLATFORM_MAC" in
-    X9,* | XC,* | XU,* | XW,* | XM,*)
-        # Qt All-OS
-        LICENSE_EXTENSION="-ALLOS"
-        ;;
-    8M,* | KM,* | S9,* | SC,* | SM,* | SU,* | SW,* | X9,* | XC,* | XU,* | XW,*)
-        # Qt for Embedded Linux
-        LICENSE_EXTENSION="-EMBEDDED"
-        ;;
-    6M,* | N7,* | N9,* | NX,*)
-        # Embedded no-deploy
-        LICENSE_EXTENSION="-EMBEDDED"
-        ;;
-    FM,* | LM,yes | ZM,no)
-        # Desktop
-        LICENSE_EXTENSION="-DESKTOP"
-        ;;
-    *)
-        Platform=Linux/X11
-        [ "$XPLATFORM_MAC" = "yes" ] && Platform='Mac OS X'
-        echo
-        echo "You are not licensed for the $Platform platform."
-        echo
-        echo "Please use the contact form at http://qt.digia.com/contact-us"
-        echo "to upgrade your license to include the $Platform platform, or install"
-        echo "the Qt Open Source Edition if you intend to develop free software."
-        exit 1
-        ;;
-    esac
-
-    if test -r "$relpath/.LICENSE"; then
-        # Generic, non-final license
-        LICENSE_EXTENSION=""
-        line=`sed 'y/a-z/A-Z/;q' "$relpath"/.LICENSE`
-        case "$line" in
-        *BETA*)
-            Edition=Beta
-            ;;
-        *TECHNOLOGY?PREVIEW*)
-            Edition=Preview
-            ;;
-        *EVALUATION*)
-            Edition=Evaluation
-            ;;
-        *)
-            echo >&2 "Invalid license files; cannot continue"
-            exit 1
-            ;;
-        esac
-        Licensee="$Edition"
-        EditionString="$Edition"
-    fi
-
-    case "$LicenseFeatureCode" in
-    B|G|L|Y)
-        # US
-        case "$LicenseType" in
-        Commercial)
-            cp -f "$relpath/.LICENSE${LICENSE_EXTENSION}-US" "$outpath/LICENSE"
-            ;;
-        Evaluation)
-            cp -f "$relpath/.LICENSE-EVALUATION-US" "$outpath/LICENSE"
-            ;;
-        esac
-        ;;
-    2|4|5|F)
-        # non-US
-        case "$LicenseType" in
-        Commercial)
-            cp -f "$relpath/.LICENSE${LICENSE_EXTENSION}" "$outpath/LICENSE"
-            ;;
-        Evaluation)
-            cp -f "$relpath/.LICENSE-EVALUATION" "$outpath/LICENSE"
-            ;;
-        esac
-        ;;
-    *)
-        echo
-        echo "Invalid license key. Please check the license key."
-        exit 1
-        ;;
-    esac
-    case "$LicenseFeatureCode" in
-    4|B|F|Y)
-        CFG_RTOS_ENABLED=yes
-        ;;
-    2|5|G|L)
-        CFG_RTOS_ENABLED=no
-        ;;
-    esac
-    if [ '!' -f "$outpath/LICENSE" ]; then
-        echo "The LICENSE, LICENSE.GPL LICENSE.LGPL file shipped with"
-        echo "this software has disappeared."
-        echo
-        echo "Sorry, you are not licensed to use this software."
-        echo "Try re-installing."
+        echo "Error: This is the Open Source version of Qt."
+        echo "If you want to use Enterprise features of Qt,"
+        echo "use the contact form at http://qt.digia.com/contact-us"
+        echo "to purchase a license."
         echo
         exit 1
     fi
@@ -2972,22 +2793,11 @@ elif [ $COMMERCIAL_USER = "no" ]; then
     Edition="OpenSource"
     EditionString="Open Source"
 fi
-echo
-echo "This is the Qt ${EditionString} Edition."
-echo
 
-if [ "$CFG_RTOS_ENABLED" = "no" ]; then
-    case `basename "$XPLATFORM"` in
-    qnx-* | vxworks-*)
-        echo ""
-        echo "You are not licensed for Qt for `basename $XPLATFORM`."
-        echo ""
-        echo "Please use the contact form at http://qt.digia.com/contact-us"
-        echo "to upgrade your license to include this platform, or install"
-        echo "the Qt Open Source Edition if you intend to develop free software."
-        exit 1
-        ;;
-    esac
+if [ "$Edition" = "OpenSource" ] || [ "$Edition" = "Preview" ]; then
+    echo
+    echo "This is the Qt ${EditionString} Edition."
+    echo
 fi
 
 if [ "$Edition" = "OpenSource" ]; then
@@ -3003,7 +2813,7 @@ if [ "$Edition" = "OpenSource" ]; then
         fi
         echo
         if [ "$OPT_CONFIRM_LICENSE" = "yes" ]; then
-            echo "You have already accepted the terms of the $LicenseType license."
+            echo "You have already accepted the terms of the $EditionString license."
             acceptance=yes
         else
             if [ -f "$relpath/LICENSE.GPL" ]; then
@@ -3034,7 +2844,7 @@ elif [ "$Edition" = "Preview" ]; then
     while true; do
 
         if [ "$OPT_CONFIRM_LICENSE" = "yes" ]; then
-            echo "You have already accepted the terms of the $LicenseType license."
+            echo "You have already accepted the terms of the $EditionString license."
             acceptance=yes
         else
             echo "You are licensed to use this software under the terms of"
@@ -3056,77 +2866,6 @@ elif [ "$Edition" = "Preview" ]; then
             exit 0
         elif [ "$acceptance" = "?" ]; then
             more "$relpath/LICENSE.PREVIEW.COMMERCIAL"
-        fi
-    done
-elif [ "$Edition" != "OpenSource" ]; then
-    if [ -n "$ExpiryDate" ]; then
-        ExpiryDate=`echo $ExpiryDate | sed -e 's,-,,g' | tr -d '\n\r'`
-        [ -z "$ExpiryDate" ] && ExpiryDate="0"
-        Today=`date +%Y%m%d`
-        if [ "$Today" -gt "$ExpiryDate" ]; then
-            case "$LicenseType" in
-            Commercial|Academic|Educational)
-                echo
-                echo "WARNING  WARNING  WARNING  WARNING"
-                echo
-                echo "  Your support and upgrade period has expired."
-                echo
-                echo "  You may continue to use your last licensed release"
-                echo "  of Qt under the terms of your existing license"
-                echo "  agreement. But you are not entitled to technical"
-                echo "  support, nor are you entitled to use any more recent"
-                echo "  Qt releases."
-                echo
-                echo "  Please use the contact form at http://qt.digia.com/contact-us"
-                echo "  to renew your support and upgrades for this license."
-                echo
-                echo "WARNING  WARNING  WARNING  WARNING"
-                echo
-                sleep 3
-                ;;
-            Evaluation|*)
-                echo
-                echo "NOTICE  NOTICE  NOTICE  NOTICE"
-                echo
-                echo "  Your Evaluation license has expired."
-                echo
-                echo "  You are no longer licensed to use this software. Please"
-                echo "  use the contact form at http://qt.digia.com/contact-us to"
-                echo "  purchase license, or install the Qt Open Source Edition"
-                echo "  if you intend to develop free software."
-                echo
-                echo "NOTICE  NOTICE  NOTICE  NOTICE"
-                echo
-                exit 1
-                ;;
-            esac
-        fi
-    fi
-    TheLicense=`head -n 1 "$outpath/LICENSE"`
-    while true; do
-        if [ "$OPT_CONFIRM_LICENSE" = "yes" ]; then
-            echo "You have already accepted the terms of the $TheLicense."
-            acceptance=yes
-        else
-            echo "You are licensed to use this software under the terms of"
-            echo "the $TheLicense."
-            echo
-            echo "Type '?' to view the $TheLicense."
-            echo "Type 'yes' to accept this license offer."
-            echo "Type 'no' to decline this license offer."
-            echo
-            echo $ECHO_N "Do you accept the terms of the $TheLicense? $ECHO_C"
-            read acceptance
-        fi
-        echo
-        if [ "$acceptance" = "yes" ]; then
-            break
-        elif [ "$acceptance" = "no" ]; then
-            echo "You are not licensed to use this software."
-            echo
-            exit 1
-        else [ "$acceptance" = "?" ]
-            more "$outpath/LICENSE"
         fi
     done
 fi
@@ -3362,7 +3101,7 @@ if [ "$XPLATFORM_IOS" = "yes" ]; then
     CFG_PKGCONFIG="no"
     CFG_NOBUILD_PARTS="$CFG_NOBUILD_PARTS examples"
     CFG_SHARED="no" # iOS builds should be static to be able to submit to the App Store
-    CFG_SKIP_MODULES="$CFG_SKIP_MODULES qtconnectivity qtdoc qtlocation qtmacextras qtserialport qttools qtwebkit qtwebkit-examples"
+    CFG_SKIP_MODULES="$CFG_SKIP_MODULES qtconnectivity qtdoc qtmacextras qtserialport qtwebkit qtwebkit-examples"
 
     # If the user passes -sdk on the command line we build a SDK-specific Qt build.
     # Otherwise we build a joined simulator and device build, which is the default.
@@ -3372,9 +3111,10 @@ if [ "$XPLATFORM_IOS" = "yes" ]; then
     fi
 fi
 
-# disable GTK style support auto-detection on Mac
-if [ "$XPLATFORM_MAC" = "yes" ] && [ "$CFG_QGTKSTYLE" = "auto" ]; then
-    CFG_QGTKSTYLE=no
+# disable XCB and GTK support auto-detection on Mac
+if [ "$XPLATFORM_MAC" = "yes" ]; then
+    [ "$CFG_XCB" = "auto" ] && CFG_XCB=no
+    [ "$CFG_QGTKSTYLE" = "auto" ] && CFG_QGTKSTYLE=no
 fi
 
 QMAKE_CONF_COMPILER=`getXQMakeConf QMAKE_CXX`
@@ -3850,22 +3590,6 @@ else
     chmod -w "$outpath/src/corelib/global/qconfig.cpp"
 fi
 
-# -----------------------------------------------------------------------------
-if [ "$LicenseType" = "Evaluation" ]; then
-    EVALKEY=qt_qevalkey=$LicenseKeyExt
-elif echo "$DEFINES" | grep QT_EVAL >/dev/null 2>&1; then
-    EVALKEY=qt_qevalkey=
-fi
-
-if [ -n "$EVALKEY" ]; then
-    rm -f "$outpath/src/corelib/global/qconfig_eval.cpp"
-    cat > "$outpath/src/corelib/global/qconfig_eval.cpp" <<EOF
-/* Evaluation license key */
-static const volatile char qt_eval_key_data                   [512 + 12] = "$EVALKEY";
-EOF
-    chmod -w "$outpath/src/corelib/global/qconfig_eval.cpp"
-fi
-
 
 # -----------------------------------------------------------------------------
 # build qmake
@@ -3982,7 +3706,7 @@ if true; then ###[ '!' -f "$outpath/bin/qmake" ];
             EXTRA_SRCS="\"\$(SOURCE_PATH)/src/corelib/io/qfilesystemengine_unix.cpp\" \
                         \"\$(SOURCE_PATH)/src/corelib/io/qfilesystemiterator_unix.cpp\" \
                         \"\$(SOURCE_PATH)/src/corelib/io/qfsfileengine_unix.cpp\" \
-                        \"\$(SOURCE_PATH)/src/corelib/tools/qlocal_unix.cpp\""
+                        \"\$(SOURCE_PATH)/src/corelib/tools/qlocale_unix.cpp\""
             EXEEXT=
         fi
         if [ "$BUILD_ON_MAC" = "yes" ]; then
@@ -5327,11 +5051,12 @@ if [ "$CFG_KMS" != "no" ]; then
 fi
 
 # Detect libxkbcommon
+MIN_REQ_XKBCOMMON="0.4.1"
 ORIG_CFG_XKBCOMMON="$CFG_XKBCOMMON"
 # currently only xcb platform plugin supports building xkbcommon
 if [ "$CFG_XCB" != "no" ]; then
     if [ "$CFG_XKBCOMMON" = "auto" ] || [ "$CFG_XKBCOMMON" = "system" ]; then
-        if [ -n "$PKG_CONFIG" ] && $PKG_CONFIG --exists "xkbcommon xkbcommon-x11 >= 0.4.0" 2>/dev/null; then
+        if [ -n "$PKG_CONFIG" ] && $PKG_CONFIG --exists "xkbcommon xkbcommon-x11 >= $MIN_REQ_XKBCOMMON" 2>/dev/null; then
             QMAKE_CFLAGS_XKBCOMMON="`$PKG_CONFIG --cflags xkbcommon xkbcommon-x11 2>/dev/null`"
             QMAKE_LIBS_XKBCOMMON="`$PKG_CONFIG --libs xkbcommon xkbcommon-x11 2>/dev/null`"
 
@@ -5454,15 +5179,6 @@ if [ -z "$QT_QPA_DEFAULT_PLATFORM" ]; then
     fi
 fi
 
-# Determine print support plugin belonging to the default QPA platform
-if [ "$QT_QPA_DEFAULT_PLATFORM" = "cocoa" ]; then
-    QT_PRINTSUPPORT_DEFAULT_PLUGIN=cocoaprintersupport
-elif [ "$QT_QPA_DEFAULT_PLATFORM" = "windows" ]; then
-    QT_PRINTSUPPORT_DEFAULT_PLUGIN=windowsprintersupport
-elif [ "$QT_QPA_DEFAULT_PLATFORM" = "xcb" ]; then
-    QT_PRINTSUPPORT_DEFAULT_PLUGIN=cupsprintersupport
-fi
-
 if [ -n "$QMAKE_CFLAGS_XCB" ] || [ -n "$QMAKE_LIBS_XCB" ]; then
     QMakeVar set QMAKE_CFLAGS_XCB "$QMAKE_CFLAGS_XCB"
     QMakeVar set QMAKE_LIBS_XCB "$QMAKE_LIBS_XCB"
@@ -5506,8 +5222,8 @@ if [ "$CFG_FREETYPE" = "auto" ]; then
 fi
 
 # harfbuzz support
-[ "$XPLATFORM_MINGW" = "yes" ] && [ "$CFG_HARFBUZZ" = "auto" ] && CFG_HARFBUZZ=no
 [ "$XPLATFORM_MAC" = "yes" ] && [ "$CFG_HARFBUZZ" = "auto" ] && CFG_HARFBUZZ=yes
+[ "$CFG_HARFBUZZ" = "auto" ] && CFG_HARFBUZZ=no # disable auto-detection on non-Mac for now
 if [ "$CFG_HARFBUZZ" = "auto" ]; then
     if compileTest unix/harfbuzz "HarfBuzz"; then
         CFG_HARFBUZZ=system
@@ -6223,10 +5939,6 @@ full)
     ;;
 esac
 
-cat >>"$outpath/src/corelib/global/qconfig.h.new" <<EOF
-
-EOF
-
 echo '/* Compile time features */' >>"$outpath/src/corelib/global/qconfig.h.new"
 [ '!' -z "$LicenseKeyExt" ] && echo "#define QT_PRODUCT_LICENSEKEY \"$LicenseKeyExt\"" >>"$outpath/src/corelib/global/qconfig.h.new"
 
@@ -6326,6 +6038,7 @@ QMakeVar set sql-plugins "$SQL_PLUGINS"
 # X11/Unix/Mac only configs
 [ "$CFG_CUPS" = "no" ]       && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_CUPS"
 [ "$CFG_ICONV" = "no" ]      && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_ICONV"
+[ "$CFG_EVDEV" = "no" ]      && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_EVDEV"
 [ "$CFG_GLIB" != "yes" ]     && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_GLIB"
 [ "$CFG_QGTKSTYLE" != "yes" ] && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_STYLE_GTK"
 [ "$CFG_CLOCK_MONOTONIC" = "no" ] && QCONFIG_FLAGS="$QCONFIG_FLAGS QT_NO_CLOCK_MONOTONIC"
@@ -6425,7 +6138,6 @@ EOF
 fi
 
 echo "#define QT_QPA_DEFAULT_PLATFORM_NAME \"$QT_QPA_DEFAULT_PLATFORM\"" >>"$outpath/src/corelib/global/qconfig.h.new"
-echo "#define QT_QPA_DEFAULT_PRINTSUPPORTPLUGIN_NAME \"QT_PRINTSUPPORT_DEFAULT_PLUGIN\"" >>"$outpath/src/corelib/global/qconfig.h.new"
 
 # avoid unecessary rebuilds by copying only if qconfig.h has changed
 if cmp -s "$outpath/src/corelib/global/qconfig.h" "$outpath/src/corelib/global/qconfig.h.new"; then
@@ -6495,7 +6207,6 @@ EOF
 
 if [ "$CFG_SHARED" = "no" ]; then
     echo "QT_DEFAULT_QPA_PLUGIN = q$QT_QPA_DEFAULT_PLATFORM" >> "$QTCONFIG.tmp"
-    echo "QT_DEFAULT_PRINTSUPPORTPLUGIN = $QT_PRINTSUPPORT_DEFAULT_PLUGIN" >> "$QTCONFIG.tmp"
     echo >> "$QTCONFIG.tmp"
 fi
 
@@ -6745,6 +6456,7 @@ report_support "  ALSA ..................." "$CFG_ALSA"
 report_support "  CUPS ..................." "$CFG_CUPS"
 [ "$XPLATFORM_MINGW" = "yes" ] && \
     report_support "  DirectWrite ............" "$CFG_DIRECTWRITE"
+report_support "  Evdev .................." "$CFG_EVDEV"
 report_support "  FontConfig ............." "$CFG_FONTCONFIG"
 report_support "  FreeType ..............." "$CFG_FREETYPE" system "system library" yes "bundled copy"
 report_support "  Glib ..................." "$CFG_GLIB"
@@ -6840,7 +6552,7 @@ if [ "$CFG_OPENSSL" = "linked" ] && [ "$OPENSSL_LIBS" = "" ]; then
     echo
 fi
 if [ "$ORIG_CFG_XKBCOMMON" != qt ] && [ "$CFG_XKBCOMMON" = qt ]; then
-    echo "NOTE: libxkbcommon and libxkbcommon-x11 0.4.0 or higher not found on the system, will use "
+    echo "NOTE: libxkbcommon and libxkbcommon-x11 $MIN_REQ_XKBCOMMON or higher not found on the system, will use "
     echo "the bundled version from 3rd party directory."
 fi
 if [ "$CFG_XKBCOMMON" = "qt" ] && [ "$CFG_XKB_CONFIG_ROOT" = "not found" ]; then

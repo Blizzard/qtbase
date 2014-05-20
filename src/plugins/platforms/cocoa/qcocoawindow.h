@@ -183,6 +183,7 @@ public:
     void windowWillMove();
     void windowDidMove();
     void windowDidResize();
+    void windowDidEndLiveResize();
     bool windowShouldClose();
     bool windowIsPopupType(Qt::WindowType type = Qt::Widget) const;
 
@@ -210,7 +211,9 @@ public:
     void registerTouch(bool enable);
     void setContentBorderThickness(int topThickness, int bottomThickness);
     void registerContentBorderArea(quintptr identifier, int upper, int lower);
-    void enableContentBorderArea(bool enable);
+    void setContentBorderAreaEnabled(quintptr identifier, bool enable);
+    void setContentBorderEnabled(bool enable);
+    bool testContentBorderAreaPosition(int position) const;
     void applyContentBorderThickness(NSWindow *window);
     void updateNSToolbar();
 
@@ -252,6 +255,7 @@ public: // for QNSView
     QList<QCocoaWindow *> m_childWindows;
 
     Qt::WindowFlags m_windowFlags;
+    bool m_effectivelyMaximized;
     Qt::WindowState m_synchedWindowState;
     Qt::WindowModality m_windowModality;
     QPointer<QWindow> m_activePopupWindow;
@@ -268,6 +272,7 @@ public: // for QNSView
     bool m_geometryUpdateExposeAllowed;
     bool m_isExposed;
     QRect m_exposedGeometry;
+    qreal m_exposedDevicePixelRatio;
     int m_registerTouchCount;
     bool m_resizableTransientParent;
     bool m_hiddenByClipping;
@@ -287,7 +292,8 @@ public: // for QNSView
     NSApplicationPresentationOptions m_presentationOptions;
 
     struct BorderRange {
-        BorderRange(int u, int l) : upper(u), lower(l) { }
+        BorderRange(quintptr i, int u, int l) : identifier(i), upper(u), lower(l) { }
+        quintptr identifier;
         int upper;
         int lower;
         bool operator<(BorderRange const& right) const {
@@ -295,6 +301,7 @@ public: // for QNSView
         }
     };
     QHash<quintptr, BorderRange> m_contentBorderAreas; // identifer -> uppper/lower
+    QHash<quintptr, bool> m_enabledContentBorderAreas; // identifer -> enabled state (true/false)
 };
 
 QT_END_NAMESPACE

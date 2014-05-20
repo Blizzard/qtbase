@@ -3619,6 +3619,14 @@ void tst_QString::fromUtf8_data()
     str += " some ";
     QTest::newRow("str3-len") << QByteArray("\342\202\254 some text") << str << 9;
 
+    // test that QString::fromUtf8 suppresses an initial BOM, but not a ZWNBSP
+    str = "hello";
+    QByteArray bom("\357\273\277");
+    QTest::newRow("bom0") << bom << QString() << 3;
+    QTest::newRow("bom1") << bom + "hello" << str << -1;
+    QTest::newRow("bom+zwnbsp0") << bom + bom << QString(QChar(0xfeff)) << -1;
+    QTest::newRow("bom+zwnbsp1") << bom + "hello" + bom << str + QChar(0xfeff) << -1;
+
     str = "hello";
     str += QChar::ReplacementCharacter;
     str += QChar(0x68);
@@ -4277,14 +4285,23 @@ void tst_QString::capacity()
     QVERIFY( (int)s2.capacity() >= res );
     QCOMPARE( s2, s1 );
 
+    s2 = s1;    // share again
     s2.reserve( res * 2 );
     QVERIFY( (int)s2.capacity() >=  res * 2 );
+    QVERIFY(s2.constData() != s1.constData());
     QCOMPARE( s2, s1 );
 
+    // don't share again -- s2 must be detached for squeeze() to do anything
     s2.squeeze();
     QVERIFY( (int)s2.capacity() == res );
     QCOMPARE( s2, s1 );
 
+    s2 = s1;    // share again
+    int oldsize = s1.size();
+    s2.reserve( res / 2 );
+    QVERIFY( (int)s2.capacity() >=  res / 2 );
+    QVERIFY( (int)s2.capacity() >=  oldsize );
+    QCOMPARE( s2, s1 );
 }
 
 void tst_QString::section_data()
@@ -4876,10 +4893,8 @@ void tst_QString::localeAwareCompare()
     DWORD oldLcid = GetUserDefaultLCID();
     SetUserDefaultLCID(locale);
     QCOMPARE(locale, GetUserDefaultLCID());
-#elif defined (Q_OS_MAC)
-    QSKIP("Setting the locale is not supported on OS X (you can set the C locale, but that won't affect CFStringCompare which is used to compare strings)");
-#elif defined(QT_USE_ICU)
-    QLocale::setDefault(QLocale(locale));
+#elif defined (Q_OS_MAC) || defined(QT_USE_ICU)
+    QSKIP("Setting the locale is not supported on OS X or ICU (you can set the C locale, but that won't affect localeAwareCompare)");
 #else
     if (!locale.isEmpty()) {
         const char *newLocale = setlocale(LC_ALL, locale.toLatin1());

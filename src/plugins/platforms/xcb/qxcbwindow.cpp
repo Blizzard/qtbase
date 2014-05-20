@@ -1174,7 +1174,7 @@ void QXcbWindow::updateNetWmUserTime(xcb_timestamp_t timestamp)
 
 void QXcbWindow::setTransparentForMouseEvents(bool transparent)
 {
-    if (transparent == m_transparent)
+    if (!connection()->hasXFixes() || transparent == m_transparent)
         return;
 
     xcb_rectangle_t rectangle;
@@ -1705,16 +1705,16 @@ void QXcbWindow::handleButtonPressEvent(const xcb_button_press_event_t *event)
     Qt::KeyboardModifiers modifiers = connection()->keyboard()->translateModifiers(event->state);
 
     if (isWheel) {
-#ifndef XCB_USE_XINPUT21
-        // Logic borrowed from qapplication_x11.cpp
-        int delta = 120 * ((event->detail == 4 || event->detail == 6) ? 1 : -1);
-        bool hor = (((event->detail == 4 || event->detail == 5)
-                     && (modifiers & Qt::AltModifier))
-                    || (event->detail == 6 || event->detail == 7));
+        if (!connection()->isUsingXInput21()) {
+            // Logic borrowed from qapplication_x11.cpp
+            int delta = 120 * ((event->detail == 4 || event->detail == 6) ? 1 : -1);
+            bool hor = (((event->detail == 4 || event->detail == 5)
+                         && (modifiers & Qt::AltModifier))
+                        || (event->detail == 6 || event->detail == 7));
 
-        QWindowSystemInterface::handleWheelEvent(window(), event->time,
-                                                 local, global, delta, hor ? Qt::Horizontal : Qt::Vertical, modifiers);
-#endif
+            QWindowSystemInterface::handleWheelEvent(window(), event->time,
+                                                     local, global, delta, hor ? Qt::Horizontal : Qt::Vertical, modifiers);
+        }
         return;
     }
 
@@ -1778,6 +1778,9 @@ public:
 void QXcbWindow::handleEnterNotifyEvent(const xcb_enter_notify_event_t *event)
 {
     connection()->setTime(event->time);
+#ifdef XCB_USE_XINPUT2
+    connection()->handleEnterEvent(event);
+#endif
 
     if ((event->mode != XCB_NOTIFY_MODE_NORMAL && event->mode != XCB_NOTIFY_MODE_UNGRAB)
         || event->detail == XCB_NOTIFY_DETAIL_VIRTUAL
@@ -1829,21 +1832,21 @@ void QXcbWindow::handlePropertyNotifyEvent(const xcb_property_notify_event_t *ev
             return;
 
         Qt::WindowState newState = Qt::WindowNoState;
-        if (event->atom == atom(QXcbAtom::_NET_WM_STATE)) { // WM_STATE: Quick check for 'Minimize'.
+        if (event->atom == atom(QXcbAtom::WM_STATE)) { // WM_STATE: Quick check for 'Minimize'.
             const xcb_get_property_cookie_t get_cookie =
-            xcb_get_property(xcb_connection(), 0, m_window, atom(QXcbAtom::_NET_WM_STATE),
-                                 XCB_ATOM_ANY, 0, 1024);
+            xcb_get_property(xcb_connection(), 0, m_window, atom(QXcbAtom::WM_STATE),
+                             XCB_ATOM_ANY, 0, 1024);
 
             xcb_get_property_reply_t *reply =
                 xcb_get_property_reply(xcb_connection(), get_cookie, NULL);
 
-            if (reply && reply->format == 32 && reply->type == atom(QXcbAtom::_NET_WM_STATE)) {
+            if (reply && reply->format == 32 && reply->type == atom(QXcbAtom::WM_STATE)) {
                 const quint32 *data = (const quint32 *)xcb_get_property_value(reply);
                 if (reply->length != 0 && XCB_WM_STATE_ICONIC == data[0])
                     newState = Qt::WindowMinimized;
             }
             free(reply);
-        } // WM_STATE: Quick check for 'Minimize'.
+        }
         if (newState != Qt::WindowMinimized) { // Something else changed, get _NET_WM_STATE.
             const NetWmStates states = netWmStates();
             if ((states & NetWmStateMaximizedHorz) && (states & NetWmStateMaximizedVert))

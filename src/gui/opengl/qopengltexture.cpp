@@ -2432,7 +2432,7 @@ bool QOpenGLTexture::hasFeature(Feature feature)
     bool supported = false;
 
 #if !defined(QT_OPENGL_ES_2)
-    if (!ctx->isES()) {
+    if (!ctx->isOpenGLES()) {
         switch (feature) {
         case ImmutableMultisampleStorage:
         case TextureBuffer:
@@ -2489,7 +2489,7 @@ bool QOpenGLTexture::hasFeature(Feature feature)
         }
     }
 
-    if (ctx->isES())
+    if (ctx->isOpenGLES())
 #endif
     {
         switch (feature) {
@@ -2524,7 +2524,7 @@ bool QOpenGLTexture::hasFeature(Feature feature)
 void QOpenGLTexture::setMipBaseLevel(int baseLevel)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->textureId);
@@ -2561,7 +2561,7 @@ int QOpenGLTexture::mipBaseLevel() const
 void QOpenGLTexture::setMipMaxLevel(int maxLevel)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->textureId);
@@ -2598,7 +2598,7 @@ int QOpenGLTexture::mipMaxLevel() const
 void QOpenGLTexture::setMipLevelRange(int baseLevel, int maxLevel)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->textureId);
@@ -2668,12 +2668,12 @@ void QOpenGLTexture::generateMipMaps()
 }
 
 /*!
-    Generates mipmaps for this texture object from mipmap level \baseLevel. If you are
+    Generates mipmaps for this texture object from mipmap level \a baseLevel. If you are
     using a texture target and filtering option that requires mipmaps and you
     have disabled automatic mipmap generation then you need to call this function
     or the overload to create the mipmap chain.
 
-    The generation of mipmaps to above \baseLevel is achieved by setting the mipmap
+    The generation of mipmaps to above \a baseLevel is achieved by setting the mipmap
     base level to \a baseLevel and then generating the mipmap chain. If \a resetBaseLevel
     is \c true, then the baseLevel of the texture will be reset to its previous value.
 
@@ -2708,7 +2708,7 @@ void QOpenGLTexture::generateMipMaps(int baseLevel, bool resetBaseLevel)
 void QOpenGLTexture::setSwizzleMask(SwizzleComponent component, SwizzleValue value)
 {
 #if !defined(Q_OS_MAC) && !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -2737,7 +2737,7 @@ void QOpenGLTexture::setSwizzleMask(SwizzleValue r, SwizzleValue g,
                                     SwizzleValue b, SwizzleValue a)
 {
 #if !defined(Q_OS_MAC) && !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -2786,7 +2786,7 @@ QOpenGLTexture::SwizzleValue QOpenGLTexture::swizzleMask(SwizzleComponent compon
 void QOpenGLTexture::setDepthStencilMode(QOpenGLTexture::DepthStencilMode mode)
 {
 #if !defined(Q_OS_MAC) && !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -2977,7 +2977,7 @@ QOpenGLTexture::WrapMode QOpenGLTexture::wrapMode(QOpenGLTexture::CoordinateDire
 void QOpenGLTexture::setBorderColor(QColor color)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3000,14 +3000,14 @@ void QOpenGLTexture::setBorderColor(QColor color)
 }
 
 /*!
-    Sets the color red to \a {r}, green to \a {g}, blue to \{b}, and \a {a} to the
+    Sets the color red to \a {r}, green to \a {g}, blue to \a {b}, and \a {a} to the
     alpha value.
     \overload
 */
 void QOpenGLTexture::setBorderColor(float r, float g, float b, float a)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3033,14 +3033,14 @@ void QOpenGLTexture::setBorderColor(float r, float g, float b, float a)
 }
 
 /*!
-    Sets the color red to \a {r}, green to \a {g}, blue to \a {b}, and \a the alpha
-    value to {a}.
+    Sets the color red to \a {r}, green to \a {g}, blue to \a {b}, and the alpha
+    value to \a {a}.
     \overload
 */
 void QOpenGLTexture::setBorderColor(int r, int g, int b, int a)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3068,14 +3068,14 @@ void QOpenGLTexture::setBorderColor(int r, int g, int b, int a)
 }
 
 /*!
-    Sets the color red to \a {r}, green to \a {g}, blue to \a {b}, and \a the alpha
-    value to {a}.
+    Sets the color red to \a {r}, green to \a {g}, blue to \a {b}, and the alpha
+    value to \a {a}.
     \overload
 */
 void QOpenGLTexture::setBorderColor(uint r, uint g, uint b, uint a)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3187,7 +3187,7 @@ void QOpenGLTexture::borderColor(unsigned int *border) const
 void QOpenGLTexture::setMinimumLevelOfDetail(float value)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3224,7 +3224,7 @@ float QOpenGLTexture::minimumLevelOfDetail() const
 void QOpenGLTexture::setMaximumLevelOfDetail(float value)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3260,7 +3260,7 @@ float QOpenGLTexture::maximumLevelOfDetail() const
 void QOpenGLTexture::setLevelOfDetailRange(float min, float max)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);
@@ -3302,7 +3302,7 @@ QPair<float, float> QOpenGLTexture::levelOfDetailRange() const
 void QOpenGLTexture::setLevelofDetailBias(float bias)
 {
 #if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         Q_D(QOpenGLTexture);
         d->create();
         Q_ASSERT(d->texFuncs);

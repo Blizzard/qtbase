@@ -79,6 +79,7 @@
 #include "qfileinfo.h"
 #include <QtGui/qinputmethod.h>
 #include <QtGui/qopenglcontext.h>
+#include <QtGui/private/qopenglcontext_p.h>
 
 #include <private/qgraphicseffect_p.h>
 #include <qbackingstore.h>
@@ -2836,7 +2837,10 @@ void QWidget::showFullScreen()
     setWindowState((windowState() & ~(Qt::WindowMinimized | Qt::WindowMaximized))
                    | Qt::WindowFullScreen);
     setVisible(true);
+#if !defined Q_OS_QNX // On QNX this window will be activated anyway from libscreen
+                      // activating it here before libscreen activates it causes problems
     activateWindow();
+#endif
 }
 
 /*!
@@ -4677,7 +4681,8 @@ void QWidget::unsetCursor()
 void QWidget::render(QPaintDevice *target, const QPoint &targetOffset,
                      const QRegion &sourceRegion, RenderFlags renderFlags)
 {
-    d_func()->render(target, targetOffset, sourceRegion, renderFlags, false);
+    QPainter p(target);
+    render(&p, targetOffset, sourceRegion, renderFlags);
 }
 
 /*!
@@ -4721,9 +4726,6 @@ void QWidget::render(QPainter *painter, const QPoint &targetOffset,
         d->createExtra();
     d->extra->inRenderWithPainter = true;
 
-#ifdef Q_WS_MAC
-    d->render_helper(painter, targetOffset, toBePainted, renderFlags);
-#else
     QPaintEngine *engine = painter->paintEngine();
     Q_ASSERT(engine);
     QPaintEnginePrivate *enginePriv = engine->d_func();
@@ -4734,7 +4736,7 @@ void QWidget::render(QPainter *painter, const QPoint &targetOffset,
     // Render via a pixmap when dealing with non-opaque painters or printers.
     if (!inRenderWithPainter && (opacity < 1.0 || (target->devType() == QInternal::Printer))) {
         d->render_helper(painter, targetOffset, toBePainted, renderFlags);
-        d->extra->inRenderWithPainter = false;
+        d->extra->inRenderWithPainter = inRenderWithPainter;
         return;
     }
 
@@ -4755,7 +4757,7 @@ void QWidget::render(QPainter *painter, const QPoint &targetOffset,
         enginePriv->setSystemViewport(oldSystemClip);
     }
 
-    render(target, targetOffset, toBePainted, renderFlags);
+    d->render(target, targetOffset, toBePainted, renderFlags);
 
     // Restore system clip, viewport and transform.
     enginePriv->systemClip = oldSystemClip;
@@ -4764,9 +4766,8 @@ void QWidget::render(QPainter *painter, const QPoint &targetOffset,
 
     // Restore shared painter.
     d->setSharedPainter(oldPainter);
-#endif
 
-    d->extra->inRenderWithPainter = false;
+    d->extra->inRenderWithPainter = inRenderWithPainter;
 }
 
 static void sendResizeEvents(QWidget *target)
@@ -5204,8 +5205,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
 }
 
 void QWidgetPrivate::render(QPaintDevice *target, const QPoint &targetOffset,
-                            const QRegion &sourceRegion, QWidget::RenderFlags renderFlags,
-                            bool readyToRender)
+                            const QRegion &sourceRegion, QWidget::RenderFlags renderFlags)
 {
     if (!target) {
         qWarning("QWidget::render: null pointer to paint device");
@@ -5213,7 +5213,7 @@ void QWidgetPrivate::render(QPaintDevice *target, const QPoint &targetOffset,
     }
 
     const bool inRenderWithPainter = extra && extra->inRenderWithPainter;
-    QRegion paintRegion = !inRenderWithPainter && !readyToRender
+    QRegion paintRegion = !inRenderWithPainter
                           ? prepareToRender(sourceRegion, renderFlags)
                           : sourceRegion;
     if (paintRegion.isEmpty())
@@ -5272,23 +5272,12 @@ void QWidgetPrivate::render(QPaintDevice *target, const QPoint &targetOffset,
 
     flags |= DontSetCompositionMode;
 
-    if (target->devType() == QInternal::Printer) {
-        QPainter p(target);
-        render_helper(&p, targetOffset, paintRegion, renderFlags);
-        return;
-    }
-
-#ifndef Q_WS_MAC
     // Render via backingstore.
     drawWidget(target, paintRegion, offset, flags, sharedPainter());
 
     // Restore shared painter.
     if (oldSharedPainter)
         setSharedPainter(oldSharedPainter);
-#else
-    // Render via backingstore (no shared painter).
-    drawWidget(target, paintRegion, offset, flags, 0);
-#endif
 }
 
 void QWidgetPrivate::paintSiblingsRecursive(QPaintDevice *pdev, const QObjectList& siblings, int index, const QRegion &rgn,
@@ -8369,6 +8358,8 @@ bool QWidget::event(QEvent *event)
                 d->extra->customDpiY = value;
             d->updateFont(d->data.fnt);
         }
+        if (windowHandle() && !qstrncmp(propName, "_q_platform_", 12))
+            windowHandle()->setProperty(propName, property(propName));
         // fall through
     }
 #endif
@@ -8534,6 +8525,8 @@ void QWidget::mouseReleaseEvent(QMouseEvent *event)
     This event handler, for event \a event, can be reimplemented in a
     subclass to receive mouse double click events for the widget.
 
+    The default implementation calls mousePressEvent().
+
     \note The widget will also receive mouse press and mouse release
     events in addition to the double click event. It is up to the
     developer to ensure that the application interprets these events
@@ -8545,7 +8538,7 @@ void QWidget::mouseReleaseEvent(QMouseEvent *event)
 
 void QWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
-    event->ignore();
+    mousePressEvent(event);
 }
 
 #ifndef QT_NO_WHEELEVENT
@@ -11163,6 +11156,7 @@ QOpenGLContext *QWidgetPrivate::shareContext() const
     QWidgetPrivate *that = const_cast<QWidgetPrivate *>(this);
     if (!extra->topextra->shareContext) {
         QOpenGLContext *ctx = new QOpenGLContext();
+        ctx->setShareContext(QOpenGLContextPrivate::globalShareContext());
         ctx->setFormat(extra->topextra->window->format());
         ctx->create();
         that->extra->topextra->shareContext = ctx;

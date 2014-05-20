@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -257,7 +257,7 @@ tst_QSqlQuery::~tst_QSqlQuery()
 
 void tst_QSqlQuery::initTestCase()
 {
-    dbs.open();
+    QVERIFY(dbs.open());
 
     for ( QStringList::ConstIterator it = dbs.dbNames.begin(); it != dbs.dbNames.end(); ++it ) {
         QSqlDatabase db = QSqlDatabase::database(( *it ) );
@@ -1068,6 +1068,18 @@ void tst_QSqlQuery::numRowsAffected()
     QVERIFY_SQL( q, exec( "update " + qtest + " set id = id + 100" ) );
     QCOMPARE( q.numRowsAffected(), i );
     QCOMPARE( q.numRowsAffected(), i ); // yes, we check twice
+
+    QVERIFY_SQL( q, prepare( "update " + qtest + " set id = id + :newid" ) );
+    q.bindValue(":newid", 100);
+    QVERIFY_SQL( q, exec() );
+    QCOMPARE( q.numRowsAffected(), i );
+    QCOMPARE( q.numRowsAffected(), i ); // yes, we check twice
+
+    QVERIFY_SQL( q, prepare( "update " + qtest + " set id = id + :newid where NOT(1 = 1)" ) );
+    q.bindValue(":newid", 100);
+    QVERIFY_SQL( q, exec() );
+    QCOMPARE( q.numRowsAffected(), 0 );
+    QCOMPARE( q.numRowsAffected(), 0 ); // yes, we check twice
 
     QVERIFY_SQL( q, exec( "insert into " + qtest + " values (42000, 'homer', 'marge')" ) );
     QCOMPARE( q.numRowsAffected(), 1 );

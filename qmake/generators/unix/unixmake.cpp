@@ -210,7 +210,7 @@ UnixMakefileGenerator::init()
 
             // replace place holders
             pchFlags = pchFlags.replace("${QMAKE_PCH_INPUT}",
-                                        fileFixify(project->first("PRECOMPILED_HEADER").toQString()));
+                                        project->first("PRECOMPILED_HEADER").toQString());
             pchFlags = pchFlags.replace("${QMAKE_PCH_OUTPUT_BASE}", pchBaseName);
             if (project->isActiveConfig("icc_pch_style")) {
                 // icc style
@@ -749,7 +749,9 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
         target = "$(QMAKE_TARGET)";
     } else if(project->first("TEMPLATE") == "lib") {
         if(project->isEmpty("QMAKE_CYGWIN_SHLIB")) {
-            if(!project->isActiveConfig("staticlib") && !project->isActiveConfig("plugin")) {
+            if (!project->isActiveConfig("staticlib")
+                    && !project->isActiveConfig("plugin")
+                    && !project->isActiveConfig("unversioned_libname")) {
                 if(project->isEmpty("QMAKE_HPUX_SHLIB")) {
                     links << "$(TARGET0)" << "$(TARGET1)" << "$(TARGET2)";
                 } else {
@@ -921,7 +923,8 @@ UnixMakefileGenerator::escapeFilePath(const QString &path) const
 {
     QString ret = path;
     if(!ret.isEmpty()) {
-        ret = unescapeFilePath(ret).replace(QLatin1Char(' '), QLatin1String("\\ "));
+        ret = unescapeFilePath(ret).replace(QLatin1Char(' '), QLatin1String("\\ "))
+                                   .replace(QLatin1Char('\t'), QLatin1String("\\\t"));
         debug_msg(2, "EscapeFilePath: %s -> %s", path.toLatin1().constData(), ret.toLatin1().constData());
     }
     return ret;

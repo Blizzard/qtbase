@@ -316,12 +316,17 @@ void tst_QTabBar::sizeHints()
     tabBar.setUsesScrollButtons(false);
     tabBar.setElideMode(Qt::ElideRight);
 //    qDebug() << tabBar.minimumSizeHint() << tabBar.sizeHint();
-    QVERIFY(tabBar.minimumSizeHint().width() < 500);
-    QVERIFY(tabBar.sizeHint().width() > 700); // unchanged
+
+    // The sizeHint is very much dependent on the screen DPI value
+    // so we can not really predict it.
+    int tabBarMinSizeHintWidth = tabBar.minimumSizeHint().width();
+    int tabBarSizeHintWidth = tabBar.sizeHint().width();
+    QVERIFY(tabBarMinSizeHintWidth < tabBarSizeHintWidth);
+    QVERIFY(tabBarSizeHintWidth > 700); // unchanged
 
     tabBar.addTab("This is tab10 with a very long title");
-    QVERIFY(tabBar.minimumSizeHint().width() < 600);
-    QVERIFY(tabBar.sizeHint().width() > 700); // unchanged
+    QVERIFY(tabBar.minimumSizeHint().width() > tabBarMinSizeHintWidth);
+    QVERIFY(tabBar.sizeHint().width() > tabBarSizeHintWidth);
 }
 
 void tst_QTabBar::setUsesScrollButtons_data()
@@ -674,7 +679,8 @@ void tst_QTabBar::tabBarClicked()
         QCOMPARE(doubleClickSpy.count(), 0);
 
         QTest::mouseDClick(&tabBar, button, 0, tabPos);
-        QCOMPARE(clickSpy.count(), 0);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), 0);
         QCOMPARE(doubleClickSpy.count(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), 0);
 
@@ -686,7 +692,8 @@ void tst_QTabBar::tabBarClicked()
         QCOMPARE(doubleClickSpy.count(), 0);
 
         QTest::mouseDClick(&tabBar, button, 0, barPos);
-        QCOMPARE(clickSpy.count(), 0);
+        QCOMPARE(clickSpy.count(), 1);
+        QCOMPARE(clickSpy.takeFirst().takeFirst().toInt(), -1);
         QCOMPARE(doubleClickSpy.count(), 1);
         QCOMPARE(doubleClickSpy.takeFirst().takeFirst().toInt(), -1);
 

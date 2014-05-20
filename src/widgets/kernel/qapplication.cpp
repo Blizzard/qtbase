@@ -336,6 +336,15 @@ QApplicationPrivate::~QApplicationPrivate()
 */
 
 /*!
+    \fn QApplication::setGraphicsSystem(const QString &)
+    \obsolete
+
+    This call has no effect.
+
+    Use the QPA framework instead.
+*/
+
+/*!
     \fn QWidget *QApplication::topLevelAt(const QPoint &point)
 
     Returns the top-level widget at the given \a point; returns 0 if
@@ -2861,16 +2870,19 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
         case QEvent::NetworkReplyUpdated:
             break;
         default:
-            if (receiver->isWidgetType()) {
-                if (d->gestureManager->filterEvent(static_cast<QWidget *>(receiver), e))
-                    return true;
-            } else {
-                // a special case for events that go to QGesture objects.
-                // We pass the object to the gesture manager and it'll figure
-                // out if it's QGesture or not.
-                if (d->gestureManager->filterEvent(receiver, e))
-                    return true;
+            if (d->gestureManager->thread() == QThread::currentThread()) {
+                if (receiver->isWidgetType()) {
+                    if (d->gestureManager->filterEvent(static_cast<QWidget *>(receiver), e))
+                        return true;
+                } else {
+                    // a special case for events that go to QGesture objects.
+                    // We pass the object to the gesture manager and it'll figure
+                    // out if it's QGesture or not.
+                    if (d->gestureManager->filterEvent(receiver, e))
+                        return true;
+                }
             }
+            break;
         }
     }
 #endif // QT_NO_GESTURES
@@ -3970,7 +3982,11 @@ bool QApplicationPrivate::translateRawTouchEvent(QWidget *window,
             break;
         }
         default:
-            if (widget->testAttribute(Qt::WA_WState_AcceptedTouchBeginEvent)) {
+            if (widget->testAttribute(Qt::WA_WState_AcceptedTouchBeginEvent)
+#ifndef QT_NO_GESTURES
+                || QGestureManager::gesturePending(widget)
+#endif
+                ) {
                 if (touchEvent.type() == QEvent::TouchEnd)
                     widget->setAttribute(Qt::WA_WState_AcceptedTouchBeginEvent, false);
                 if (QApplication::sendSpontaneousEvent(widget, &touchEvent) && touchEvent.isAccepted())

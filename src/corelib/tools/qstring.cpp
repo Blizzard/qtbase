@@ -78,6 +78,7 @@
 #include "qchar.cpp"
 #include "qstringmatcher.cpp"
 #include "qstringiterator_p.h"
+#include "qthreadstorage.h"
 
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
@@ -558,11 +559,13 @@ static int ucstrncmp(const QChar *a, const uchar *c, int l)
         }
     }
 
-    // we'll read uc[offset..offset+7] (16 bytes) and c[offset-8..offset+7] (16 bytes)
+#  ifdef Q_PROCESSOR_X86_64
+    enum { MaxTailLength = 7 };
+    // we'll read uc[offset..offset+7] (16 bytes) and c[offset..offset+7] (8 bytes)
     if (uc + offset + 7 < e) {
-        // same, but we'll throw away half the data
-        __m128i chunk = _mm_loadu_si128((__m128i*)(c + offset - 8));
-        __m128i secondHalf = _mm_unpackhi_epi8(chunk, nullmask);
+        // same, but we're using an 8-byte load
+        __m128i chunk = _mm_cvtsi64_si128(*(long long *)(c + offset));
+        __m128i secondHalf = _mm_unpacklo_epi8(chunk, nullmask);
 
         __m128i ucdata = _mm_loadu_si128((__m128i*)(uc + offset));
         __m128i result = _mm_cmpeq_epi16(secondHalf, ucdata);
@@ -576,6 +579,10 @@ static int ucstrncmp(const QChar *a, const uchar *c, int l)
         // still matched
         offset += 8;
     }
+#  else
+    // 32-bit, we can't do MOVQ to load 8 bytes
+    enum { MaxTailLength = 15 };
+#  endif
 
     // reset uc and c
     uc += offset;
@@ -583,7 +590,7 @@ static int ucstrncmp(const QChar *a, const uchar *c, int l)
 
 #  ifdef Q_COMPILER_LAMBDA
     const auto &lambda = [=](int i) { return uc[i] - ushort(c[i]); };
-    return UnrollTailLoop<7>::exec(e - uc, 0, lambda, lambda);
+    return UnrollTailLoop<MaxTailLength>::exec(e - uc, 0, lambda, lambda);
 #  endif
 #endif
 
@@ -4324,14 +4331,6 @@ QByteArray QString::toLocal8Bit_helper(const QChar *data, int size)
     UTF-8 is a Unicode codec and can represent all characters in a Unicode
     string like QString.
 
-    However, in the Unicode range, there are certain codepoints that are not
-    considered characters. The Unicode standard reserves the last two
-    codepoints in each Unicode Plane (U+FFFE, U+FFFF, U+1FFFE, U+1FFFF,
-    U+2FFFE, etc.), as well as 32 codepoints in the range U+FDD0..U+FDEF,
-    inclusive, as non-characters. If any of those appear in the string, they
-    may be discarded and will not appear in the UTF-8 representation, or they
-    may be replaced by one or more replacement characters.
-
     \sa fromUtf8(), toLatin1(), toLocal8Bit(), QTextCodec
 */
 
@@ -4486,10 +4485,10 @@ QString QString::fromLocal8Bit_helper(const char *str, int size)
     sequences, non-characters, overlong sequences or surrogate codepoints
     encoded into UTF-8.
 
-    Non-characters are codepoints that the Unicode standard reserves and must
-    not be used in text interchange. They are the last two codepoints in each
-    Unicode Plane (U+FFFE, U+FFFF, U+1FFFE, U+1FFFF, U+2FFFE, etc.), as well
-    as 32 codepoints in the range U+FDD0..U+FDEF, inclusive.
+    This function can be used to process incoming data incrementally as long as
+    all UTF-8 characters are terminated within the incoming data. Any
+    unterminated characters at the end of the string will be replaced or
+    suppressed. In order to do stateful decoding, please use \l QTextDecoder.
 
     \sa toUtf8(), fromLatin1(), fromLocal8Bit()
 */
@@ -5319,6 +5318,10 @@ int QString::localeAwareCompare(const QString &other) const
     return localeAwareCompare_helper(constData(), length(), other.constData(), other.length());
 }
 
+#if defined(QT_USE_ICU) && !defined(Q_OS_WIN32) && !defined(Q_OS_WINCE) && !defined (Q_OS_MAC)
+Q_GLOBAL_STATIC(QThreadStorage<QCollator>, defaultCollator)
+#endif
+
 /*!
     \internal
     \since 4.5
@@ -5362,8 +5365,9 @@ int QString::localeAwareCompare_helper(const QChar *data1, int length1,
     CFRelease(otherString);
     return result;
 #elif defined(QT_USE_ICU)
-    QCollator collator;
-    return collator.compare(data1, length1, data2, length2);
+    if (!defaultCollator()->hasLocalData())
+        defaultCollator()->setLocalData(QCollator());
+    return defaultCollator()->localData().compare(data1, length1, data2, length2);
 #elif defined(Q_OS_UNIX)
     // declared in <string.h>
     int delta = strcoll(toLocal8Bit_helper(data1, length1).constData(), toLocal8Bit_helper(data2, length2).constData());
@@ -6168,7 +6172,7 @@ qulonglong QString::toIntegral_helper(const QChar *data, uint len, bool *ok, int
 
     \snippet qstring/main.cpp 73
 
-    \sa number(), toULong(), toInt(), QLocale::toLong()
+    \sa number(), toULong(), toInt(), QLocale::toInt()
 */
 
 long QString::toLong(bool *ok, int base) const
@@ -6197,7 +6201,7 @@ long QString::toLong(bool *ok, int base) const
 
     \snippet qstring/main.cpp 78
 
-    \sa number(), QLocale::toULong()
+    \sa number(), QLocale::toUInt()
 */
 
 ulong QString::toULong(bool *ok, int base) const
@@ -7562,6 +7566,8 @@ QString QString::multiArg(int numArgs, const QString **args) const
     \since 5.2
 
     Constructs a new QString containing a copy of the \a string CFString.
+
+    \note this function is only available on Mac OS X and iOS.
 */
 
 /*! \fn CFStringRef QString::toCFString() const
@@ -7569,18 +7575,24 @@ QString QString::multiArg(int numArgs, const QString **args) const
 
     Creates a CFString from a QString. The caller owns the CFString and is
     responsible for releasing it.
+
+    \note this function is only available on Mac OS X and iOS.
 */
 
 /*! \fn QString QString::fromNSString(const NSString *string)
     \since 5.2
 
     Constructs a new QString containing a copy of the \a string NSString.
+
+    \note this function is only available on Mac OS X and iOS.
 */
 
 /*! \fn NSString QString::toNSString() const
     \since 5.2
 
-    Creates a NSString from a QString.g. The NSString is autoreleased.
+    Creates a NSString from a QString. The NSString is autoreleased.
+
+    \note this function is only available on Mac OS X and iOS.
 */
 
 /*! \fn bool QString::isSimpleText() const
@@ -9496,14 +9508,6 @@ QByteArray QStringRef::toLocal8Bit() const
 
     UTF-8 is a Unicode codec and can represent all characters in a Unicode
     string like QString.
-
-    However, in the Unicode range, there are certain codepoints that are not
-    considered characters. The Unicode standard reserves the last two
-    codepoints in each Unicode Plane (U+FFFE, U+FFFF, U+1FFFE, U+1FFFF,
-    U+2FFFE, etc.), as well as 16 codepoints in the range U+FDD0..U+FDDF,
-    inclusive, as non-characters. If any of those appear in the string, they
-    may be discarded and will not appear in the UTF-8 representation, or they
-    may be replaced by one or more replacement characters.
 
     \sa toLatin1(), toLocal8Bit(), QTextCodec
 */

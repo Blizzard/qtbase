@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -79,8 +79,11 @@ private slots:
     void init();
     void cleanup();
 
+    void singleWidgetTest();
     void lineEditTest();
     void hierarchyTest();
+    void notificationsTest();
+
 private:
     AccessibleTestWindow *m_window;
 };
@@ -101,6 +104,16 @@ void tst_QAccessibilityMac::cleanup()
     delete m_window;
 }
 
+void tst_QAccessibilityMac::singleWidgetTest()
+{
+    if (!macNativeAccessibilityEnabled())
+        return;
+
+    delete m_window;
+    m_window = 0;
+
+    QVERIFY(singleWidget());
+}
 
 void tst_QAccessibilityMac::lineEditTest()
 {
@@ -112,6 +125,7 @@ void tst_QAccessibilityMac::lineEditTest()
     m_window->addWidget(lineEdit);
     QVERIFY(QTest::qWaitForWindowExposed(m_window));
     QCoreApplication::processEvents();
+
     QVERIFY(testLineEdit());
 }
 
@@ -122,14 +136,27 @@ void tst_QAccessibilityMac::hierarchyTest()
 
     QWidget *w = new QWidget(m_window);
     m_window->addWidget(w);
-    QPushButton *b = new QPushButton(w);
+
     w->setLayout(new QVBoxLayout());
+    QPushButton *b = new QPushButton(w);
     w->layout()->addWidget(b);
     b->setText("I am a button");
 
+    QPushButton *b2 = new QPushButton(w);
+    w->layout()->addWidget(b2);
+    b2->setText("Button 2");
+
     QVERIFY(QTest::qWaitForWindowExposed(m_window));
     QCoreApplication::processEvents();
-    QVERIFY(testHierarchy());
+    QVERIFY(testHierarchy(w));
+}
+
+void tst_QAccessibilityMac::notificationsTest()
+{
+    if (!macNativeAccessibilityEnabled())
+        return;
+
+    QVERIFY(notifications(m_window));
 }
 
 QTEST_MAIN(tst_QAccessibilityMac)

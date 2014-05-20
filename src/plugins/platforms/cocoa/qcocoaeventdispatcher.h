@@ -134,6 +134,8 @@ public:
     void interrupt();
     void flush();
 
+    bool event(QEvent *);
+
     friend void qt_mac_maybeCancelWaitForMoreEventsForwarder(QAbstractEventDispatcher *eventDispatcher);
 };
 

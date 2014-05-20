@@ -223,7 +223,7 @@ QGLFunctions::QGLFunctions(const QGLContext *context)
 static int qt_gl_resolve_features()
 {
     QOpenGLContext *ctx = QOpenGLContext::currentContext();
-    if (ctx->isES() && QOpenGLContext::openGLModuleType() != QOpenGLContext::GLES1) {
+    if (ctx->isOpenGLES()) {
         // OpenGL ES 2
         int features = QGLFunctions::Multitexture |
             QGLFunctions::Shaders |
@@ -238,26 +238,6 @@ static int qt_gl_resolve_features()
             QGLFunctions::Multisample |
             QGLFunctions::StencilSeparate;
         QOpenGLExtensionMatcher extensions;
-        if (extensions.match("GL_OES_texture_npot"))
-            features |= QGLFunctions::NPOTTextures;
-        if (extensions.match("GL_IMG_texture_npot"))
-            features |= QGLFunctions::NPOTTextures;
-        return features;
-    } else if (ctx->isES()) {
-        // OpenGL ES 1
-        int features = QGLFunctions::Multitexture |
-            QGLFunctions::Buffers |
-            QGLFunctions::CompressedTextures |
-            QGLFunctions::Multisample;
-        QOpenGLExtensionMatcher extensions;
-        if (extensions.match("GL_OES_framebuffer_object"))
-            features |= QGLFunctions::Framebuffers;
-        if (extensions.match("GL_OES_blend_equation_separate"))
-            features |= QGLFunctions::BlendEquationSeparate;
-        if (extensions.match("GL_OES_blend_func_separate"))
-            features |= QGLFunctions::BlendFuncSeparate;
-        if (extensions.match("GL_OES_blend_subtract"))
-            features |= QGLFunctions::BlendSubtract;
         if (extensions.match("GL_OES_texture_npot"))
             features |= QGLFunctions::NPOTTextures;
         if (extensions.match("GL_IMG_texture_npot"))
@@ -466,7 +446,7 @@ void QGLFunctions::initializeGLFunctions(const QGLContext *context)
 */
 
 /*!
-    \fn void QGLFunctions::glBufferData(GLenum target, qgl_GLsizeiptr size, const void* data, GLenum usage)
+    \fn void QGLFunctions::glBufferData(GLenum target, qopengl_GLsizeiptr size, const void* data, GLenum usage)
 
     Convenience function that calls glBufferData(\a target, \a size, \a data, \a usage).
 
@@ -475,7 +455,7 @@ void QGLFunctions::initializeGLFunctions(const QGLContext *context)
 */
 
 /*!
-    \fn void QGLFunctions::glBufferSubData(GLenum target, qgl_GLintptr offset, qgl_GLsizeiptr size, const void* data)
+    \fn void QGLFunctions::glBufferSubData(GLenum target, qopengl_GLintptr offset, qopengl_GLsizeiptr size, const void* data)
 
     Convenience function that calls glBufferSubData(\a target, \a offset, \a size, \a data).
 

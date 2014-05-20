@@ -1700,7 +1700,7 @@ QImage qt_gl_read_texture(const QSize &size, bool alpha_format, bool include_alp
     int w = size.width();
     int h = size.height();
 #ifndef QT_OPENGL_ES
-    if (!QOpenGLContext::currentContext()->isES()) {
+    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
         //### glGetTexImage not in GL ES 2.0, need to do something else here!
         glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.bits());
     }
@@ -2285,7 +2285,7 @@ QGLTexture* QGLContextPrivate::bindTexture(const QImage &image, GLenum target, G
     glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filtering);
 
     QOpenGLContext *ctx = QOpenGLContext::currentContext();
-    bool genMipmap = !ctx->isES();
+    bool genMipmap = !ctx->isOpenGLES();
     if (glFormat.directRendering()
         && (qgl_extensions()->hasOpenGLExtension(QOpenGLExtensions::GenerateMipmap))
         && target == GL_TEXTURE_2D
@@ -2427,7 +2427,7 @@ QGLTexture* QGLContextPrivate::bindTexture(const QImage &image, GLenum target, G
             printf(" - did byte swapping (%d ms)\n", time.elapsed());
 #endif
     }
-    if (ctx->isES()) {
+    if (ctx->isOpenGLES()) {
         // OpenGL/ES requires that the internal and external formats be
         // identical.
         internalFormat = externalFormat;
@@ -2440,8 +2440,8 @@ QGLTexture* QGLContextPrivate::bindTexture(const QImage &image, GLenum target, G
     const QImage &constRef = img; // to avoid detach in bits()...
     glTexImage2D(target, 0, internalFormat, img.width(), img.height(), 0, externalFormat,
                  pixel_type, constRef.bits());
-    if (genMipmap && ctx->isES())
-        functions->glGenerateMipmap(target);
+    if (genMipmap && ctx->isOpenGLES())
+        q->functions()->glGenerateMipmap(target);
 #ifndef QT_NO_DEBUG
     GLenum error = glGetError();
     if (error != GL_NO_ERROR) {
@@ -2524,7 +2524,7 @@ int QGLContextPrivate::maxTextureSize()
 
 #ifndef QT_OPENGL_ES
     Q_Q(QGLContext);
-    if (!q->contextHandle()->isES()) {
+    if (!q->contextHandle()->isOpenGLES()) {
         GLenum proxy = GL_PROXY_TEXTURE_2D;
 
         GLint size;
@@ -2702,7 +2702,7 @@ static void qDrawTextureRect(const QRectF &target, GLint textureWidth, GLint tex
     Q_UNUSED(textureHeight);
     Q_UNUSED(textureTarget);
 #else
-    if (textureTarget != GL_TEXTURE_2D && !QOpenGLContext::currentContext()->isES()) {
+    if (textureTarget != GL_TEXTURE_2D && !QOpenGLContext::currentContext()->isOpenGLES()) {
         if (textureWidth == -1 || textureHeight == -1) {
             glGetTexLevelParameteriv(textureTarget, 0, GL_TEXTURE_WIDTH, &textureWidth);
             glGetTexLevelParameteriv(textureTarget, 0, GL_TEXTURE_HEIGHT, &textureHeight);
@@ -2769,7 +2769,7 @@ void QGLContext::drawTexture(const QRectF &target, GLuint textureId, GLenum text
 #endif
 
 #ifndef QT_OPENGL_ES_2
-     if (!contextHandle()->isES()) {
+     if (!contextHandle()->isOpenGLES()) {
 #ifdef QT_OPENGL_ES
         if (textureTarget != GL_TEXTURE_2D) {
             qWarning("QGLContext::drawTexture(): texture target must be GL_TEXTURE_2D on OpenGL ES");
@@ -2831,7 +2831,7 @@ void QGLContext::drawTexture(const QPointF &point, GLuint textureId, GLenum text
     Q_UNUSED(textureId);
     Q_UNUSED(textureTarget);
 #else
-    if (!contextHandle()->isES()) {
+    if (!contextHandle()->isOpenGLES()) {
         const bool wasEnabled = glIsEnabled(GL_TEXTURE_2D);
         GLint oldTexture;
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture);
@@ -2934,8 +2934,9 @@ void QGLContext::setFormat(const QGLFormat &format)
 void QGLContext::setDevice(QPaintDevice *pDev)
 {
     Q_D(QGLContext);
-    if (isValid())
-        reset();
+    // Do not touch the valid flag here. The context is either a new one and
+    // valid is not yet set or it is adapted from a valid QOpenGLContext in which
+    // case it must remain valid.
     d->paintDevice = pDev;
     if (d->paintDevice && (d->paintDevice->devType() != QInternal::Widget
                            && d->paintDevice->devType() != QInternal::Pixmap
@@ -3225,43 +3226,6 @@ void QGLContext::moveToThread(QThread *thread)
     which finds a matching pixel format identifier. On X11, it calls
     the virtual function chooseVisual() which finds an appropriate X
     visual. On other platforms it may work differently.
-*/
-
-/*! \fn int QGLContext::choosePixelFormat(void* dummyPfd, HDC pdc)
-
-    \b{Win32 only:} This virtual function chooses a pixel format
-    that matches the OpenGL \l{setFormat()}{format}.
-    Reimplement this function in a subclass if you need a custom
-    context.
-
-    \warning The \a dummyPfd pointer and \a pdc are used as a \c
-    PIXELFORMATDESCRIPTOR*. We use \c void to avoid using
-    Windows-specific types in our header files.
-
-    \sa chooseContext()
-*/
-
-/*! \fn void *QGLContext::chooseVisual()
-
-  \b{X11 only:} This virtual function tries to find a visual that
-  matches the format, reducing the demands if the original request
-  cannot be met.
-
-  The algorithm for reducing the demands of the format is quite
-  simple-minded, so override this method in your subclass if your
-  application has spcific requirements on visual selection.
-
-  \sa chooseContext()
-*/
-
-/*! \fn void *QGLContext::tryVisual(const QGLFormat& f, int bufDepth)
-  \internal
-
-  \b{X11 only:} This virtual function chooses a visual that matches
-  the OpenGL \l{format()}{format}. Reimplement this function
-  in a subclass if you need a custom visual.
-
-  \sa chooseContext()
 */
 
 /*!
@@ -3706,7 +3670,7 @@ QGLWidget::~QGLWidget()
 */
 
 /*!
-    \fn QFunctionPointer QGLContext::getProcAddress() const
+    \fn QFunctionPointer QGLContext::getProcAddress(const QString &proc) const
 
     Returns a function pointer to the GL extension function passed in
     \a proc. 0 is returned if a pointer to the function could not be
@@ -4046,14 +4010,6 @@ void QGLWidget::paintEvent(QPaintEvent *)
 
 
 /*!
-    \fn void QGLWidget::setMouseTracking(bool enable)
-
-    If \a enable is true then mouse tracking is enabled; otherwise it
-    is disabled.
-*/
-
-
-/*!
     Renders the current scene on a pixmap and returns the pixmap.
 
     You can use this method on both visible and invisible QGLWidget objects.
@@ -4128,6 +4084,11 @@ QPixmap QGLWidget::renderPixmap(int w, int h, bool useContext)
     Depending on your hardware, you can explicitly select which color
     buffer to grab with a glReadBuffer() call before calling this
     function.
+
+    On QNX the back buffer is not preserved when swapBuffers() is called. The back buffer
+    where this function reads from, might thus not contain the same content as the front buffer.
+    In order to retrieve what is currently visible on the screen, swapBuffers()
+    has to be executed prior to this function call.
 */
 QImage QGLWidget::grabFrameBuffer(bool withAlpha)
 {
@@ -4174,7 +4135,7 @@ void QGLWidget::glDraw()
         return;
     makeCurrent();
 #ifndef QT_OPENGL_ES
-    if (d->glcx->deviceIsPixmap() && !d->glcx->contextHandle()->isES())
+    if (d->glcx->deviceIsPixmap() && !d->glcx->contextHandle()->isOpenGLES())
         glDrawBuffer(GL_FRONT);
 #endif
     QSize readback_target_size = d->glcx->d_ptr->readback_target_size;
@@ -4219,7 +4180,7 @@ void QGLWidget::qglColor(const QColor& c) const
 #else
     Q_D(const QGLWidget);
     const QGLContext *ctx = QGLContext::currentContext();
-    if (ctx && !ctx->contextHandle()->isES()) {
+    if (ctx && !ctx->contextHandle()->isOpenGLES()) {
         if (ctx->format().rgba())
             glColor4f(c.redF(), c.greenF(), c.blueF(), c.alphaF());
         else if (!d->cmap.isEmpty()) { // QGLColormap in use?
@@ -4251,7 +4212,7 @@ void QGLWidget::qglClearColor(const QColor& c) const
 #else
     Q_D(const QGLWidget);
     const QGLContext *ctx = QGLContext::currentContext();
-    if (ctx && !ctx->contextHandle()->isES()) {
+    if (ctx && !ctx->contextHandle()->isOpenGLES()) {
         if (ctx->format().rgba())
             glClearColor(c.redF(), c.greenF(), c.blueF(), c.alphaF());
         else if (!d->cmap.isEmpty()) { // QGLColormap in use?
@@ -4426,7 +4387,7 @@ void QGLWidget::renderText(int x, int y, const QString &str, const QFont &font)
 {
 #ifndef QT_OPENGL_ES
     Q_D(QGLWidget);
-    if (!d->glcx->contextHandle()->isES()) {
+    if (!d->glcx->contextHandle()->isOpenGLES()) {
         Q_D(QGLWidget);
         if (str.isEmpty() || !isValid())
             return;
@@ -4516,7 +4477,7 @@ void QGLWidget::renderText(double x, double y, double z, const QString &str, con
 {
 #ifndef QT_OPENGL_ES
     Q_D(QGLWidget);
-    if (!d->glcx->contextHandle()->isES()) {
+    if (!d->glcx->contextHandle()->isOpenGLES()) {
         Q_D(QGLWidget);
         if (str.isEmpty() || !isValid())
             return;

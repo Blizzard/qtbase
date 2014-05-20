@@ -551,7 +551,7 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     QObject::signalsBlocked() state is transferred to this object.
 
     The object's signals this signal blocker was blocking prior to
-    being moved to, if any, are unblocked \em except in the case where
+    being moved to, if any, are unblocked \e except in the case where
     both instances block the same object's signals and \c *this is
     unblocked while \a other is not, at the time of the move.
 */
@@ -2731,9 +2731,7 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
             Qt::ConnectionType type)
     but it uses QMetaMethod to specify signal and method.
 
-    \sa connect(const QObject *sender, const char *signal,
-                const QObject *receiver, const char *method,
-                Qt::ConnectionType type)
+    \sa connect(const QObject *sender, const char *signal, const QObject *receiver, const char *method, Qt::ConnectionType type)
  */
 QMetaObject::Connection QObject::connect(const QObject *sender, const QMetaMethod &signal,
                                      const QObject *receiver, const QMetaMethod &method,
@@ -4065,18 +4063,21 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     \macro Q_CLASSINFO(Name, Value)
     \relates QObject
 
-    This macro associates extra information to the class, which is
-    available using QObject::metaObject(). Except for the ActiveQt
-    extension, Qt doesn't use this information.
+    This macro associates extra information to the class, which is available
+    using QObject::metaObject(). Qt makes only limited use of this feature, in
+    the \l{Active Qt}, \l{Qt D-Bus} and \l{Qt QML} modules.
 
-    The extra information takes the form of a \a Name string and a \a
-    Value literal string.
+    The extra information takes the form of a \a Name string and a \a Value
+    literal string.
 
     Example:
 
     \snippet code/src_corelib_kernel_qobject.cpp 35
 
     \sa QMetaObject::classInfo()
+    \sa QAxFactory
+    \sa {Using Qt D-Bus Adaptors}
+    \sa {Extending QML - Default Property Example}
 */
 
 /*!

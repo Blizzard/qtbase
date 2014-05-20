@@ -160,6 +160,7 @@ public:
         Exposed = 0x10000,
         WithinCreate = 0x20000,
         WithinMaximize = 0x40000,
+        MaximizeToFullScreen = 0x80000
     };
 
     QWindowsWindow(QWindow *window, const QWindowsWindowData &data);

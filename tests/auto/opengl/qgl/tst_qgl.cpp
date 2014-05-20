@@ -754,7 +754,7 @@ void tst_QGL::openGLVersionCheck()
 #elif defined(QT_OPENGL_ES_2)
     QVERIFY(QGLFormat::openGLVersionFlags() & QGLFormat::OpenGL_ES_Version_2_0);
 #else
-    if (QOpenGLContext::currentContext()->isES())
+    if (QOpenGLContext::currentContext()->isOpenGLES())
         QVERIFY(QGLFormat::openGLVersionFlags() & QGLFormat::OpenGL_ES_Version_2_0);
     else
         QVERIFY(QGLFormat::openGLVersionFlags() & QGLFormat::OpenGL_Version_1_1);
@@ -1064,6 +1064,12 @@ void tst_QGL::glWidgetRendering()
     QVERIFY(w.beginOk);
     QVERIFY(w.engineType == QPaintEngine::OpenGL || w.engineType == QPaintEngine::OpenGL2);
 
+#if defined(Q_OS_QNX)
+    // glReadPixels reads from the back buffer. On QNX the buffer is not preserved
+    // after a buffer swap. This is why we have to swap the buffer explicitly before calling
+    // grabFrameBuffer to retrieve the content of the front buffer.
+    w.swapBuffers();
+#endif
     QImage fb = w.grabFrameBuffer(false);
     qt_opengl_check_test_pattern(fb);
 }
@@ -1104,6 +1110,9 @@ void tst_QGL::glFBOSimpleRendering()
 //       buffer is actually missing. But that's probably ok anyway.
 void tst_QGL::glFBORendering()
 {
+#if defined(Q_OS_QNX)
+    QSKIP("Reading the QGLFramebufferObject is unsupported on this platform");
+#endif
     if (!QGLFramebufferObject::hasOpenGLFramebufferObjects())
         QSKIP("QGLFramebufferObject not supported on this platform");
 
@@ -1280,7 +1289,7 @@ protected:
         fboPainter.end();
         fboImage = fbo->toImage();
 
-        widgetPainter.fillRect(-1, -1, width()+2, width()+2, Qt::blue);
+        widgetPainter.fillRect(-1, -1, width()+2, height()+2, Qt::blue);
 
         delete fbo;
     }
@@ -1300,6 +1309,13 @@ void tst_QGL::glFBOUseInGLWidget()
 
     QVERIFY(w.widgetPainterBeginOk);
     QVERIFY(w.fboPainterBeginOk);
+
+#if defined(Q_OS_QNX)
+    // glReadPixels reads from the back buffer. On QNX the buffer is not preserved
+    // after a buffer swap. This is why we have to swap the buffer explicitly before calling
+    // grabFrameBuffer to retrieve the content of the front buffer
+    w.swapBuffers();
+#endif
 
     QImage widgetFB = w.grabFrameBuffer(false);
     QImage widgetReference(widgetFB.size(), widgetFB.format());
@@ -1536,7 +1552,7 @@ void tst_QGL::fboFormat()
 #ifdef QT_OPENGL_ES_2
         GL_RGBA;
 #else
-        QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL ? GL_RGBA : GL_RGBA8;
+        QOpenGLContext::openGLModuleType() != QOpenGLContext::LibGL ? GL_RGBA : GL_RGBA8;
 #endif
     QCOMPARE(int(format1.internalTextureFormat()), expectedFormat);
 
@@ -1613,7 +1629,7 @@ void tst_QGL::fboFormat()
 #ifdef QT_OPENGL_ES_2
         GL_RGBA
 #else
-        QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL ? GL_RGBA : GL_RGBA8
+        QOpenGLContext::openGLModuleType() != QOpenGLContext::LibGL ? GL_RGBA : GL_RGBA8
 #endif
         );
     QVERIFY(!(format1c == format3c));
@@ -1626,7 +1642,7 @@ void tst_QGL::fboFormat()
 #ifdef QT_OPENGL_ES_2
         GL_RGBA
 #else
-        QOpenGLContext::openGLModuleType() != QOpenGLContext::DesktopGL ? GL_RGBA : GL_RGBA8
+        QOpenGLContext::openGLModuleType() != QOpenGLContext::LibGL ? GL_RGBA : GL_RGBA8
 #endif
         );
     QVERIFY(!(format1c == format4c));
@@ -1691,6 +1707,12 @@ void tst_QGL::replaceClipping()
     glw.paint(&referencePainter);
     referencePainter.end();
 
+#if defined(Q_OS_QNX)
+    // glReadPixels reads from the back buffer. On QNX the buffer is not preserved
+    // after a buffer swap. This is why we have to swap the buffer explicitly before calling
+    // grabFrameBuffer to retrieve the content of the front buffer
+    glw.swapBuffers();
+#endif
     const QImage widgetFB = glw.grabFrameBuffer(false).convertToFormat(QImage::Format_RGB32);
 
     // Sample pixels in a grid pattern which avoids false failures due to
@@ -1802,6 +1824,12 @@ void tst_QGL::clipTest()
     glw.paint(&referencePainter);
     referencePainter.end();
 
+#if defined(Q_OS_QNX)
+    // glReadPixels reads from the back buffer. On QNX the buffer is not preserved
+    // after a buffer swap. This is why we have to swap the buffer explicitly before calling
+    // grabFrameBuffer to retrieve the content of the front buffer
+    glw.swapBuffers();
+#endif
     const QImage widgetFB = glw.grabFrameBuffer(false).convertToFormat(QImage::Format_RGB32);
 
     // Sample pixels in a grid pattern which avoids false failures due to
@@ -2389,10 +2417,10 @@ void tst_QGL::extensions()
         QVERIFY(allFeatures.testFlag(QOpenGLFunctions::Shaders));
         QVERIFY(allFeatures.testFlag(QOpenGLFunctions::Buffers));
         QVERIFY(allFeatures.testFlag(QOpenGLFunctions::Multisample));
-        QVERIFY(!ctx->isES() || allFeatures.testFlag(QOpenGLFunctions::Framebuffers));
+        QVERIFY(!ctx->isOpenGLES() || allFeatures.testFlag(QOpenGLFunctions::Framebuffers));
         QVERIFY(allFeatures.testFlag(QOpenGLFunctions::NPOTTextures)
                 && allFeatures.testFlag(QOpenGLFunctions::NPOTTextureRepeat));
-        if (ctx->isES()) {
+        if (ctx->isOpenGLES()) {
             QVERIFY(!allFeatures.testFlag(QOpenGLFunctions::FixedFunctionPipeline));
             QVERIFY(allFeatures.testFlag(QOpenGLFunctions::Framebuffers));
         }

@@ -192,6 +192,8 @@ private slots:
     void resume();
     void qtbug18498_peek();
     void qtbug18498_peek2();
+    void dhServer();
+    void ecdhServer();
     void setEmptyDefaultConfiguration(); // this test should be last
 
     static void exitLoop()
@@ -271,6 +273,9 @@ void tst_QSslSocket::initTestCase_data()
 
 void tst_QSslSocket::initTestCase()
 {
+    qDebug("Using SSL library %s (%ld)",
+           qPrintable(QSslSocket::sslLibraryVersionString()),
+           QSslSocket::sslLibraryVersionNumber());
     QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
 }
 
@@ -347,6 +352,9 @@ void tst_QSslSocket::proxyAuthenticationRequired(const QNetworkProxy &, QAuthent
 
 void tst_QSslSocket::constructing()
 {
+    const char readNotOpenMessage[] = "QIODevice::read: device not open";
+    const char writeNotOpenMessage[] = "QIODevice::write: device not open";
+
     if (!QSslSocket::supportsSsl())
         return;
 
@@ -363,6 +371,7 @@ void tst_QSslSocket::constructing()
     QCOMPARE(socket.sslConfiguration(), QSslConfiguration::defaultConfiguration());
     QCOMPARE(socket.errorString(), QString("Unknown error"));
     char c = '\0';
+    QTest::ignoreMessage(QtWarningMsg, readNotOpenMessage);
     QVERIFY(!socket.getChar(&c));
     QCOMPARE(c, '\0');
     QVERIFY(!socket.isOpen());
@@ -371,11 +380,16 @@ void tst_QSslSocket::constructing()
     QVERIFY(!socket.isTextModeEnabled());
     QVERIFY(!socket.isWritable());
     QCOMPARE(socket.openMode(), QIODevice::NotOpen);
+    QTest::ignoreMessage(QtWarningMsg, readNotOpenMessage);
     QVERIFY(socket.peek(2).isEmpty());
     QCOMPARE(socket.pos(), qint64(0));
+    QTest::ignoreMessage(QtWarningMsg, writeNotOpenMessage);
     QVERIFY(!socket.putChar('c'));
+    QTest::ignoreMessage(QtWarningMsg, readNotOpenMessage);
     QVERIFY(socket.read(2).isEmpty());
+    QTest::ignoreMessage(QtWarningMsg, readNotOpenMessage);
     QCOMPARE(socket.read(0, 0), qint64(-1));
+    QTest::ignoreMessage(QtWarningMsg, readNotOpenMessage);
     QVERIFY(socket.readAll().isEmpty());
     QTest::ignoreMessage(QtWarningMsg, "QIODevice::readLine: Called with maxSize < 2");
     QCOMPARE(socket.readLine(0, 0), qint64(-1));
@@ -388,7 +402,9 @@ void tst_QSslSocket::constructing()
     QCOMPARE(socket.size(), qint64(0));
     QVERIFY(!socket.waitForBytesWritten(10));
     QVERIFY(!socket.waitForReadyRead(10));
+    QTest::ignoreMessage(QtWarningMsg, writeNotOpenMessage);
     QCOMPARE(socket.write(0, 0), qint64(-1));
+    QTest::ignoreMessage(QtWarningMsg, writeNotOpenMessage);
     QCOMPARE(socket.write(QByteArray()), qint64(-1));
     QCOMPARE(socket.error(), QAbstractSocket::UnknownSocketError);
     QVERIFY(!socket.flush());
@@ -672,7 +688,7 @@ void tst_QSslSocket::sessionCipher()
     connect(socket.data(), SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(ignoreErrorSlot()));
     QVERIFY(socket->sessionCipher().isNull());
     socket->connectToHost(QtNetworkSettings::serverName(), 443 /* https */);
-    QVERIFY(socket->waitForConnected(10000));
+    QVERIFY2(socket->waitForConnected(10000), qPrintable(socket->errorString()));
     QVERIFY(socket->sessionCipher().isNull());
     socket->startClientEncryption();
     if (!socket->waitForEncrypted(5000))
@@ -775,7 +791,7 @@ void tst_QSslSocket::peerCertificateChain()
     socket->connectToHost(QtNetworkSettings::serverName(), 443);
     QCOMPARE(socket->mode(), QSslSocket::UnencryptedMode);
     QVERIFY(socket->peerCertificateChain().isEmpty());
-    QVERIFY2(socket->waitForConnected(10000), "Network timeout");
+    QVERIFY2(socket->waitForConnected(10000), qPrintable(socket->errorString()));
 
     socket->startClientEncryption();
     if (setProxy && !socket->waitForEncrypted(10000))
@@ -990,6 +1006,7 @@ public:
     QString m_keyFile;
     QString m_certFile;
     QString m_interFile;
+    QString ciphers;
 
 protected:
     void incomingConnection(qintptr socketDescriptor)
@@ -1021,6 +1038,10 @@ protected:
             QVERIFY(interCert.first().handle());
 
             socket->setLocalCertificateChain(localCert + interCert);
+        }
+
+        if (!ciphers.isEmpty()) {
+            socket->setCiphers(ciphers);
         }
 
         QVERIFY(socket->setSocketDescriptor(socketDescriptor, QAbstractSocket::ConnectedState));
@@ -1334,7 +1355,7 @@ void tst_QSslSocket::waitForConnectedEncryptedReadyRead()
     connect(this->socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(ignoreErrorSlot()));
     socket->connectToHostEncrypted(QtNetworkSettings::serverName(), 993);
 
-    QVERIFY(socket->waitForConnected(10000));
+    QVERIFY2(socket->waitForConnected(10000), qPrintable(socket->errorString()));
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy && !socket->waitForEncrypted(10000))
         QSKIP("Skipping flaky test - See QTBUG-29941");
@@ -1679,7 +1700,7 @@ void tst_QSslSocket::setReadBufferSize_task_250027()
     socket->ignoreSslErrors();
     socket->connectToHostEncrypted(QtNetworkSettings::serverName(), 443);
     socket->ignoreSslErrors();
-    QVERIFY(socket->waitForConnected(10*1000));
+    QVERIFY2(socket->waitForConnected(10*1000), qPrintable(socket->errorString()));
     if (setProxy && !socket->waitForEncrypted(10*1000))
         QSKIP("Skipping flaky test - See QTBUG-29941");
 
@@ -2649,6 +2670,66 @@ void tst_QSslSocket::qtbug18498_peek2()
     QCOMPARE(server->readAll(), QByteArray("goodbye\r\n"));
     client->disconnectFromHost();
     QVERIFY(client->waitForDisconnected(5000));
+}
+
+void tst_QSslSocket::dhServer()
+{
+    if (!QSslSocket::supportsSsl()) {
+        qWarning("SSL not supported, skipping test");
+        return;
+    }
+
+    QFETCH_GLOBAL(bool, setProxy);
+    if (setProxy)
+        return;
+
+    SslServer server;
+    server.ciphers = QLatin1String("DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA");
+    QVERIFY(server.listen());
+
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, SLOT(quit()));
+
+    QSslSocketPtr client(new QSslSocket);
+    socket = client.data();
+    connect(socket, SIGNAL(error(QAbstractSocket::SocketError)), &loop, SLOT(quit()));
+    connect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(ignoreErrorSlot()));
+    connect(socket, SIGNAL(encrypted()), &loop, SLOT(quit()));
+
+    client->connectToHostEncrypted(QHostAddress(QHostAddress::LocalHost).toString(), server.serverPort());
+
+    loop.exec();
+    QVERIFY(client->state() == QAbstractSocket::ConnectedState);
+}
+
+void tst_QSslSocket::ecdhServer()
+{
+    if (!QSslSocket::supportsSsl()) {
+        qWarning("SSL not supported, skipping test");
+        return;
+    }
+
+    QFETCH_GLOBAL(bool, setProxy);
+    if (setProxy)
+        return;
+
+    SslServer server;
+    server.ciphers = QLatin1String("ECDHE-RSA-AES128-SHA");
+    QVERIFY(server.listen());
+
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, SLOT(quit()));
+
+    QSslSocketPtr client(new QSslSocket);
+    socket = client.data();
+    connect(socket, SIGNAL(error(QAbstractSocket::SocketError)), &loop, SLOT(quit()));
+    connect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(ignoreErrorSlot()));
+    connect(socket, SIGNAL(encrypted()), &loop, SLOT(quit()));
+
+    client->connectToHostEncrypted(QHostAddress(QHostAddress::LocalHost).toString(), server.serverPort());
+
+    loop.exec();
+    QVERIFY(client->state() == QAbstractSocket::ConnectedState);
 }
 
 void tst_QSslSocket::setEmptyDefaultConfiguration() // this test should be last, as it has some side effects

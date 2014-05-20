@@ -44,6 +44,7 @@
 #include <QtCore/private/qobject_p.h>
 #include <QtGui/qopenglcontext.h>
 #include <QtGui/qopenglfunctions.h>
+#include <QtGui/qoffscreensurface.h>
 
 #include <QtGui/qopenglfunctions_3_0.h>
 #include <QtGui/qopenglfunctions_3_2_core.h>
@@ -59,7 +60,7 @@ public:
     QVertexArrayObjectHelper(QOpenGLContext *context)
     {
         Q_ASSERT(context);
-        if (context->isES()) {
+        if (context->isOpenGLES()) {
             GenVertexArrays = reinterpret_cast<void (QOPENGLF_APIENTRYP)(GLsizei , GLuint *)>(context->getProcAddress(QByteArrayLiteral("glGenVertexArraysOES")));
             DeleteVertexArrays = reinterpret_cast<void (QOPENGLF_APIENTRYP)(GLsizei , const GLuint *)>(context->getProcAddress(QByteArrayLiteral("glDeleteVertexArraysOES")));
             BindVertexArray = reinterpret_cast<void (QOPENGLF_APIENTRYP)(GLuint )>(context->getProcAddress(QByteArrayLiteral("glBindVertexArrayOES")));
@@ -149,8 +150,6 @@ bool QOpenGLVertexArrayObjectPrivate::create()
     }
 
     Q_Q(QOpenGLVertexArrayObject);
-    if (context)
-        QObject::disconnect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
 
     QOpenGLContext *ctx = QOpenGLContext::currentContext();
     if (!ctx) {
@@ -160,7 +159,7 @@ bool QOpenGLVertexArrayObjectPrivate::create()
     context = ctx;
     QObject::connect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
 
-    if (ctx->isES()) {
+    if (ctx->isOpenGLES()) {
         if (ctx->hasExtension(QByteArrayLiteral("GL_OES_vertex_array_object"))) {
             vaoFuncs.helper = new QVertexArrayObjectHelper(ctx);
             vaoFuncsType = OES;
@@ -202,6 +201,8 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
     if (!vao)
         return;
 
+    Q_Q(QOpenGLVertexArrayObject);
+
     switch (vaoFuncsType) {
 #ifndef QT_OPENGL_ES_2
     case Core_3_2:
@@ -219,6 +220,10 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
     default:
         break;
     }
+
+    Q_ASSERT(context);
+    QObject::disconnect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
+    context = 0;
 
     vao = 0;
 }
@@ -355,9 +360,17 @@ QOpenGLVertexArrayObject::~QOpenGLVertexArrayObject()
 
     Q_D(QOpenGLVertexArrayObject);
     QOpenGLContext *oldContext = 0;
+    QScopedPointer<QOffscreenSurface> offscreenSurface;
     if (d->context && ctx && d->context != ctx) {
         oldContext = ctx;
-        if (d->context->makeCurrent(oldContext->surface())) {
+        // Cannot just make the current surface current again with another context.
+        // The format may be incompatible and some platforms (iOS) may impose
+        // restrictions on using a window with different contexts. Create an
+        // offscreen surface (a pbuffer or a hidden window) instead to be safe.
+        offscreenSurface.reset(new QOffscreenSurface);
+        offscreenSurface->setFormat(d->context->format());
+        offscreenSurface->create();
+        if (d->context->makeCurrent(offscreenSurface.data())) {
             ctx = d->context;
         } else {
             qWarning("QOpenGLVertexArrayObject::~QOpenGLVertexArrayObject() failed to make VAO's context current");

@@ -171,15 +171,18 @@ QPrint::DeviceState QCocoaPrintDevice::state() const
 
 QPageSize QCocoaPrintDevice::createPageSize(const PMPaper &paper) const
 {
-    QCFString key;
+    CFStringRef key;
     double width;
     double height;
-    QCFString localizedName;
+    CFStringRef localizedName;
     if (PMPaperGetPPDPaperName(paper, &key) == noErr
         && PMPaperGetWidth(paper, &width) == noErr
         && PMPaperGetHeight(paper, &height) == noErr
         && PMPaperCreateLocalizedName(paper, m_printer, &localizedName) == noErr) {
-        return(QPlatformPrintDevice::createPageSize(key, QSize(width, height), localizedName));
+        QPageSize pageSize = QPlatformPrintDevice::createPageSize(QString::fromCFString(key),QSize(width, height),
+                                                                  QString::fromCFString(localizedName));
+        CFRelease(localizedName);
+        return pageSize;
     }
     return QPageSize();
 }
@@ -216,10 +219,11 @@ QPageSize QCocoaPrintDevice::defaultPageSize() const
     QPageSize pageSize;
     PMPageFormat pageFormat;
     PMPaper paper;
-    if (PMCreatePageFormat(&pageFormat) == noErr
-        && PMSessionDefaultPageFormat(m_session, pageFormat) == noErr
-        && PMGetPageFormatPaper(pageFormat, &paper) == noErr) {
-        pageSize = createPageSize(paper);
+    if (PMCreatePageFormat(&pageFormat) == noErr) {
+        if (PMSessionDefaultPageFormat(m_session, pageFormat) == noErr
+            && PMGetPageFormatPaper(pageFormat, &paper) == noErr) {
+            pageSize = createPageSize(paper);
+        }
         PMRelease(pageFormat);
     }
     return pageSize;
@@ -459,7 +463,11 @@ bool QCocoaPrintDevice::openPpdFile()
         ppdClose(m_ppd);
     m_ppd = 0;
     CFURLRef ppdURL = NULL;
+#if MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_7
+    char ppdPath[PATH_MAX];
+#else
     char ppdPath[MAXPATHLEN];
+#endif
     if (PMPrinterCopyDescriptionURL(m_printer, kPMPPDDescriptionType, &ppdURL) == noErr
         && ppdURL != NULL
         && CFURLGetFileSystemRepresentation(ppdURL, true, (UInt8*)ppdPath, sizeof(ppdPath))) {

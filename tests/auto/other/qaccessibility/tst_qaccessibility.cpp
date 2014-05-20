@@ -1415,19 +1415,19 @@ void tst_QAccessibility::menuTest()
     iFile->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(file->isVisible() && !edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(file->isVisible() && !edit->isVisible() && !help->isVisible());
     iEdit->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && edit->isVisible() && !help->isVisible());
     iHelp->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && !edit->isVisible() && help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && !edit->isVisible() && help->isVisible());
     iAction->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     if(menuFade)
         QTest::qWait(menuFadeDelay);
-    QVERIFY(!file->isVisible() && !edit->isVisible() && !help->isVisible());
+    QTRY_VERIFY(!file->isVisible() && !edit->isVisible() && !help->isVisible());
 
     QVERIFY(interface->actionInterface());
     QCOMPARE(interface->actionInterface()->actionNames(), QStringList());
@@ -1500,8 +1500,8 @@ void tst_QAccessibility::menuTest()
     iFile->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     iFileNew->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
 
-    QVERIFY(file->isVisible());
-    QVERIFY(fileNew->isVisible());
+    QTRY_VERIFY(file->isVisible());
+    QTRY_VERIFY(fileNew->isVisible());
     QVERIFY(!edit->isVisible());
     QVERIFY(!help->isVisible());
 
@@ -1711,6 +1711,48 @@ void tst_QAccessibility::textEditTest()
         QCOMPARE(textIface->textAtOffset(28, QAccessible::CharBoundary, &start, &end), QLatin1String("\n"));
         QCOMPARE(start, 28);
         QCOMPARE(end, 29);
+
+        edit.clear();
+        QTestAccessibility::clearEvents();
+
+        // make sure we get notifications when typing text
+        QTestEventList keys;
+        keys.addKeyClick('A');
+        keys.simulate(&edit);
+        keys.clear();
+        QAccessibleTextInsertEvent insertA(&edit, 0, "A");
+        QVERIFY_EVENT(&insertA);
+        QAccessibleTextCursorEvent move1(&edit, 1);
+        QVERIFY_EVENT(&move1);
+
+
+        keys.addKeyClick('c');
+        keys.simulate(&edit);
+        keys.clear();
+        QAccessibleTextInsertEvent insertC(&edit, 1, "c");
+        QVERIFY_EVENT(&insertC);
+        QAccessibleTextCursorEvent move2(&edit, 2);
+        QVERIFY_EVENT(&move2);
+
+        keys.addKeyClick(Qt::Key_Backspace);
+        keys.simulate(&edit);
+        keys.clear();
+
+        // FIXME this should get a proper string instead of space
+        QAccessibleTextRemoveEvent del(&edit, 1, " ");
+        QVERIFY_EVENT(&del);
+        QVERIFY_EVENT(&move1);
+
+        // it would be nicer to get a text update event, but the current implementation
+        // instead does remove and insert which is also fine
+        edit.setText(QStringLiteral("Accessibility rocks"));
+        QAccessibleTextRemoveEvent remove(&edit, 0, "  ");
+        QVERIFY_EVENT(&remove);
+
+        // FIXME the new text is not there yet
+        QEXPECT_FAIL("", "Inserting should always contain the new text", Continue);
+        QAccessibleTextInsertEvent insert(&edit, 0, "Accessibility rocks");
+        QVERIFY_EVENT(&insert);
         }
         QTestAccessibility::clearEvents();
     }
