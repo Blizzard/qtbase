@@ -760,9 +760,13 @@ void QWindowsGeometryHint::applyToMinMaxInfo(DWORD style, DWORD exStyle, MINMAXI
         << " in " << *mmi;
 
     QMargins margins;
-    const QWindowsWindow *ww = static_cast<const QWindowsWindow *>(window->handle());
-    if (!ww->emptyDefaultMargins()) {
-        margins = QWindowsGeometryHint::frame(style, exStyle);
+    if (const QWindowsWindow *ww = static_cast<const QWindowsWindow *>(window->handle())) {
+        if (!ww->emptyDefaultMargins())
+            margins = QWindowsGeometryHint::frame(style, exStyle);
+    } else {
+        QVariant prop = window->property("_q_windowsEmptyDefaultMargins");
+        if (!prop.isValid() || !prop.value<bool>())
+            margins = QWindowsGeometryHint::frame(style, exStyle);
     }
 
     const int frameWidth = margins.left() + margins.right() + customMargins.left() + customMargins.right();
