@@ -2383,6 +2383,13 @@ QSize QComboBox::sizeHint() const
  * Tries to show a native popup. Returns true if it could, false otherwise.
  *
  */
+struct IndexSetter {
+    int index;
+    QComboBox *cb;
+
+    void operator()(void) { cb->setCurrentIndex(index); }
+};
+
 bool QComboBoxPrivate::showNativePopup()
 {
     Q_Q(QComboBox);
@@ -2390,13 +2397,6 @@ bool QComboBoxPrivate::showNativePopup()
     QPlatformTheme *theme = QGuiApplicationPrivate::instance()->platformTheme();
     if (QPlatformMenu *menu = theme->createPlatformMenu()) {
         int itemsCount = q->count();
-
-        struct IndexSetter {
-            int index;
-            QComboBox *cb;
-
-            void operator()(void) { cb->setCurrentIndex(index); }
-        };
 
         QList<QPlatformMenuItem *> items;
         items.reserve(itemsCount);
