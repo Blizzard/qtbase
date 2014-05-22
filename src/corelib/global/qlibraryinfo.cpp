@@ -65,6 +65,9 @@ QString qt_libraryInfoFile()
 #ifdef Q_OS_MAC
 #  include "private/qcore_mac_p.h"
 #endif
+#ifdef Q_OS_WIN
+#  include "qt_windows.h"
+#endif
 
 #include "qconfig.cpp"
 
@@ -176,6 +179,19 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
             {
                 QDir pwd(QCoreApplication::applicationDirPath());
                 qtconfig = pwd.filePath(QLatin1String("qt.conf"));
+#ifdef Q_OS_WIN
+                if (!QFile::exists(qtconfig)) {
+#ifdef QT_DEBUG
+                    HMODULE hModule = GetModuleHandle(L"Qt5Cored.dll");
+#else
+                    HMODULE hModule = GetModuleHandle(L"Qt5Core.dll");
+#endif // QT_DEBUG
+                    WCHAR dllPath[_MAX_PATH];
+                    GetModuleFileNameW(hModule, dllPath, _MAX_PATH);
+                    QDir dllDir =  QFileInfo(QString::fromWCharArray(dllPath)).dir();
+                    qtconfig = dllDir.filePath(QLatin1String("qt.conf"));
+                }
+#endif // Q_OS_WIN
             }
     }
 #endif
