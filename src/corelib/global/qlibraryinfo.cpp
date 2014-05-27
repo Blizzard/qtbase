@@ -179,8 +179,9 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
             {
                 QDir pwd(QCoreApplication::applicationDirPath());
                 qtconfig = pwd.filePath(QLatin1String("qt.conf"));
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
                 if (!QFile::exists(qtconfig)) {
+                    // Use qt.conf found next to dll if it exists.
 #ifdef QT_DEBUG
                     HMODULE hModule = GetModuleHandle(L"Qt5Cored.dll");
 #else
@@ -190,8 +191,26 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
                     GetModuleFileNameW(hModule, dllPath, _MAX_PATH);
                     QDir dllDir =  QFileInfo(QString::fromWCharArray(dllPath)).dir();
                     qtconfig = dllDir.filePath(QLatin1String("qt.conf"));
+                    if (QFile::exists(qtconfig)) {
+                        QSettings *settings = new QSettings(qtconfig, QSettings::IniFormat);
+                        // If we have 'RelativePrefix', and 'Prefix' is not supplied, then we create
+                        // a prefix path using a relative path to the binary location.
+                        settings->beginGroup(QLatin1String("Paths"));
+                        if (settings->contains(QLatin1String("RelativePrefix"))
+                            && !settings->contains(QLatin1String("Prefix"))) {
+                            QString prefixPath = dllDir.absolutePath();
+                            QString suffix = settings->value(QLatin1String("RelativePrefix"),
+                                                             QString()).toString();
+                            if (!suffix.isEmpty()) {
+                                prefixPath += QLatin1String("/") + suffix;
+                            }
+                            settings->setValue(QLatin1String("Prefix"), prefixPath);
+                        }
+                        settings->endGroup();
+                        return settings;
+                    }
                 }
-#endif // Q_OS_WIN
+#endif
             }
     }
 #endif
