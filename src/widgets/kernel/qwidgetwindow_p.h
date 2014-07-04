@@ -65,7 +65,7 @@ class QCloseEvent;
 class QMoveEvent;
 class QWidgetWindowPrivate;
 
-class QWidgetWindow : public QWindow
+class Q_WIDGETS_EXPORT QWidgetWindow : public QWindow
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QWidgetWindow)
