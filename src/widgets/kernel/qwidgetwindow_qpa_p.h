@@ -53,7 +53,7 @@ QT_BEGIN_NAMESPACE
 class QCloseEvent;
 class QMoveEvent;
 
-class QWidgetWindow : public QWindow
+class Q_WIDGETS_EXPORT QWidgetWindow : public QWindow
 {
     Q_OBJECT
 public:
