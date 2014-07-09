@@ -423,6 +423,7 @@ namespace QtAndroid
                                      m_destroySurfaceMethodID,
                                      surfaceId);
     }
+
 } // namespace QtAndroid
 
 
@@ -463,17 +464,19 @@ static void *startMainMethod(void */*data*/)
 static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring paramsString, jstring environmentString)
 {
     m_mainLibraryHnd = NULL;
-    const char *nativeString = env->GetStringUTFChars(environmentString, 0);
-    QByteArray string = nativeString;
-    env->ReleaseStringUTFChars(environmentString, nativeString);
-    m_applicationParams=string.split('\t');
-    foreach (string, m_applicationParams) {
-        if (!string.isEmpty() && putenv(string.constData()))
-            qWarning() << "Can't set environment" << string;
+    { // Set env. vars
+        const char *nativeString = env->GetStringUTFChars(environmentString, 0);
+        const QList<QByteArray> envVars = QByteArray(nativeString).split('\t');
+        env->ReleaseStringUTFChars(environmentString, nativeString);
+        foreach (const QByteArray &envVar, envVars) {
+            const QList<QByteArray> envVarPair = envVar.split('=');
+            if (envVarPair.size() == 2 && ::setenv(envVarPair[0], envVarPair[1], 1) != 0)
+                qWarning() << "Can't set environment" << envVarPair;
+        }
     }
 
-    nativeString = env->GetStringUTFChars(paramsString, 0);
-    string = nativeString;
+    const char *nativeString = env->GetStringUTFChars(paramsString, 0);
+    QByteArray string = nativeString;
     env->ReleaseStringUTFChars(paramsString, nativeString);
 
     m_applicationParams=string.split('\t');
@@ -546,7 +549,7 @@ static void setSurface(JNIEnv *env, jobject /*thiz*/, jint id, jobject jSurface,
 }
 
 static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
-                            jint /*widthPixels*/, jint /*heightPixels*/,
+                            jint widthPixels, jint heightPixels,
                             jint desktopWidthPixels, jint desktopHeightPixels,
                             jdouble xdpi, jdouble ydpi, jdouble scaledDensity)
 {
@@ -555,13 +558,17 @@ static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
     m_scaledDensity = scaledDensity;
 
     if (!m_androidPlatformIntegration) {
-        QAndroidPlatformIntegration::setDefaultDisplayMetrics(desktopWidthPixels,desktopHeightPixels,
-                                                                qRound(double(desktopWidthPixels)  / xdpi * 25.4),
-                                                                qRound(double(desktopHeightPixels) / ydpi * 25.4));
+        QAndroidPlatformIntegration::setDefaultDisplayMetrics(desktopWidthPixels,
+                                                              desktopHeightPixels,
+                                                              qRound(double(desktopWidthPixels)  / xdpi * 25.4),
+                                                              qRound(double(desktopHeightPixels) / ydpi * 25.4),
+                                                              widthPixels,
+                                                              heightPixels);
     } else {
         m_androidPlatformIntegration->setDisplayMetrics(qRound(double(desktopWidthPixels)  / xdpi * 25.4),
                                                         qRound(double(desktopHeightPixels) / ydpi * 25.4));
         m_androidPlatformIntegration->setDesktopSize(desktopWidthPixels, desktopHeightPixels);
+        m_androidPlatformIntegration->setScreenSize(widthPixels, heightPixels);
     }
 }
 
@@ -571,8 +578,11 @@ static void updateWindow(JNIEnv */*env*/, jobject /*thiz*/)
         return;
 
     if (QGuiApplication::instance() != 0) {
-        foreach (QWindow *w, QGuiApplication::topLevelWindows())
-            QWindowSystemInterface::handleExposeEvent(w, QRegion(w->geometry()));
+        foreach (QWindow *w, QGuiApplication::topLevelWindows()) {
+            QRect availableGeometry = w->screen()->availableGeometry();
+            if (w->geometry().width() > 0 && w->geometry().height() > 0 && availableGeometry.width() > 0 && availableGeometry.height() > 0)
+                QWindowSystemInterface::handleExposeEvent(w, QRegion(w->geometry()));
+        }
     }
 
     QAndroidPlatformScreen *screen = static_cast<QAndroidPlatformScreen *>(m_androidPlatformIntegration->screen());
@@ -738,15 +748,6 @@ static int registerNatives(JNIEnv *env)
     return JNI_TRUE;
 }
 
-jint androidApiLevel(JNIEnv *env)
-{
-    jclass clazz;
-    FIND_AND_CHECK_CLASS("android/os/Build$VERSION");
-    jfieldID fieldId;
-    GET_AND_CHECK_STATIC_FIELD(fieldId, clazz, "SDK_INT", "I");
-    return env->GetStaticIntField(clazz, fieldId);
-}
-
 Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
 {
     typedef union {
@@ -772,12 +773,6 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
             || !QtAndroidAccessibility::registerNatives(env)
             || !QtAndroidDialogHelpers::registerNatives(env)) {
         __android_log_print(ANDROID_LOG_FATAL, "Qt", "registerNatives failed");
-        return -1;
-    }
-
-    jint apiLevel = androidApiLevel(env);
-    if (apiLevel >= 16 && !QtAndroidAccessibility::registerNatives(env)) {
-        __android_log_print(ANDROID_LOG_FATAL, "Qt A11y", "registerNatives failed");
         return -1;
     }
 

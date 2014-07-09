@@ -84,7 +84,6 @@ static QStringList dependModules;
 static QStringList indexDirs;
 static QString currentDir;
 static QString prevCurrentDir;
-static QString documentationPath;
 
 /*!
   Print the help message to \c stdout.
@@ -154,11 +153,6 @@ static void loadIndexFiles(Config& config)
         if (singleOutputSubdir.isEmpty())
             singleOutputSubdir = "html";
     }
-
-    // Allow modules and third-party application/libraries to link
-    // to the Qt docs without having to explicitly pass --indexdir.
-    if (!indexDirs.contains(documentationPath))
-        indexDirs.append(documentationPath);
 
     if (dependModules.size() > 0) {
         if (indexDirs.size() > 0) {
@@ -230,8 +224,7 @@ static void loadIndexFiles(Config& config)
             }
         }
         else {
-            qDebug() << "Dependant modules specified, but no index directories or "
-                     << "install directory were set."
+            qDebug() << "Dependent modules specified, but no index directories were set."
                      << "There will probably be errors for missing links.";
         }
     }
@@ -542,6 +535,7 @@ static void processQdocconfFile(const QString &fileName)
     Generator::debugSegfault("qdoc finished!");
 }
 
+extern Q_CORE_EXPORT QBasicAtomicInt qt_qhash_seed;
 QT_END_NAMESPACE
 
 int main(int argc, char **argv)
@@ -549,6 +543,7 @@ int main(int argc, char **argv)
     QT_USE_NAMESPACE
 
 #ifndef QT_BOOTSTRAPPED
+    qt_qhash_seed.testAndSetRelaxed(-1, 0); // set the hash seed to 0 if it wasn't set yet
     QCoreApplication app(argc, argv);
 #endif
 
@@ -622,7 +617,6 @@ int main(int argc, char **argv)
         }
         else if (opt == "-installdir") {
             Config::installDir = argv[i];
-            indexDirs += argv[i];
             i++;
         }
         else if (opt == "-obsoletelinks") {

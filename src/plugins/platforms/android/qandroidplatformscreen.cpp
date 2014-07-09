@@ -55,6 +55,9 @@
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
 
+#include <QtGui/QGuiApplication>
+#include <QtGui/QWindow>
+
 QT_BEGIN_NAMESPACE
 
 #ifdef QANDROIDPLATFORMSCREEN_DEBUG
@@ -83,7 +86,8 @@ private:
 
 QAndroidPlatformScreen::QAndroidPlatformScreen():QObject(),QPlatformScreen()
 {
-    m_geometry = QRect(0, 0, QAndroidPlatformIntegration::m_defaultGeometryWidth, QAndroidPlatformIntegration::m_defaultGeometryHeight);
+    m_availableGeometry = QRect(0, 0, QAndroidPlatformIntegration::m_defaultGeometryWidth, QAndroidPlatformIntegration::m_defaultGeometryHeight);
+    m_size = QSize(QAndroidPlatformIntegration::m_defaultScreenWidth, QAndroidPlatformIntegration::m_defaultScreenHeight);
     // Raster only apps should set QT_ANDROID_RASTER_IMAGE_DEPTH to 16
     // is way much faster than 32
     if (qgetenv("QT_ANDROID_RASTER_IMAGE_DEPTH").toInt() == 16) {
@@ -201,7 +205,7 @@ void QAndroidPlatformScreen::scheduleUpdate()
 
 void QAndroidPlatformScreen::setDirty(const QRect &rect)
 {
-    QRect intersection = rect.intersected(m_geometry);
+    QRect intersection = rect.intersected(m_availableGeometry);
     m_dirtyRect |= intersection;
     scheduleUpdate();
 }
@@ -211,16 +215,36 @@ void QAndroidPlatformScreen::setPhysicalSize(const QSize &size)
     m_physicalSize = size;
 }
 
-void QAndroidPlatformScreen::setGeometry(const QRect &rect)
+void QAndroidPlatformScreen::setSize(const QSize &size)
+{
+    m_size = size;
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
+}
+
+void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
 {
     QMutexLocker lock(&m_surfaceMutex);
-    if (m_geometry == rect)
+    if (m_availableGeometry == rect)
         return;
 
-    m_geometry = rect;
+    QRect oldGeometry = m_availableGeometry;
+
+    m_availableGeometry = rect;
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
     QWindowSystemInterface::handleScreenAvailableGeometryChange(QPlatformScreen::screen(), availableGeometry());
     resizeMaximizedWindows();
+
+    if (oldGeometry.width() == 0 && oldGeometry.height() == 0 && rect.width() > 0 && rect.height() > 0) {
+        QList<QWindow *> windows = QGuiApplication::allWindows();
+        for (int i = 0; i < windows.size(); ++i) {
+            QWindow *w = windows.at(i);
+            if (w->handle()) {
+                QRect geometry = w->handle()->geometry();
+                if (geometry.width() > 0 && geometry.height() > 0)
+                    QWindowSystemInterface::handleExposeEvent(w, QRegion(geometry));
+            }
+        }
+    }
 
     if (m_id != -1) {
         if (m_nativeSurface) {
@@ -256,7 +280,7 @@ void QAndroidPlatformScreen::doRedraw()
 
     QMutexLocker lock(&m_surfaceMutex);
     if (m_id == -1 && m_rasterSurfaces) {
-        m_id = QtAndroid::createSurface(this, m_geometry, true, m_depth);
+        m_id = QtAndroid::createSurface(this, m_availableGeometry, true, m_depth);
         m_surfaceWaitCondition.wait(&m_surfaceMutex);
     }
 

@@ -455,7 +455,7 @@ void QWindow::setVisible(bool visible)
     }
 
 #ifndef QT_NO_CURSOR
-    if (visible && d->hasCursor)
+    if (visible && (d->hasCursor || QGuiApplication::overrideCursor()))
         d->applyCursor();
 #endif
     d->platformWindow->setVisible(visible);
@@ -743,7 +743,7 @@ void QWindow::setTitle(const QString &title)
         d->windowTitle = title;
         changed = true;
     }
-    if (d->platformWindow)
+    if (d->platformWindow && type() != Qt::Desktop)
         d->platformWindow->setWindowTitle(title);
     if (changed)
         emit windowTitleChanged(title);

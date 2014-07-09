@@ -288,6 +288,7 @@ private slots:
 
 #ifndef Q_OS_MAC
     void scroll();
+    void scrollNativeChildren();
 #endif
 
     // tests QWidget::setGeometry()
@@ -1209,6 +1210,12 @@ void tst_QWidget::isEnabledTo()
     QVERIFY( !childWidget->isEnabledTo( testWidget ) );
     QVERIFY( grandChildWidget->isEnabledTo( childWidget ) );
     QVERIFY( !grandChildWidget->isEnabledTo( testWidget ) );
+
+    QMainWindow* childDialog = new QMainWindow(testWidget);
+    testWidget->setEnabled(false);
+    QVERIFY(!childDialog->isEnabled());
+    QVERIFY(childDialog->isEnabledTo(0));
+    testWidget->setEnabled(true);
 }
 
 void tst_QWidget::visible()
@@ -4336,7 +4343,30 @@ void tst_QWidget::scroll()
         QTRY_COMPARE(updateWidget.paintedRegion, dirty);
     }
 }
-#endif
+
+// QTBUG-38999, scrolling a widget with native child widgets should move the children.
+void tst_QWidget::scrollNativeChildren()
+{
+    QWidget parent;
+    parent.setWindowTitle(QLatin1String(__FUNCTION__));
+    parent.resize(400, 400);
+    centerOnScreen(&parent);
+    QLabel *nativeLabel = new QLabel(QStringLiteral("nativeLabel"), &parent);
+    const QPoint oldLabelPos(100, 100);
+    nativeLabel->move(oldLabelPos);
+    QVERIFY(nativeLabel->winId());
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    const QPoint delta(50, 50);
+    parent.scroll(delta.x(), delta.y());
+    const QPoint newLabelPos = oldLabelPos + delta;
+    QWindow *labelWindow = nativeLabel->windowHandle();
+    QVERIFY(labelWindow);
+    QTRY_COMPARE(labelWindow->geometry().topLeft(), newLabelPos);
+    QTRY_COMPARE(nativeLabel->geometry().topLeft(), newLabelPos);
+}
+
+#endif // Mac OS
 
 class DestroyedSlotChecker : public QObject
 {
@@ -4631,32 +4661,28 @@ void tst_QWidget::windowMoveResize()
 
         QTest::qWait(10);
         QTRY_COMPARE(widget.pos(), rect.topLeft());
-        if (m_platform == QStringLiteral("windows")) {
-            QEXPECT_FAIL("130,100 0x200, flags 0", "QTBUG-26424", Continue);
-            QEXPECT_FAIL("130,50 0x0, flags 0", "QTBUG-26424", Continue);
-        }
-        QTRY_COMPARE(widget.size(), rect.size());
+        // Windows: Minimum size of decorated windows.
+        const bool expectResizeFail = (!windowFlags && (rect.width() < 160 || rect.height() < 40))
+            && m_platform == QStringLiteral("windows");
+        if (!expectResizeFail)
+            QTRY_COMPARE(widget.size(), rect.size());
 
         // move() while shown
         foreach (const QRect &r, rects) {
-            if (m_platform == QStringLiteral("xcb")
-               && ((widget.width() == 0 || widget.height() == 0) && r.width() != 0 && r.height() != 0)) {
-                QEXPECT_FAIL("130,100 0x200, flags 0",
-                             "First resize after show of zero-sized gets wrong win_gravity.",
-                             Continue);
-                QEXPECT_FAIL("100,50 200x0, flags 0",
-                             "First resize after show of zero-sized gets wrong win_gravity.",
-                             Continue);
-                QEXPECT_FAIL("130,50 0x0, flags 0",
-                             "First resize after show of zero-sized gets wrong win_gravity.",
-                             Continue);
-            }
-
+            // XCB: First resize after show of zero-sized gets wrong win_gravity.
+            const bool expectMoveFail = !windowFlags
+                && ((widget.width() == 0 || widget.height() == 0) && r.width() != 0 && r.height() != 0)
+                && m_platform == QStringLiteral("xcb")
+                && (rect == QRect(QPoint(130, 100), QSize(0, 200))
+                    || rect == QRect(QPoint(100, 50), QSize(200, 0))
+                    || rect == QRect(QPoint(130, 50), QSize(0, 0)));
             widget.move(r.topLeft());
             widget.resize(r.size());
             QApplication::processEvents();
-            QTRY_COMPARE(widget.pos(), r.topLeft());
-            QTRY_COMPARE(widget.size(), r.size());
+            if (!expectMoveFail) {
+                QTRY_COMPARE(widget.pos(), r.topLeft());
+                QTRY_COMPARE(widget.size(), r.size());
+            }
         }
         widget.move(rect.topLeft());
         widget.resize(rect.size());

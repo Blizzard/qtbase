@@ -1345,12 +1345,30 @@ void QMacStylePrivate::initComboboxBdi(const QStyleOptionComboBox *combo, HIThem
         // an extra check here before using the mini and small buttons.
         int h = combo->rect.size().height();
         if (combo->editable){
-            if (h < 21)
-                bdi->kind = kThemeComboBoxMini;
-            else if (h < 26)
-                bdi->kind = kThemeComboBoxSmall;
-            else
-                bdi->kind = kThemeComboBox;
+            if (qobject_cast<const QDateTimeEdit *>(widget)) {
+                // Except when, you know, we get a QDateTimeEdit with calendarPopup
+                // enabled. And then things get weird, basically because it's a
+                // transvestite spinbox with editable combobox tendencies. Meaning
+                // that it wants to look a combobox, except that it isn't one, so it
+                // doesn't get all those extra free margins around. (Don't know whose
+                // idea those margins were, but now it looks like we're stuck with
+                // them forever). So anyway, the height threshold should be smaller
+                // in this case, or the style gets confused when it needs to render
+                // or return any subcontrol size of the poor thing.
+                if (h < 9)
+                    bdi->kind = kThemeComboBoxMini;
+                else if (h < 22)
+                    bdi->kind = kThemeComboBoxSmall;
+                else
+                    bdi->kind = kThemeComboBox;
+            } else {
+                if (h < 21)
+                    bdi->kind = kThemeComboBoxMini;
+                else if (h < 26)
+                    bdi->kind = kThemeComboBoxSmall;
+                else
+                    bdi->kind = kThemeComboBox;
+            }
         } else {
             // Even if we specify that we want the kThemePopupButton, Carbon
             // will use the kThemePopupButtonSmall if the size matches. So we
@@ -1678,7 +1696,7 @@ QMacStylePrivate::QMacStylePrivate()
     if (ptrHIShapeGetBounds == 0) {
         QLibrary library(QLatin1String("/System/Library/Frameworks/Carbon.framework/Carbon"));
         library.setLoadHints(QLibrary::ExportExternalSymbolsHint);
-		ptrHIShapeGetBounds = reinterpret_cast<PtrHIShapeGetBounds>(library.resolve("HIShapeGetBounds"));
+        ptrHIShapeGetBounds = reinterpret_cast<PtrHIShapeGetBounds>(library.resolve("HIShapeGetBounds"));
     }
 
 }
@@ -3247,7 +3265,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
     case PE_PanelStatusBar: {
         // Fill the status bar with the titlebar gradient.
         QLinearGradient linearGrad(0, opt->rect.top(), 0, opt->rect.bottom());
-        if (opt->state & QStyle::State_Active) {
+        if (w ? qt_macWindowMainWindow(w->window()) : (opt->state & QStyle::State_Active)) {
             linearGrad.setColorAt(0, titlebarGradientActiveBegin);
             linearGrad.setColorAt(1, titlebarGradientActiveEnd);
         } else {
@@ -3257,7 +3275,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
         p->fillRect(opt->rect, linearGrad);
 
         // Draw the black separator line at the top of the status bar.
-        if (opt->state & QStyle::State_Active)
+        if (w ? qt_macWindowMainWindow(w->window()) : (opt->state & QStyle::State_Active))
             p->setPen(titlebarSeparatorLineActive);
         else
             p->setPen(titlebarSeparatorLineInactive);
@@ -5301,7 +5319,7 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
         if (const QStyleOptionComboBox *combo = qstyleoption_cast<const QStyleOptionComboBox *>(opt)){
             HIThemeButtonDrawInfo bdi;
             d->initComboboxBdi(combo, &bdi, widget, d->getDrawState(opt->state));
-            if (!tds == kThemeStateInactive)
+            if (tds != kThemeStateInactive)
                 QMacStylePrivate::drawCombobox(qt_hirectForQRect(combo->rect), bdi, p);
             else
                 d->drawColorlessButton(qt_hirectForQRect(combo->rect), &bdi, p, opt);

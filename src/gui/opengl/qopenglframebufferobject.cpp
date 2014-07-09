@@ -436,9 +436,10 @@ void QOpenGLFramebufferObjectPrivate::init(QOpenGLFramebufferObject *, const QSi
     samples = qBound(0, int(samples), int(maxSamples));
 #endif
 
+    samples = qMax(0, samples);
+    requestedSamples = samples;
     size = sz;
     target = texture_target;
-    // texture dimensions
 
     QT_RESET_GLERROR(); // reset error state
     GLuint fbo = 0;
@@ -453,16 +454,28 @@ void QOpenGLFramebufferObjectPrivate::init(QOpenGLFramebufferObject *, const QSi
     if (samples == 0) {
         initTexture(texture_target, internal_format, size, mipmap);
     } else {
+        GLenum storageFormat = internal_format;
+#ifdef GL_RGBA8_OES
+        // Correct the internal format used by the render buffer when using ANGLE
+        if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGLES && internal_format == GL_RGBA
+                && strstr((const char *)funcs.glGetString(GL_RENDERER), "ANGLE") != 0) {
+            storageFormat = GL_RGBA8_OES;
+        }
+#endif
+
         mipmap = false;
         funcs.glGenRenderbuffers(1, &color_buffer);
         funcs.glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
-        funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, internal_format, size.width(), size.height());
+        funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, storageFormat, size.width(), size.height());
         funcs.glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                              GL_RENDERBUFFER, color_buffer);
         QT_CHECK_GLERROR();
         valid = checkFramebufferStatus(ctx);
 
         if (valid) {
+            // Query the actual number of samples. This can be greater than the requested
+            // value since the typically supported values are 0, 4, 8, ..., and the
+            // requests are mapped to the next supported value.
             funcs.glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &samples);
             color_buffer_guard = new QOpenGLSharedResourceGuard(ctx, color_buffer, freeRenderbufferFunc);
         }
@@ -533,7 +546,10 @@ void QOpenGLFramebufferObjectPrivate::initTexture(GLenum target, GLenum internal
 
 void QOpenGLFramebufferObjectPrivate::initAttachments(QOpenGLContext *ctx, QOpenGLFramebufferObject::Attachment attachment)
 {
-    int samples = format.samples();
+    // Use the same sample count for all attachments. format.samples() already contains
+    // the actual number of samples for the color attachment and is not suitable. Use
+    // requestedSamples instead.
+    const int samples = requestedSamples;
 
     // free existing attachments
     if (depth_buffer_guard) {
@@ -1112,6 +1128,9 @@ Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format,
     \fn QImage QOpenGLFramebufferObject::toImage() const
 
     Returns the contents of this framebuffer object as a QImage.
+
+    Will try to return a premultiplied ARBG32 or RGB32 image. Since 5.2 it will fall back to
+    a premultiplied RGBA8888 or RGBx8888 image when reading to ARGB32 is not supported.
 */
 QImage QOpenGLFramebufferObject::toImage() const
 {

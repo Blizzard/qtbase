@@ -147,7 +147,7 @@ void QOpenGLWidget::paintGL()
 void QOpenGLWidget::updateGL()
 {
     Q_D(QOpenGLWidget);
-    if (d->uninitialized)
+    if (d->uninitialized || !d->surface())
         return;
 
     makeCurrent();
@@ -170,12 +170,6 @@ void QOpenGLWidget::resizeEvent(QResizeEvent *)
     d->fbo = new QOpenGLFramebufferObject(size() * devicePixelRatio(), QOpenGLFramebufferObject::CombinedDepthStencil);
     d->fbo->bind();
     QOpenGLFunctions *funcs = d->context.functions();
-    funcs->glBindTexture(GL_TEXTURE_2D, d->fbo->texture());
-    funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    funcs->glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
     resizeGL(width(), height());
     paintGL();
     funcs->glFlush();

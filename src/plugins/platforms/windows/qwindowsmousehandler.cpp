@@ -354,7 +354,6 @@ static bool isValidWheelReceiver(QWindow *candidate)
 bool QWindowsMouseHandler::translateMouseWheelEvent(QWindow *window, HWND,
                                                     MSG msg, LRESULT *)
 {
-    const Qt::MouseButtons buttons = keyStateToMouseButtons((int)msg.wParam);
     const Qt::KeyboardModifiers mods = keyStateToModifiers((int)msg.wParam);
 
     int delta;
@@ -364,7 +363,7 @@ bool QWindowsMouseHandler::translateMouseWheelEvent(QWindow *window, HWND,
         delta = (int) msg.wParam;
 
     Qt::Orientation orientation = (msg.message == WM_MOUSEHWHEEL
-                                  || (buttons & Qt::AltModifier)) ?
+                                  || (mods & Qt::AltModifier)) ?
                                   Qt::Horizontal : Qt::Vertical;
 
     // according to the MSDN documentation on WM_MOUSEHWHEEL:

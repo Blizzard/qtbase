@@ -237,9 +237,7 @@ QSslCipher QSslSocketBackendPrivate::QSslCipher_from_SSL_CIPHER(SSL_CIPHER *ciph
             ciph.d->encryptionMethod = descriptionList.at(4).mid(4);
         ciph.d->exportable = (descriptionList.size() > 6 && descriptionList.at(6) == QLatin1String("export"));
 
-        ciph.d->bits = cipher->strength_bits;
-        ciph.d->supportedBits = cipher->alg_bits;
-
+        ciph.d->bits = q_SSL_CIPHER_get_bits(cipher, &ciph.d->supportedBits);
     }
     return ciph;
 }
@@ -1438,8 +1436,10 @@ void QSslSocketBackendPrivate::continueHandshake()
     if (readBufferMaxSize)
         plainSocket->setReadBufferSize(readBufferMaxSize);
 
+#if OPENSSL_VERSION_NUMBER >= 0x0090806fL && !defined(OPENSSL_NO_TLSEXT)
     if (q_SSL_ctrl((ssl), SSL_CTRL_GET_SESSION_REUSED, 0, NULL))
         configuration.peerSessionShared = true;
+#endif
 
 #ifdef QT_DECRYPT_SSL_TRAFFIC
     if (ssl->session && ssl->s3) {

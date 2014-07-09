@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -47,6 +47,7 @@
 
 #include <d2d1_1.h>
 #include <dwrite_1.h>
+#include <wrl.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,12 +66,17 @@ public:
 
     Type type() const Q_DECL_OVERRIDE;
 
+    void setState(QPainterState *s) Q_DECL_OVERRIDE;
+
+    void draw(const QVectorPath &path) Q_DECL_OVERRIDE;
+
     void fill(const QVectorPath &path, const QBrush &brush) Q_DECL_OVERRIDE;
+    void fill(ID2D1Geometry *geometry, const QBrush &brush);
+
+    void stroke(const QVectorPath &path, const QPen &pen) Q_DECL_OVERRIDE;
+    void stroke(ID2D1Geometry *geometry, const QPen &pen);
 
     void clip(const QVectorPath &path, Qt::ClipOperation op) Q_DECL_OVERRIDE;
-    void clip(const QRect &rect, Qt::ClipOperation op) Q_DECL_OVERRIDE;
-    void clip(const QRegion &region, Qt::ClipOperation op) Q_DECL_OVERRIDE;
-    void clip(const QPainterPath &path, Qt::ClipOperation op) Q_DECL_OVERRIDE;
 
     void clipEnabledChanged() Q_DECL_OVERRIDE;
     void penChanged() Q_DECL_OVERRIDE;
@@ -80,6 +86,17 @@ public:
     void compositionModeChanged() Q_DECL_OVERRIDE;
     void renderHintsChanged() Q_DECL_OVERRIDE;
     void transformChanged() Q_DECL_OVERRIDE;
+
+    void fillRect(const QRectF &rect, const QBrush &brush) Q_DECL_OVERRIDE;
+
+    void drawRects(const QRect *rects, int rectCount) Q_DECL_OVERRIDE;
+    void drawRects(const QRectF *rects, int rectCount) Q_DECL_OVERRIDE;
+
+    void drawLines(const QLine *lines, int lineCount) Q_DECL_OVERRIDE;
+    void drawLines(const QLineF *lines, int lineCount) Q_DECL_OVERRIDE;
+
+    void drawEllipse(const QRectF &r) Q_DECL_OVERRIDE;
+    void drawEllipse(const QRect &r) Q_DECL_OVERRIDE;
 
     void drawImage(const QRectF &rectangle, const QImage &image, const QRectF &sr, Qt::ImageConversionFlags flags = Qt::AutoColor) Q_DECL_OVERRIDE;
     void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr) Q_DECL_OVERRIDE;
@@ -91,6 +108,22 @@ private:
     void drawGlyphRun(const D2D1_POINT_2F &pos, IDWriteFontFace *fontFace, const QFont &font,
                       int numGlyphs, const UINT16 *glyphIndices, const FLOAT *glyphAdvances,
                       const DWRITE_GLYPH_OFFSET *glyphOffsets, bool rtl);
+
+    void ensureBrush();
+    void ensureBrush(const QBrush &brush);
+    void ensurePen();
+    void ensurePen(const QPen &pen);
+
+    void rasterFill(const QVectorPath &path, const QBrush &brush);
+
+    enum EmulationType { PenEmulation, BrushEmulation };
+    bool emulationRequired(EmulationType type) const;
+
+    bool antiAliasingEnabled() const;
+    void adjustForAliasing(QRectF *rect);
+    void adjustForAliasing(QPointF *point);
+
+    Microsoft::WRL::ComPtr<IDWriteFontFace> fontFaceFromFontEngine(const QFont &font, QFontEngine *fe);
 };
 
 QT_END_NAMESPACE

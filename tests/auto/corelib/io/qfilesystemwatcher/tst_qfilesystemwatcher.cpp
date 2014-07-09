@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -112,9 +112,11 @@ void tst_QFileSystemWatcher::basicTest_data()
         + QChar(ushort(0x00DC)) // LATIN_CAPITAL_LETTER_U_WITH_DIAERESIS
         + QStringLiteral(".txt");
 
+#if !defined(Q_OS_QNX) || !defined(QT_NO_INOTIFY)
     QTest::newRow("native backend-testfile") << "native" << testFile;
-    QTest::newRow("poller backend-testfile") << "poller" << testFile;
     QTest::newRow("native backend-specialchars") << "native" << specialCharacterFile;
+#endif
+    QTest::newRow("poller backend-testfile") << "poller" << testFile;
 }
 
 void tst_QFileSystemWatcher::basicTest()
@@ -405,6 +407,13 @@ void tst_QFileSystemWatcher::removePaths()
     watcher.removePaths(paths);
 }
 
+static QByteArray msgFileOperationFailed(const char *what, const QFile &f)
+{
+    return what + QByteArrayLiteral(" failed on \"")
+        + QDir::toNativeSeparators(f.fileName()).toLocal8Bit()
+        + QByteArrayLiteral("\": ") + f.errorString().toLocal8Bit();
+}
+
 void tst_QFileSystemWatcher::watchFileAndItsDirectory()
 {
     QFETCH(QString, backend);
@@ -420,14 +429,10 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
 
     QString testFileName = testDir.filePath("testFile.txt");
     QString secondFileName = testDir.filePath("testFile2.txt");
-    QFile::remove(secondFileName);
 
     QFile testFile(testFileName);
-    testFile.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
-    testFile.remove();
-
-    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    testFile.write(QByteArray("hello"));
+    QVERIFY2(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate), msgFileOperationFailed("open", testFile));
+    QVERIFY2(testFile.write(QByteArrayLiteral("hello")) > 0, msgFileOperationFailed("write", testFile));
     testFile.close();
 
     QFileSystemWatcher watcher;
@@ -449,8 +454,8 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     // wait before modifying the directory...
     QTest::qWait(2000);
 
-    QVERIFY(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    testFile.write(QByteArray("hello again"));
+    QVERIFY2(testFile.open(QIODevice::WriteOnly | QIODevice::Truncate), msgFileOperationFailed("open", testFile));
+    QVERIFY2(testFile.write(QByteArrayLiteral("hello again")), msgFileOperationFailed("write", testFile));
     testFile.close();
 
 #ifdef Q_OS_MAC
@@ -472,8 +477,8 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     fileChangedSpy.clear();
     dirChangedSpy.clear();
     QFile secondFile(secondFileName);
-    secondFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    secondFile.write("Foo");
+    QVERIFY2(secondFile.open(QIODevice::WriteOnly | QIODevice::Truncate), msgFileOperationFailed("open", secondFile));
+    QVERIFY2(secondFile.write(QByteArrayLiteral("Foo")) > 0, msgFileOperationFailed("write", secondFile));
     secondFile.close();
 
     timer.start(3000);
@@ -491,17 +496,17 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
 
     dirChangedSpy.clear();
 
-    QFile::remove(testFileName);
+    QVERIFY(QFile::remove(testFileName));
 
     QTRY_VERIFY(fileChangedSpy.count() > 0);
-    QCOMPARE(dirChangedSpy.count(), 1);
+    QTRY_COMPARE(dirChangedSpy.count(), 1);
 
     fileChangedSpy.clear();
     dirChangedSpy.clear();
 
     // removing a deleted file should fail
     QVERIFY(!watcher.removePath(testFileName));
-    QFile::remove(secondFileName);
+    QVERIFY(QFile::remove(secondFileName));
 
     timer.start(3000);
     eventLoop.exec();

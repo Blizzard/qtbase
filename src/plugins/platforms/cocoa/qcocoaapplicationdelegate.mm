@@ -124,7 +124,7 @@ static void cleanupCocoaApplicationDelegate()
     [dockMenu release];
     [qtMenuLoader release];
     if (reflectionDelegate) {
-        [NSApp setDelegate:reflectionDelegate];
+        [[NSApplication sharedApplication] setDelegate:reflectionDelegate];
         [reflectionDelegate release];
     }
     [[NSNotificationCenter defaultCenter] removeObserver:self];
@@ -223,7 +223,14 @@ static void cleanupCocoaApplicationDelegate()
             // events while the event loop is still running.
             const QWindowList topLevels = QGuiApplication::topLevelWindows();
             for (int i = 0; i < topLevels.size(); ++i) {
-                QWindowSystemInterface::handleCloseEvent(topLevels.at(i));
+                QWindow *topLevelWindow = topLevels.at(i);
+                // Widgets have alreay received a CloseEvent from the QApplication
+                // QCloseEvent handler. (see canQuit above). Prevent running the
+                // CloseEvent logic twice, call close() directly.
+                if (topLevelWindow->inherits("QWidgetWindow"))
+                    topLevelWindow->close();
+                else
+                    QWindowSystemInterface::handleCloseEvent(topLevelWindow);
             }
             QWindowSystemInterface::flushWindowSystemEvents();
 

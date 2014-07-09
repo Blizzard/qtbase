@@ -315,6 +315,8 @@ void tst_QAccessibility::initTestCase()
 {
     QTestAccessibility::initialize();
     QPlatformIntegration *pfIntegration = QGuiApplicationPrivate::platformIntegration();
+    if (!pfIntegration->accessibility())
+        QSKIP("This platform does not support accessibility");
     pfIntegration->accessibility()->setActive(true);
 }
 
@@ -1928,7 +1930,7 @@ void tst_QAccessibility::lineEditTest()
     QVERIFY(iface->state().movable);
     QVERIFY(iface->state().focusable);
     QVERIFY(iface->state().selectable);
-    QVERIFY(iface->state().hasPopup);
+    QVERIFY(!iface->state().hasPopup);
     QCOMPARE(bool(iface->state().focused), le->hasFocus());
 
     QString secret(QLatin1String("secret"));
@@ -1956,7 +1958,7 @@ void tst_QAccessibility::lineEditTest()
     QVERIFY(!(iface->state().movable));
     QVERIFY(iface->state().focusable);
     QVERIFY(iface->state().selectable);
-    QVERIFY(iface->state().hasPopup);
+    QVERIFY(!iface->state().hasPopup);
     QCOMPARE(bool(iface->state().focused), le->hasFocus());
 
     QLineEdit *le2 = new QLineEdit(toplevel);
@@ -3283,7 +3285,7 @@ void tst_QAccessibility::comboBoxTest()
 
     QVERIFY(!combo.view()->isVisible());
     QVERIFY(iface->actionInterface());
-    QCOMPARE(iface->actionInterface()->actionNames(), QStringList() << QAccessibleActionInterface::showMenuAction());
+    QCOMPARE(iface->actionInterface()->actionNames(), QStringList() << QAccessibleActionInterface::showMenuAction() << QAccessibleActionInterface::pressAction());
     iface->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
     QTRY_VERIFY(combo.view()->isVisible());
 

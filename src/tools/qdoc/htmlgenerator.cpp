@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -1344,7 +1344,6 @@ void HtmlGenerator::generateCollisionPages()
         ncn->clearCurrentChild();
         beginSubPage(ncn, Generator::fileName(ncn));
         QString fullTitle = ncn->fullTitle();
-        QString htmlTitle = fullTitle;
         CodeMarker* marker = CodeMarker::markerForFileName(ncn->location().filePath());
         if (ncn->isQmlNode()) {
             // Replace the marker with a QML code marker.
@@ -1352,7 +1351,7 @@ void HtmlGenerator::generateCollisionPages()
                 marker = CodeMarker::markerForLanguage(QLatin1String("QML"));
         }
 
-        generateHeader(htmlTitle, ncn, marker);
+        generateHeader(fullTitle, ncn, marker);
         if (!fullTitle.isEmpty())
             out() << "<h1 class=\"title\">" << protectEnc(fullTitle) << "</h1>\n";
 
@@ -1437,17 +1436,18 @@ void HtmlGenerator::generateDocNode(DocNode* dn, CodeMarker* marker)
     QList<Section> sections;
     QList<Section>::const_iterator s;
     QString fullTitle = dn->fullTitle();
-    QString htmlTitle = fullTitle;
 
     if (dn->subType() == Node::QmlBasicType) {
         fullTitle = "QML Basic Type: " + fullTitle;
-        htmlTitle = fullTitle;
 
         // Replace the marker with a QML code marker.
         marker = CodeMarker::markerForLanguage(QLatin1String("QML"));
     }
+    else if (dn->subType() == Node::QmlClass) {
+        fullTitle = fullTitle + " QML Type";
+    }
 
-    generateHeader(htmlTitle, dn, marker);
+    generateHeader(fullTitle, dn, marker);
     /*
       Generate the TOC for the new doc format.
       Don't generate a TOC for the home page.
@@ -4399,36 +4399,43 @@ void HtmlGenerator::generateManifestFile(QString manifest, QString element)
         }
 
         QString ename = en->name().mid(en->name().lastIndexOf('/')+1);
-        QSet<QString> usedNames;
+        QMap<int, const Node*> filesToOpen;
         foreach (const Node* child, en->childNodes()) {
             if (child->subType() == Node::File) {
-                QString file = child->name();
-                QString fileName = file.mid(file.lastIndexOf('/')+1);
-                QString baseName = fileName;
-                if ((fileName.count(QChar('.')) > 0) &&
-                        (fileName.endsWith(".cpp") ||
-                         fileName.endsWith(".h") ||
-                         fileName.endsWith(".qml")))
-                    baseName.truncate(baseName.lastIndexOf(QChar('.')));
-                if (baseName.compare(ename, Qt::CaseInsensitive) == 0) {
-                    if (!usedNames.contains(fileName)) {
-                        writer.writeStartElement("fileToOpen");
-                        writer.writeCharacters(examplesPath + file);
-                        writer.writeEndElement(); // fileToOpen
-                        usedNames.insert(fileName);
-                    }
+                QFileInfo fileInfo(child->name());
+                QString fileName = fileInfo.fileName().toLower();
+                // open .qml, .cpp and .h files with a
+                // basename matching the example (project) name
+                // QMap key indicates the priority -
+                // the lowest value will be the top-most file
+                if ((fileInfo.baseName().compare(ename, Qt::CaseInsensitive) == 0)) {
+                    if (fileName.endsWith(".qml"))
+                        filesToOpen.insert(0, child);
+                    else if (fileName.endsWith(".cpp"))
+                        filesToOpen.insert(1, child);
+                    else if (fileName.endsWith(".h"))
+                        filesToOpen.insert(2, child);
                 }
-                else if (fileName.toLower().endsWith("main.cpp") ||
-                         fileName.toLower().endsWith("main.qml")) {
-                    if (!usedNames.contains(fileName)) {
-                        writer.writeStartElement("fileToOpen");
-                        writer.writeCharacters(examplesPath + file);
-                        writer.writeEndElement(); // fileToOpen
-                        usedNames.insert(fileName);
-                    }
+                // main.qml takes precedence over main.cpp
+                else if (fileName.endsWith("main.qml")) {
+                    filesToOpen.insert(3, child);
                 }
+                else if (fileName.endsWith("main.cpp")) {
+                    filesToOpen.insert(4, child);
+               }
             }
         }
+
+        QMap<int, const Node*>::const_iterator it = filesToOpen.constEnd();
+        while (it != filesToOpen.constBegin()) {
+            writer.writeStartElement("fileToOpen");
+            if (--it == filesToOpen.constBegin()) {
+                writer.writeAttribute(QStringLiteral("mainFile"), QStringLiteral("true"));
+            }
+            writer.writeCharacters(examplesPath + it.value()->name());
+            writer.writeEndElement();
+        }
+
         writer.writeEndElement(); // example
         ++i;
     }

@@ -2912,7 +2912,13 @@ void QWidget::showNormal()
     This is the case if neither the widget itself nor every parent up
     to but excluding \a ancestor has been explicitly disabled.
 
-    isEnabledTo(0) is equivalent to isEnabled().
+    isEnabledTo(0) returns false if this widget or any if its ancestors
+    was explicitly disabled.
+
+    The word ancestor here means a parent widget within the same window.
+
+    Therefore isEnabledTo(0) stops at this widget's window, unlike
+    isEnabled() which also takes parent windows into considerations.
 
     \sa setEnabled(), enabled
 */
@@ -6002,10 +6008,8 @@ void QWidget::setFocus(Qt::FocusReason reason)
         if (!(testAttribute(Qt::WA_WState_Created) && window()->windowType() != Qt::Popup && internalWinId()))
             //setFocusWidget will already post a focus event for us (that the AT client receives) on Windows
 # endif
-# ifdef  Q_OS_UNIX
         // menus update the focus manually and this would create bogus events
         if (!(f->inherits("QMenuBar") || f->inherits("QMenu") || f->inherits("QMenuItem")))
-# endif
         {
             QAccessibleEvent event(f, QAccessible::Focus);
             QAccessible::updateAccessibility(&event);

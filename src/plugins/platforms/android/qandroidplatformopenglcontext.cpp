@@ -44,6 +44,8 @@
 #include "qandroidplatformopenglwindow.h"
 #include "qandroidplatformintegration.h"
 
+#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+
 #include <QSurface>
 #include <QtGui/private/qopenglcontext_p.h>
 
@@ -72,6 +74,7 @@ bool QAndroidPlatformOpenGLContext::needsFBOReadBackWorkaroud()
         needsWorkaround =
                 qstrcmp(rendererString, "Mali-400 MP") == 0
                 || qstrcmp(rendererString, "Adreno (TM) 200") == 0
+                || qstrcmp(rendererString, "Adreno (TM) 205") == 0
                 || qstrcmp(rendererString, "GC1000 core") == 0;
         set = true;
     }
@@ -98,7 +101,8 @@ EGLSurface QAndroidPlatformOpenGLContext::eglSurfaceForPlatformSurface(QPlatform
 {
     if (surface->surface()->surfaceClass() == QSurface::Window)
         return static_cast<QAndroidPlatformOpenGLWindow *>(surface)->eglSurface(eglConfig());
-    return EGL_NO_SURFACE;
+    else
+        return static_cast<QEGLPbuffer *>(surface)->pbuffer();
 }
 
 QT_END_NAMESPACE

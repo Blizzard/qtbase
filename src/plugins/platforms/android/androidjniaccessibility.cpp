@@ -47,15 +47,28 @@
 #include "qwindow.h"
 #include "qrect.h"
 #include "QtGui/qaccessible.h"
+#include <QtCore/private/qjnihelpers_p.h>
 
 #include "qdebug.h"
 
-static const char m_qtTag[] = "QtA11y";
+static const char m_qtTag[] = "Qt A11Y";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
 
 namespace QtAndroidAccessibility
 {
+    static jmethodID m_addActionMethodID = 0;
+    static jmethodID m_setCheckableMethodID = 0;
+    static jmethodID m_setCheckedMethodID = 0;
+    static jmethodID m_setClickableMethodID = 0;
+    static jmethodID m_setContentDescriptionMethodID = 0;
+    static jmethodID m_setEnabledMethodID = 0;
+    static jmethodID m_setFocusableMethodID = 0;
+    static jmethodID m_setFocusedMethodID = 0;
+    static jmethodID m_setTextSelectionMethodID = 0;
+    static jmethodID m_setVisibleToUserMethodID = 0;
+
+
     static void setActive(JNIEnv */*env*/, jobject /*thiz*/, jboolean active)
     {
         QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
@@ -164,17 +177,6 @@ if (!clazz) { \
 
         //__android_log_print(ANDROID_LOG_FATAL, m_qtTag, m_methodErrorMsg, METHOD_NAME, METHOD_SIGNATURE);
 
-#define CALL_METHOD(OBJECT, METHOD_NAME, METHOD_SIGNATURE, ...) \
-{ \
-    jclass clazz = env->GetObjectClass(OBJECT); \
-    jmethodID method = env->GetMethodID(clazz, METHOD_NAME, METHOD_SIGNATURE); \
-    if (!method) { \
-        __android_log_print(ANDROID_LOG_WARN, m_qtTag, m_methodErrorMsg, METHOD_NAME, METHOD_SIGNATURE); \
-        return; \
-    } \
-    env->CallVoidMethod(OBJECT, method, __VA_ARGS__); \
-}
-
 
     static jstring descriptionForAccessibleObject(JNIEnv *env, jobject /*thiz*/, jint objectId)
     {
@@ -184,20 +186,18 @@ if (!clazz) { \
             desc = iface->text(QAccessible::Name);
             if (desc.isEmpty())
                 desc = iface->text(QAccessible::Description);
-
-            desc += QChar(' ') + QString::fromUtf8(qAccessibleRoleString(iface->role()));
         }
 
         jstring jdesc = env->NewString((jchar*) desc.constData(), (jsize) desc.size());
         return jdesc;
     }
 
-    static void populateNode(JNIEnv *env, jobject /*thiz*/, jint objectId, jobject node)
+    static bool populateNode(JNIEnv *env, jobject /*thiz*/, jint objectId, jobject node)
     {
         QAccessibleInterface *iface = interfaceFromId(objectId);
         if (!iface || !iface->isValid()) {
             __android_log_print(ANDROID_LOG_WARN, m_qtTag, "Accessibility: populateNode for Invalid ID");
-            return;
+            return false;
         }
         QAccessible::State state = iface->state();
 
@@ -208,41 +208,36 @@ if (!clazz) { \
         if (desc.isEmpty())
             desc = iface->text(QAccessible::Description);
         if (QAccessibleTextInterface *textIface = iface->textInterface()) {
-            if (textIface->selectionCount() > 0) {
+            if (m_setTextSelectionMethodID && textIface->selectionCount() > 0) {
                 int startSelection;
                 int endSelection;
                 textIface->selection(0, &startSelection, &endSelection);
-                CALL_METHOD(node, "setTextSelection", "(II)V", startSelection, endSelection)
+                env->CallVoidMethod(node, m_setTextSelectionMethodID, startSelection, endSelection);
             }
         }
 
-        if ((iface->role() != QAccessible::NoRole) &&
-            (iface->role() != QAccessible::Client) &&
-            (iface->role() != QAccessible::Pane)) {
-            desc += QChar(' ') + QString::fromUtf8(qAccessibleRoleString(iface->role()));
-        }
-
-        CALL_METHOD(node, "setEnabled", "(Z)V", !state.disabled)
-        //CALL_METHOD(node, "setFocusable", "(Z)V", state.focusable)
-        CALL_METHOD(node, "setFocusable", "(Z)V", true)
-        //CALL_METHOD(node, "setFocused", "(Z)V", state.focused)
-        CALL_METHOD(node, "setCheckable", "(Z)V", state.checkable)
-        CALL_METHOD(node, "setChecked", "(Z)V", state.checked)
-        CALL_METHOD(node, "setVisibleToUser", "(Z)V", !state.invisible)
+        env->CallVoidMethod(node, m_setEnabledMethodID, !state.disabled);
+        env->CallVoidMethod(node, m_setCheckedMethodID, (bool)state.checked);
+        env->CallVoidMethod(node, m_setFocusableMethodID, (bool)state.focusable);
+        env->CallVoidMethod(node, m_setFocusedMethodID, (bool)state.focused);
+        env->CallVoidMethod(node, m_setCheckableMethodID, (bool)state.checkable);
+        env->CallVoidMethod(node, m_setVisibleToUserMethodID, !state.invisible);
 
         if (iface->actionInterface()) {
             QStringList actions = iface->actionInterface()->actionNames();
             bool clickable = actions.contains(QAccessibleActionInterface::pressAction());
             bool toggle = actions.contains(QAccessibleActionInterface::toggleAction());
             if (clickable || toggle) {
-                CALL_METHOD(node, "setClickable", "(Z)V", clickable)
-                CALL_METHOD(node, "addAction", "(I)V", 16) // ACTION_CLICK defined in AccessibilityNodeInfo
+                env->CallVoidMethod(node, m_setClickableMethodID, (bool)clickable);
+                env->CallVoidMethod(node, m_addActionMethodID, (int)16);    // ACTION_CLICK defined in AccessibilityNodeInfo
             }
         }
 
         jstring jdesc = env->NewString((jchar*) desc.constData(), (jsize) desc.size());
         //CALL_METHOD(node, "setText", "(Ljava/lang/CharSequence;)V", jdesc)
-        CALL_METHOD(node, "setContentDescription", "(Ljava/lang/CharSequence;)V", jdesc)
+        env->CallVoidMethod(node, m_setContentDescriptionMethodID, jdesc);
+
+        return true;
     }
 
     static JNINativeMethod methods[] = {
@@ -252,19 +247,44 @@ if (!clazz) { \
         {"descriptionForAccessibleObject", "(I)Ljava/lang/String;", (jstring)descriptionForAccessibleObject},
         {"screenRect", "(I)Landroid/graphics/Rect;", (jobject)screenRect},
         {"hitTest", "(FF)I", (void*)hitTest},
-        {"populateNode", "(ILandroid/view/accessibility/AccessibilityNodeInfo;)V", (void*)populateNode},
+        {"populateNode", "(ILandroid/view/accessibility/AccessibilityNodeInfo;)Z", (void*)populateNode},
         {"clickAction", "(I)Z", (void*)clickAction},
     };
 
+#define GET_AND_CHECK_STATIC_METHOD(VAR, CLASS, METHOD_NAME, METHOD_SIGNATURE) \
+    VAR = env->GetMethodID(CLASS, METHOD_NAME, METHOD_SIGNATURE); \
+    if (!VAR) { \
+        __android_log_print(ANDROID_LOG_FATAL, QtAndroid::qtTagText(), QtAndroid::methodErrorMsgFmt(), METHOD_NAME, METHOD_SIGNATURE); \
+        return false; \
+    }
+
     bool registerNatives(JNIEnv *env)
     {
+        if (QtAndroidPrivate::androidSdkVersion() < 16)
+            return true; // We need API level 16 or higher
+
         jclass clazz;
         FIND_AND_CHECK_CLASS("org/qtproject/qt5/android/accessibility/QtNativeAccessibility");
         jclass appClass = static_cast<jclass>(env->NewGlobalRef(clazz));
 
         if (env->RegisterNatives(appClass, methods, sizeof(methods) / sizeof(methods[0])) < 0) {
-            __android_log_print(ANDROID_LOG_FATAL,"Qt", "RegisterNatives failed");
+            __android_log_print(ANDROID_LOG_FATAL,"Qt A11y", "RegisterNatives failed");
             return false;
+        }
+
+        jclass nodeInfoClass = env->FindClass("android/view/accessibility/AccessibilityNodeInfo");
+        GET_AND_CHECK_STATIC_METHOD(m_addActionMethodID, nodeInfoClass, "addAction", "(I)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setCheckableMethodID, nodeInfoClass, "setCheckable", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setCheckedMethodID, nodeInfoClass, "setChecked", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setClickableMethodID, nodeInfoClass, "setClickable", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setContentDescriptionMethodID, nodeInfoClass, "setContentDescription", "(Ljava/lang/CharSequence;)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setEnabledMethodID, nodeInfoClass, "setEnabled", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setFocusableMethodID, nodeInfoClass, "setFocusable", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setFocusedMethodID, nodeInfoClass, "setFocused", "(Z)V");
+        GET_AND_CHECK_STATIC_METHOD(m_setVisibleToUserMethodID, nodeInfoClass, "setVisibleToUser", "(Z)V");
+
+        if (QtAndroidPrivate::androidSdkVersion() >= 18) {
+            GET_AND_CHECK_STATIC_METHOD(m_setTextSelectionMethodID, nodeInfoClass, "setTextSelection", "(II)V");
         }
 
         return true;
