@@ -98,6 +98,7 @@ public:
 
     ~QCoreApplication();
 
+    static void setSupportUnicodeArguments(bool on);
     static QStringList arguments();
 
     static void setAttribute(Qt::ApplicationAttribute attribute, bool on = true);
