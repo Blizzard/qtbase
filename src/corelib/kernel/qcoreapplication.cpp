@@ -202,6 +202,7 @@ QString QCoreApplicationPrivate::appVersion() const
 #endif
 
 QString *QCoreApplicationPrivate::cachedApplicationFilePath = nullptr;
+bool QCoreApplicationPrivate::supportUnicodeArguments = true;
 
 bool QCoreApplicationPrivate::checkInstance(const char *function)
 {
@@ -2434,6 +2435,14 @@ QStringList QCoreApplication::arguments()
     char ** const av = self->d_func()->argv;
     list.reserve(ac);
 
+    // Skip everything else if we don't care about unicode arguments
+    if (!QCoreApplicationPrivate::supportUnicodeArguments) {
+        for (int a = 0; a < ac; ++a) {
+            list << QString::fromLocal8Bit(av[a]);
+        }
+        return list;
+    }
+
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     // On Windows, it is possible to pass Unicode arguments on
     // the command line. To restore those, we split the command line
@@ -2458,6 +2467,11 @@ QStringList QCoreApplication::arguments()
     }
 
     return list;
+}
+
+void QCoreApplication::setSupportUnicodeArguments(bool on)
+{
+    QCoreApplicationPrivate::supportUnicodeArguments = on;
 }
 
 /*!
