@@ -1784,9 +1784,22 @@ bool QWindow::close()
 {
     Q_D(QWindow);
 
+    // do not recurse
+    if (d->isClosing)
+        return true;
+
     // Do not close non top level windows
     if (parent())
         return false;
+
+    d->isClosing = true;
+
+    QCloseEvent e;
+    QGuiApplication::sendSpontaneousEvent(this, &e);
+    if (!e.isAccepted()) {
+        d->isClosing = false;
+        return false;
+    }
 
     if (QGuiApplicationPrivate::focus_window == this)
         QGuiApplicationPrivate::focus_window = 0;
@@ -1796,6 +1809,7 @@ bool QWindow::close()
     QGuiApplicationPrivate::window_list.removeAll(this);
     destroy();
     d->maybeQuitOnLastWindowClosed();
+    d->isClosing = false;
     return true;
 }
 
@@ -1865,6 +1879,17 @@ void QWindow::showEvent(QShowEvent *ev)
 void QWindow::hideEvent(QHideEvent *ev)
 {
     ev->ignore();
+}
+
+/*!
+    Override this to handle close events (\a ev).
+
+    The function is called when the window has requested being closed
+    in the windowing system.
+*/
+void QWindow::closeEvent(QCloseEvent *ev)
+{
+    ev->accept();
 }
 
 /*!
@@ -1945,6 +1970,7 @@ bool QWindow::event(QEvent *ev)
     case QEvent::Close: {
         Q_D(QWindow);
         bool wasVisible = isVisible();
+        closeEvent(static_cast<QCloseEvent *>(ev));
         if (ev->isAccepted()) {
             destroy();
             if (wasVisible)

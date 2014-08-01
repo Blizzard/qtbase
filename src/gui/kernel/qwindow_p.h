@@ -100,6 +100,7 @@ public:
         , cursor(Qt::ArrowCursor)
         , hasCursor(false)
 #endif
+        , isClosing(false)
     {
         isWindow = true;
     }
@@ -171,6 +172,8 @@ public:
     QCursor cursor;
     bool hasCursor;
 #endif
+
+    bool isClosing;
 };
 
 

@@ -224,6 +224,7 @@ private:
     friend class QWidget;
     friend class QWidgetWindow;
     friend class QWidgetPrivate;
+    friend class QWindow;
 #ifndef QT_NO_QOBJECT
     friend class QEventDispatcherUNIXPrivate;
     friend class QCocoaEventDispatcherPrivate;
