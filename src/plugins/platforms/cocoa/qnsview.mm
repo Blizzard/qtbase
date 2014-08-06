@@ -845,6 +845,12 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
 {
     if (m_window->flags() & Qt::WindowTransparentForInput)
         return [super rightMouseDown:theEvent];
+    if (m_platformWindow->m_activePopupWindow) {
+        Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
+        QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
+        QWindowSystemInterface::flushWindowSystemEvents();
+        m_platformWindow->m_activePopupWindow = 0;
+    }
     m_buttons |= Qt::RightButton;
     [self handleMouseEvent:theEvent];
 }
@@ -870,6 +876,12 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
 {
     if (m_window->flags() & Qt::WindowTransparentForInput)
         return [super otherMouseDown:theEvent];
+    if (m_platformWindow->m_activePopupWindow) {
+        Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
+        QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
+        QWindowSystemInterface::flushWindowSystemEvents();
+        m_platformWindow->m_activePopupWindow = 0;
+    }
     m_buttons |= cocoaButton2QtButton([theEvent buttonNumber]);
     [self handleMouseEvent:theEvent];
 }
