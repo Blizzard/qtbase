@@ -311,6 +311,8 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
     // So we should say that it is maximized because it actually is.
     if (newState == Qt::WindowNoState && m_platformWindow->m_effectivelyMaximized)
         newState = Qt::WindowMaximized;
+    if (newState == Qt::WindowMaximized)
+        m_platformWindow->m_effectivelyMaximized = true;
     QWindowSystemInterface::handleWindowStateChanged(m_window, newState);
     // We want to read the window state back from the window,
     // but the event we just sent may be asynchronous.
