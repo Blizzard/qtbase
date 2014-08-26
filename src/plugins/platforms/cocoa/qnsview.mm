@@ -381,6 +381,16 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
     if (QSysInfo::QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) {
+        // Close any popup before entering/exiting full screen mode
+        if (notificationName == NSWindowWillEnterFullScreenNotification
+            || notificationName == NSWindowWillExitFullScreenNotification) {
+            if (m_platformWindow->m_activePopupWindow) {
+                Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
+                QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
+                QWindowSystemInterface::flushWindowSystemEvents();
+                m_platformWindow->m_activePopupWindow = 0;
+            }
+        }
         if (notificationName == NSWindowDidEnterFullScreenNotification
             || notificationName == NSWindowDidExitFullScreenNotification) {
             Qt::WindowState newState = notificationName == NSWindowDidEnterFullScreenNotification ?
