@@ -1490,7 +1490,8 @@ bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
     PAINTSTRUCT ps;
 
     // Observed painting problems with Aero style disabled (QTBUG-7865).
-    if (testFlag(OpenGLSurface) && testFlag(OpenGLDoubleBuffered))
+    if (testFlag(OpenGLSurface)
+        && (QSysInfo::windowsVersion() < QSysInfo::WV_VISTA || testFlag(OpenGLDoubleBuffered)))
         InvalidateRect(hwnd, 0, false);
 
     BeginPaint(hwnd, &ps);
