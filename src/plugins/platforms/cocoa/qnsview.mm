@@ -338,6 +338,7 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
             if (!m_platformWindow->windowIsPopupType())
                 QWindowSystemInterface::handleWindowActivated(0);
         }
+        m_platformWindow->closeActivePopupWindow();
     } else if (notificationName == NSWindowDidMiniaturizeNotification
                || notificationName == NSWindowDidDeminiaturizeNotification) {
         Qt::WindowState newState = notificationName == NSWindowDidMiniaturizeNotification ?
@@ -384,12 +385,7 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
         // Close any popup before entering/exiting full screen mode
         if (notificationName == NSWindowWillEnterFullScreenNotification
             || notificationName == NSWindowWillExitFullScreenNotification) {
-            if (m_platformWindow->m_activePopupWindow) {
-                Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
-                QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
-                QWindowSystemInterface::flushWindowSystemEvents();
-                m_platformWindow->m_activePopupWindow = 0;
-            }
+            m_platformWindow->closeActivePopupWindow();
         }
         if (notificationName == NSWindowDidEnterFullScreenNotification
             || notificationName == NSWindowDidExitFullScreenNotification) {
@@ -692,9 +688,7 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
     m_sendUpAsRightButton = false;
     if (m_platformWindow->m_activePopupWindow) {
         Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
-        QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
-        QWindowSystemInterface::flushWindowSystemEvents();
-        m_platformWindow->m_activePopupWindow = 0;
+        m_platformWindow->closeActivePopupWindow();
         // Consume the mouse event when closing the popup, except for tool tips
         // were it's expected that the event is processed normally.
         if (type != Qt::ToolTip)
@@ -857,12 +851,7 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
 {
     if (m_window->flags() & Qt::WindowTransparentForInput)
         return [super rightMouseDown:theEvent];
-    if (m_platformWindow->m_activePopupWindow) {
-        Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
-        QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
-        QWindowSystemInterface::flushWindowSystemEvents();
-        m_platformWindow->m_activePopupWindow = 0;
-    }
+    m_platformWindow->closeActivePopupWindow();
     m_buttons |= Qt::RightButton;
     [self handleMouseEvent:theEvent];
 }
@@ -888,12 +877,7 @@ static NSString *_q_NSWindowDidChangeOcclusionStateNotification = nil;
 {
     if (m_window->flags() & Qt::WindowTransparentForInput)
         return [super otherMouseDown:theEvent];
-    if (m_platformWindow->m_activePopupWindow) {
-        Qt::WindowType type = m_platformWindow->m_activePopupWindow->type();
-        QWindowSystemInterface::handleCloseEvent(m_platformWindow->m_activePopupWindow);
-        QWindowSystemInterface::flushWindowSystemEvents();
-        m_platformWindow->m_activePopupWindow = 0;
-    }
+    m_platformWindow->closeActivePopupWindow();
     m_buttons |= cocoaButton2QtButton([theEvent buttonNumber]);
     [self handleMouseEvent:theEvent];
 }

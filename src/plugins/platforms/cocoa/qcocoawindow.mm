@@ -444,6 +444,8 @@ QCocoaWindow::~QCocoaWindow()
         child->m_parentCocoaWindow = 0;
     }
 
+    closeActivePopupWindow();
+
     [m_contentView release];
     [m_nsWindow release];
     [m_windowCursor release];
@@ -631,6 +633,9 @@ void QCocoaWindow::setVisible(bool visible)
             // Register popup windows so that the parent window can close them when needed.
             if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip) {
                 // qDebug() << "transientParent and popup" << window()->type() << Qt::Popup << (window()->type() & Qt::Popup);
+                if (parentCocoaWindow->m_activePopupWindow) {
+                    parentCocoaWindow->closeActivePopupWindow();
+                }
                 parentCocoaWindow->m_activePopupWindow = window();
             }
 
@@ -738,7 +743,9 @@ void QCocoaWindow::setVisible(bool visible)
             monitor = nil;
         }
         if (parentCocoaWindow && window()->type() == Qt::Popup) {
-            parentCocoaWindow->m_activePopupWindow = 0;
+            if (parentCocoaWindow->m_activePopupWindow) {
+                parentCocoaWindow->closeActivePopupWindow();
+            }
             if (m_resizableTransientParent
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
                 && QSysInfo::QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7
@@ -1154,11 +1161,7 @@ void QCocoaWindow::setEmbeddedInForeignView(bool embedded)
 void QCocoaWindow::windowWillMove()
 {
     // Close any open popups on window move
-    if (m_activePopupWindow) {
-        QWindowSystemInterface::handleCloseEvent(m_activePopupWindow);
-        QWindowSystemInterface::flushWindowSystemEvents();
-        m_activePopupWindow = 0;
-    }
+    closeActivePopupWindow();
 }
 
 void QCocoaWindow::windowDidMove()
@@ -1790,6 +1793,15 @@ QMargins QCocoaWindow::frameMargins() const
 void QCocoaWindow::setFrameStrutEventsEnabled(bool enabled)
 {
     m_frameStrutEventsEnabled = enabled;
+}
+
+void QCocoaWindow::closeActivePopupWindow()
+{
+    if (m_activePopupWindow) {
+        QWindowSystemInterface::handleCloseEvent(m_activePopupWindow);
+        QWindowSystemInterface::flushWindowSystemEvents();
+        m_activePopupWindow = 0;
+    }
 }
 
 // QCocoaWindowBuilder

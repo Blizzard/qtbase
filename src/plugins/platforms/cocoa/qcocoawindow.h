@@ -223,6 +223,8 @@ public:
     void obscureWindow();
     void updateExposedGeometry();
     QWindow *childWindowAt(QPoint windowPoint);
+
+    void closeActivePopupWindow();
 protected:
     void recreateWindow(const QPlatformWindow *parentWindow);
     QCocoaNSWindow *createNSWindow();
