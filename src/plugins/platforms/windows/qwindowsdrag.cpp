@@ -559,7 +559,7 @@ QWindowsOleDropSource::QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeyState)
         break;
     }
 
-    const Qt::MouseButtons buttons =  QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState);
+    const Qt::MouseButtons buttons =  QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState, true);
     if (m_currentButtons == Qt::NoButton) {
         m_currentButtons = buttons;
     } else {
@@ -683,7 +683,7 @@ void QWindowsOleDropTarget::handleDrag(QWindow *window, DWORD grfKeyState,
     QWindowsDrag *windowsDrag = QWindowsDrag::instance();
     const Qt::DropActions actions = translateToQDragDropActions(*pdwEffect);
     QGuiApplicationPrivate::modifier_buttons = toQtKeyboardModifiers(grfKeyState);
-    QGuiApplicationPrivate::mouse_buttons = QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState);
+    QGuiApplicationPrivate::mouse_buttons = QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState, true);
 
     const QPlatformDragQtResponse response =
           QWindowSystemInterface::handleDrag(window, windowsDrag->dropData(), m_lastPoint, actions);

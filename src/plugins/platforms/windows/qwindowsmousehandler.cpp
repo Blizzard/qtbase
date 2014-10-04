@@ -215,8 +215,11 @@ bool QWindowsMouseHandler::translateMouseEvent(QWindow *window, HWND hwnd,
         return true;
     }
 
+    bool extraButtons = msg.message == WM_XBUTTONDOWN
+        || msg.message == WM_XBUTTONUP
+        || msg.message == WM_XBUTTONDBLCLK;
     QWindowsWindow *platformWindow = static_cast<QWindowsWindow *>(window->handle());
-    const Qt::MouseButtons buttons = keyStateToMouseButtons((int)msg.wParam);
+    const Qt::MouseButtons buttons = keyStateToMouseButtons((int)msg.wParam, extraButtons);
 
     // If the window was recently resized via mouse doubleclick on the frame or title bar,
     // we don't get WM_LBUTTONDOWN or WM_LBUTTONDBLCLK for the second click,

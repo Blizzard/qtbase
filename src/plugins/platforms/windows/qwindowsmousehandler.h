@@ -66,7 +66,7 @@ public:
                              QtWindows::WindowsEventType t, MSG msg,
                              LRESULT *result);
 
-    static inline Qt::MouseButtons keyStateToMouseButtons(int);
+    static inline Qt::MouseButtons keyStateToMouseButtons(int, bool);
     static inline Qt::KeyboardModifiers keyStateToModifiers(int);
     static inline int mouseButtonsToKeyState(Qt::MouseButtons);
 
@@ -87,19 +87,22 @@ private:
     QWindow *m_previousCaptureWindow;
 };
 
-Qt::MouseButtons QWindowsMouseHandler::keyStateToMouseButtons(int wParam)
+Qt::MouseButtons QWindowsMouseHandler::keyStateToMouseButtons(int wParam, bool extraButtons)
 {
     Qt::MouseButtons mb(Qt::NoButton);
+    wParam = GET_KEYSTATE_WPARAM(wParam);
     if (wParam & MK_LBUTTON)
         mb |= Qt::LeftButton;
     if (wParam & MK_MBUTTON)
         mb |= Qt::MiddleButton;
     if (wParam & MK_RBUTTON)
         mb |= Qt::RightButton;
-    if (wParam & MK_XBUTTON1)
-        mb |= Qt::XButton1;
-    if (wParam & MK_XBUTTON2)
-        mb |= Qt::XButton2;
+    if (extraButtons) {
+        if (wParam & MK_XBUTTON1 && !(wParam & ~MK_XBUTTON1))
+            mb |= Qt::XButton1;
+        if (wParam & MK_XBUTTON2 && !(wParam & ~MK_XBUTTON2))
+            mb |= Qt::XButton2;
+    }
     return mb;
 }
 
