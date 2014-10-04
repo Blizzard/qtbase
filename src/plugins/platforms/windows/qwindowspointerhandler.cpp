@@ -753,6 +753,16 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
     else
         mouseButtons = mouseButtonsFromKeyState(msg.wParam);
 
+    // Strip the buttons flag of any XButtons unless the Windows message
+    // is XButton-related and the XButton is the only one being used.
+    const bool extraButtons = msg.message == WM_XBUTTONDOWN
+        || msg.message == WM_XBUTTONUP
+        || msg.message == WM_XBUTTONDBLCLK;
+    if (!extraButtons || (mouseButtons != Qt::XButton1 && mouseButtons != Qt::XButton2)) {
+        mouseButtons &= ~Qt::XButton1;
+        mouseButtons &= ~Qt::XButton2;
+    }
+
     // When the left/right mouse buttons are pressed over the window title bar
     // WM_NCLBUTTONDOWN/WM_NCRBUTTONDOWN messages are received. But no UP
     // messages are received on release, only WM_NCMOUSEMOVE/WM_MOUSEMOVE.
