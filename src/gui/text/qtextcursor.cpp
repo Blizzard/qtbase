@@ -1162,7 +1162,7 @@ void QTextCursor::setPosition(int pos, MoveMode m)
         return;
 
     if (pos < 0 || pos >= d->priv->length()) {
-        qWarning("QTextCursor::setPosition: Position '%d' out of range", pos);
+        //qWarning("QTextCursor::setPosition: Position '%d' out of range", pos);
         return;
     }
 
