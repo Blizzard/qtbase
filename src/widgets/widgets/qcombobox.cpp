@@ -2401,13 +2401,6 @@ struct IndexSetter {
  * Tries to show a native popup. Returns true if it could, false otherwise.
  *
  */
-struct IndexSetter {
-    int index;
-    QComboBox *cb;
-
-    void operator()(void) { cb->setCurrentIndex(index); }
-};
-
 bool QComboBoxPrivate::showNativePopup()
 {
     Q_Q(QComboBox);
