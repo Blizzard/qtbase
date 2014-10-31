@@ -86,6 +86,7 @@ class QPlatformWindow;
 class QBackingStore;
 class QScreen;
 class QAccessibleInterface;
+class QWindowContainer;
 
 class Q_GUI_EXPORT QWindow : public QObject, public QSurface
 {
@@ -360,6 +361,7 @@ private:
 
     friend class QGuiApplication;
     friend class QGuiApplicationPrivate;
+    friend class QWindowContainer;
     friend Q_GUI_EXPORT QWindowPrivate *qt_window_private(QWindow *window);
 };
 

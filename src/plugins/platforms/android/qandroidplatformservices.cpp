@@ -43,29 +43,21 @@
 #include <QUrl>
 #include <QDir>
 #include <QDebug>
+#include <QtCore/private/qjni_p.h>
+
+QT_BEGIN_NAMESPACE
 
 QAndroidPlatformServices::QAndroidPlatformServices()
 {
-    QtAndroid::AttachedJNIEnv env;
-    if (!env.jniEnv)
-        return;
-
-    m_openURIMethodID = env.jniEnv->GetStaticMethodID(QtAndroid::applicationClass(),
-                                               "openURL",
-                                               "(Ljava/lang/String;)V");
 }
 
 bool QAndroidPlatformServices::openUrl(const QUrl &url)
 {
-    QtAndroid::AttachedJNIEnv env;
-    if (!env.jniEnv)
-        return false;
-
-    jstring string = env.jniEnv->NewString(reinterpret_cast<const jchar *>(url.toString().constData()),
-                                    url.toString().length());
-    env.jniEnv->CallStaticVoidMethod(QtAndroid::applicationClass(), m_openURIMethodID, string);
-    env.jniEnv->DeleteLocalRef(string);
-    return true;
+    QJNIObjectPrivate urlString = QJNIObjectPrivate::fromString(url.toString());
+    return QJNIObjectPrivate::callStaticMethod<jboolean>(QtAndroid::applicationClass(),
+                                                         "openURL",
+                                                         "(Ljava/lang/String;)Z",
+                                                         urlString.object());
 }
 
 bool QAndroidPlatformServices::openDocument(const QUrl &url)
@@ -77,3 +69,5 @@ QByteArray QAndroidPlatformServices::desktopEnvironment() const
 {
     return QByteArray("Android");
 }
+
+QT_END_NAMESPACE

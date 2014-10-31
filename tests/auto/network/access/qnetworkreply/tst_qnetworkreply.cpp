@@ -206,6 +206,7 @@ private Q_SLOTS:
     void getFromFileSpecial();
     void getFromFtp_data();
     void getFromFtp();
+    void getFromFtpAfterError();    // QTBUG-40797
     void getFromHttp_data();
     void getFromHttp();
     void getErrors_data();
@@ -460,6 +461,8 @@ private Q_SLOTS:
     void backgroundRequestConnectInBackground_data();
     void backgroundRequestConnectInBackground();
 #endif
+
+    void putWithRateLimiting();
 
     // NOTE: This test must be last!
     void parentingRepliesToTheApp();
@@ -1749,6 +1752,26 @@ void tst_QNetworkReply::getFromFtp()
 
     QCOMPARE(reply->header(QNetworkRequest::ContentLengthHeader).toLongLong(), reference.size());
     QCOMPARE(reply->readAll(), reference.readAll());
+}
+
+void tst_QNetworkReply::getFromFtpAfterError()
+{
+    QNetworkRequest invalidRequest(QUrl("ftp://" + QtNetworkSettings::serverName() + "/qtest/invalid.txt"));
+    QNetworkReplyPtr invalidReply;
+    invalidReply.reset(manager.get(invalidRequest));
+    QSignalSpy spy(invalidReply.data(), SIGNAL(error(QNetworkReply::NetworkError)));
+    QVERIFY(spy.wait());
+    QCOMPARE(invalidReply->error(), QNetworkReply::ContentNotFoundError);
+
+    QFile reference(testDataDir + "/rfc3252.txt");
+    QVERIFY(reference.open(QIODevice::ReadOnly));
+    QNetworkRequest validRequest(QUrl("ftp://" + QtNetworkSettings::serverName() + "/qtest/rfc3252.txt"));
+    QNetworkReplyPtr validReply;
+    RUN_REQUEST(runSimpleRequest(QNetworkAccessManager::GetOperation, validRequest, validReply));
+    QCOMPARE(validReply->url(), validRequest.url());
+    QCOMPARE(validReply->error(), QNetworkReply::NoError);
+    QCOMPARE(validReply->header(QNetworkRequest::ContentLengthHeader).toLongLong(), reference.size());
+    QCOMPARE(validReply->readAll(), reference.readAll());
 }
 
 void tst_QNetworkReply::getFromHttp_data()
@@ -7775,6 +7798,96 @@ void tst_QNetworkReply::backgroundRequestConnectInBackground()
 #endif
 }
 #endif
+
+class RateLimitedUploadDevice : public QIODevice
+{
+    Q_OBJECT
+public:
+    QByteArray data;
+    QBuffer buffer;
+    qint64 read;
+    qint64 bandwidthQuota;
+    QTimer timer;
+
+    RateLimitedUploadDevice(QByteArray d) : QIODevice(),data(d),read(0),bandwidthQuota(0) {
+        buffer.setData(data);
+        buffer.open(QIODevice::ReadOnly);
+        timer.setInterval(200);
+        QObject::connect(&timer, SIGNAL(timeout()), this, SLOT(timeoutSlot()));
+        timer.start();
+    }
+
+    virtual qint64 writeData(const char* , qint64 ) {
+        Q_ASSERT(false);
+        return 0;
+    }
+
+    virtual qint64 readData(char* data, qint64 maxlen) {
+        //qDebug() << Q_FUNC_INFO << maxlen << bandwidthQuota;
+        maxlen = qMin(maxlen, buffer.bytesAvailable());
+        maxlen = qMin(maxlen, bandwidthQuota);
+        if (maxlen <= 0) {  // no quota or at end
+            return 0;
+        }
+        bandwidthQuota -= maxlen; // reduce quota
+
+        qint64 ret = buffer.read(data, maxlen);
+        if (ret == -1) {
+            return -1;
+        }
+        read += ret;
+        //qDebug() << Q_FUNC_INFO << maxlen << bandwidthQuota << read << ret << buffer.bytesAvailable();
+        return ret;
+    }
+    virtual bool atEnd() const {
+        return buffer.atEnd();
+    }
+    virtual qint64 size() const{
+        return data.length();
+    }
+    qint64 bytesAvailable() const
+    {
+        return buffer.bytesAvailable() + QIODevice::bytesAvailable();
+    }
+    virtual bool isSequential() const{ // random access, we can seek
+        return false;
+    }
+    virtual bool seek ( qint64 pos ) {
+        return buffer.seek(pos);
+    }
+protected slots:
+    void timeoutSlot() {
+        //qDebug() << Q_FUNC_INFO;
+        bandwidthQuota = 8*1024; // fill quota
+        emit readyRead();
+    }
+};
+
+void tst_QNetworkReply::putWithRateLimiting()
+{
+    QFile reference(testDataDir + "/rfc3252.txt");
+    reference.open(QIODevice::ReadOnly);
+    QByteArray data = reference.readAll();
+    QVERIFY(data.length() > 0);
+
+    QUrl url = QUrl::fromUserInput("http://" + QtNetworkSettings::serverName()+ "/qtest/cgi-bin/echo.cgi?");
+
+    QNetworkRequest request(url);
+    QNetworkReplyPtr reply;
+
+    RateLimitedUploadDevice rateLimitedUploadDevice(data);
+    rateLimitedUploadDevice.open(QIODevice::ReadOnly);
+
+    RUN_REQUEST(runCustomRequest(request, reply,QByteArray("POST"), &rateLimitedUploadDevice));
+    QCOMPARE(reply->error(), QNetworkReply::NoError);
+    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
+
+    QByteArray uploadedData = reply->readAll();
+    QCOMPARE(uploadedData.length(), data.length());
+    QCOMPARE(uploadedData, data);
+}
+
+
 
 // NOTE: This test must be last testcase in tst_qnetworkreply!
 void tst_QNetworkReply::parentingRepliesToTheApp()

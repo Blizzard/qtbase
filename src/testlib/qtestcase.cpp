@@ -2617,10 +2617,12 @@ void QTest::ignoreMessage(QtMsgType type, const char *message)
     \since 5.3
 */
 
+#ifndef QT_NO_REGULAREXPRESSION
 void QTest::ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern)
 {
     QTestLog::ignoreMessage(type, messagePattern);
 }
+#endif
 
 /*! \internal
  */
@@ -2706,6 +2708,13 @@ QString QTest::qFindTestData(const QString& base, const char *file, int line, co
                     .arg(base, QDir::toNativeSeparators(candidate))),
                 file, line);
         }
+    }
+
+    // 4. Try resources
+    if (found.isEmpty()) {
+        QString candidate = QString::fromLatin1(":/%1").arg(base);
+        if (QFileInfo(candidate).exists())
+            found = candidate;
     }
 
     if (found.isEmpty()) {

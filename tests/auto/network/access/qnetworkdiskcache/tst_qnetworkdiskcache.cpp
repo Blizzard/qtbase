@@ -62,6 +62,7 @@ public slots:
     void cleanupTestCase();
     void init();
     void cleanup();
+    void accessAfterRemoveReadyReadSlot();
 
 private slots:
     void qnetworkdiskcache_data();
@@ -74,6 +75,7 @@ private slots:
     void data();
     void metaData();
     void remove();
+    void accessAfterRemove(); // QTBUG-17400
     void setCacheDirectory_data();
     void setCacheDirectory();
     void updateMetaData();
@@ -83,12 +85,17 @@ private slots:
     void oldCacheVersionFile_data();
     void oldCacheVersionFile();
 
+    void streamVersion_data();
+    void streamVersion();
+
     void sync();
 
     void crashWhenParentingCache();
 
 private:
     QTemporaryDir tempDir;
+    QUrl url; // used by accessAfterRemove()
+    QNetworkDiskCache *diskCache; // used by accessAfterRemove()
 };
 
 // FIXME same as in tst_qnetworkreply.cpp .. could be unified
@@ -370,6 +377,40 @@ void tst_QNetworkDiskCache::remove()
     QCOMPARE(countFiles(cacheDirectory).count(), NUM_SUBDIRECTORIES + 2);
 }
 
+void tst_QNetworkDiskCache::accessAfterRemove() // QTBUG-17400
+{
+    QByteArray data("HTTP/1.1 200 OK\r\n"
+                    "Content-Length: 1\r\n"
+                    "\r\n"
+                    "a");
+
+    MiniHttpServer server(data);
+
+    QNetworkAccessManager *manager = new QNetworkAccessManager();
+    SubQNetworkDiskCache subCache;
+    subCache.setCacheDirectory(QLatin1String("cacheDir"));
+    diskCache = &subCache;
+    manager->setCache(&subCache);
+
+    url = QUrl("http://127.0.0.1:" + QString::number(server.serverPort()));
+    QNetworkRequest request(url);
+
+    QNetworkReply *reply = manager->get(request);
+    connect(reply, SIGNAL(readyRead()), this, SLOT(accessAfterRemoveReadyReadSlot()));
+    connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()));
+
+    QTestEventLoop::instance().enterLoop(5);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+
+    reply->deleteLater();
+    manager->deleteLater();
+}
+
+void tst_QNetworkDiskCache::accessAfterRemoveReadyReadSlot()
+{
+    diskCache->remove(url); // this used to cause a crash later on
+}
+
 void tst_QNetworkDiskCache::setCacheDirectory_data()
 {
     QTest::addColumn<QString>("cacheDir");
@@ -527,6 +568,74 @@ void tst_QNetworkDiskCache::oldCacheVersionFile()
         QIODevice *device = cache.data(url);
         QVERIFY(!device);
         QVERIFY(!QFile::exists(cacheFile));
+    }
+}
+
+void tst_QNetworkDiskCache::streamVersion_data()
+{
+    QTest::addColumn<int>("version");
+    QTest::newRow("Qt 5.1") << int(QDataStream::Qt_5_1);
+    QDataStream ds;
+    QTest::newRow("current") << ds.version();
+    QTest::newRow("higher than current") << ds.version() + 1;
+}
+
+void tst_QNetworkDiskCache::streamVersion()
+{
+    SubQNetworkDiskCache cache;
+    QUrl url(EXAMPLE_URL);
+    cache.setupWithOne(tempDir.path(), url);
+
+    QString cacheFile;
+    // find the file
+    QStringList files = countFiles(cache.cacheDirectory());
+    foreach (const QString &file, files) {
+        QFileInfo info(file);
+        if (info.isFile()) {
+            cacheFile = file;
+            break;
+        }
+    }
+
+    QFile file(cacheFile);
+    QVERIFY(file.open(QFile::ReadWrite|QIODevice::Truncate));
+    QDataStream out(&file);
+    QFETCH(int, version);
+    if (version < out.version())
+        out.setVersion(version);
+    out << qint32(0xe8);    // cache magic
+    // Following code works only for cache file version 8 and should be updated on version change
+    out << qint32(8);
+    out << qint32(version);
+
+    QNetworkCacheMetaData md;
+    md.setUrl(url);
+    QNetworkCacheMetaData::RawHeader header("content-type", "text/html");
+    QNetworkCacheMetaData::RawHeaderList list;
+    list.append(header);
+    md.setRawHeaders(list);
+    md.setLastModified(QDateTime::currentDateTimeUtc().toOffsetFromUtc(3600));
+    out << md;
+
+    bool compressed = true;
+    out << compressed;
+
+    QByteArray data("Hello World!");
+    out << qCompress(data);
+
+    file.close();
+
+    QNetworkCacheMetaData cachedMetaData = cache.call_fileMetaData(cacheFile);
+    if (version > out.version()) {
+        QVERIFY(!cachedMetaData.isValid());
+        QVERIFY(!QFile::exists(cacheFile));
+    } else {
+        QVERIFY(cachedMetaData.isValid());
+        QVERIFY(QFile::exists(cacheFile));
+        QIODevice *dataDevice = cache.data(url);
+        QVERIFY(dataDevice != 0);
+        QByteArray cachedData = dataDevice->readAll();
+        QCOMPARE(cachedData, data);
     }
 }
 

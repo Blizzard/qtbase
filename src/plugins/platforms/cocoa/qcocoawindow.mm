@@ -237,6 +237,9 @@ static bool isMouseEvent(NSEvent *ev)
     if (!pw || pw->m_isNSWindowChild)
         return NO;
 
+    if (pw->shouldRefuseKeyWindowAndFirstResponder())
+        return NO;
+
     // The default implementation returns NO for title-bar less windows,
     // override and return yes here to make sure popup windows such as
     // the combobox popup can become the key window.
@@ -314,6 +317,9 @@ static bool isMouseEvent(NSEvent *ev)
     if (!pw)
         return NO;
 
+    if (pw->shouldRefuseKeyWindowAndFirstResponder())
+        return NO;
+
     // Only tool or dialog windows should become key:
     Qt::WindowType type = pw->window()->type();
     if (type == Qt::Tool || type == Qt::Dialog)
@@ -366,6 +372,7 @@ QCocoaWindow::QCocoaWindow(QWindow *tlw)
     , m_windowModality(Qt::NonModal)
     , m_windowUnderMouse(false)
     , m_inConstructor(true)
+    , m_inSetVisible(false)
     , m_glContext(0)
     , m_menubar(0)
     , m_windowCursor(0)
@@ -614,6 +621,8 @@ void QCocoaWindow::setVisible(bool visible)
     if (m_isNSWindowChild && m_hiddenByClipping)
         return;
 
+    m_inSetVisible = true;
+
     QCocoaAutoReleasePool pool;
     QCocoaWindow *parentCocoaWindow = 0;
     if (window()->transientParent())
@@ -756,6 +765,8 @@ void QCocoaWindow::setVisible(bool visible)
                 [parentCocoaWindow->m_nsWindow setStyleMask:[parentCocoaWindow->m_nsWindow styleMask] | NSResizableWindowMask];
         }
     }
+
+    m_inSetVisible = false;
 }
 
 NSInteger QCocoaWindow::windowLevel(Qt::WindowFlags flags)
@@ -1777,6 +1788,23 @@ QWindow *QCocoaWindow::childWindowAt(QPoint windowPoint)
                     targetWindow = static_cast<QCocoaWindow*>(handle)->childWindowAt(windowPoint - childWindow->position());
 
     return targetWindow;
+}
+
+bool QCocoaWindow::shouldRefuseKeyWindowAndFirstResponder()
+{
+    // This function speaks up if there's any reason
+    // to refuse key window or first responder state.
+
+    if (window()->flags() & Qt::WindowDoesNotAcceptFocus)
+        return true;
+
+    if (m_inSetVisible) {
+        QVariant showWithoutActivating = window()->property("_q_showWithoutActivating");
+        if (showWithoutActivating.isValid() && showWithoutActivating.toBool())
+            return true;
+    }
+
+    return false;
 }
 
 QMargins QCocoaWindow::frameMargins() const

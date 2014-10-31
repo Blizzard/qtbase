@@ -89,6 +89,12 @@ private slots:
     void eraseValidIteratorOnSharedMap();
 };
 
+struct IdentityTracker {
+    int value, id;
+};
+
+inline bool operator<(IdentityTracker lhs, IdentityTracker rhs) { return lhs.value < rhs.value; }
+
 typedef QMap<QString, QString> StringMap;
 
 class MyClass
@@ -1122,6 +1128,33 @@ void tst_QMap::insert()
         QCOMPARE(intMap.size(), 1000);
         QCOMPARE(intMap.value(i), -1);
     }
+
+    {
+        QMap<IdentityTracker, int> map;
+        QCOMPARE(map.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(map.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.insert(id01, id01.id).key().id, id00.id); // first key inserted is kept
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.find(searchKey).value(), id01.id);  // last-inserted value
+        QCOMPARE(map.find(searchKey).key().id, id00.id); // but first-inserted key
+    }
+    {
+        QMultiMap<IdentityTracker, int> map;
+        QCOMPARE(map.size(), 0);
+        const int dummy = -1;
+        IdentityTracker id00 = {0, 0}, id01 = {0, 1}, searchKey = {0, dummy};
+        QCOMPARE(map.insert(id00, id00.id).key().id, id00.id);
+        QCOMPARE(map.size(), 1);
+        QCOMPARE(map.insert(id01, id01.id).key().id, id01.id);
+        QCOMPARE(map.size(), 2);
+        QMultiMap<IdentityTracker, int>::const_iterator pos = map.constFind(searchKey);
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
+        ++pos;
+        QCOMPARE(pos.value(), pos.key().id); // key fits to value it was inserted with
+    }
 }
 
 void tst_QMap::checkMostLeftNode()
@@ -1179,10 +1212,15 @@ void tst_QMap::checkMostLeftNode()
 void tst_QMap::initializerList()
 {
 #ifdef Q_COMPILER_INITIALIZER_LISTS
-    QMap<int, QString> map{{1, "hello"}, {2, "initializer_list"}};
+    QMap<int, QString> map = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
     QCOMPARE(map.count(), 2);
-    QVERIFY(map[1] == "hello");
-    QVERIFY(map[2] == "initializer_list");
+    QCOMPARE(map[1], QString("hello"));
+    QCOMPARE(map[2], QString("initializer_list"));
+
+    // note the difference to std::map:
+    // std::map<int, QString> stdm = {{1, "bar"}, {1, "hello"}, {2, "initializer_list"}};
+    // QCOMPARE(stdm.size(), 2UL);
+    // QCOMPARE(stdm[1], QString("bar"));
 
     QMultiMap<QString, int> multiMap{{"il", 1}, {"il", 2}, {"il", 3}};
     QCOMPARE(multiMap.count(), 3);

@@ -76,6 +76,8 @@
 
 Q_IMPORT_PLUGIN(QAndroidPlatformIntegrationPlugin)
 
+QT_BEGIN_NAMESPACE
+
 static JavaVM *m_javaVM = NULL;
 static jclass m_applicationClass  = NULL;
 static jobject m_classLoaderObject = NULL;
@@ -411,10 +413,9 @@ namespace QtAndroid
     {
         QMutexLocker lock(&m_surfacesMutex);
         const auto &it = m_surfaces.find(surfaceId);
-        if (it == m_surfaces.end())
-            return;
+        if (it != m_surfaces.end())
+            m_surfaces.remove(surfaceId);
 
-        m_surfaces.remove(surfaceId);
         QJNIEnvironmentPrivate env;
         if (!env)
             return;
@@ -553,6 +554,12 @@ static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
                             jint desktopWidthPixels, jint desktopHeightPixels,
                             jdouble xdpi, jdouble ydpi, jdouble scaledDensity)
 {
+    // Android does not give us the correct screen size for immersive mode, but
+    // the surface does have the right size
+
+    widthPixels = qMax(widthPixels, desktopWidthPixels);
+    heightPixels = qMax(heightPixels, desktopHeightPixels);
+
     m_desktopWidthPixels = desktopWidthPixels;
     m_desktopHeightPixels = desktopHeightPixels;
     m_scaledDensity = scaledDensity;
@@ -560,15 +567,15 @@ static void setDisplayMetrics(JNIEnv */*env*/, jclass /*clazz*/,
     if (!m_androidPlatformIntegration) {
         QAndroidPlatformIntegration::setDefaultDisplayMetrics(desktopWidthPixels,
                                                               desktopHeightPixels,
-                                                              qRound(double(desktopWidthPixels)  / xdpi * 25.4),
-                                                              qRound(double(desktopHeightPixels) / ydpi * 25.4),
+                                                              qRound(double(widthPixels)  / xdpi * 25.4),
+                                                              qRound(double(heightPixels) / ydpi * 25.4),
                                                               widthPixels,
                                                               heightPixels);
     } else {
-        m_androidPlatformIntegration->setDisplayMetrics(qRound(double(desktopWidthPixels)  / xdpi * 25.4),
-                                                        qRound(double(desktopHeightPixels) / ydpi * 25.4));
-        m_androidPlatformIntegration->setDesktopSize(desktopWidthPixels, desktopHeightPixels);
+        m_androidPlatformIntegration->setDisplayMetrics(qRound(double(widthPixels)  / xdpi * 25.4),
+                                                        qRound(double(heightPixels) / ydpi * 25.4));
         m_androidPlatformIntegration->setScreenSize(widthPixels, heightPixels);
+        m_androidPlatformIntegration->setDesktopSize(desktopWidthPixels, desktopHeightPixels);
     }
 }
 
@@ -748,8 +755,11 @@ static int registerNatives(JNIEnv *env)
     return JNI_TRUE;
 }
 
+QT_END_NAMESPACE
+
 Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
 {
+    QT_USE_NAMESPACE
     typedef union {
         JNIEnv *nativeEnvironment;
         void *venv;
@@ -768,7 +778,6 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
     JNIEnv *env = uenv.nativeEnvironment;
     if (!registerNatives(env)
             || !QtAndroidInput::registerNatives(env)
-            || !QtAndroidClipboard::registerNatives(env)
             || !QtAndroidMenu::registerNatives(env)
             || !QtAndroidAccessibility::registerNatives(env)
             || !QtAndroidDialogHelpers::registerNatives(env)) {

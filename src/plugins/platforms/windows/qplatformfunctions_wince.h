@@ -86,8 +86,10 @@
 #define HWND_MESSAGE 0
 #endif
 
+// Real Value would be 0x40000000, but if we pass this to Windows Embedded Compact
+// he blits it wrongly, so lets not do any harm and define it to 0
 #ifndef CAPTUREBLT
-#define CAPTUREBLT                   (DWORD)0x40000000
+#define CAPTUREBLT                   (DWORD)0x0
 #endif
 
 #define SW_SHOWMINIMIZED SW_MINIMIZE
@@ -271,14 +273,19 @@ typedef struct tagTTPOLYCURVE
 #define WM_DRAWCLIPBOARD 0x0308
 #endif
 
+#include <QFileInfo>
+
 inline bool IsIconic( HWND /*hWnd*/ )
 {
     return false;
 }
 
-inline int AddFontResourceExW( LPCWSTR /*name*/, DWORD /*fl*/, PVOID /*res*/)
+inline int AddFontResourceExW( LPCWSTR name, DWORD /*fl*/, PVOID /*res*/)
 {
-    return 0;
+    QString fName = QString::fromWCharArray(name);
+    QFileInfo fileinfo(fName);
+    fName = fileinfo.absoluteFilePath();
+    return AddFontResource((LPCWSTR)fName.utf16());
 }
 
 inline bool RemoveFontResourceExW( LPCWSTR /*name*/, DWORD /*fl*/, PVOID /*pdv*/)

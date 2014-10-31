@@ -108,6 +108,10 @@ QT_BEGIN_NAMESPACE
     This class is only used if the text layout is used to lay out
     parts of a QTextDocument.
 
+    Normally, you do not need to create a QTextInlineObject. It is
+    used by QAbstractTextDocumentLayout to handle inline objects when
+    implementing a custom layout.
+
     The inline object has various attributes that can be set, for
     example using, setWidth(), setAscent(), and setDescent(). The
     rectangle it occupies is given by rect(), and its direction by
@@ -117,6 +121,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn QTextInlineObject::QTextInlineObject(int i, QTextEngine *e)
+    \internal
 
     Creates a new inline object for the item at position \a i in the
     text engine \a e.
@@ -1842,8 +1847,17 @@ void QTextLine::layout_helper(int maxGlyphs)
                 addNextCluster(lbh.currentPosition, end, lbh.tmpData, lbh.glyphCount,
                                current, lbh.logClusters, lbh.glyphs);
 
+                // This is a hack to fix a regression caused by the introduction of the
+                // whitespace flag to non-breakable spaces and will cause the non-breakable
+                // spaces to behave as in previous Qt versions in the line breaking algorithm.
+                // The line breaks do not currently follow the Unicode specs, but fixing this would
+                // require refactoring the code and would cause behavioral regressions.
+                bool isBreakableSpace = lbh.currentPosition < eng->layoutData->string.length()
+                                        && attributes[lbh.currentPosition].whiteSpace
+                                        && eng->layoutData->string.at(lbh.currentPosition).decompositionTag() != QChar::NoBreak;
+
                 if (lbh.currentPosition >= eng->layoutData->string.length()
-                    || attributes[lbh.currentPosition].whiteSpace
+                    || isBreakableSpace
                     || attributes[lbh.currentPosition].lineBreak) {
                     sb_or_ws = true;
                     break;

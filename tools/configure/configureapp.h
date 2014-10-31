@@ -140,6 +140,7 @@ private:
     QString opensslLibsRelease;
     QString opensslPath;
     QString dbusPath;
+    QString dbusHostPath;
     QString mysqlPath;
     QString psqlLibs;
     QString zlibLibs;
@@ -168,6 +169,7 @@ private:
     void reloadCmdLine();
     void saveCmdLine();
 
+    void addSysroot(QString *command);
     bool tryCompileProject(const QString &projectPath, const QString &extraOptions = QString());
     bool compilerSupportsFlag(const QString &compilerAndArgs);
 

@@ -106,7 +106,7 @@ private slots:
     void changeStyleInChangeEvent();
     void QTBUG15910_crashNullWidget();
     void QTBUG36933_brokenPseudoClassLookup();
-
+    void styleSheetChangeBeforePolish();
     //at the end because it mess with the style.
     void widgetStyle();
     void appStyle();
@@ -1754,6 +1754,29 @@ void tst_QStyleSheetStyle::QTBUG36933_brokenPseudoClassLookup()
     QVERIFY(testForColors(image, QColor(0xFF, 0x00, 0x00)));
 }
 
+void tst_QStyleSheetStyle::styleSheetChangeBeforePolish()
+{
+    QWidget widget;
+    QVBoxLayout *vbox = new QVBoxLayout(&widget);
+    QFrame *frame = new QFrame(&widget);
+    frame->setFixedSize(200, 200);
+    frame->setStyleSheet("background-color: #FF0000;");
+    frame->setStyleSheet("background-color: #00FF00;");
+    vbox->addWidget(frame);
+    QFrame *frame2 = new QFrame(&widget);
+    frame2->setFixedSize(200, 200);
+    frame2->setStyleSheet("background-color: #FF0000;");
+    frame2->setStyleSheet("background-color: #00FF00;");
+    vbox->addWidget(frame);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    QImage image(frame->size(), QImage::Format_ARGB32);
+    frame->render(&image);
+    QVERIFY(testForColors(image, QColor(0x00, 0xFF, 0x00)));
+    QImage image2(frame2->size(), QImage::Format_ARGB32);
+    frame2->render(&image2);
+    QVERIFY(testForColors(image2, QColor(0x00, 0xFF, 0x00)));
+}
 
 QTEST_MAIN(tst_QStyleSheetStyle)
 #include "tst_qstylesheetstyle.moc"

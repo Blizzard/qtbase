@@ -42,8 +42,9 @@
 #ifndef ANDROIDJNICLIPBOARD_H
 #define ANDROIDJNICLIPBOARD_H
 
-#include <jni.h>
 #include <QString>
+
+QT_BEGIN_NAMESPACE
 
 class QAndroidPlatformClipboard;
 namespace QtAndroidClipboard
@@ -54,8 +55,8 @@ namespace QtAndroidClipboard
     bool hasClipboardText();
     QString clipboardText();
     // Clipboard support
-
-    bool registerNatives(JNIEnv *env);
 }
+
+QT_END_NAMESPACE
 
 #endif // ANDROIDJNICLIPBOARD_H

@@ -115,6 +115,10 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
             win->setProperty(propertyName, q->property(propertyName));
     }
 
+#ifdef Q_OS_OSX
+    if (q->testAttribute(Qt::WA_ShowWithoutActivating))
+        win->setProperty("_q_showWithoutActivating", QVariant(true));
+#endif
     win->setFlags(data.window_flags);
     fixPosIncludesFrame();
     if (q->testAttribute(Qt::WA_Moved)
@@ -134,7 +138,7 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
     if (QWidget *nativeParent = q->nativeParentWidget()) {
         if (nativeParent->windowHandle()) {
             if (flags & Qt::Window) {
-                win->setTransientParent(nativeParent->windowHandle());
+                win->setTransientParent(nativeParent->window()->windowHandle());
                 win->setParent(0);
             } else {
                 win->setTransientParent(0);

@@ -124,7 +124,7 @@ private:
         for (int i = start + 1; i < end; ++i) {
             if (m_analysis[i].bidiLevel == m_analysis[start].bidiLevel
                 && m_analysis[i].flags == m_analysis[start].flags
-                && m_analysis[i].script == m_analysis[start].script
+                && (m_analysis[i].script == m_analysis[start].script || m_string[i] == QLatin1Char('.'))
                 && m_analysis[i].flags < QScriptAnalysis::SpaceTabOrObject
                 && i - start < MaxItemLength)
                 continue;
@@ -1298,8 +1298,12 @@ int QTextEngine::shapeTextWithHarfbuzz(const QScriptItem &si, const ushort *stri
             attrs.justification = hbAttrs.justification;
         }
 
-        for (quint32 i = 0; i < shaper_item.item.length; ++i)
+        for (quint32 i = 0; i < shaper_item.item.length; ++i) {
+            // Workaround wrong log_clusters for surrogates (i.e. QTBUG-39875)
+            if (shaper_item.log_clusters[i] >= shaper_item.num_glyphs)
+                shaper_item.log_clusters[i] = shaper_item.num_glyphs - 1;
             shaper_item.log_clusters[i] += glyph_pos;
+        }
 
         if (kerningEnabled && !shaper_item.kerning_applied)
             actualFontEngine->doKerning(&g, option.useDesignMetrics() ? QFontEngine::DesignMetrics : QFontEngine::ShaperFlags(0));

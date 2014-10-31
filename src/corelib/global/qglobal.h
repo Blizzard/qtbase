@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Copyright (C) 2012 Intel Corporation.
+** Copyright (C) 2014 Intel Corporation.
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -45,11 +45,11 @@
 
 #include <stddef.h>
 
-#define QT_VERSION_STR   "5.3.1"
+#define QT_VERSION_STR   "5.3.2"
 /*
    QT_VERSION is (major << 16) + (minor << 8) + patch.
 */
-#define QT_VERSION 0x050301
+#define QT_VERSION 0x050302
 /*
    can be used like #if (QT_VERSION >= QT_VERSION_CHECK(4, 4, 0))
 */
@@ -59,7 +59,11 @@
 #include <QtCore/qconfig.h>
 #include <QtCore/qfeatures.h>
 #endif
-#define QT_SUPPORTS(FEATURE) (!defined(QT_NO_##FEATURE))
+#ifdef _MSC_VER
+#  define QT_SUPPORTS(FEATURE) (!defined QT_NO_##FEATURE)
+#else
+#  define QT_SUPPORTS(FEATURE) (!defined(QT_NO_##FEATURE))
+#endif
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
 #  define QT_NO_UNSHARABLE_CONTAINERS
 #endif

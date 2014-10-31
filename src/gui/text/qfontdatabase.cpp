@@ -596,7 +596,7 @@ struct QtFontDesc
 
 static int match(int script, const QFontDef &request,
                  const QString &family_name, const QString &foundry_name, int force_encoding_id,
-                 QtFontDesc *desc, const QList<int> &blacklisted);
+                 QtFontDesc *desc, const QList<int> &blacklisted, bool fallback);
 
 static void initFontDef(const QtFontDesc &desc, const QFontDef &request, QFontDef *fontDef, bool multi)
 {
@@ -822,6 +822,13 @@ QFontEngine *loadSingleEngine(int script,
     QFontCache::Key key(def,script);
     QFontEngine *engine = QFontCache::instance()->findEngine(key);
     if (!engine) {
+        // If the font data's native stretch matches the requested stretch we need to set stretch to 100
+        // to avoid the fontengine synthesizing stretch. If they didn't match exactly we need to calculate
+        // the new stretch factor. This only done if not matched by styleName.
+        bool styleNameMatch = !request.styleName.isEmpty() && request.styleName == style->styleName;
+        if (!styleNameMatch && style->key.stretch != 0 && request.stretch != 0)
+            def.stretch = (request.stretch * 100 + 50) / style->key.stretch;
+
         engine = pfdb->fontEngine(def, size->handle);
         if (engine) {
             Q_ASSERT(engine->type() != QFontEngine::Multi);
@@ -931,7 +938,7 @@ static
 unsigned int bestFoundry(int script, unsigned int score, int styleStrategy,
                          const QtFontFamily *family, const QString &foundry_name,
                          QtFontStyle::Key styleKey, int pixelSize, char pitch,
-                         QtFontDesc *desc, int force_encoding_id)
+                         QtFontDesc *desc, int force_encoding_id, QString styleName = QString())
 {
     Q_UNUSED(force_encoding_id);
     Q_UNUSED(script);
@@ -953,7 +960,7 @@ unsigned int bestFoundry(int script, unsigned int score, int styleStrategy,
         FM_DEBUG("          looking for matching style in foundry '%s' %d",
                  foundry->name.isEmpty() ? "-- none --" : foundry->name.toLatin1().constData(), foundry->count);
 
-        QtFontStyle *style = bestStyle(foundry, styleKey);
+        QtFontStyle *style = bestStyle(foundry, styleKey, styleName);
 
         if (!style->smoothScalable && (styleStrategy & QFont::ForceOutline)) {
             FM_DEBUG("            ForceOutline set, but not smoothly scalable");
@@ -1079,7 +1086,7 @@ static bool matchFamilyName(const QString &familyName, QtFontFamily *f)
 */
 static int match(int script, const QFontDef &request,
                  const QString &family_name, const QString &foundry_name, int force_encoding_id,
-                 QtFontDesc *desc, const QList<int> &blacklistedFamilies)
+                 QtFontDesc *desc, const QList<int> &blacklistedFamilies, bool fallback = false)
 {
     Q_UNUSED(force_encoding_id);
     int result = -1;
@@ -1132,7 +1139,7 @@ static int match(int script, const QFontDef &request,
             load(test.family->name, script);
 
         // Check if family is supported in the script we want
-        if (script != QChar::Script_Common && !(test.family->writingSystems[writingSystem] & QtFontFamily::Supported))
+        if (!fallback && script != QChar::Script_Common && !(test.family->writingSystems[writingSystem] & QtFontFamily::Supported))
             continue;
 
         // as we know the script is supported, we can be sure
@@ -1140,13 +1147,13 @@ static int match(int script, const QFontDef &request,
         unsigned int newscore =
             bestFoundry(script, score, request.styleStrategy,
                         test.family, foundry_name, styleKey, request.pixelSize, pitch,
-                        &test, force_encoding_id);
+                        &test, force_encoding_id, request.styleName);
         if (test.foundry == 0) {
             // the specific foundry was not found, so look for
             // any foundry matching our requirements
             newscore = bestFoundry(script, score, request.styleStrategy, test.family,
                                    QString(), styleKey, request.pixelSize,
-                                   pitch, &test, force_encoding_id);
+                                   pitch, &test, force_encoding_id, request.styleName);
         }
 
         if (newscore < score) {
@@ -2450,7 +2457,7 @@ bool QFontDatabase::supportsThreadedFontRendering()
 */
 QFontEngine *
 QFontDatabase::findFont(int script, const QFontPrivate *fp,
-                        const QFontDef &request, bool multi)
+                        const QFontDef &request, bool multi, bool fallback)
 {
     QMutexLocker locker(fontDatabaseMutex());
 
@@ -2478,7 +2485,7 @@ QFontDatabase::findFont(int script, const QFontPrivate *fp,
 
     QtFontDesc desc;
     QList<int> blackListed;
-    int index = match(script, request, family_name, foundry_name, force_encoding_id, &desc, blackListed);
+    int index = match(script, request, family_name, foundry_name, force_encoding_id, &desc, blackListed, fallback);
     if (index >= 0) {
         engine = loadEngine(script, request, desc.family, desc.foundry, desc.style, desc.size);
         if (!engine)

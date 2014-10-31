@@ -1636,9 +1636,10 @@ void QObject::killTimer(int id)
         int at = d->extraData ? d->extraData->runningTimers.indexOf(id) : -1;
         if (at == -1) {
             // timer isn't owned by this object
-            qWarning("QObject::killTimer(): Error: timer id %d is not valid for object %p (%s), timer has not been killed",
+            qWarning("QObject::killTimer(): Error: timer id %d is not valid for object %p (%s, %s), timer has not been killed",
                      id,
                      this,
+                     metaObject()->className(),
                      qPrintable(objectName()));
             return;
         }
@@ -3230,7 +3231,7 @@ QObjectPrivate::Connection *QMetaObjectPrivate::connect(const QObject *sender,
             int method_index_absolute = method_index + method_offset;
 
             while (c2) {
-                if (c2->receiver == receiver && c2->method() == method_index_absolute)
+                if (!c2->isSlotObject && c2->receiver == receiver && c2->method() == method_index_absolute)
                     return 0;
                 c2 = c2->nextConnectionList;
             }
@@ -4711,10 +4712,14 @@ bool QObject::disconnectImpl(const QObject *sender, void **signal, const QObject
     int signal_index = -1;
     if (signal) {
         void *args[] = { &signal_index, signal };
-        senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
-        if (signal_index < 0 || signal_index >= QMetaObjectPrivate::get(senderMetaObject)->signalCount) {
-            qWarning("QObject::disconnect: signal not found in %s", senderMetaObject->className());
-            return false;
+        for (; senderMetaObject && signal_index < 0; senderMetaObject = senderMetaObject->superClass()) {
+            senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
+            if (signal_index >= 0 && signal_index < QMetaObjectPrivate::get(senderMetaObject)->signalCount)
+                break;
+        }
+        if (!senderMetaObject) {
+            qWarning("QObject::disconnect: signal not found in %s", sender->metaObject()->className());
+            return QMetaObject::Connection(0);
         }
         signal_index += QMetaObjectPrivate::signalOffset(senderMetaObject);
     }
