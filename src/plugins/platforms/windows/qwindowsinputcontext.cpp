@@ -269,6 +269,27 @@ void QWindowsInputContext::invokeAction(QInputMethod::Action action, int cursorP
     ImmReleaseContext(m_compositionContext.hwnd, himc);
 }
 
+static HIMC defaultContext = 0;
+
+void QWindowsInputContext::setFocusObject(QObject *object)
+{
+    QWindow *window = qApp->focusWindow();
+    if (object && window) {
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        if (inputMethodAccepted()) {
+            // enable ime
+            if (defaultContext)
+                ImmAssociateContext(hwnd, defaultContext);
+        }
+        else {
+            // disable ime
+            HIMC oldimc = ImmAssociateContext(hwnd, 0);
+            if (!defaultContext)
+                defaultContext = oldimc;
+        }
+    }
+}
+
 QWindowsInputContext *QWindowsInputContext::instance()
 {
     return static_cast<QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());

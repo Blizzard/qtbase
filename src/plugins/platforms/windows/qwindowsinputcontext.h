@@ -72,6 +72,8 @@ public:
     virtual void update(Qt::InputMethodQueries);
     virtual void invokeAction(QInputMethod::Action, int cursorPosition);
 
+    virtual void setFocusObject(QObject *object);
+
     static QWindowsInputContext *instance();
 
     bool startComposition(HWND hwnd);
