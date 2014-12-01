@@ -247,8 +247,22 @@ void QWindowsShell32DLL::init()
     sHGetImageList = (SHGetImageList)library.resolve("SHGetImageList");
 }
 
+QWindowsDwmapiDLL::QWindowsDwmapiDLL()
+    : dwmIsCompositionEnabled(0)
+{
+}
+
+void QWindowsDwmapiDLL::init()
+{
+    if (QSysInfo::WindowsVersion < QSysInfo::WV_6_0)
+        return;
+    QSystemLibrary library(QStringLiteral("dwmapi"));
+    dwmIsCompositionEnabled = (DwmIsCompositionEnabled)library.resolve("DwmIsCompositionEnabled");
+}
+
 QWindowsUser32DLL QWindowsContext::user32dll;
 QWindowsShell32DLL QWindowsContext::shell32dll;
+QWindowsDwmapiDLL QWindowsContext::dwmapidll;
 
 #endif // !Q_OS_WINCE
 
@@ -287,6 +301,7 @@ struct QWindowsContextPrivate {
     const QByteArray m_eventType;
     QWindow *m_lastActiveWindow;
     bool m_asyncExpose;
+    int m_lockUpdatesCount;
 };
 
 QWindowsContextPrivate::QWindowsContextPrivate()
@@ -294,11 +309,13 @@ QWindowsContextPrivate::QWindowsContextPrivate()
     , m_oleInitializeResult(OleInitialize(NULL))
     , m_eventType(QByteArrayLiteral("windows_generic_MSG"))
     , m_lastActiveWindow(0), m_asyncExpose(0)
+    , m_lockUpdatesCount(0)
 {
     const QSysInfo::WinVersion ver = QSysInfo::windowsVersion();
 #ifndef Q_OS_WINCE
     QWindowsContext::user32dll.init();
     QWindowsContext::shell32dll.init();
+    QWindowsContext::dwmapidll.init();
     // Ensure metrics functions report correct data, QTBUG-30063.
     if (QWindowsContext::user32dll.setProcessDPIAware)
         QWindowsContext::user32dll.setProcessDPIAware();
@@ -1149,6 +1166,41 @@ void QWindowsContext::setAsyncExpose(bool value)
     d->m_asyncExpose = value;
 }
 
+static bool isAeroGlassEnabled()
+{
+    if (!QWindowsContext::dwmapidll.dwmIsCompositionEnabled)
+        return false;
+    if (QSysInfo::WindowsVersion > QSysInfo::WV_6_1)
+        return true;
+    BOOL enabled = FALSE;
+    return SUCCEEDED(QWindowsContext::dwmapidll.dwmIsCompositionEnabled(&enabled)) && enabled;
+}
+
+LRESULT QWindowsContext::callDefWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    // Windows will repaint portions of the default non-client area over the top
+    // of a custom frame. This rendering is being done from inside the default handling
+    // of WM_SETICON. Prevent a window from being able to redraw in response to invalidations
+    // that may occur from Windows message handling for the duration of this call.
+    if (message == WM_SETICON) {
+        if ((GetWindowLong(hwnd, GWL_STYLE) & WS_VISIBLE) != 0) {
+            bool force = !(GetWindowLong(hwnd, GWL_STYLE) & WS_CAPTION);
+            // Lock Redrawing
+            if ((force || !isAeroGlassEnabled()) && ++d->m_lockUpdatesCount == 1) {
+                SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) & ~WS_VISIBLE);
+            }
+            LRESULT result = DefWindowProc(hwnd, message, wParam, lParam);
+            // Unlock Redrawing
+            if ((force || !isAeroGlassEnabled()) && --d->m_lockUpdatesCount <= 0) {
+                SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) | WS_VISIBLE);
+                d->m_lockUpdatesCount = 0;
+            }
+            return result;
+        }
+    }
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
 /*!
     \brief Windows functions for actual windows.
 
@@ -1171,7 +1223,7 @@ extern "C" LRESULT QT_WIN_CALLBACK qWindowsWndProc(HWND hwnd, UINT message, WPAR
         }
     }
     if (!handled)
-        result = DefWindowProc(hwnd, message, wParam, lParam);
+        result = QWindowsContext::instance()->callDefWindowProc(hwnd, message, wParam, lParam);
     return result;
 }
 

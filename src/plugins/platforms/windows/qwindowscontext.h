@@ -126,6 +126,16 @@ struct QWindowsShell32DLL
     SHGetStockIconInfo sHGetStockIconInfo;
     SHGetImageList sHGetImageList;
 };
+
+struct QWindowsDwmapiDLL
+{
+    QWindowsDwmapiDLL();
+    inline void init();
+
+    typedef HRESULT (WINAPI *DwmIsCompositionEnabled)(BOOL*);
+
+    DwmIsCompositionEnabled dwmIsCompositionEnabled;
+};
 #endif // Q_OS_WINCE
 
 class QWindowsContext
@@ -177,6 +187,7 @@ public:
     inline bool windowsProc(HWND hwnd, UINT message,
                             QtWindows::WindowsEventType et,
                             WPARAM wParam, LPARAM lParam, LRESULT *result);
+    LRESULT callDefWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
     QWindow *keyGrabber() const;
     void setKeyGrabber(QWindow *hwnd);
@@ -197,6 +208,7 @@ public:
 #ifndef Q_OS_WINCE
     static QWindowsUser32DLL user32dll;
     static QWindowsShell32DLL shell32dll;
+    static QWindowsDwmapiDLL dwmapidll;
 #endif
 
     static QByteArray comErrorString(HRESULT hr);
