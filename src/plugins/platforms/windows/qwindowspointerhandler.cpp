@@ -757,7 +757,8 @@ bool QWindowsPointerHandler::translateMouseEvent(QWindow *window,
     // is XButton-related and the XButton is the only one being used.
     const bool extraButtons = msg.message == WM_XBUTTONDOWN
         || msg.message == WM_XBUTTONUP
-        || msg.message == WM_XBUTTONDBLCLK;
+        || msg.message == WM_XBUTTONDBLCLK
+        || msg.message == WM_MOUSEMOVE;
     if (!extraButtons || (mouseButtons != Qt::XButton1 && mouseButtons != Qt::XButton2)) {
         mouseButtons &= ~Qt::XButton1;
         mouseButtons &= ~Qt::XButton2;
