@@ -217,7 +217,8 @@ bool QWindowsMouseHandler::translateMouseEvent(QWindow *window, HWND hwnd,
 
     bool extraButtons = msg.message == WM_XBUTTONDOWN
         || msg.message == WM_XBUTTONUP
-        || msg.message == WM_XBUTTONDBLCLK;
+        || msg.message == WM_XBUTTONDBLCLK
+        || msg.message == WM_MOUSEMOVE;
     QWindowsWindow *platformWindow = static_cast<QWindowsWindow *>(window->handle());
     const Qt::MouseButtons buttons = keyStateToMouseButtons((int)msg.wParam, extraButtons);
 
