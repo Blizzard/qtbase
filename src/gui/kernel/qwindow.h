@@ -70,7 +70,6 @@ class QMoveEvent;
 class QResizeEvent;
 class QShowEvent;
 class QHideEvent;
-class QCloseEvent;
 class QKeyEvent;
 class QMouseEvent;
 #ifndef QT_NO_WHEELEVENT
@@ -333,7 +332,7 @@ protected:
 
     virtual void showEvent(QShowEvent *);
     virtual void hideEvent(QHideEvent *);
-    virtual void closeEvent(QCloseEvent *);
+    // TODO Qt 6 - add closeEvent virtual handler
 
     virtual bool event(QEvent *);
     virtual void keyPressEvent(QKeyEvent *);
