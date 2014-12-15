@@ -3762,13 +3762,6 @@ void QGraphicsScene::helpEvent(QGraphicsSceneHelpEvent *helpEvent)
             if (helpEvent->isAccepted())
                 return;
         }
-#ifdef QT_BLIZZARD_QGRAPHICSITEM_CUSTOM_TOOLTIP
-        if (tmp->flags() & QGraphicsItem::ItemHasCustomTooltip) {
-            sendEvent(tmp, helpEvent);
-            if (helpEvent->isAccepted())
-                return;
-        }
-#endif
         if (!tmp->toolTip().isEmpty()) {
             toolTipItem = tmp;
             break;
