@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Copyright (C) 2014 Intel Corporation
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -545,6 +537,13 @@ void QProcessPrivate::Channel::clear()
     calling setEnvironment(). To set a working directory, call
     setWorkingDirectory(). By default, processes are run in the
     current working directory of the calling process.
+
+    The positioning and the screen Z-order of windows belonging to
+    GUI applications started with QProcess are controlled by
+    the underlying windowing system. For Qt 5 applications, the
+    positioning can be specified using the \c{-qwindowgeometry}
+    command line option; X11 applications generally accept a
+    \c{-geometry} command line option.
 
     \note On QNX, setting the working directory may cause all
     application threads, with the exception of the QProcess caller
@@ -1667,11 +1666,10 @@ QProcess::ProcessState QProcess::state() const
 
 /*!
     \deprecated
-    Sets the environment that QProcess will use when starting a process to the
-    \a environment specified which consists of a list of key=value pairs.
+    Sets the environment that QProcess will pass to the child process.
+    The parameter \a environment is a list of key=value pairs.
 
-    For example, the following code adds the \c{C:\\BIN} directory to the list of
-    executable paths (\c{PATHS}) on Windows:
+    For example, the following code adds the environment variable \c{TMPDIR}:
 
     \snippet qprocess-environment/main.cpp 0
 
@@ -1687,7 +1685,7 @@ void QProcess::setEnvironment(const QStringList &environment)
 
 /*!
     \deprecated
-    Returns the environment that QProcess will use when starting a
+    Returns the environment that QProcess will pass to its child
     process, or an empty QStringList if no environment has been set
     using setEnvironment(). If no environment has been set, the
     environment of the calling process will be used.
@@ -1705,11 +1703,9 @@ QStringList QProcess::environment() const
 
 /*!
     \since 4.6
-    Sets the environment that QProcess will use when starting a process to the
-    \a environment object.
+    Sets the \a environment that QProcess will pass to the child process.
 
-    For example, the following code adds the \c{C:\\BIN} directory to the list of
-    executable paths (\c{PATHS}) on Windows and sets \c{TMPDIR}:
+    For example, the following code adds the environment variable \c{TMPDIR}:
 
     \snippet qprocess-environment/main.cpp 1
 
@@ -1725,7 +1721,7 @@ void QProcess::setProcessEnvironment(const QProcessEnvironment &environment)
 
 /*!
     \since 4.6
-    Returns the environment that QProcess will use when starting a
+    Returns the environment that QProcess will pass to its child
     process, or an empty object if no environment has been set using
     setEnvironment() or setProcessEnvironment(). If no environment has
     been set, the environment of the calling process will be used.
@@ -1857,8 +1853,8 @@ void QProcess::setProcessState(ProcessState state)
 
 /*!
   This function is called in the child process context just before the
-    program is executed on Unix or Mac OS X (i.e., after \e fork(), but before
-    \e execve()). Reimplement this function to do last minute initialization
+    program is executed on Unix or OS X (i.e., after \c fork(), but before
+    \c execve()). Reimplement this function to do last minute initialization
     of the child process. Example:
 
     \snippet code/src_corelib_io_qprocess.cpp 4
@@ -1868,7 +1864,7 @@ void QProcess::setProcessState(ProcessState state)
     execution, your workaround is to emit finished() and then call
     exit().
 
-    \warning This function is called by QProcess on Unix and Mac OS X
+    \warning This function is called by QProcess on Unix and OS X
     only. On Windows and QNX, it is not called.
 */
 void QProcess::setupChildProcess()
@@ -2276,7 +2272,7 @@ void QProcess::setArguments(const QStringList &arguments)
 
     On Windows, terminate() posts a WM_CLOSE message to all toplevel windows
     of the process and then to the main thread of the process itself. On Unix
-    and Mac OS X the SIGTERM signal is sent.
+    and OS X the \c SIGTERM signal is sent.
 
     Console applications on Windows that do not run an event loop, or whose
     event loop does not handle the WM_CLOSE message, can only be terminated by
@@ -2293,7 +2289,7 @@ void QProcess::terminate()
 /*!
     Kills the current process, causing it to exit immediately.
 
-    On Windows, kill() uses TerminateProcess, and on Unix and Mac OS X, the
+    On Windows, kill() uses TerminateProcess, and on Unix and OS X, the
     SIGKILL signal is sent to the process.
 
     \sa terminate()

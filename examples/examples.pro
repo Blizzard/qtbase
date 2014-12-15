@@ -2,22 +2,20 @@ TEMPLATE      = subdirs
 CONFIG += no_docs_target
 
 SUBDIRS = \
+    corelib \
     dbus \
     embedded \
     gui \
-    ipc \
-    json \
     network \
-    opengl \
     qpa \
     qtconcurrent \
     qtestlib \
     sql \
-    threads \
-    tools \
     touch \
     widgets \
     xml
+
+contains(QT_CONFIG, opengl): SUBDIRS += opengl
 
 aggregate.files = aggregate/examples.pro
 aggregate.path = $$[QT_INSTALL_EXAMPLES]

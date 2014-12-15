@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the demonstration applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -72,13 +64,13 @@ class ColorEdit : public ParameterEdit
 public:
     ColorEdit(QRgb initialColor, int id);
     QRgb color() const {return m_color;}
-    virtual void emitChange() {emit colorChanged(m_color, m_id);}
+    virtual void emitChange() Q_DECL_OVERRIDE {emit colorChanged(m_color, m_id);}
 public slots:
     void editDone();
 signals:
     void colorChanged(QRgb color, int id);
 protected:
-    virtual void mousePressEvent(QMouseEvent *event);
+    virtual void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
     void setColor(QRgb color); // also emits colorChanged()
 private:
     QGraphicsScene *m_dialogParentScene;
@@ -94,7 +86,7 @@ class FloatEdit : public ParameterEdit
 public:
     FloatEdit(float initialValue, int id);
     float value() const {return m_value;}
-    virtual void emitChange() {emit valueChanged(m_value, m_id);}
+    virtual void emitChange() Q_DECL_OVERRIDE {emit valueChanged(m_value, m_id);}
 public slots:
     void editDone();
 signals:
@@ -111,9 +103,9 @@ class GraphicsWidget : public QGraphicsProxyWidget
 public:
     GraphicsWidget() : QGraphicsProxyWidget(0, Qt::Window) {}
 protected:
-    virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value);
-    virtual void resizeEvent(QGraphicsSceneResizeEvent *event);
-    virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
+    virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value) Q_DECL_OVERRIDE;
+    virtual void resizeEvent(QGraphicsSceneResizeEvent *event) Q_DECL_OVERRIDE;
+    virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) Q_DECL_OVERRIDE;
 };
 
 class TwoSidedGraphicsWidget : public QObject
@@ -153,7 +145,7 @@ signals:
     void shaderChanged(int);
     void doubleClicked();
 protected:
-    virtual void mouseDoubleClickEvent(QMouseEvent *event);
+    virtual void mouseDoubleClickEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
 
     QVector<QByteArray> m_parameterNames;
     QComboBox *m_textureCombo;
@@ -180,7 +172,7 @@ signals:
     void doubleClicked();
     void newItemTriggered(ItemDialog::ItemType type);
 protected:
-    virtual void mouseDoubleClickEvent(QMouseEvent *event);
+    virtual void mouseDoubleClickEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
 };
 
 class Scene : public QGraphicsScene
@@ -189,7 +181,7 @@ class Scene : public QGraphicsScene
 public:
     Scene(int width, int height, int maxTextureSize);
     ~Scene();
-    virtual void drawBackground(QPainter *painter, const QRectF &rect);
+    virtual void drawBackground(QPainter *painter, const QRectF &rect) Q_DECL_OVERRIDE;
 
 public slots:
     void setShader(int index);
@@ -205,10 +197,10 @@ protected:
     void defaultStates();
     void renderCubemaps();
 
-    virtual void mousePressEvent(QGraphicsSceneMouseEvent *event);
-    virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event);
-    virtual void mouseMoveEvent(QGraphicsSceneMouseEvent *event);
-    virtual void wheelEvent(QGraphicsSceneWheelEvent * event);
+    virtual void mousePressEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
+    virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
+    virtual void mouseMoveEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
+    virtual void wheelEvent(QGraphicsSceneWheelEvent * event) Q_DECL_OVERRIDE;
 private:
     void initGL();
     QPointF pixelPosToViewPos(const QPointF& p);

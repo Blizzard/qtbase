@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -150,6 +142,8 @@ private slots:
     void chainedProxyModelRoleNames();
 
     void noMapAfterSourceDelete();
+    void forwardDropApi();
+
 protected:
     void buildHierarchy(const QStringList &data, QAbstractItemModel *model);
     void checkHierarchy(const QStringList &data, const QAbstractItemModel *model);
@@ -158,6 +152,8 @@ private:
     QStandardItemModel *m_model;
     QSortFilterProxyModel *m_proxy;
 };
+
+Q_DECLARE_METATYPE(QAbstractItemModel::LayoutChangeHint)
 
 // Testing get/set functions
 void tst_QSortFilterProxyModel::getSetCheck()
@@ -177,6 +173,7 @@ void tst_QSortFilterProxyModel::getSetCheck()
 tst_QSortFilterProxyModel::tst_QSortFilterProxyModel()
     : m_model(0), m_proxy(0)
 {
+    qRegisterMetaType<QAbstractItemModel::LayoutChangeHint>();
 }
 
 void tst_QSortFilterProxyModel::initTestCase()
@@ -1472,7 +1469,7 @@ void tst_QSortFilterProxyModel::filterCurrent()
 
     view.show();
     view.setModel(&proxy);
-    QSignalSpy spy(view.selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)));
+    QSignalSpy spy(view.selectionModel(), &QItemSelectionModel::currentChanged);
     QVERIFY(spy.isValid());
 
     view.setCurrentIndex(proxy.index(0, 0));
@@ -1620,10 +1617,10 @@ void tst_QSortFilterProxyModel::removeSourceRows()
         proxy.sort(0, static_cast<Qt::SortOrder>(sortOrder));
     (void)proxy.rowCount(QModelIndex()); // force mapping
 
-    QSignalSpy removeSpy(&proxy, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy insertSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
-    QSignalSpy aboutToRemoveSpy(&proxy, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)));
-    QSignalSpy aboutToInsertSpy(&proxy, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)));
+    QSignalSpy removeSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy insertSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
+    QSignalSpy aboutToRemoveSpy(&proxy, &QSortFilterProxyModel::rowsAboutToBeRemoved);
+    QSignalSpy aboutToInsertSpy(&proxy, &QSortFilterProxyModel::rowsAboutToBeInserted);
 
     QVERIFY(removeSpy.isValid());
     QVERIFY(insertSpy.isValid());
@@ -1801,8 +1798,8 @@ void tst_QSortFilterProxyModel::changeFilter()
     proxy.sort(0, static_cast<Qt::SortOrder>(sortOrder));
     (void)proxy.rowCount(QModelIndex()); // force mapping
 
-    QSignalSpy initialRemoveSpy(&proxy, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy initialInsertSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy initialRemoveSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy initialInsertSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
 
     QVERIFY(initialRemoveSpy.isValid());
     QVERIFY(initialInsertSpy.isValid());
@@ -1825,8 +1822,8 @@ void tst_QSortFilterProxyModel::changeFilter()
         QCOMPARE(proxy.data(index, Qt::DisplayRole).toString(), initialProxyItems.at(i));
     }
 
-    QSignalSpy finalRemoveSpy(&proxy, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy finalInsertSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy finalRemoveSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy finalInsertSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
 
     QVERIFY(finalRemoveSpy.isValid());
     QVERIFY(finalInsertSpy.isValid());
@@ -1976,8 +1973,8 @@ void tst_QSortFilterProxyModel::changeSourceData()
 
     proxy.setFilterRegExp(filter);
 
-    QSignalSpy removeSpy(&proxy, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy insertSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy removeSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy insertSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
 
     QVERIFY(removeSpy.isValid());
     QVERIFY(insertSpy.isValid());
@@ -2075,7 +2072,7 @@ void tst_QSortFilterProxyModel::selectionFilteredOut()
 
     view.show();
     view.setModel(&proxy);
-    QSignalSpy spy(view.selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)));
+    QSignalSpy spy(view.selectionModel(), &QItemSelectionModel::currentChanged);
     QVERIFY(spy.isValid());
 
     view.setCurrentIndex(proxy.index(0, 0));
@@ -2190,8 +2187,8 @@ void tst_QSortFilterProxyModel::insertIntoChildrenlessItem()
     QSortFilterProxyModel proxy;
     proxy.setSourceModel(&model);
 
-    QSignalSpy colsInsertedSpy(&proxy, SIGNAL(columnsInserted(QModelIndex,int,int)));
-    QSignalSpy rowsInsertedSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy colsInsertedSpy(&proxy, &QSortFilterProxyModel::columnsInserted);
+    QSignalSpy rowsInsertedSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
 
     QVERIFY(colsInsertedSpy.isValid());
     QVERIFY(rowsInsertedSpy.isValid());
@@ -2270,7 +2267,7 @@ void tst_QSortFilterProxyModel::insertRowIntoFilteredParent()
     EvenOddFilterModel proxy;
     proxy.setSourceModel(&model);
 
-    QSignalSpy spy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy spy(&proxy, &EvenOddFilterModel::rowsInserted);
     QVERIFY(spy.isValid());
 
     QStandardItem *itemA = new QStandardItem();
@@ -2299,8 +2296,8 @@ void tst_QSortFilterProxyModel::filterOutParentAndFilterInChild()
     QStandardItem *itemC = new QStandardItem("C");
     itemA->appendRow(itemC); // filtered
 
-    QSignalSpy removedSpy(&proxy, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy insertedSpy(&proxy, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy removedSpy(&proxy, &QSortFilterProxyModel::rowsRemoved);
+    QSignalSpy insertedSpy(&proxy, &QSortFilterProxyModel::rowsInserted);
 
     QVERIFY(removedSpy.isValid());
     QVERIFY(insertedSpy.isValid());
@@ -2903,8 +2900,8 @@ void tst_QSortFilterProxyModel::appearsAndSort()
     QCOMPARE(sourceModel.rowCount(), 3);
     QCOMPARE(proxyModel.rowCount(), 0); //all rows are hidden at first;
 
-    QSignalSpy spyAbout1(&proxyModel, SIGNAL(layoutAboutToBeChanged()));
-    QSignalSpy spyChanged1(&proxyModel, SIGNAL(layoutChanged()));
+    QSignalSpy spyAbout1(&proxyModel, &PModel::layoutAboutToBeChanged);
+    QSignalSpy spyChanged1(&proxyModel, &PModel::layoutChanged);
 
     QVERIFY(spyAbout1.isValid());
     QVERIFY(spyChanged1.isValid());
@@ -2915,8 +2912,8 @@ void tst_QSortFilterProxyModel::appearsAndSort()
     secondProxyModel.setDynamicSortFilter(true);
     secondProxyModel.sort(0, Qt::DescendingOrder);
     QCOMPARE(secondProxyModel.rowCount(), 0); //all rows are hidden at first;
-    QSignalSpy spyAbout2(&secondProxyModel, SIGNAL(layoutAboutToBeChanged()));
-    QSignalSpy spyChanged2(&secondProxyModel, SIGNAL(layoutChanged()));
+    QSignalSpy spyAbout2(&secondProxyModel, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy spyChanged2(&secondProxyModel, &QSortFilterProxyModel::layoutChanged);
 
     QVERIFY(spyAbout2.isValid());
     QVERIFY(spyChanged2.isValid());
@@ -3443,25 +3440,25 @@ void tst_QSortFilterProxyModel::testParentLayoutChanged()
     proxy2.setSourceModel(&proxy);
     proxy2.setObjectName("proxy2");
 
-    QSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(QModelIndex,QModelIndex)));
+    QSignalSpy dataChangedSpy(&model, &QSortFilterProxyModel::dataChanged);
 
     QVERIFY(dataChangedSpy.isValid());
 
     // Verify that the no-arg signal is still emitted.
-    QSignalSpy layoutAboutToBeChangedSpy(&proxy, SIGNAL(layoutAboutToBeChanged()));
-    QSignalSpy layoutChangedSpy(&proxy, SIGNAL(layoutChanged()));
+    QSignalSpy layoutAboutToBeChangedSpy(&proxy, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy layoutChangedSpy(&proxy, &QSortFilterProxyModel::layoutChanged);
 
     QVERIFY(layoutAboutToBeChangedSpy.isValid());
     QVERIFY(layoutChangedSpy.isValid());
 
-    QSignalSpy parentsAboutToBeChangedSpy(&proxy, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy parentsChangedSpy(&proxy, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
+    QSignalSpy parentsAboutToBeChangedSpy(&proxy, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy parentsChangedSpy(&proxy, &QSortFilterProxyModel::layoutChanged);
 
     QVERIFY(parentsAboutToBeChangedSpy.isValid());
     QVERIFY(parentsChangedSpy.isValid());
 
-    QSignalSpy proxy2ParentsAboutToBeChangedSpy(&proxy2, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy proxy2ParentsChangedSpy(&proxy2, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
+    QSignalSpy proxy2ParentsAboutToBeChangedSpy(&proxy2, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy proxy2ParentsChangedSpy(&proxy2, &QSortFilterProxyModel::layoutChanged);
 
     QVERIFY(proxy2ParentsAboutToBeChangedSpy.isValid());
     QVERIFY(proxy2ParentsChangedSpy.isValid());
@@ -3484,8 +3481,8 @@ void tst_QSortFilterProxyModel::testParentLayoutChanged()
     QVariantList beforeSignal = parentsAboutToBeChangedSpy.first();
     QVariantList afterSignal = parentsChangedSpy.first();
 
-    QCOMPARE(beforeSignal.size(), 1);
-    QCOMPARE(afterSignal.size(), 1);
+    QCOMPARE(beforeSignal.size(), 2);
+    QCOMPARE(afterSignal.size(), 2);
 
     QList<QPersistentModelIndex> beforeParents = beforeSignal.first().value<QList<QPersistentModelIndex> >();
     QList<QPersistentModelIndex> afterParents = afterSignal.first().value<QList<QPersistentModelIndex> >();
@@ -3620,16 +3617,16 @@ void tst_QSortFilterProxyModel::moveSourceRows()
     filterBothProxy.setSourceModel(&proxy);
     filterBothProxy.setFilterRegExp("5"); // The parents are 6 and 3. This filters both out.
 
-    QSignalSpy modelBeforeSpy(&model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy modelAfterSpy(&model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy proxyBeforeMoveSpy(m_proxy, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy proxyAfterMoveSpy(m_proxy, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy proxyBeforeParentLayoutSpy(&proxy, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy proxyAfterParentLayoutSpy(&proxy, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy filterBeforeParentLayoutSpy(&filterProxy, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy filterAfterParentLayoutSpy(&filterProxy, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy filterBothBeforeParentLayoutSpy(&filterBothProxy, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-    QSignalSpy filterBothAfterParentLayoutSpy(&filterBothProxy, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
+    QSignalSpy modelBeforeSpy(&model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy modelAfterSpy(&model, &DynamicTreeModel::rowsMoved);
+    QSignalSpy proxyBeforeMoveSpy(m_proxy, &QSortFilterProxyModel::rowsAboutToBeMoved);
+    QSignalSpy proxyAfterMoveSpy(m_proxy, &QSortFilterProxyModel::rowsMoved);
+    QSignalSpy proxyBeforeParentLayoutSpy(&proxy, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy proxyAfterParentLayoutSpy(&proxy, &QSortFilterProxyModel::layoutChanged);
+    QSignalSpy filterBeforeParentLayoutSpy(&filterProxy, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy filterAfterParentLayoutSpy(&filterProxy, &QSortFilterProxyModel::layoutChanged);
+    QSignalSpy filterBothBeforeParentLayoutSpy(&filterBothProxy, &QSortFilterProxyModel::layoutAboutToBeChanged);
+    QSignalSpy filterBothAfterParentLayoutSpy(&filterBothProxy, &QSortFilterProxyModel::layoutChanged);
 
     QVERIFY(modelBeforeSpy.isValid());
     QVERIFY(modelAfterSpy.isValid());
@@ -3870,6 +3867,36 @@ void tst_QSortFilterProxyModel::noMapAfterSourceDelete()
     delete model;
 
     QVERIFY(!persistent.isValid());
+}
+
+// QTBUG-39549, test whether canDropMimeData(), dropMimeData() are proxied as well
+// by invoking them on a QSortFilterProxyModel proxying a QStandardItemModel that allows drops
+// on row #1, filtering for that row.
+class DropTestModel : public QStandardItemModel {
+public:
+    explicit DropTestModel(QObject *parent = 0) : QStandardItemModel(0, 1, parent)
+    {
+        appendRow(new QStandardItem(QStringLiteral("Row0")));
+        appendRow(new QStandardItem(QStringLiteral("Row1")));
+    }
+
+    bool canDropMimeData(const QMimeData *, Qt::DropAction,
+                         int row, int /* column */, const QModelIndex & /* parent */) const Q_DECL_OVERRIDE
+    { return row == 1; }
+
+    bool dropMimeData(const QMimeData *, Qt::DropAction,
+                      int row, int /* column */, const QModelIndex & /* parent */) Q_DECL_OVERRIDE
+    { return row == 1; }
+};
+
+void tst_QSortFilterProxyModel::forwardDropApi()
+{
+    QSortFilterProxyModel model;
+    model.setSourceModel(new DropTestModel(&model));
+    model.setFilterFixedString(QStringLiteral("Row1"));
+    QCOMPARE(model.rowCount(), 1);
+    QVERIFY(model.canDropMimeData(0, Qt::CopyAction, 0, 0, QModelIndex()));
+    QVERIFY(model.dropMimeData(0, Qt::CopyAction, 0, 0, QModelIndex()));
 }
 
 QTEST_MAIN(tst_QSortFilterProxyModel)

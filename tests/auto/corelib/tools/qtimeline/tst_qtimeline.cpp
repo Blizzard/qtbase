@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -102,7 +94,7 @@ void tst_QTimeLine::range()
 
     // Verify that you can change the range in the timeLine
     timeLine.setFrameRange(10, 20);
-    QSignalSpy spy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy spy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
 #ifdef Q_OS_WINCE
@@ -131,7 +123,7 @@ void tst_QTimeLine::currentTime()
 {
     QTimeLine timeLine(2000);
     timeLine.setUpdateInterval((timeLine.duration()/2) / 33);
-    QSignalSpy spy(&timeLine, SIGNAL(valueChanged(qreal)));
+    QSignalSpy spy(&timeLine, &QTimeLine::valueChanged);
     QVERIFY(spy.isValid());
     timeLine.setFrameRange(10, 20);
     QCOMPARE(timeLine.currentTime(), 0);
@@ -202,7 +194,7 @@ void tst_QTimeLine::frameRate()
 
     // Default speed
     timeLine.setUpdateInterval(1000 / 33);
-    QSignalSpy spy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy spy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration()*2);
@@ -225,7 +217,7 @@ void tst_QTimeLine::value()
     QVERIFY(timeLine.currentValue() == 0.0);
 
     // Default speed
-    QSignalSpy spy(&timeLine, SIGNAL(valueChanged(qreal)));
+    QSignalSpy spy(&timeLine, &QTimeLine::valueChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration()/3);
@@ -256,7 +248,7 @@ void tst_QTimeLine::currentFrame()
     QCOMPARE(timeLine.currentFrame(), 10);
 
     // Default speed
-    QSignalSpy spy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy spy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration()/3);
@@ -288,7 +280,7 @@ void tst_QTimeLine::loopCount()
     QCOMPARE(timeLine.loopCount(), 0);
 
     // Default speed infiniti looping
-    QSignalSpy spy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy spy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration());
@@ -306,8 +298,8 @@ void tst_QTimeLine::loopCount()
     timeLine.setFrameRange(0, 2);
     timeLine.setLoopCount(4);
 
-    QSignalSpy finishedSpy(&timeLine, SIGNAL(finished()));
-    QSignalSpy frameChangedSpy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy finishedSpy(&timeLine, &QTimeLine::finished);
+    QSignalSpy frameChangedSpy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(finishedSpy.isValid());
     QVERIFY(frameChangedSpy.isValid());
     QEventLoop loop;
@@ -461,7 +453,7 @@ void tst_QTimeLine::frameChanged()
     timeLine.setCurveShape(QTimeLine::LinearCurve);
     timeLine.setFrameRange(0,9);
     timeLine.setUpdateInterval(800);
-    QSignalSpy spy(&timeLine, SIGNAL(frameChanged(int)));
+    QSignalSpy spy(&timeLine, &QTimeLine::frameChanged);
     QVERIFY(spy.isValid());
 
     // Test what happens when duration expires before all frames are emitted.
@@ -492,7 +484,7 @@ void tst_QTimeLine::stopped()
     QTimeLine timeLine;
     timeLine.setFrameRange(0, 9);
     qRegisterMetaType<QTimeLine::State>("QTimeLine::State");
-    QSignalSpy spy(&timeLine, SIGNAL(stateChanged(QTimeLine::State)));
+    QSignalSpy spy(&timeLine, &QTimeLine::stateChanged);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration()*2);
@@ -510,7 +502,7 @@ void tst_QTimeLine::finished()
 {
     QTimeLine timeLine;
     timeLine.setFrameRange(0,9);
-    QSignalSpy spy(&timeLine, SIGNAL(finished()));
+    QSignalSpy spy(&timeLine, &QTimeLine::finished);
     QVERIFY(spy.isValid());
     timeLine.start();
     QTest::qWait(timeLine.duration()*2);
@@ -543,7 +535,7 @@ void tst_QTimeLine::multipleTimeLines()
     // Stopping a timer shouldn't affect the other timers
     QTimeLine timeLine(200);
     timeLine.setFrameRange(0,99);
-    QSignalSpy spy(&timeLine, SIGNAL(finished()));
+    QSignalSpy spy(&timeLine, &QTimeLine::finished);
     QVERIFY(spy.isValid());
 
     QTimeLine timeLineKiller;

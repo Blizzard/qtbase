@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +35,7 @@
 
 #include <qvariant.h>
 #include <qbitarray.h>
+#include <qbytearraylist.h>
 #include <qdatetime.h>
 #include <qmap.h>
 #include <qiodevice.h>
@@ -216,6 +209,7 @@ private slots:
     void convertBoolToByteArray_data() const;
     void convertByteArrayToBool() const;
     void convertByteArrayToBool_data() const;
+    void convertIterables() const;
     void toIntFromQString() const;
     void toIntFromDouble() const;
     void setValue();
@@ -224,6 +218,7 @@ private slots:
     void moreCustomTypes();
     void movabilityTest();
     void variantInVariant();
+    void userConversion();
 
     void forwardDeclare();
     void debugStream_data();
@@ -249,6 +244,10 @@ private slots:
     void pairElements();
 
     void enums();
+
+    void compareSanity_data();
+    void compareSanity();
+
 private:
     void dataStream_data(QDataStream::Version version);
     void loadQVariantFromDataStream(QDataStream::Version version);
@@ -318,18 +317,16 @@ void tst_QVariant::constructor_invalid()
 
     QFETCH(uint, typeId);
     {
-        MessageHandlerInvalidType msg;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type, type id:"));
         QVariant variant(static_cast<QVariant::Type>(typeId));
         QVERIFY(!variant.isValid());
         QVERIFY(variant.userType() == QMetaType::UnknownType);
-        QVERIFY(msg.ok);
     }
     {
-        MessageHandlerInvalidType msg;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type, type id:"));
         QVariant variant(typeId, /* copy */ 0);
         QVERIFY(!variant.isValid());
         QVERIFY(variant.userType() == QMetaType::UnknownType);
-        QVERIFY(msg.ok);
     }
 }
 
@@ -2843,6 +2840,49 @@ void tst_QVariant::convertByteArrayToBool_data() const
         << QByteArray("true");
 }
 
+void tst_QVariant::convertIterables() const
+{
+    {
+        QStringList list;
+        list.append("Hello");
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+    }
+    {
+        QByteArrayList list;
+        list.append("Hello");
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+    }
+    {
+        QVariantList list;
+        list.append("World");
+        QCOMPARE(QVariant::fromValue(list).value<QVariantList>().count(), list.count());
+    }
+    {
+        QMap<QString, int> map;
+        map.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+    }
+    {
+        QVariantMap map;
+        map.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+    }
+    {
+        QHash<QString, int> hash;
+        hash.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+    }
+    {
+        QVariantHash hash;
+        hash.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+    }
+}
+
 /*!
   We verify that:
     1. Converting the string "9.9" to int fails. This is the behavior of
@@ -3314,6 +3354,98 @@ void tst_QVariant::variantInVariant()
     QCOMPARE(qvariant_cast<QVariant>(var9), var1);
 }
 
+struct Convertible {
+    double d;
+    operator int() const { return (int)d; }
+    operator double() const { return d; }
+    operator QString() const { return QString::number(d); }
+};
+
+Q_DECLARE_METATYPE(Convertible);
+
+struct BigConvertible {
+    double d;
+    double dummy;
+    double dummy2;
+    operator int() const { return (int)d; }
+    operator double() const { return d; }
+    operator QString() const { return QString::number(d); }
+};
+
+Q_DECLARE_METATYPE(BigConvertible);
+Q_STATIC_ASSERT(sizeof(BigConvertible) > sizeof(QVariant));
+
+void tst_QVariant::userConversion()
+{
+    {
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<int, Convertible>()));
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<double, Convertible>()));
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<QString, Convertible>()));
+
+        Convertible c = { 123 };
+        QVariant v = qVariantFromValue(c);
+
+        bool ok;
+        v.toInt(&ok);
+        QVERIFY(!ok);
+
+        v.toDouble(&ok);
+        QVERIFY(!ok);
+
+        QString s = v.toString();
+        QVERIFY(s.isEmpty());
+
+        QMetaType::registerConverter<Convertible, int>();
+        QMetaType::registerConverter<Convertible, double>();
+        QMetaType::registerConverter<Convertible, QString>();
+
+        int i = v.toInt(&ok);
+        QVERIFY(ok);
+        QCOMPARE(i, 123);
+
+        double d = v.toDouble(&ok);
+        QVERIFY(ok);
+        QCOMPARE(d, 123.);
+
+        s = v.toString();
+        QCOMPARE(s, QString::fromLatin1("123"));
+    }
+
+    {
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<int, BigConvertible>()));
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<double, BigConvertible>()));
+        QVERIFY(!(QMetaType::hasRegisteredConverterFunction<QString, BigConvertible>()));
+
+        BigConvertible c = { 123, 0, 0 };
+        QVariant v = qVariantFromValue(c);
+
+        bool ok;
+        v.toInt(&ok);
+        QVERIFY(!ok);
+
+        v.toDouble(&ok);
+        QVERIFY(!ok);
+
+        QString s = v.toString();
+        QVERIFY(s.isEmpty());
+
+        QMetaType::registerConverter<BigConvertible, int>();
+        QMetaType::registerConverter<BigConvertible, double>();
+        QMetaType::registerConverter<BigConvertible, QString>();
+
+        int i = v.toInt(&ok);
+        QVERIFY(ok);
+        QCOMPARE(i, 123);
+
+        double d = v.toDouble(&ok);
+        QVERIFY(ok);
+        QCOMPARE(d, 123.);
+
+        s = v.toString();
+        QCOMPARE(s, QString::fromLatin1("123"));
+    }
+}
+
 class Forward;
 Q_DECLARE_OPAQUE_POINTER(Forward*)
 Q_DECLARE_METATYPE(Forward*)
@@ -3648,11 +3780,28 @@ struct ContainerAPI<Container, QString>
     }
 };
 
-// We have no built-in defines to check the stdlib features.
-// #define TEST_FORWARD_LIST
+template<typename Container>
+struct ContainerAPI<Container, QByteArray>
+{
+    static void insert(Container &container, int value)
+    {
+        container.push_back(QByteArray::number(value));
+    }
 
-#ifdef TEST_FORWARD_LIST
-#include <forward_list>
+    static bool compare(const QVariant &variant, QByteArray value)
+    {
+        return variant.value<QByteArray>() == value;
+    }
+    static bool compare(QVariant variant, const QVariant &value)
+    {
+        return variant == value;
+    }
+};
+
+#ifdef __has_include
+# if __has_include(<forward_list>)
+# define TEST_FORWARD_LIST
+# include <forward_list>
 
 Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(std::forward_list)
 
@@ -3706,7 +3855,8 @@ struct ContainerAPI<std::forward_list<QString> >
         return variant == value;
     }
 };
-#endif
+# endif // __has_include(<forward_list>)
+#endif // __has_include
 
 template<typename Container>
 struct KeyGetter
@@ -3764,12 +3914,12 @@ void tst_QVariant::iterateContainerElements()
 {
 #ifdef Q_COMPILER_RANGE_FOR
 
-#define TEST_RANGE_FOR(CONTAINER, VALUE_TYPE) \
+#define TEST_RANGE_FOR(CONTAINER) \
         numSeen = 0; \
         containerIter = intList.begin(); \
         for (QVariant v : listIter) { \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(v, *containerIter)); \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(v, varList.at(numSeen))); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(v, *containerIter)); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(v, varList.at(numSeen))); \
             ++containerIter; \
             ++numSeen; \
         } \
@@ -3777,17 +3927,17 @@ void tst_QVariant::iterateContainerElements()
 
 #else
 
-#define TEST_RANGE_FOR(CONTAINER, VALUE_TYPE)
+#define TEST_RANGE_FOR(CONTAINER)
 
 #endif
 
-#define TEST_SEQUENTIAL_ITERATION(CONTAINER, VALUE_TYPE) \
+#define TEST_SEQUENTIAL_ITERATION_ON_FULL_NAME(CONTAINER) \
     { \
         int numSeen = 0; \
-        CONTAINER<VALUE_TYPE > intList; \
-        ContainerAPI<CONTAINER<VALUE_TYPE > >::insert(intList, 1); \
-        ContainerAPI<CONTAINER<VALUE_TYPE > >::insert(intList, 2); \
-        ContainerAPI<CONTAINER<VALUE_TYPE > >::insert(intList, 3); \
+        CONTAINER intList; \
+        ContainerAPI<CONTAINER >::insert(intList, 1); \
+        ContainerAPI<CONTAINER >::insert(intList, 2); \
+        ContainerAPI<CONTAINER >::insert(intList, 3); \
         \
         QVariant listVariant = QVariant::fromValue(intList); \
         QVERIFY(listVariant.canConvert<QVariantList>()); \
@@ -3796,12 +3946,12 @@ void tst_QVariant::iterateContainerElements()
         QSequentialIterable listIter = listVariant.value<QSequentialIterable>(); \
         QCOMPARE(varList.size(), listIter.size()); \
         \
-        CONTAINER<VALUE_TYPE >::iterator containerIter = intList.begin(); \
-        const CONTAINER<VALUE_TYPE >::iterator containerEnd = intList.end(); \
+        CONTAINER::iterator containerIter = intList.begin(); \
+        const CONTAINER::iterator containerEnd = intList.end(); \
         for (int i = 0; i < listIter.size(); ++i, ++containerIter, ++numSeen) \
         { \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(listIter.at(i), *containerIter)); \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(listIter.at(i), varList.at(i))); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(listIter.at(i), *containerIter)); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(listIter.at(i), varList.at(i))); \
         } \
         QCOMPARE(numSeen, (int)std::distance(intList.begin(), intList.end())); \
         QCOMPARE(containerIter, containerEnd); \
@@ -3809,14 +3959,18 @@ void tst_QVariant::iterateContainerElements()
         containerIter = intList.begin(); \
         numSeen = 0; \
         Q_FOREACH (const QVariant &v, listIter) { \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(v, *containerIter)); \
-            QVERIFY(ContainerAPI<CONTAINER<VALUE_TYPE > >::compare(v, varList.at(numSeen))); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(v, *containerIter)); \
+            QVERIFY(ContainerAPI<CONTAINER >::compare(v, varList.at(numSeen))); \
             ++containerIter; \
             ++numSeen; \
         } \
         QCOMPARE(numSeen, (int)std::distance(intList.begin(), intList.end())); \
-        TEST_RANGE_FOR(CONTAINER, VALUE_TYPE) \
+        TEST_RANGE_FOR(CONTAINER) \
     }
+
+#define TEST_SEQUENTIAL_ITERATION(CONTAINER, VALUE_TYPE) \
+    TEST_SEQUENTIAL_ITERATION_ON_FULL_NAME(CONTAINER<VALUE_TYPE > )
+
 
     TEST_SEQUENTIAL_ITERATION(QVector, int)
     TEST_SEQUENTIAL_ITERATION(QVector, QVariant)
@@ -3827,6 +3981,7 @@ void tst_QVariant::iterateContainerElements()
     TEST_SEQUENTIAL_ITERATION(QList, int)
     TEST_SEQUENTIAL_ITERATION(QList, QVariant)
     TEST_SEQUENTIAL_ITERATION(QList, QString)
+    TEST_SEQUENTIAL_ITERATION(QList, QByteArray)
     TEST_SEQUENTIAL_ITERATION(QStack, int)
     TEST_SEQUENTIAL_ITERATION(QStack, QVariant)
     TEST_SEQUENTIAL_ITERATION(QStack, QString)
@@ -3836,6 +3991,8 @@ void tst_QVariant::iterateContainerElements()
     TEST_SEQUENTIAL_ITERATION(std::list, int)
     TEST_SEQUENTIAL_ITERATION(std::list, QVariant)
     TEST_SEQUENTIAL_ITERATION(std::list, QString)
+    TEST_SEQUENTIAL_ITERATION_ON_FULL_NAME(QStringList)
+    TEST_SEQUENTIAL_ITERATION_ON_FULL_NAME(QByteArrayList)
 
 #ifdef TEST_FORWARD_LIST
     TEST_SEQUENTIAL_ITERATION(std::forward_list, int)
@@ -4035,6 +4192,32 @@ void tst_QVariant::enums()
     testVariant(EnumTest_Enum3::EnumTest_Enum3_value, &ok);
     QVERIFY(ok);
 #endif
+}
+
+void tst_QVariant::compareSanity_data()
+{
+    QTest::addColumn<QVariant>("value1");
+    QTest::addColumn<QVariant>("value2");
+
+    QTest::newRow( "int <>/== QUrl" ) << QVariant( 97 ) << QVariant(QUrl("a"));
+    QTest::newRow( "int <>/== QChar" ) << QVariant( 97 ) << QVariant(QChar('a'));
+    QTest::newRow( "int <>/== QString" ) << QVariant( 97 ) << QVariant(QString("a"));
+    QTest::newRow( "QUrl <>/== QChar" ) << QVariant(QUrl("a")) << QVariant(QChar('a'));
+    QTest::newRow( "QUrl <>/== QString" ) << QVariant(QUrl("a")) << QVariant(QString("a"));
+    QTest::newRow( "QChar <>/== QString" ) << QVariant(QChar('a')) << QVariant(QString("a"));
+}
+
+void tst_QVariant::compareSanity()
+{
+    QFETCH(QVariant, value1);
+    QFETCH(QVariant, value2);
+
+    if (value1 == value2) {
+        QVERIFY(!(value1 < value2) && !(value1 > value2));
+    } else {
+        QVERIFY(value1 != value2);
+        QVERIFY((value1 < value2) || (value1 > value2));
+    }
 }
 
 QTEST_MAIN(tst_QVariant)

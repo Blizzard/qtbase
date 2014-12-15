@@ -2,9 +2,7 @@ TEMPLATE=subdirs
 SUBDIRS=\
    # atwrapper \ # QTBUG-19452
    baselineexample \
-   collections \
    compiler \
-   d3dcompiler \
    gestures \
    headersclean \
    lancelot \
@@ -58,8 +56,6 @@ cross_compile: SUBDIRS -= \
    compiler
 
 wince*|!contains(QT_CONFIG, accessibility): SUBDIRS -= qaccessibility
-
-!angle_d3d11: SUBDIRS -= d3dcompiler
 
 !contains(QT_CONFIG, accessibility-atspi-bridge): SUBDIRS -= qaccessibilitylinux
 

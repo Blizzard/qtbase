@@ -5,35 +5,27 @@
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -521,18 +513,23 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
             const QString target = var("DEST_TARGET");
             QString manifest = project->first("QMAKE_MANIFEST").toQString();
             QString extraLFlags;
+            const bool linkerSupportsEmbedding = (msvcVersion() >= 1200);
             if (manifest.isEmpty()) {
                 generateManifest = true;
-                manifest = escapeFilePath(target + ".embed.manifest");
-                extraLFlags = "/MANIFEST /MANIFESTFILE:" + manifest;
-                project->values("QMAKE_CLEAN") << manifest;
+                if (linkerSupportsEmbedding) {
+                    extraLFlags = "/MANIFEST:embed";
+                } else {
+                    manifest = escapeFilePath(target + ".embed.manifest");
+                    extraLFlags += "/MANIFEST /MANIFESTFILE:" + manifest;
+                    project->values("QMAKE_CLEAN") << manifest;
+                }
             } else {
                 manifest = escapeFilePath(fileFixify(manifest));
             }
 
             const QString resourceId = (templateName == "app") ? "1" : "2";
             const bool incrementalLinking = project->values("QMAKE_LFLAGS").toQStringList().filter(QRegExp("(/|-)INCREMENTAL:NO")).isEmpty();
-            if (incrementalLinking) {
+            if (incrementalLinking && !linkerSupportsEmbedding) {
                 // Link a resource that contains the manifest without modifying the exe/dll after linking.
 
                 QString manifest_rc = escapeFilePath(target +  "_manifest.rc");
@@ -565,8 +562,10 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
                 // directly embed the manifest in the executable after linking
                 t << "\n\t";
                 writeLinkCommand(t, extraLFlags);
-                t << "\n\tmt.exe /nologo /manifest " << manifest
-                  << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
+                if (!linkerSupportsEmbedding) {
+                    t << "\n\tmt.exe /nologo /manifest " << manifest
+                      << " /outputresource:$(DESTDIR_TARGET);" << resourceId;
+                }
             }
         }  else {
             t << "\n\t";
@@ -595,6 +594,15 @@ void NmakeMakefileGenerator::writeLinkCommand(QTextStream &t, const QString &ext
     if (!extraInlineFileContent.isEmpty())
         t << ' ' << extraInlineFileContent;
     t << "\n<<";
+}
+
+int NmakeMakefileGenerator::msvcVersion() const
+{
+    const int fallbackVersion = 800;    // Visual Studio 2005
+    const QString ver = project->first(ProKey("MSVC_VER")).toQString();
+    bool ok;
+    float f = ver.toFloat(&ok);
+    return ok ? int(f * 100) : fallbackVersion;
 }
 
 QT_END_NAMESPACE

@@ -41,10 +41,8 @@
 #ifndef BUTTONTESTER_H
 #define BUTTONTESTER_H
 
-#include <QtWidgets>
 #include <QTextEdit>
 #include <QString>
-#include <QDebug>
 #include <QMouseEvent>
 #include <QWheelEvent>
 
@@ -53,11 +51,11 @@ class ButtonTester : public QTextEdit
     Q_OBJECT
 
 protected:
-    void    mousePressEvent(QMouseEvent *event);
-    void    mouseReleaseEvent(QMouseEvent *event);
-    void    mouseDoubleClickEvent(QMouseEvent *event);
+    void    mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void    mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void    mouseDoubleClickEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
 #ifndef QT_NO_WHEELEVENT
-    void    wheelEvent(QWheelEvent * event);
+    void    wheelEvent(QWheelEvent * event) Q_DECL_OVERRIDE;
 #endif
     int     buttonByNumber(const Qt::MouseButton button);
     QString enumNameFromValue(const Qt::MouseButton button);

@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -269,6 +261,21 @@ public slots:
 };
 
 int ReceiverObject::sequence = 0;
+
+static void playWithObjects()
+{
+    // Do operations that will lock the internal signalSlotLock mutex on many QObjects.
+    // The more QObjects, the higher the chance that the signalSlotLock mutex used
+    // is already in use. If the number of objects is higher than the number of mutexes in
+    // the pool (currently 131), the deadlock should always trigger. Use an even higher number
+    // to be on the safe side.
+    const int objectCount = 1024;
+    SenderObject lotsOfObjects[objectCount];
+    for (int i = 0; i < objectCount; ++i) {
+        QObject::connect(&lotsOfObjects[i], &SenderObject::signal1,
+                         &lotsOfObjects[i], &SenderObject::aPublicSlot);
+    }
+}
 
 void tst_QObject::initTestCase()
 {
@@ -1368,10 +1375,10 @@ struct CheckInstanceCount
 struct CustomType
 {
     CustomType(int l1 = 0, int l2 = 0, int l3 = 0): i1(l1), i2(l2), i3(l3)
-    { ++instanceCount; }
+    { ++instanceCount; playWithObjects(); }
     CustomType(const CustomType &other): i1(other.i1), i2(other.i2), i3(other.i3)
-    { ++instanceCount; }
-    ~CustomType() { --instanceCount; }
+    { ++instanceCount; playWithObjects(); }
+    ~CustomType() { --instanceCount; playWithObjects(); }
 
     int i1, i2, i3;
     int value() { return i1 + i2 + i3; }
@@ -5749,17 +5756,7 @@ public:
     {}
 
     ~MyFunctor() {
-        // Do operations that will lock the internal signalSlotLock mutex on many QObjects.
-        // The more QObjects, the higher the chance that the signalSlotLock mutex used
-        // is already in use. If the number of objects is higher than the number of mutexes in
-        // the pool (currently 131), the deadlock should always trigger. Use an even higher number
-        // to be on the safe side.
-        const int objectCount = 1024;
-        SenderObject lotsOfObjects[objectCount];
-        for (int i = 0; i < objectCount; ++i) {
-            QObject::connect(&lotsOfObjects[i], &SenderObject::signal1,
-                             &lotsOfObjects[i], &SenderObject::aPublicSlot);
-        }
+        playWithObjects();
     }
 
     void operator()() {

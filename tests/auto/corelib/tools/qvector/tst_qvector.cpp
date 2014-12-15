@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -178,6 +170,9 @@ private slots:
     void copyConstructorInt() const;
     void copyConstructorMovable() const;
     void copyConstructorCustom() const;
+    void assignmentInt() const;
+    void assignmentMovable() const;
+    void assignmentCustom() const;
     void addInt() const;
     void addMovable() const;
     void addCustom() const;
@@ -225,7 +220,9 @@ private slots:
     void fromListCustom() const;
     void fromStdVector() const;
     void indexOf() const;
-    void insert() const;
+    void insertInt() const;
+    void insertMovable() const;
+    void insertCustom() const;
     void isEmpty() const;
     void last() const;
     void lastIndexOf() const;
@@ -296,6 +293,7 @@ private:
     template<typename T> void eraseReserved() const;
     template<typename T> void fill() const;
     template<typename T> void fromList() const;
+    template<typename T> void insert() const;
     template<typename T> void prepend() const;
     template<typename T> void remove() const;
     template<typename T> void size() const;
@@ -439,6 +437,52 @@ void tst_QVector::copyConstructorCustom() const
     const int instancesCount = Custom::counter.loadAcquire();
     copyConstructor<Custom>();
     QCOMPARE(instancesCount, Custom::counter.loadAcquire());
+}
+
+template <class T>
+static inline void testAssignment()
+{
+    QVector<T> v1(5);
+    QCOMPARE(v1.size(), 5);
+    QVERIFY(v1.isDetached());
+
+    QVector<T> v2(7);
+    QCOMPARE(v2.size(), 7);
+    QVERIFY(v2.isDetached());
+
+    QVERIFY(!v1.isSharedWith(v2));
+
+    v1 = v2;
+
+    QVERIFY(!v1.isDetached());
+    QVERIFY(!v2.isDetached());
+    QVERIFY(v1.isSharedWith(v2));
+
+    const void *const data1 = v1.constData();
+    const void *const data2 = v2.constData();
+
+    QCOMPARE(data1, data2);
+
+    v1.clear();
+
+    QVERIFY(v2.isDetached());
+    QVERIFY(!v1.isSharedWith(v2));
+    QCOMPARE((void *)v2.constData(), data2);
+}
+
+void tst_QVector::assignmentInt() const
+{
+    testAssignment<int>();
+}
+
+void tst_QVector::assignmentMovable() const
+{
+    testAssignment<Movable>();
+}
+
+void tst_QVector::assignmentCustom() const
+{
+    testAssignment<Custom>();
 }
 
 template<typename T>
@@ -1231,32 +1275,87 @@ void tst_QVector::indexOf() const
     QVERIFY(myvec.indexOf("A", 4) == -1);
 }
 
+template <typename T>
 void tst_QVector::insert() const
 {
-    QVector<QString> myvec;
-    myvec << "A" << "B" << "C";
+    QVector<T> myvec;
+    const T
+        tA = SimpleValue<T>::at(0),
+        tB = SimpleValue<T>::at(1),
+        tC = SimpleValue<T>::at(2),
+        tX = SimpleValue<T>::at(3),
+        tZ = SimpleValue<T>::at(4),
+        tT = SimpleValue<T>::at(5),
+        ti = SimpleValue<T>::at(6);
+    myvec << tA << tB << tC;
+    QVector<T> myvec2 = myvec;
 
     // first position
-    QCOMPARE(myvec.at(0), QLatin1String("A"));
-    myvec.insert(0, QLatin1String("X"));
-    QCOMPARE(myvec.at(0), QLatin1String("X"));
-    QCOMPARE(myvec.at(1), QLatin1String("A"));
+    QCOMPARE(myvec.at(0), tA);
+    myvec.insert(0, tX);
+    QCOMPARE(myvec.at(0), tX);
+    QCOMPARE(myvec.at(1), tA);
+
+    QCOMPARE(myvec2.at(0), tA);
+    myvec2.insert(myvec2.begin(), tX);
+    QCOMPARE(myvec2.at(0), tX);
+    QCOMPARE(myvec2.at(1), tA);
 
     // middle
-    myvec.insert(1, QLatin1String("Z"));
-    QCOMPARE(myvec.at(0), QLatin1String("X"));
-    QCOMPARE(myvec.at(1), QLatin1String("Z"));
-    QCOMPARE(myvec.at(2), QLatin1String("A"));
+    myvec.insert(1, tZ);
+    QCOMPARE(myvec.at(0), tX);
+    QCOMPARE(myvec.at(1), tZ);
+    QCOMPARE(myvec.at(2), tA);
+
+    myvec2.insert(myvec2.begin() + 1, tZ);
+    QCOMPARE(myvec2.at(0), tX);
+    QCOMPARE(myvec2.at(1), tZ);
+    QCOMPARE(myvec2.at(2), tA);
 
     // end
-    myvec.insert(5, QLatin1String("T"));
-    QCOMPARE(myvec.at(5), QLatin1String("T"));
-    QCOMPARE(myvec.at(4), QLatin1String("C"));
+    myvec.insert(5, tT);
+    QCOMPARE(myvec.at(5), tT);
+    QCOMPARE(myvec.at(4), tC);
+
+    myvec2.insert(myvec2.end(), tT);
+    QCOMPARE(myvec2.at(5), tT);
+    QCOMPARE(myvec2.at(4), tC);
 
     // insert a lot of garbage in the middle
-    myvec.insert(2, 2, QLatin1String("infinity"));
-    QCOMPARE(myvec, QVector<QString>() << "X" << "Z" << "infinity" << "infinity"
-             << "A" << "B" << "C" << "T");
+    myvec.insert(2, 2, ti);
+    QCOMPARE(myvec, QVector<T>() << tX << tZ << ti << ti
+             << tA << tB << tC << tT);
+
+    myvec2.insert(myvec2.begin() + 2, 2, ti);
+    QCOMPARE(myvec2, myvec);
+
+    // insert from references to the same container:
+    myvec.insert(0, 1, myvec[5]);   // inserts tB
+    myvec2.insert(0, 1, myvec2[5]); // inserts tB
+    QCOMPARE(myvec, QVector<T>() << tB << tX << tZ << ti << ti
+             << tA << tB << tC << tT);
+    QCOMPARE(myvec2, myvec);
+
+    myvec.insert(0, 1, const_cast<const QVector<T>&>(myvec)[0]);   // inserts tB
+    myvec2.insert(0, 1, const_cast<const QVector<T>&>(myvec2)[0]); // inserts tB
+    QCOMPARE(myvec, QVector<T>() << tB << tB << tX << tZ << ti << ti
+             << tA << tB << tC << tT);
+    QCOMPARE(myvec2, myvec);
+}
+
+void tst_QVector::insertInt() const
+{
+    insert<int>();
+}
+
+void tst_QVector::insertMovable() const
+{
+    insert<Movable>();
+}
+
+void tst_QVector::insertCustom() const
+{
+    insert<Custom>();
 }
 
 void tst_QVector::isEmpty() const
@@ -1321,6 +1420,8 @@ void tst_QVector::mid() const
     list << "foo" << "bar" << "baz" << "bak" << "buck" << "hello" << "kitty";
 
     QCOMPARE(list.mid(3, 3), QVector<QString>() << "bak" << "buck" << "hello");
+    QCOMPARE(list.mid(6, 10), QVector<QString>() << "kitty");
+    QCOMPARE(list.mid(-1, 20), list);
     QCOMPARE(list.mid(4), QVector<QString>() << "buck" << "hello" << "kitty");
 }
 
@@ -1386,13 +1487,28 @@ void tst_QVector::remove() const
     T val1 = SimpleValue<T>::at(1);
     T val2 = SimpleValue<T>::at(2);
     T val3 = SimpleValue<T>::at(3);
+    T val4 = SimpleValue<T>::at(4);
+    myvec << val1 << val2 << val3;
+    myvec << val1 << val2 << val3;
     myvec << val1 << val2 << val3;
     // remove middle
     myvec.remove(1);
-    QCOMPARE(myvec, QVector<T>() << val1 << val3);
+    QCOMPARE(myvec, QVector<T>() << val1 << val3  << val1 << val2 << val3  << val1 << val2 << val3);
+
+    // removeOne()
+    QVERIFY(!myvec.removeOne(val4));
+    QVERIFY(myvec.removeOne(val2));
+    QCOMPARE(myvec, QVector<T>() << val1 << val3  << val1 << val3  << val1 << val2 << val3);
+
+    // removeAll()
+    QCOMPARE(myvec.removeAll(val4), 0);
+    QCOMPARE(myvec.removeAll(val1), 3);
+    QCOMPARE(myvec, QVector<T>() << val3  << val3  << val2 << val3);
+    QCOMPARE(myvec.removeAll(val2), 1);
+    QCOMPARE(myvec, QVector<T>() << val3  << val3  << val3);
 
     // remove rest
-    myvec.remove(0, 2);
+    myvec.remove(0, 3);
     QCOMPARE(myvec, QVector<T>());
 }
 
@@ -2184,7 +2300,7 @@ void tst_QVector::setSharable() const
         if (isCapacityReserved)
             QVERIFY2(copy.capacity() >= capacity,
                     qPrintable(QString("Capacity is %1, expected at least %2.")
-                        .arg(vector.capacity())
+                        .arg(copy.capacity())
                         .arg(capacity)));
         QCOMPARE(copy, vector);
     }

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -74,7 +66,7 @@ QT_BEGIN_NAMESPACE
 
     \snippet code/src_opengl_qglshaderprogram.cpp 0
 
-    \section1 Writing portable shaders
+    \section1 Writing Portable Shaders
 
     Shader programs can be difficult to reuse across OpenGL implementations
     because of varying levels of support for standard vertex attributes and
@@ -98,7 +90,7 @@ QT_BEGIN_NAMESPACE
     to just features that are present in GLSL/ES, and avoid
     standard variable names that only work on the desktop.
 
-    \section1 Simple shader example
+    \section1 Simple Shader Example
 
     \snippet code/src_opengl_qglshaderprogram.cpp 1
 
@@ -107,7 +99,7 @@ QT_BEGIN_NAMESPACE
 
     \snippet code/src_opengl_qglshaderprogram.cpp 2
 
-    \section1 Binary shaders and programs
+    \section1 Binary Shaders and Programs
 
     Binary shaders may be specified using \c{glShaderBinary()} on
     the return value from QGLShader::shaderId().  The QGLShader instance
@@ -3074,8 +3066,9 @@ int QGLShaderProgram::maxGeometryOutputVertices() const
 {
     GLint n = 0;
 #if !defined(QT_OPENGL_ES_2)
+    Q_D(const QGLShaderProgram);
     if (!QOpenGLContext::currentContext()->isOpenGLES())
-        glGetIntegerv(GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT, &n);
+        d->glfuncs->glGetIntegerv(GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT, &n);
 #endif
     return n;
 }
@@ -3229,7 +3222,7 @@ bool QGLShader::hasOpenGLShaders(ShaderType type, const QGLContext *context)
     if (!resolved)
         return false;
 
-    if ((type & Geometry) && !QByteArray((const char *) glGetString(GL_EXTENSIONS)).contains("GL_EXT_geometry_shader4"))
+    if ((type & Geometry) && !QByteArray((const char *) functions.glGetString(GL_EXTENSIONS)).contains("GL_EXT_geometry_shader4"))
         return false;
 
     return true;

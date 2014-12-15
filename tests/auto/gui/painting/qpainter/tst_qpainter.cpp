@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -282,6 +274,8 @@ private slots:
 
     void QTBUG17053_zeroDashPattern();
 
+    void QTBUG38781_NoBrushAndQBitmap();
+
     void drawTextOutsideGuiThread();
 
     void drawTextWithComplexBrush();
@@ -293,6 +287,8 @@ private slots:
 
     void blendARGBonRGB_data();
     void blendARGBonRGB();
+
+    void RasterOp_NotDestination();
 
 private:
     void fillData();
@@ -1134,6 +1130,8 @@ void tst_QPainter::fillRect2_data()
     QTest::newRow("argb32pm") << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("rgba8888") << QImage::Format_RGBA8888;
     QTest::newRow("rgba8888pm") << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("a2rgb30pm") << QImage::Format_A2RGB30_Premultiplied;
+    QTest::newRow("a2bgr30pm") << QImage::Format_A2BGR30_Premultiplied;
 }
 
 void tst_QPainter::fillRect2()
@@ -1526,6 +1524,8 @@ void tst_QPainter::qimageFormats_data()
     QTest::newRow("Qimage::Format_RGB555") << QImage::Format_RGB555;
     QTest::newRow("Qimage::Format_ARGB8555_Premultiplied") << QImage::Format_ARGB8555_Premultiplied;
     QTest::newRow("Qimage::Format_RGB888") << QImage::Format_RGB888;
+    QTest::newRow("Qimage::Format_A2RGB30_Premultiplied") << QImage::Format_A2RGB30_Premultiplied;
+    QTest::newRow("Qimage::Format_RGB30") << QImage::Format_RGB30;
 }
 
 /*
@@ -2342,6 +2342,26 @@ void tst_QPainter::setOpacity_data()
 
     QTest::newRow("RGB32 on RGBx8888") << QImage::Format_RGB32
                                        << QImage::Format_RGBX8888;
+
+    QTest::newRow("A2RGB30P on A2RGB30P") << QImage::Format_A2RGB30_Premultiplied
+                                          << QImage::Format_A2RGB30_Premultiplied;
+
+    QTest::newRow("ARGB32P on A2RGB30P") << QImage::Format_ARGB32_Premultiplied
+                                         << QImage::Format_A2RGB30_Premultiplied;
+
+
+    QTest::newRow("RGB32 on A2BGR30P") << QImage::Format_ARGB32_Premultiplied
+                                       << QImage::Format_A2BGR30_Premultiplied;
+
+    QTest::newRow("A2RGB30P on A2BGR30P") << QImage::Format_A2RGB30_Premultiplied
+                                          << QImage::Format_A2BGR30_Premultiplied;
+
+    QTest::newRow("ARGB32P on BGR30") << QImage::Format_ARGB32_Premultiplied
+                                      << QImage::Format_BGR30;
+
+    QTest::newRow("ARGB32P on RGB30") << QImage::Format_A2RGB30_Premultiplied
+                                      << QImage::Format_RGB30;
+
 }
 
 void tst_QPainter::setOpacity()
@@ -2430,7 +2450,9 @@ void tst_QPainter::drawhelper_blend_untransformed()
                              dest.bytesPerLine(), dest.format());
 
         if (dest.format() == QImage::Format_ARGB8565_Premultiplied ||
-            dest.format() == QImage::Format_ARGB8555_Premultiplied) {
+            dest.format() == QImage::Format_ARGB8555_Premultiplied ||
+            dest.format() == QImage::Format_A2BGR30_Premultiplied ||
+            dest.format() == QImage::Format_A2RGB30_Premultiplied ) {
             // Test skipped due to rounding errors...
             continue;
         }
@@ -4473,6 +4495,26 @@ void tst_QPainter::QTBUG17053_zeroDashPattern()
     QCOMPARE(image, original);
 }
 
+void tst_QPainter::QTBUG38781_NoBrushAndQBitmap()
+{
+    QBitmap bitmap(10, 10);
+    bitmap.fill(Qt::color0);
+    QPainter p(&bitmap);
+    p.setPen(Qt::color1);
+    p.drawLine(0, 1, 9, 1); // at horizontal line at y=1
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(0, 0, 9, 9); // a rect all around
+
+    QRgb white = qRgb(0xff, 0xff, 0xff);
+    QRgb black = qRgb(0, 0, 0);
+    QImage image = bitmap.toImage();
+    QCOMPARE(image.pixel(0, 0), black);
+    QCOMPARE(image.pixel(5, 5), white);
+
+    // Check that the rect didn't overwrite the line
+    QCOMPARE(image.pixel(5, 1), black);
+}
+
 class TextDrawerThread : public QThread
 {
 public:
@@ -4753,6 +4795,21 @@ void tst_QPainter::cosmeticStrokerClipping()
 
     // ditto for regular clips
     QCOMPARE(old, image);
+}
+
+void tst_QPainter::RasterOp_NotDestination()
+{
+    QImage image(3, 3, QImage::Format_RGB32);
+    image.fill(Qt::red);
+
+    {
+        QPainter p(&image);
+        p.setCompositionMode(QPainter::RasterOp_NotDestination);
+        p.fillRect(image.rect(), Qt::black);
+    }
+
+    uint pixel = image.pixel(1, 1);
+    QCOMPARE(pixel, 0xff00ffff);
 }
 
 QTEST_MAIN(tst_QPainter)

@@ -5,35 +5,27 @@
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -77,6 +69,7 @@ private slots:
     void testStdinArgument();
     void testSingleDashWordOptionModes_data();
     void testSingleDashWordOptionModes();
+    void testCpp11StyleInitialization();
 
     // QProcess-based tests using qcommandlineparser_test_helper
     void testVersionOption();
@@ -448,6 +441,27 @@ void tst_QCommandLineParser::testSingleDashWordOptionModes()
     for (int i = 0; i < expectedOptionValues.count(); ++i)
         QCOMPARE(parser.value(parser.optionNames().at(i)), expectedOptionValues.at(i));
     QCOMPARE(parser.unknownOptionNames(), QStringList());
+}
+
+void tst_QCommandLineParser::testCpp11StyleInitialization()
+{
+#if defined(Q_COMPILER_INITIALIZER_LISTS) && defined(Q_COMPILER_UNIFORM_INIT)
+    QCoreApplication app(empty_argc, empty_argv);
+
+    QCommandLineParser parser;
+    // primarily check that this compiles:
+    parser.addOptions({
+        { "a",                "The A option." },
+        { { "v", "verbose" }, "The verbose option." },
+        { { "i", "infile" },  "The input file.", "value" },
+    });
+    // but do a very basic functionality test, too:
+    QVERIFY(parser.parse({"tst_QCommandLineParser", "-a", "-vvv", "--infile=in.txt"}));
+    QCOMPARE(parser.optionNames(), (QStringList{"a", "v", "v", "v", "infile"}));
+    QCOMPARE(parser.value("infile"), QString("in.txt"));
+#else
+    QSKIP("This test requires C++11 uniform initialization support in the compiler.");
+#endif
 }
 
 void tst_QCommandLineParser::testVersionOption()

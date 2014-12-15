@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,17 +37,13 @@
 #include <QtCore/qhash.h>
 #include <QtCore/qstring.h>
 #include <QtCore/QThread>
+#include <QtCore/QReadWriteLock>
 
 QT_BEGIN_NAMESPACE
 
 static inline QString keyBase()
 {
     return QStringLiteral("%1%2%3");
-}
-
-static inline QByteArray threadBaseName()
-{
-    return QByteArrayLiteral("QtThread-");
 }
 
 static QString qt_convertJString(jstring string)
@@ -82,34 +70,62 @@ static inline bool exceptionCheckAndClear(JNIEnv *env)
 
 typedef QHash<QString, jclass> JClassHash;
 Q_GLOBAL_STATIC(JClassHash, cachedClasses)
+Q_GLOBAL_STATIC(QReadWriteLock, cachedClassesLock)
 
-static jclass getCachedClass(JNIEnv *env, const char *className)
+static QString toDotEncodedClassName(const char *className)
 {
-    jclass clazz = 0;
-    QString classDotEnc = QString::fromLatin1(className).replace(QLatin1Char('/'), QLatin1Char('.'));
-    QHash<QString, jclass>::iterator it = cachedClasses->find(classDotEnc);
-    if (it == cachedClasses->end()) {
-        QJNIObjectPrivate classLoader = QtAndroidPrivate::classLoader();
-        if (!classLoader.isValid())
-            return 0;
+    return QString::fromLatin1(className).replace(QLatin1Char('/'), QLatin1Char('.'));
+}
 
-        QJNIObjectPrivate stringName = QJNIObjectPrivate::fromString(classDotEnc);
-        QJNIObjectPrivate classObject = classLoader.callObjectMethod("loadClass",
-                                                                     "(Ljava/lang/String;)Ljava/lang/Class;",
-                                                                     stringName.object());
+static jclass getCachedClass(const QString &classDotEnc, bool *isCached = 0)
+{
+    QReadLocker locker(cachedClassesLock);
+    const QHash<QString, jclass>::const_iterator &it = cachedClasses->constFind(classDotEnc);
+    const bool found = (it != cachedClasses->constEnd());
 
-        if (!exceptionCheckAndClear(env) && classObject.isValid())
-            clazz = static_cast<jclass>(env->NewGlobalRef(classObject.object()));
+    if (isCached != 0)
+        *isCached = found;
 
-        cachedClasses->insert(classDotEnc, clazz);
-    } else {
-        clazz = it.value();
-    }
+    return found ? it.value() : 0;
+}
+
+static jclass loadClassDotEnc(const QString &classDotEnc, JNIEnv *env)
+{
+    bool isCached = false;
+    jclass clazz = getCachedClass(classDotEnc, &isCached);
+    if (clazz != 0 || isCached)
+        return clazz;
+
+    QJNIObjectPrivate classLoader = QtAndroidPrivate::classLoader();
+    if (!classLoader.isValid())
+        return 0;
+
+    QWriteLocker locker(cachedClassesLock);
+    // did we lose the race?
+    const QHash<QString, jclass>::const_iterator &it = cachedClasses->constFind(classDotEnc);
+    if (it != cachedClasses->constEnd())
+        return it.value();
+
+    QJNIObjectPrivate stringName = QJNIObjectPrivate::fromString(classDotEnc);
+    QJNIObjectPrivate classObject = classLoader.callObjectMethod("loadClass",
+                                                                 "(Ljava/lang/String;)Ljava/lang/Class;",
+                                                                 stringName.object());
+
+    if (!exceptionCheckAndClear(env) && classObject.isValid())
+        clazz = static_cast<jclass>(env->NewGlobalRef(classObject.object()));
+
+    cachedClasses->insert(classDotEnc, clazz);
     return clazz;
+}
+
+inline static jclass loadClass(const char *className, JNIEnv *env)
+{
+    return loadClassDotEnc(toDotEncodedClassName(className), env);
 }
 
 typedef QHash<QString, jmethodID> JMethodIDHash;
 Q_GLOBAL_STATIC(JMethodIDHash, cachedMethodID)
+Q_GLOBAL_STATIC(QReadWriteLock, cachedMethodIDLock)
 
 static jmethodID getCachedMethodID(JNIEnv *env,
                                    jclass clazz,
@@ -117,11 +133,24 @@ static jmethodID getCachedMethodID(JNIEnv *env,
                                    const char *sig,
                                    bool isStatic = false)
 {
-    jmethodID id = 0;
     // TODO: We need to use something else then the ref. from clazz to avoid collisions.
-    QString key = keyBase().arg(size_t(clazz)).arg(QLatin1String(name)).arg(QLatin1String(sig));
-    QHash<QString, jmethodID>::iterator it = cachedMethodID->find(key);
-    if (it == cachedMethodID->end()) {
+    const QString key = keyBase().arg(size_t(clazz)).arg(QLatin1String(name)).arg(QLatin1String(sig));
+    QHash<QString, jmethodID>::const_iterator it;
+
+    {
+        QReadLocker locker(cachedMethodIDLock);
+        it = cachedMethodID->constFind(key);
+        if (it != cachedMethodID->constEnd())
+            return it.value();
+    }
+
+    {
+        QWriteLocker locker(cachedMethodIDLock);
+        it = cachedMethodID->constFind(key);
+        if (it != cachedMethodID->constEnd())
+            return it.value();
+
+        jmethodID id = 0;
         if (isStatic)
             id = env->GetStaticMethodID(clazz, name, sig);
         else
@@ -131,14 +160,13 @@ static jmethodID getCachedMethodID(JNIEnv *env,
             id = 0;
 
         cachedMethodID->insert(key, id);
-    } else {
-        id = it.value();
+        return id;
     }
-    return id;
 }
 
 typedef QHash<QString, jfieldID> JFieldIDHash;
 Q_GLOBAL_STATIC(JFieldIDHash, cachedFieldID)
+Q_GLOBAL_STATIC(QReadWriteLock, cachedFieldIDLock)
 
 static jfieldID getCachedFieldID(JNIEnv *env,
                                  jclass clazz,
@@ -146,10 +174,23 @@ static jfieldID getCachedFieldID(JNIEnv *env,
                                  const char *sig,
                                  bool isStatic = false)
 {
-    jfieldID id = 0;
-    QString key = keyBase().arg(size_t(clazz)).arg(QLatin1String(name)).arg(QLatin1String(sig));
-    QHash<QString, jfieldID>::iterator it = cachedFieldID->find(key);
-    if (it == cachedFieldID->end()) {
+    const QString key = keyBase().arg(size_t(clazz)).arg(QLatin1String(name)).arg(QLatin1String(sig));
+    QHash<QString, jfieldID>::const_iterator it;
+
+    {
+        QReadLocker locker(cachedFieldIDLock);
+        it = cachedFieldID->constFind(key);
+        if (it != cachedFieldID->constEnd())
+            return it.value();
+    }
+
+    {
+        QWriteLocker locker(cachedFieldIDLock);
+        it = cachedFieldID->constFind(key);
+        if (it != cachedFieldID->constEnd())
+            return it.value();
+
+        jfieldID id = 0;
         if (isStatic)
             id = env->GetStaticFieldID(clazz, name, sig);
         else
@@ -159,10 +200,8 @@ static jfieldID getCachedFieldID(JNIEnv *env,
             id = 0;
 
         cachedFieldID->insert(key, id);
-    } else {
-        id = it.value();
+        return id;
     }
-    return id;
 }
 
 class QJNIEnvironmentPrivateTLS
@@ -176,14 +215,14 @@ public:
 
 Q_GLOBAL_STATIC(QThreadStorage<QJNIEnvironmentPrivateTLS *>, jniEnvTLS)
 
+static const char qJniThreadName[] = "QtThread";
+
 QJNIEnvironmentPrivate::QJNIEnvironmentPrivate()
     : jniEnv(0)
 {
     JavaVM *vm = QtAndroidPrivate::javaVM();
     if (vm->GetEnv((void**)&jniEnv, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        const qulonglong id = reinterpret_cast<qulonglong>(QThread::currentThreadId());
-        const QByteArray threadName = threadBaseName() + QByteArray::number(id);
-        JavaVMAttachArgs args = { JNI_VERSION_1_6, threadName, Q_NULLPTR };
+        JavaVMAttachArgs args = { JNI_VERSION_1_6, qJniThreadName, Q_NULLPTR };
         if (vm->AttachCurrentThread(&jniEnv, &args) != JNI_OK)
             return;
     }
@@ -198,6 +237,40 @@ QJNIEnvironmentPrivate::QJNIEnvironmentPrivate()
 JNIEnv *QJNIEnvironmentPrivate::operator->()
 {
     return jniEnv;
+}
+
+jclass QJNIEnvironmentPrivate::findClass(const char *className, JNIEnv *env)
+{
+    const QString &classDotEnc = toDotEncodedClassName(className);
+    bool isCached = false;
+    jclass clazz = getCachedClass(classDotEnc, &isCached);
+
+    const bool found = (clazz != 0) || (clazz == 0 && isCached);
+
+    if (found)
+        return clazz;
+
+    if (env != 0) { // We got an env. pointer (We expect this to be the right env. and call FindClass())
+        QWriteLocker locker(cachedClassesLock);
+        const QHash<QString, jclass>::const_iterator &it = cachedClasses->constFind(classDotEnc);
+        // Did we lose the race?
+        if (it != cachedClasses->constEnd())
+            return it.value();
+
+        jclass fclazz = env->FindClass(className);
+        if (!exceptionCheckAndClear(env)) {
+            clazz = static_cast<jclass>(env->NewGlobalRef(fclazz));
+            env->DeleteLocalRef(fclazz);
+        }
+
+        if (clazz != 0)
+            cachedClasses->insert(classDotEnc, clazz);
+    }
+
+    if (clazz == 0) // We didn't get an env. pointer or we got one with the WRONG class loader...
+        clazz = loadClassDotEnc(classDotEnc, QJNIEnvironmentPrivate());
+
+    return clazz;
 }
 
 QJNIEnvironmentPrivate::operator JNIEnv* () const
@@ -236,7 +309,7 @@ QJNIObjectPrivate::QJNIObjectPrivate(const char *className)
     : d(new QJNIObjectData())
 {
     QJNIEnvironmentPrivate env;
-    d->m_jclass = getCachedClass(env, className);
+    d->m_jclass = loadClass(className, env);
     d->m_own_jclass = false;
     if (d->m_jclass) {
         // get default constructor
@@ -255,7 +328,7 @@ QJNIObjectPrivate::QJNIObjectPrivate(const char *className, const char *sig, ...
     : d(new QJNIObjectData())
 {
     QJNIEnvironmentPrivate env;
-    d->m_jclass = getCachedClass(env, className);
+    d->m_jclass = loadClass(className, env);
     d->m_own_jclass = false;
     if (d->m_jclass) {
         jmethodID constructorId = getCachedMethodID(env, d->m_jclass, "<init>", sig);
@@ -272,11 +345,11 @@ QJNIObjectPrivate::QJNIObjectPrivate(const char *className, const char *sig, ...
     }
 }
 
-QJNIObjectPrivate::QJNIObjectPrivate(const char *className, const char *sig, va_list args)
+QJNIObjectPrivate::QJNIObjectPrivate(const char *className, const char *sig, const QVaListPrivate &args)
     : d(new QJNIObjectData())
 {
     QJNIEnvironmentPrivate env;
-    d->m_jclass = getCachedClass(env, className);
+    d->m_jclass = loadClass(className, env);
     d->m_own_jclass = false;
     if (d->m_jclass) {
         jmethodID constructorId = getCachedMethodID(env, d->m_jclass, "<init>", sig);
@@ -330,7 +403,7 @@ QJNIObjectPrivate::QJNIObjectPrivate(jclass clazz, const char *sig, ...)
     }
 }
 
-QJNIObjectPrivate::QJNIObjectPrivate(jclass clazz, const char *sig, va_list args)
+QJNIObjectPrivate::QJNIObjectPrivate(jclass clazz, const char *sig, const QVaListPrivate &args)
     : d(new QJNIObjectData())
 {
     QJNIEnvironmentPrivate env;
@@ -361,9 +434,8 @@ QJNIObjectPrivate::QJNIObjectPrivate(jobject obj)
     d->m_jclass = static_cast<jclass>(env->NewGlobalRef(objectClass));
     env->DeleteLocalRef(objectClass);
 }
-
 template <>
-void QJNIObjectPrivate::callMethod<void>(const char *methodName, const char *sig, va_list args) const
+void QJNIObjectPrivate::callMethodV<void>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jmethodID id = getCachedMethodID(env, d->m_jclass, methodName, sig);
@@ -377,12 +449,12 @@ void QJNIObjectPrivate::callMethod<void>(const char *methodName, const char *sig
 {
     va_list args;
     va_start(args, sig);
-    callMethod<void>(methodName, sig, args);
+    callMethodV<void>(methodName, sig, args);
     va_end(args);
 }
 
 template <>
-jboolean QJNIObjectPrivate::callMethod<jboolean>(const char *methodName, const char *sig, va_list args) const
+jboolean QJNIObjectPrivate::callMethodV<jboolean>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jboolean res = 0;
@@ -398,13 +470,13 @@ jboolean QJNIObjectPrivate::callMethod<jboolean>(const char *methodName, const c
 {
     va_list args;
     va_start(args, sig);
-    jboolean res = callMethod<jboolean>(methodName, sig, args);
+    jboolean res = callMethodV<jboolean>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jbyte QJNIObjectPrivate::callMethod<jbyte>(const char *methodName, const char *sig, va_list args) const
+jbyte QJNIObjectPrivate::callMethodV<jbyte>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jbyte res = 0;
@@ -420,13 +492,13 @@ jbyte QJNIObjectPrivate::callMethod<jbyte>(const char *methodName, const char *s
 {
     va_list args;
     va_start(args, sig);
-    jbyte res = callMethod<jbyte>(methodName, sig, args);
+    jbyte res = callMethodV<jbyte>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jchar QJNIObjectPrivate::callMethod<jchar>(const char *methodName, const char *sig, va_list args) const
+jchar QJNIObjectPrivate::callMethodV<jchar>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jchar res = 0;
@@ -442,13 +514,13 @@ jchar QJNIObjectPrivate::callMethod<jchar>(const char *methodName, const char *s
 {
     va_list args;
     va_start(args, sig);
-    jchar res = callMethod<jchar>(methodName, sig, args);
+    jchar res = callMethodV<jchar>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jshort QJNIObjectPrivate::callMethod<jshort>(const char *methodName, const char *sig, va_list args) const
+jshort QJNIObjectPrivate::callMethodV<jshort>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jshort res = 0;
@@ -464,13 +536,13 @@ jshort QJNIObjectPrivate::callMethod<jshort>(const char *methodName, const char 
 {
     va_list args;
     va_start(args, sig);
-    jshort res = callMethod<jshort>(methodName, sig, args);
+    jshort res = callMethodV<jshort>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jint QJNIObjectPrivate::callMethod<jint>(const char *methodName, const char *sig, va_list args) const
+jint QJNIObjectPrivate::callMethodV<jint>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jint res = 0;
@@ -486,13 +558,13 @@ jint QJNIObjectPrivate::callMethod<jint>(const char *methodName, const char *sig
 {
     va_list args;
     va_start(args, sig);
-    jint res = callMethod<jint>(methodName, sig, args);
+    jint res = callMethodV<jint>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jlong QJNIObjectPrivate::callMethod<jlong>(const char *methodName, const char *sig, va_list args) const
+jlong QJNIObjectPrivate::callMethodV<jlong>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jlong res = 0;
@@ -508,13 +580,13 @@ jlong QJNIObjectPrivate::callMethod<jlong>(const char *methodName, const char *s
 {
     va_list args;
     va_start(args, sig);
-    jlong res = callMethod<jlong>(methodName, sig, args);
+    jlong res = callMethodV<jlong>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jfloat QJNIObjectPrivate::callMethod<jfloat>(const char *methodName, const char *sig, va_list args) const
+jfloat QJNIObjectPrivate::callMethodV<jfloat>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jfloat res = 0.f;
@@ -530,13 +602,13 @@ jfloat QJNIObjectPrivate::callMethod<jfloat>(const char *methodName, const char 
 {
     va_list args;
     va_start(args, sig);
-    jfloat res = callMethod<jfloat>(methodName, sig, args);
+    jfloat res = callMethodV<jfloat>(methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jdouble QJNIObjectPrivate::callMethod<jdouble>(const char *methodName, const char *sig, va_list args) const
+jdouble QJNIObjectPrivate::callMethodV<jdouble>(const char *methodName, const char *sig, va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jdouble res = 0.;
@@ -552,7 +624,7 @@ jdouble QJNIObjectPrivate::callMethod<jdouble>(const char *methodName, const cha
 {
     va_list args;
     va_start(args, sig);
-    jdouble res = callMethod<jdouble>(methodName, sig, args);
+    jdouble res = callMethodV<jdouble>(methodName, sig, args);
     va_end(args);
     return res;
 }
@@ -612,13 +684,13 @@ jdouble QJNIObjectPrivate::callMethod<jdouble>(const char *methodName) const
 }
 
 template <>
-void QJNIObjectPrivate::callStaticMethod<void>(const char *className,
-                                               const char *methodName,
-                                               const char *sig,
-                                               va_list args)
+void QJNIObjectPrivate::callStaticMethodV<void>(const char *className,
+                                                const char *methodName,
+                                                const char *sig,
+                                                va_list args)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -635,15 +707,15 @@ void QJNIObjectPrivate::callStaticMethod<void>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    callStaticMethod<void>(className, methodName, sig, args);
+    callStaticMethodV<void>(className, methodName, sig, args);
     va_end(args);
 }
 
 template <>
-void QJNIObjectPrivate::callStaticMethod<void>(jclass clazz,
-                                               const char *methodName,
-                                               const char *sig,
-                                               va_list args)
+void QJNIObjectPrivate::callStaticMethodV<void>(jclass clazz,
+                                                const char *methodName,
+                                                const char *sig,
+                                                va_list args)
 {
     QJNIEnvironmentPrivate env;
     jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
@@ -660,19 +732,19 @@ void QJNIObjectPrivate::callStaticMethod<void>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    callStaticMethod<void>(clazz, methodName, sig, args);
+    callStaticMethodV<void>(clazz, methodName, sig, args);
     va_end(args);
 }
 
 template <>
-jboolean QJNIObjectPrivate::callStaticMethod<jboolean>(const char *className,
-                                                       const char *methodName,
-                                                       const char *sig,
-                                                       va_list args)
+jboolean QJNIObjectPrivate::callStaticMethodV<jboolean>(const char *className,
+                                                        const char *methodName,
+                                                        const char *sig,
+                                                        va_list args)
 {
     QJNIEnvironmentPrivate env;
     jboolean res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -691,16 +763,16 @@ jboolean QJNIObjectPrivate::callStaticMethod<jboolean>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jboolean res = callStaticMethod<jboolean>(className, methodName, sig, args);
+    jboolean res = callStaticMethodV<jboolean>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jboolean QJNIObjectPrivate::callStaticMethod<jboolean>(jclass clazz,
-                                                       const char *methodName,
-                                                       const char *sig,
-                                                       va_list args)
+jboolean QJNIObjectPrivate::callStaticMethodV<jboolean>(jclass clazz,
+                                                        const char *methodName,
+                                                        const char *sig,
+                                                        va_list args)
 {
     QJNIEnvironmentPrivate env;
     jboolean res = 0;
@@ -720,20 +792,20 @@ jboolean QJNIObjectPrivate::callStaticMethod<jboolean>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jboolean res = callStaticMethod<jboolean>(clazz, methodName, sig, args);
+    jboolean res = callStaticMethodV<jboolean>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jbyte QJNIObjectPrivate::callStaticMethod<jbyte>(const char *className,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jbyte QJNIObjectPrivate::callStaticMethodV<jbyte>(const char *className,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jbyte res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -752,16 +824,16 @@ jbyte QJNIObjectPrivate::callStaticMethod<jbyte>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jbyte res = callStaticMethod<jbyte>(className, methodName, sig, args);
+    jbyte res = callStaticMethodV<jbyte>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jbyte QJNIObjectPrivate::callStaticMethod<jbyte>(jclass clazz,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jbyte QJNIObjectPrivate::callStaticMethodV<jbyte>(jclass clazz,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jbyte res = 0;
@@ -781,20 +853,20 @@ jbyte QJNIObjectPrivate::callStaticMethod<jbyte>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jbyte res = callStaticMethod<jbyte>(clazz, methodName, sig, args);
+    jbyte res = callStaticMethodV<jbyte>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jchar QJNIObjectPrivate::callStaticMethod<jchar>(const char *className,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jchar QJNIObjectPrivate::callStaticMethodV<jchar>(const char *className,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jchar res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -813,16 +885,16 @@ jchar QJNIObjectPrivate::callStaticMethod<jchar>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jchar res = callStaticMethod<jchar>(className, methodName, sig, args);
+    jchar res = callStaticMethodV<jchar>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jchar QJNIObjectPrivate::callStaticMethod<jchar>(jclass clazz,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jchar QJNIObjectPrivate::callStaticMethodV<jchar>(jclass clazz,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jchar res = 0;
@@ -842,20 +914,20 @@ jchar QJNIObjectPrivate::callStaticMethod<jchar>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jchar res = callStaticMethod<jchar>(clazz, methodName, sig, args);
+    jchar res = callStaticMethodV<jchar>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jshort QJNIObjectPrivate::callStaticMethod<jshort>(const char *className,
-                                                   const char *methodName,
-                                                   const char *sig,
-                                                   va_list args)
+jshort QJNIObjectPrivate::callStaticMethodV<jshort>(const char *className,
+                                                    const char *methodName,
+                                                    const char *sig,
+                                                    va_list args)
 {
     QJNIEnvironmentPrivate env;
     jshort res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -874,16 +946,16 @@ jshort QJNIObjectPrivate::callStaticMethod<jshort>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jshort res = callStaticMethod<jshort>(className, methodName, sig, args);
+    jshort res = callStaticMethodV<jshort>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jshort QJNIObjectPrivate::callStaticMethod<jshort>(jclass clazz,
-                                                   const char *methodName,
-                                                   const char *sig,
-                                                   va_list args)
+jshort QJNIObjectPrivate::callStaticMethodV<jshort>(jclass clazz,
+                                                    const char *methodName,
+                                                    const char *sig,
+                                                    va_list args)
 {
     QJNIEnvironmentPrivate env;
     jshort res = 0;
@@ -903,20 +975,20 @@ jshort QJNIObjectPrivate::callStaticMethod<jshort>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jshort res = callStaticMethod<jshort>(clazz, methodName, sig, args);
+    jshort res = callStaticMethodV<jshort>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jint QJNIObjectPrivate::callStaticMethod<jint>(const char *className,
-                                               const char *methodName,
-                                               const char *sig,
-                                               va_list args)
+jint QJNIObjectPrivate::callStaticMethodV<jint>(const char *className,
+                                                const char *methodName,
+                                                const char *sig,
+                                                va_list args)
 {
     QJNIEnvironmentPrivate env;
     jint res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -935,16 +1007,16 @@ jint QJNIObjectPrivate::callStaticMethod<jint>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jint res = callStaticMethod<jint>(className, methodName, sig, args);
+    jint res = callStaticMethodV<jint>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jint QJNIObjectPrivate::callStaticMethod<jint>(jclass clazz,
-                                               const char *methodName,
-                                               const char *sig,
-                                               va_list args)
+jint QJNIObjectPrivate::callStaticMethodV<jint>(jclass clazz,
+                                                const char *methodName,
+                                                const char *sig,
+                                                va_list args)
 {
     QJNIEnvironmentPrivate env;
     jint res = 0;
@@ -964,20 +1036,20 @@ jint QJNIObjectPrivate::callStaticMethod<jint>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jint res = callStaticMethod<jint>(clazz, methodName, sig, args);
+    jint res = callStaticMethodV<jint>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jlong QJNIObjectPrivate::callStaticMethod<jlong>(const char *className,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jlong QJNIObjectPrivate::callStaticMethodV<jlong>(const char *className,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jlong res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -996,16 +1068,16 @@ jlong QJNIObjectPrivate::callStaticMethod<jlong>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jlong res = callStaticMethod<jlong>(className, methodName, sig, args);
+    jlong res = callStaticMethodV<jlong>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jlong QJNIObjectPrivate::callStaticMethod<jlong>(jclass clazz,
-                                                 const char *methodName,
-                                                 const char *sig,
-                                                 va_list args)
+jlong QJNIObjectPrivate::callStaticMethodV<jlong>(jclass clazz,
+                                                  const char *methodName,
+                                                  const char *sig,
+                                                  va_list args)
 {
     QJNIEnvironmentPrivate env;
     jlong res = 0;
@@ -1025,20 +1097,20 @@ jlong QJNIObjectPrivate::callStaticMethod<jlong>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jlong res = callStaticMethod<jlong>(clazz, methodName, sig, args);
+    jlong res = callStaticMethodV<jlong>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jfloat QJNIObjectPrivate::callStaticMethod<jfloat>(const char *className,
-                                                   const char *methodName,
-                                                   const char *sig,
-                                                   va_list args)
+jfloat QJNIObjectPrivate::callStaticMethodV<jfloat>(const char *className,
+                                                    const char *methodName,
+                                                    const char *sig,
+                                                    va_list args)
 {
     QJNIEnvironmentPrivate env;
     jfloat res = 0.f;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -1057,16 +1129,16 @@ jfloat QJNIObjectPrivate::callStaticMethod<jfloat>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jfloat res = callStaticMethod<jfloat>(className, methodName, sig, args);
+    jfloat res = callStaticMethodV<jfloat>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jfloat QJNIObjectPrivate::callStaticMethod<jfloat>(jclass clazz,
-                                                   const char *methodName,
-                                                   const char *sig,
-                                                   va_list args)
+jfloat QJNIObjectPrivate::callStaticMethodV<jfloat>(jclass clazz,
+                                                    const char *methodName,
+                                                    const char *sig,
+                                                    va_list args)
 {
     QJNIEnvironmentPrivate env;
     jfloat res = 0.f;
@@ -1086,20 +1158,20 @@ jfloat QJNIObjectPrivate::callStaticMethod<jfloat>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jfloat res = callStaticMethod<jfloat>(clazz, methodName, sig, args);
+    jfloat res = callStaticMethodV<jfloat>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jdouble QJNIObjectPrivate::callStaticMethod<jdouble>(const char *className,
-                                                     const char *methodName,
-                                                     const char *sig,
-                                                     va_list args)
+jdouble QJNIObjectPrivate::callStaticMethodV<jdouble>(const char *className,
+                                                      const char *methodName,
+                                                      const char *sig,
+                                                      va_list args)
 {
     QJNIEnvironmentPrivate env;
     jdouble res = 0.;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -1118,16 +1190,16 @@ jdouble QJNIObjectPrivate::callStaticMethod<jdouble>(const char *className,
 {
     va_list args;
     va_start(args, sig);
-    jdouble res = callStaticMethod<jdouble>(className, methodName, sig, args);
+    jdouble res = callStaticMethodV<jdouble>(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
 template <>
-jdouble QJNIObjectPrivate::callStaticMethod<jdouble>(jclass clazz,
-                                                     const char *methodName,
-                                                     const char *sig,
-                                                     va_list args)
+jdouble QJNIObjectPrivate::callStaticMethodV<jdouble>(jclass clazz,
+                                                      const char *methodName,
+                                                      const char *sig,
+                                                      va_list args)
 {
     QJNIEnvironmentPrivate env;
     jdouble res = 0.;
@@ -1147,7 +1219,7 @@ jdouble QJNIObjectPrivate::callStaticMethod<jdouble>(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    jdouble res = callStaticMethod<jdouble>(clazz, methodName, sig, args);
+    jdouble res = callStaticMethodV<jdouble>(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
@@ -1260,9 +1332,9 @@ jdouble QJNIObjectPrivate::callStaticMethod<jdouble>(jclass clazz, const char *m
     return callStaticMethod<jdouble>(clazz, methodName, "()D");
 }
 
-QJNIObjectPrivate QJNIObjectPrivate::callObjectMethod(const char *methodName,
-                                                      const char *sig,
-                                                      va_list args) const
+QJNIObjectPrivate QJNIObjectPrivate::callObjectMethodV(const char *methodName,
+                                                       const char *sig,
+                                                       va_list args) const
 {
     QJNIEnvironmentPrivate env;
     jobject res = 0;
@@ -1284,7 +1356,7 @@ QJNIObjectPrivate QJNIObjectPrivate::callObjectMethod(const char *methodName,
 {
     va_list args;
     va_start(args, sig);
-    QJNIObjectPrivate res = callObjectMethod(methodName, sig, args);
+    QJNIObjectPrivate res = callObjectMethodV(methodName, sig, args);
     va_end(args);
     return res;
 }
@@ -1337,14 +1409,14 @@ QJNIObjectPrivate QJNIObjectPrivate::callObjectMethod<jdoubleArray>(const char *
     return callObjectMethod(methodName, "()[D");
 }
 
-QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethod(const char *className,
-                                                            const char *methodName,
-                                                            const char *sig,
-                                                            va_list args)
+QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethodV(const char *className,
+                                                             const char *methodName,
+                                                             const char *sig,
+                                                             va_list args)
 {
     QJNIEnvironmentPrivate env;
     jobject res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz) {
         jmethodID id = getCachedMethodID(env, clazz, methodName, sig, true);
         if (id) {
@@ -1366,15 +1438,15 @@ QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethod(const char *classNam
 {
     va_list args;
     va_start(args, sig);
-    QJNIObjectPrivate res = callStaticObjectMethod(className, methodName, sig, args);
+    QJNIObjectPrivate res = callStaticObjectMethodV(className, methodName, sig, args);
     va_end(args);
     return res;
 }
 
-QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethod(jclass clazz,
-                                                            const char *methodName,
-                                                            const char *sig,
-                                                            va_list args)
+QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethodV(jclass clazz,
+                                                             const char *methodName,
+                                                             const char *sig,
+                                                             va_list args)
 {
     QJNIEnvironmentPrivate env;
     jobject res = 0;
@@ -1397,7 +1469,7 @@ QJNIObjectPrivate QJNIObjectPrivate::callStaticObjectMethod(jclass clazz,
 {
     va_list args;
     va_start(args, sig);
-    QJNIObjectPrivate res = callStaticObjectMethod(clazz, methodName, sig, args);
+    QJNIObjectPrivate res = callStaticObjectMethodV(clazz, methodName, sig, args);
     va_end(args);
     return res;
 }
@@ -1515,7 +1587,7 @@ jboolean QJNIObjectPrivate::getStaticField<jboolean>(const char *className, cons
 {
     QJNIEnvironmentPrivate env;
     jboolean res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jboolean>(clazz, fieldName);
 
@@ -1539,7 +1611,7 @@ jbyte QJNIObjectPrivate::getStaticField<jbyte>(const char *className, const char
 {
     QJNIEnvironmentPrivate env;
     jbyte res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jbyte>(clazz, fieldName);
 
@@ -1563,7 +1635,7 @@ jchar QJNIObjectPrivate::getStaticField<jchar>(const char *className, const char
 {
     QJNIEnvironmentPrivate env;
     jchar res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jchar>(clazz, fieldName);
 
@@ -1587,7 +1659,7 @@ jshort QJNIObjectPrivate::getStaticField<jshort>(const char *className, const ch
 {
     QJNIEnvironmentPrivate env;
     jshort res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jshort>(clazz, fieldName);
 
@@ -1611,7 +1683,7 @@ jint QJNIObjectPrivate::getStaticField<jint>(const char *className, const char *
 {
     QJNIEnvironmentPrivate env;
     jint res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jint>(clazz, fieldName);
 
@@ -1635,7 +1707,7 @@ jlong QJNIObjectPrivate::getStaticField<jlong>(const char *className, const char
 {
     QJNIEnvironmentPrivate env;
     jlong res = 0;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jlong>(clazz, fieldName);
 
@@ -1659,7 +1731,7 @@ jfloat QJNIObjectPrivate::getStaticField<jfloat>(const char *className, const ch
 {
     QJNIEnvironmentPrivate env;
     jfloat res = 0.f;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jfloat>(clazz, fieldName);
 
@@ -1683,7 +1755,7 @@ jdouble QJNIObjectPrivate::getStaticField<jdouble>(const char *className, const 
 {
     QJNIEnvironmentPrivate env;
     jdouble res = 0.;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticField<jdouble>(clazz, fieldName);
 
@@ -1713,7 +1785,7 @@ QJNIObjectPrivate QJNIObjectPrivate::getStaticObjectField(const char *className,
 {
     QJNIEnvironmentPrivate env;
     QJNIObjectPrivate res;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         res = getStaticObjectField(clazz, fieldName, sig);
 
@@ -1949,7 +2021,7 @@ void QJNIObjectPrivate::setStaticField<jboolean>(const char *className,
                                                  jboolean value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jboolean>(clazz, fieldName, value);
 }
@@ -1971,7 +2043,7 @@ void QJNIObjectPrivate::setStaticField<jbyte>(const char *className,
                                               jbyte value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jbyte>(clazz, fieldName, value);
 }
@@ -1993,7 +2065,7 @@ void QJNIObjectPrivate::setStaticField<jchar>(const char *className,
                                               jchar value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jchar>(clazz, fieldName, value);
 }
@@ -2015,7 +2087,7 @@ void QJNIObjectPrivate::setStaticField<jshort>(const char *className,
                                                jshort value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jshort>(clazz, fieldName, value);
 }
@@ -2037,7 +2109,7 @@ void QJNIObjectPrivate::setStaticField<jint>(const char *className,
                                              jint value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jint>(clazz, fieldName, value);
 }
@@ -2059,7 +2131,7 @@ void QJNIObjectPrivate::setStaticField<jlong>(const char *className,
                                               jlong value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jlong>(clazz, fieldName, value);
 }
@@ -2081,7 +2153,7 @@ void QJNIObjectPrivate::setStaticField<jfloat>(const char *className,
                                                jfloat value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jfloat>(clazz, fieldName, value);
 }
@@ -2103,7 +2175,7 @@ void QJNIObjectPrivate::setStaticField<jdouble>(const char *className,
                                                 jdouble value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jdouble>(clazz, fieldName, value);
 }
@@ -2127,7 +2199,7 @@ void QJNIObjectPrivate::setStaticField<jobject>(const char *className,
                                                 jobject value)
 {
     QJNIEnvironmentPrivate env;
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     if (clazz)
         setStaticField<jobject>(clazz, fieldName, sig, value);
 }
@@ -2158,7 +2230,7 @@ bool QJNIObjectPrivate::isClassAvailable(const char *className)
     if (!env)
         return false;
 
-    jclass clazz = getCachedClass(env, className);
+    jclass clazz = loadClass(className, env);
     return (clazz != 0);
 }
 

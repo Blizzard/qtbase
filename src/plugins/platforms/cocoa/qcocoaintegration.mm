@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -137,23 +137,15 @@ void QCocoaScreen::updateGeometry()
         m_name = QString::fromUtf8([[localizedNames objectForKey:[[localizedNames allKeys] objectAtIndex:0]] UTF8String]);
     [deviceInfo release];
 
-    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry());
+    QWindowSystemInterface::handleScreenGeometryChange(screen(), geometry(), availableGeometry());
     QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(screen(), m_logicalDpi.first, m_logicalDpi.second);
     QWindowSystemInterface::handleScreenRefreshRateChange(screen(), m_refreshRate);
-    QWindowSystemInterface::handleScreenAvailableGeometryChange(screen(), availableGeometry());
 }
 
 qreal QCocoaScreen::devicePixelRatio() const
 {
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) {
-        NSScreen * screen = osScreen();
-        return qreal(screen ? [screen backingScaleFactor] : 1.0);
-    } else
-#endif
-    {
-        return 1.0;
-    }
+    NSScreen * screen = osScreen();
+    return qreal(screen ? [screen backingScaleFactor] : 1.0);
 }
 
 QWindow *QCocoaScreen::topLevelAt(const QPoint &point) const
@@ -424,30 +416,37 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
 {
     switch (cap) {
     case ThreadedPixmaps:
+#ifndef QT_NO_OPENGL
     case OpenGL:
     case ThreadedOpenGL:
     case BufferQueueingOpenGL:
+#endif
     case WindowMasks:
     case MultipleWindows:
     case ForeignWindows:
     case RasterGLSurface:
+    case ApplicationState:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
     }
 }
 
-
-
 QPlatformWindow *QCocoaIntegration::createPlatformWindow(QWindow *window) const
 {
     return new QCocoaWindow(window);
 }
 
+#ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QCocoaIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    return new QCocoaGLContext(context->format(), context->shareHandle());
+    QCocoaGLContext *glContext = new QCocoaGLContext(context->format(),
+                                                     context->shareHandle(),
+                                                     context->nativeHandle());
+    context->setNativeHandle(glContext->nativeHandle());
+    return glContext;
 }
+#endif
 
 QPlatformBackingStore *QCocoaIntegration::createPlatformBackingStore(QWindow *window) const
 {

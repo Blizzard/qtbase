@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -78,6 +70,7 @@ public:
 public slots:
     void init();
     void cleanup();
+    void initTestCase();
     void cleanupTestCase();
 
 private slots:
@@ -171,6 +164,11 @@ private slots:
     void detachOnLoad_QTBUG29639();
 
     void copyOnNonAlignedBoundary();
+
+private:
+    const QString m_prefix;
+    const QString m_convertFromImage;
+    const QString m_loadFromData;
 };
 
 static bool lenientCompare(const QPixmap &actual, const QPixmap &expected)
@@ -207,6 +205,9 @@ static bool lenientCompare(const QPixmap &actual, const QPixmap &expected)
 
 
 tst_QPixmap::tst_QPixmap()
+    : m_prefix(QFINDTESTDATA("images/"))
+    , m_convertFromImage(QFINDTESTDATA("convertFromImage"))
+    , m_loadFromData(QFINDTESTDATA("loadFromData"))
 {
 }
 
@@ -220,6 +221,13 @@ void tst_QPixmap::init()
 
 void tst_QPixmap::cleanup()
 {
+}
+
+void tst_QPixmap::initTestCase()
+{
+    QVERIFY(!m_prefix.isEmpty());
+    QVERIFY(!m_convertFromImage.isEmpty());
+    QVERIFY(!m_loadFromData.isEmpty());
 }
 
 void tst_QPixmap::cleanupTestCase()
@@ -312,22 +320,21 @@ void tst_QPixmap::convertFromImage_data()
 {
     QTest::addColumn<QImage>("img1");
     QTest::addColumn<QImage>("img2");
-    const QString prefix = QFINDTESTDATA("convertFromImage");
 
     {
         QImage img1;
         QImage img2;
-        QVERIFY(img1.load(prefix + "/task31722_0/img1.png"));
-        QVERIFY(img2.load(prefix + "/task31722_0/img2.png"));
-        QVERIFY(img1.load(prefix + "/task31722_0/img1.png"));
-        QVERIFY(img2.load(prefix + "/task31722_0/img2.png"));
+        QVERIFY(img1.load(m_convertFromImage + "/task31722_0/img1.png"));
+        QVERIFY(img2.load(m_convertFromImage + "/task31722_0/img2.png"));
+        QVERIFY(img1.load(m_convertFromImage + "/task31722_0/img1.png"));
+        QVERIFY(img2.load(m_convertFromImage + "/task31722_0/img2.png"));
         QTest::newRow("Task 31722 0") << img1 << img2;
     }
     {
         QImage img1;
         QImage img2;
-        QVERIFY(img1.load(prefix + "/task31722_1/img1.png"));
-        QVERIFY(img2.load(prefix + "/task31722_1/img2.png"));
+        QVERIFY(img1.load(m_convertFromImage + "/task31722_1/img1.png"));
+        QVERIFY(img2.load(m_convertFromImage + "/task31722_1/img2.png"));
         QTest::newRow("Task 31722 1") << img1 << img2;
     }
 }
@@ -346,11 +353,10 @@ void tst_QPixmap::convertFromImage()
 
 void tst_QPixmap::convertFromImageShouldDetach()
 {
-    const QString prefix = QFINDTESTDATA("convertFromImage");
     QImage img1;
     QImage img2;
-    QVERIFY(img1.load(prefix + "/task31722_0/img1.png"));
-    QVERIFY(img2.load(prefix + "/task31722_0/img2.png"));
+    QVERIFY(img1.load(m_convertFromImage + "/task31722_0/img1.png"));
+    QVERIFY(img2.load(m_convertFromImage + "/task31722_0/img2.png"));
     QPixmap pix = QPixmap::fromImage(img1);
     QPixmap pix1 = pix;
     pix.convertFromImage(img2);
@@ -1202,10 +1208,7 @@ void tst_QPixmap::transformed2()
 
 void tst_QPixmap::load()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("designer.png");
+    const QString filePath = m_prefix + QLatin1String("designer.png");
 
     QPixmap dest(filePath);
     QVERIFY(!dest.isNull());
@@ -1217,10 +1220,7 @@ void tst_QPixmap::load()
 
 void tst_QPixmap::loadFromData()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("designer.png");
+    const QString filePath = m_prefix + QLatin1String("designer.png");
 
     QPixmap original(filePath);
     QVERIFY(!original.isNull());
@@ -1246,10 +1246,7 @@ void tst_QPixmap::loadFromData()
 #if !defined(QT_NO_DATASTREAM)
 void tst_QPixmap::loadFromDataStream()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("designer.png");
+    const QString filePath = m_prefix + QLatin1String("designer.png");
 
     QPixmap original(filePath);
     QVERIFY(!original.isNull());
@@ -1344,17 +1341,15 @@ void tst_QPixmap::loadFromDataImage_data()
 {
     QTest::addColumn<QString>("imagePath");
 
-    const QString prefix = QFINDTESTDATA("loadFromData");
-
-    QTest::newRow("designer_argb32.png") << prefix + "/designer_argb32.png";
+    QTest::newRow("designer_argb32.png") << m_loadFromData + "/designer_argb32.png";
     // When no extension is provided we try all extensions that has been registered by image providers
-    QTest::newRow("designer_argb32") << prefix + "/designer_argb32.png";
-    QTest::newRow("designer_indexed8_no_alpha.png") << prefix + "/designer_indexed8_no_alpha.png";
-    QTest::newRow("designer_indexed8_with_alpha.png") << prefix + "/designer_indexed8_with_alpha.png";
-    QTest::newRow("designer_rgb32.png") << prefix + "/designer_rgb32.png";
-    QTest::newRow("designer_indexed8_no_alpha.gif") << prefix + "/designer_indexed8_no_alpha.gif";
-    QTest::newRow("designer_indexed8_with_alpha.gif") << prefix + "/designer_indexed8_with_alpha.gif";
-    QTest::newRow("designer_rgb32.jpg") << prefix + "/designer_rgb32.jpg";
+    QTest::newRow("designer_argb32") << m_loadFromData + "/designer_argb32.png";
+    QTest::newRow("designer_indexed8_no_alpha.png") << m_loadFromData + "/designer_indexed8_no_alpha.png";
+    QTest::newRow("designer_indexed8_with_alpha.png") << m_loadFromData + "/designer_indexed8_with_alpha.png";
+    QTest::newRow("designer_rgb32.png") << m_loadFromData + "/designer_rgb32.png";
+    QTest::newRow("designer_indexed8_no_alpha.gif") << m_loadFromData + "/designer_indexed8_no_alpha.gif";
+    QTest::newRow("designer_indexed8_with_alpha.gif") << m_loadFromData + "/designer_indexed8_with_alpha.gif";
+    QTest::newRow("designer_rgb32.jpg") << m_loadFromData + "/designer_rgb32.jpg";
 }
 
 void tst_QPixmap::loadFromDataImage()
@@ -1378,17 +1373,15 @@ void tst_QPixmap::fromImageReader_data()
 {
     QTest::addColumn<QString>("imagePath");
 
-    const QString prefix = QFINDTESTDATA("loadFromData");
-
-    QTest::newRow("designer_argb32.png") << prefix + "/designer_argb32.png";
-    QTest::newRow("designer_indexed8_no_alpha.png") << prefix + "/designer_indexed8_no_alpha.png";
-    QTest::newRow("designer_indexed8_with_alpha.png") << prefix + "/designer_indexed8_with_alpha.png";
-    QTest::newRow("designer_rgb32.png") << prefix + "/designer_rgb32.png";
-    QTest::newRow("designer_indexed8_no_alpha.gif") << prefix + "/designer_indexed8_no_alpha.gif";
-    QTest::newRow("designer_indexed8_with_alpha.gif") << prefix + "/designer_indexed8_with_alpha.gif";
-    QTest::newRow("designer_rgb32.jpg") << prefix + "/designer_rgb32.jpg";
-    QTest::newRow("designer_indexed8_with_alpha_animated") << prefix + "/designer_indexed8_with_alpha_animated.gif";
-    QTest::newRow("designer_indexed8_no_alpha_animated") << prefix + "/designer_indexed8_no_alpha_animated.gif";
+    QTest::newRow("designer_argb32.png") << m_loadFromData + "/designer_argb32.png";
+    QTest::newRow("designer_indexed8_no_alpha.png") << m_loadFromData + "/designer_indexed8_no_alpha.png";
+    QTest::newRow("designer_indexed8_with_alpha.png") << m_loadFromData + "/designer_indexed8_with_alpha.png";
+    QTest::newRow("designer_rgb32.png") << m_loadFromData + "/designer_rgb32.png";
+    QTest::newRow("designer_indexed8_no_alpha.gif") << m_loadFromData + "/designer_indexed8_no_alpha.gif";
+    QTest::newRow("designer_indexed8_with_alpha.gif") << m_loadFromData + "/designer_indexed8_with_alpha.gif";
+    QTest::newRow("designer_rgb32.jpg") << m_loadFromData + "/designer_rgb32.jpg";
+    QTest::newRow("designer_indexed8_with_alpha_animated") << m_loadFromData + "/designer_indexed8_with_alpha_animated.gif";
+    QTest::newRow("designer_indexed8_no_alpha_animated") << m_loadFromData + "/designer_indexed8_no_alpha_animated.gif";
 }
 
 void tst_QPixmap::fromImageReader()
@@ -1416,8 +1409,7 @@ void tst_QPixmap::fromImageReaderAnimatedGif()
 {
     QFETCH(QString, imagePath);
 
-    const QString prefix = QFINDTESTDATA("loadFromData");
-    const QString path = prefix + imagePath;
+    const QString path = m_loadFromData + imagePath;
 
     QImageReader referenceReader(path);
     QImageReader pixmapReader(path);
@@ -1533,14 +1525,12 @@ void tst_QPixmap::scaled_QTBUG19157()
 
 void tst_QPixmap::detachOnLoad_QTBUG29639()
 {
-    const QString prefix = QFINDTESTDATA("convertFromImage");
-
     QPixmap a;
-    a.load(prefix + "/task31722_0/img1.png");
-    a.load(prefix + "/task31722_0/img2.png");
+    a.load(m_convertFromImage + "/task31722_0/img1.png");
+    a.load(m_convertFromImage + "/task31722_0/img2.png");
 
     QPixmap b;
-    b.load(prefix + "/task31722_0/img1.png");
+    b.load(m_convertFromImage + "/task31722_0/img1.png");
 
     QVERIFY(a.toImage() != b.toImage());
 }

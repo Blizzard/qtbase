@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -164,25 +156,24 @@ namespace {
     {
         Q_ASSERT(tagName.size() == 4);
         quint32 tagId = *(reinterpret_cast<const quint32 *>(tagName.constData()));
-        if (Q_UNLIKELY(m_fontData.size() < sizeof(OffsetSubTable)))
+        const size_t fontDataSize = m_fontData.size();
+        if (Q_UNLIKELY(fontDataSize < sizeof(OffsetSubTable)))
             return 0;
 
         OffsetSubTable *offsetSubTable = reinterpret_cast<OffsetSubTable *>(m_fontData.data());
         TableDirectory *tableDirectory = reinterpret_cast<TableDirectory *>(offsetSubTable + 1);
 
-        quint16 tableCount = qFromBigEndian<quint16>(offsetSubTable->numTables);
-        if (Q_UNLIKELY(quint32(m_fontData.size()) < sizeof(OffsetSubTable) + sizeof(TableDirectory) * tableCount))
+        const size_t tableCount = qFromBigEndian<quint16>(offsetSubTable->numTables);
+        if (Q_UNLIKELY(fontDataSize < sizeof(OffsetSubTable) + sizeof(TableDirectory) * tableCount))
             return 0;
 
-        TableDirectory *nameTableDirectoryEntry = 0;
-        for (int i = 0; i < tableCount; ++i, ++tableDirectory) {
-            if (tableDirectory->identifier == tagId) {
-                nameTableDirectoryEntry = tableDirectory;
-                break;
-            }
+        TableDirectory *tableDirectoryEnd = tableDirectory + tableCount;
+        for (TableDirectory *entry = tableDirectory; entry < tableDirectoryEnd; ++entry) {
+            if (entry->identifier == tagId)
+                return entry;
         }
 
-        return nameTableDirectoryEntry;
+        return 0;
     }
 
     QString EmbeddedFont::familyName(TableDirectory *nameTableDirectoryEntry)
@@ -862,7 +853,7 @@ static bool addFontToDatabase(const QString &familyName, uchar charSet,
                               int type)
 {
     // the "@family" fonts are just the same as "family". Ignore them.
-    if (familyName.isEmpty() || familyName.at(0) == QLatin1Char('@') || familyName.startsWith(QStringLiteral("WST_")))
+    if (familyName.isEmpty() || familyName.at(0) == QLatin1Char('@') || familyName.startsWith(QLatin1String("WST_")))
         return false;
 
     static const int SMOOTH_SCALABLE = 0xffff;
@@ -927,7 +918,7 @@ static bool addFontToDatabase(const QString &familyName, uchar charSet,
         // display Thai text by default. As a temporary work around, we special case Segoe UI
         // and remove the Thai script from its list of supported writing systems.
         if (writingSystems.supported(QFontDatabase::Thai) &&
-                familyName == QStringLiteral("Segoe UI"))
+                familyName == QLatin1String("Segoe UI"))
             writingSystems.setSupported(QFontDatabase::Thai, false);
     } else {
         const QFontDatabase::WritingSystem ws = writingSystemFromCharSet(charSet);
@@ -973,6 +964,31 @@ static int QT_WIN_CALLBACK storeFont(ENUMLOGFONTEX* f, NEWTEXTMETRICEX *textmetr
     return 1;
 }
 
+static int QT_WIN_CALLBACK storeFontSub(ENUMLOGFONTEX* f, NEWTEXTMETRICEX *textmetric,
+                                        int type, LPARAM namesSetIn)
+{
+    Q_UNUSED(textmetric)
+    Q_UNUSED(type)
+
+    HDC dummy = GetDC(0);
+    LOGFONT lf;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    if (wcslen(f->elfLogFont.lfFaceName) >= LF_FACESIZE) {
+        qWarning("%s: Unable to enumerate family '%s'.",
+                 __FUNCTION__, qPrintable(QString::fromWCharArray(f->elfLogFont.lfFaceName)));
+        return 1;
+    }
+    wmemcpy(lf.lfFaceName, f->elfLogFont.lfFaceName,
+            wcslen(f->elfLogFont.lfFaceName) + 1);
+    lf.lfPitchAndFamily = 0;
+    EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFont,
+                       (LPARAM)namesSetIn, 0);
+    ReleaseDC(0, dummy);
+
+    // keep on enumerating
+    return 1;
+}
+
 void QWindowsFontDatabase::populateFontDatabase()
 {
     m_families.clear();
@@ -1008,8 +1024,15 @@ void QWindowsFontDatabase::populate(const QString &family)
     wmemcpy(lf.lfFaceName, reinterpret_cast<const wchar_t*>(family.utf16()),
             family.size() + 1);
     lf.lfPitchAndFamily = 0;
-    EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFont,
-                       (LPARAM)&m_families, 0);
+
+    if (family.isEmpty()) {
+        EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFontSub,
+                           (LPARAM)&m_families, 0);
+    } else {
+        EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFont,
+                           (LPARAM)&m_families, 0);
+    }
+
     ReleaseDC(0, dummy);
 }
 
@@ -1064,7 +1087,7 @@ QFontEngineMulti *QWindowsFontDatabase::fontEngineMulti(QFontEngine *fontEngine,
     if (script == QChar::Script_Common)
         return new QWindowsMultiFontEngine(fontEngine, script);
     // ### as long as fallbacksForFamily() does not take script parameter into account,
-    // prefer QFontEngineMultiQPA's loadEngine() implementation for complex scripts
+    // prefer QFontEngineMultiBasicImpl's loadEngine() implementation for complex scripts
     return QPlatformFontDatabase::fontEngineMulti(fontEngine, script);
 }
 
@@ -1521,13 +1544,15 @@ LOGFONT QWindowsFontDatabase::fontDefToLOGFONT(const QFontDef &request)
 #endif
 
     if (request.styleStrategy & QFont::PreferAntialias) {
-        if (QSysInfo::WindowsVersion >= QSysInfo::WV_XP) {
+        if (QSysInfo::WindowsVersion >= QSysInfo::WV_XP && !(request.styleStrategy & QFont::NoSubpixelAntialias)) {
             qual = CLEARTYPE_QUALITY;
         } else {
             qual = ANTIALIASED_QUALITY;
         }
     } else if (request.styleStrategy & QFont::NoAntialias) {
         qual = NONANTIALIASED_QUALITY;
+    } else if ((request.styleStrategy & QFont::NoSubpixelAntialias) && sharedFontData()->clearTypeEnabled) {
+        qual = ANTIALIASED_QUALITY;
     }
 
     lf.lfQuality        = qual;
@@ -1566,7 +1591,7 @@ LOGFONT QWindowsFontDatabase::fontDefToLOGFONT(const QFontDef &request)
         && (request.style == QFont::StyleItalic || (-lf.lfHeight > 18 && -lf.lfHeight != 24))) {
         fam = QStringLiteral("Arial"); // MS Sans Serif has bearing problems in italic, and does not scale
     }
-    if (fam == QStringLiteral("Courier") && !(request.styleStrategy & QFont::PreferBitmap))
+    if (fam == QLatin1String("Courier") && !(request.styleStrategy & QFont::PreferBitmap))
         fam = QStringLiteral("Courier New");
 
     memcpy(lf.lfFaceName, fam.utf16(), sizeof(wchar_t) * qMin(fam.length() + 1, 32));  // 32 = Windows hard-coded
@@ -1613,37 +1638,36 @@ QStringList QWindowsFontDatabase::extraTryFontsForFamily(const QString &family)
     return result;
 }
 
+QString QWindowsFontDatabase::familyForStyleHint(QFont::StyleHint styleHint)
+{
+    switch (styleHint) {
+    case QFont::Times:
+        return QStringLiteral("Times New Roman");
+    case QFont::Courier:
+        return QStringLiteral("Courier New");
+    case QFont::Monospace:
+        return QStringLiteral("Courier New");
+    case QFont::Cursive:
+        return QStringLiteral("Comic Sans MS");
+    case QFont::Fantasy:
+        return QStringLiteral("Impact");
+    case QFont::Decorative:
+        return QStringLiteral("Old English");
+    case QFont::Helvetica:
+        return QStringLiteral("Arial");
+    case QFont::System:
+    default:
+        break;
+    }
+    return QStringLiteral("MS Shell Dlg 2");
+}
+
 QStringList QWindowsFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
 {
     QStringList result = QPlatformFontDatabase::fallbacksForFamily(family, style, styleHint, script);
     if (!result.isEmpty())
         return result;
-
-    switch (styleHint) {
-        case QFont::Times:
-            result << QString::fromLatin1("Times New Roman");
-            break;
-        case QFont::Courier:
-            result << QString::fromLatin1("Courier New");
-            break;
-        case QFont::Monospace:
-            result << QString::fromLatin1("Courier New");
-            break;
-        case QFont::Cursive:
-            result << QString::fromLatin1("Comic Sans MS");
-            break;
-        case QFont::Fantasy:
-            result << QString::fromLatin1("Impact");
-            break;
-        case QFont::Decorative:
-            result << QString::fromLatin1("Old English");
-            break;
-        case QFont::Helvetica:
-        case QFont::System:
-        default:
-            result << QString::fromLatin1("Arial");
-    }
-
+    result.append(QWindowsFontDatabase::familyForStyleHint(styleHint));
     result.append(QWindowsFontDatabase::extraTryFontsForFamily(family));
 
     qCDebug(lcQpaFonts) << __FUNCTION__ << family << style << styleHint
@@ -1679,18 +1703,18 @@ QFontEngine *QWindowsFontDatabase::createEngine(const QFontDef &request,
     if (rawMode) {                        // will choose a stock font
         int f = SYSTEM_FONT;
         const QString fam = request.family.toLower();
-        if (fam == QStringLiteral("default") || fam == QStringLiteral("system"))
+        if (fam == QLatin1String("default") || fam == QLatin1String("system"))
             f = SYSTEM_FONT;
 #ifndef Q_OS_WINCE
-        else if (fam == QStringLiteral("system_fixed"))
+        else if (fam == QLatin1String("system_fixed"))
             f = SYSTEM_FIXED_FONT;
-        else if (fam == QStringLiteral("ansi_fixed"))
+        else if (fam == QLatin1String("ansi_fixed"))
             f = ANSI_FIXED_FONT;
-        else if (fam == QStringLiteral("ansi_var"))
+        else if (fam == QLatin1String("ansi_var"))
             f = ANSI_VAR_FONT;
-        else if (fam == QStringLiteral("device_default"))
+        else if (fam == QLatin1String("device_default"))
             f = DEVICE_DEFAULT_FONT;
-        else if (fam == QStringLiteral("oem_fixed"))
+        else if (fam == QLatin1String("oem_fixed"))
             f = OEM_FIXED_FONT;
 #endif
         else if (fam.at(0) == QLatin1Char('#'))
@@ -1811,7 +1835,7 @@ QFont QWindowsFontDatabase::systemDefaultFont()
     GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(lf), &lf);
     QFont systemFont =  QWindowsFontDatabase::LOGFONT_to_QFont(lf);
     // "MS Shell Dlg 2" is the correct system font >= Win2k
-    if (systemFont.family() == QStringLiteral("MS Shell Dlg"))
+    if (systemFont.family() == QLatin1String("MS Shell Dlg"))
         systemFont.setFamily(QStringLiteral("MS Shell Dlg 2"));
     qCDebug(lcQpaFonts) << __FUNCTION__ << systemFont;
     return systemFont;

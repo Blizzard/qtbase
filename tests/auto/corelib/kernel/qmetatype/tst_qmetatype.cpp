@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -398,7 +390,8 @@ void tst_QMetaType::typeName()
     QT_FOR_EACH_STATIC_CORE_POINTER(F) \
 
 #define FOR_EACH_COMPLEX_CORE_METATYPE(F) \
-    QT_FOR_EACH_STATIC_CORE_CLASS(F)
+    QT_FOR_EACH_STATIC_CORE_CLASS(F) \
+    QT_FOR_EACH_STATIC_CORE_TEMPLATE(F)
 
 #define FOR_EACH_CORE_METATYPE(F) \
     FOR_EACH_PRIMITIVE_METATYPE(F) \
@@ -488,6 +481,18 @@ template<> struct TestValueFactory<QMetaType::Double> {
 };
 template<> struct TestValueFactory<QMetaType::QByteArray> {
     static QByteArray *create() { return new QByteArray(QByteArray("QByteArray")); }
+};
+template<> struct TestValueFactory<QMetaType::QByteArrayList> {
+    static QByteArrayList *create() { return new QByteArrayList(QByteArrayList() << "Q" << "Byte" << "Array" << "List"); }
+};
+template<> struct TestValueFactory<QMetaType::QVariantMap> {
+    static QVariantMap *create() { return new QVariantMap(); }
+};
+template<> struct TestValueFactory<QMetaType::QVariantHash> {
+    static QVariantHash *create() { return new QVariantHash(); }
+};
+template<> struct TestValueFactory<QMetaType::QVariantList> {
+    static QVariantList *create() { return new QVariantList(QVariantList() << 123 << "Q" << "Variant" << "List"); }
 };
 template<> struct TestValueFactory<QMetaType::QChar> {
     static QChar *create() { return new QChar(QChar('q')); }
@@ -1341,6 +1346,8 @@ static QByteArray createTypeName(const char *begin, const char *va)
 }
 #endif
 
+Q_DECLARE_METATYPE(const void*)
+
 void tst_QMetaType::automaticTemplateRegistration()
 {
 #define TEST_SEQUENTIAL_CONTAINER(CONTAINER, VALUE_TYPE) \
@@ -1358,12 +1365,23 @@ void tst_QMetaType::automaticTemplateRegistration()
   TEST_SEQUENTIAL_CONTAINER(std::list, int)
 
   {
-    QList<QByteArray> bytearrayList;
-    bytearrayList << QByteArray("foo");
-    QVERIFY(QVariant::fromValue(bytearrayList).value<QList<QByteArray> >().first() == QByteArray("foo"));
-    QVector<QList<QByteArray> > vectorList;
-    vectorList << bytearrayList;
-    QVERIFY(QVariant::fromValue(vectorList).value<QVector<QList<QByteArray> > >().first().first() == QByteArray("foo"));
+    std::vector<bool> vecbool;
+    vecbool.push_back(true);
+    vecbool.push_back(false);
+    vecbool.push_back(true);
+    QVERIFY(QVariant::fromValue(vecbool).value<std::vector<bool> >().front() == true);
+    QVector<std::vector<bool> > vectorList;
+    vectorList << vecbool;
+    QVERIFY(QVariant::fromValue(vectorList).value<QVector<std::vector<bool> > >().first().front() == true);
+  }
+
+  {
+    QList<unsigned> unsignedList;
+    unsignedList << 123;
+    QVERIFY(QVariant::fromValue(unsignedList).value<QList<unsigned> >().first() == 123);
+    QVector<QList<unsigned> > vectorList;
+    vectorList << unsignedList;
+    QVERIFY(QVariant::fromValue(vectorList).value<QVector<QList<unsigned> > >().first().first() == 123);
   }
 
   QCOMPARE(::qMetaTypeId<QVariantList>(), (int)QMetaType::QVariantList);
@@ -1577,10 +1595,16 @@ void tst_QMetaType::automaticTemplateRegistration()
     )
 
     CREATE_AND_VERIFY_CONTAINER(QList, QList<QMap<int, QHash<char, QVariantList> > >)
+    CREATE_AND_VERIFY_CONTAINER(QVector, void*)
+    CREATE_AND_VERIFY_CONTAINER(QVector, const void*)
+    CREATE_AND_VERIFY_CONTAINER(QList, void*)
+    CREATE_AND_VERIFY_CONTAINER(QPair, void*, void*)
+    CREATE_AND_VERIFY_CONTAINER(QHash, void*, void*)
+    CREATE_AND_VERIFY_CONTAINER(QHash, const void*, const void*)
 
 #endif // Q_COMPILER_VARIADIC_MACROS
 
-#define TEST_SMARTPOINTER(SMARTPOINTER, ELEMENT_TYPE, FLAG_TEST, FROMVARIANTFUNCTION) \
+#define TEST_OWNING_SMARTPOINTER(SMARTPOINTER, ELEMENT_TYPE, FLAG_TEST, FROMVARIANTFUNCTION) \
     { \
         SMARTPOINTER < ELEMENT_TYPE > sp(new ELEMENT_TYPE); \
         sp.data()->setObjectName("Test name"); \
@@ -1591,22 +1615,34 @@ void tst_QMetaType::automaticTemplateRegistration()
         QCOMPARE(extractedPtr.data()->objectName(), sp.data()->objectName()); \
     }
 
-    TEST_SMARTPOINTER(QSharedPointer, QObject, SharedPointerToQObject, qSharedPointerFromVariant)
-    TEST_SMARTPOINTER(QSharedPointer, QFile, SharedPointerToQObject, qSharedPointerFromVariant)
-    TEST_SMARTPOINTER(QSharedPointer, QTemporaryFile, SharedPointerToQObject, qSharedPointerFromVariant)
-    TEST_SMARTPOINTER(QSharedPointer, MyObject, SharedPointerToQObject, qSharedPointerFromVariant)
+    TEST_OWNING_SMARTPOINTER(QSharedPointer, QObject, SharedPointerToQObject, qSharedPointerFromVariant)
+    TEST_OWNING_SMARTPOINTER(QSharedPointer, QFile, SharedPointerToQObject, qSharedPointerFromVariant)
+    TEST_OWNING_SMARTPOINTER(QSharedPointer, QTemporaryFile, SharedPointerToQObject, qSharedPointerFromVariant)
+    TEST_OWNING_SMARTPOINTER(QSharedPointer, MyObject, SharedPointerToQObject, qSharedPointerFromVariant)
+#undef TEST_OWNING_SMARTPOINTER
 
-    TEST_SMARTPOINTER(QWeakPointer, QObject, WeakPointerToQObject, qWeakPointerFromVariant)
-    TEST_SMARTPOINTER(QWeakPointer, QFile, WeakPointerToQObject, qWeakPointerFromVariant)
-    TEST_SMARTPOINTER(QWeakPointer, QTemporaryFile, WeakPointerToQObject, qWeakPointerFromVariant)
-    TEST_SMARTPOINTER(QWeakPointer, MyObject, WeakPointerToQObject, qWeakPointerFromVariant)
+#define TEST_NONOWNING_SMARTPOINTER(SMARTPOINTER, ELEMENT_TYPE, FLAG_TEST, FROMVARIANTFUNCTION) \
+    { \
+        ELEMENT_TYPE elem; \
+        SMARTPOINTER < ELEMENT_TYPE > sp(&elem); \
+        sp.data()->setObjectName("Test name"); \
+        QVariant v = QVariant::fromValue(sp); \
+        QCOMPARE(v.typeName(), #SMARTPOINTER "<" #ELEMENT_TYPE ">"); \
+        QVERIFY(QMetaType::typeFlags(::qMetaTypeId<SMARTPOINTER < ELEMENT_TYPE > >()) & QMetaType::FLAG_TEST); \
+        SMARTPOINTER < QObject > extractedPtr = FROMVARIANTFUNCTION<QObject>(v); \
+        QCOMPARE(extractedPtr.data()->objectName(), sp.data()->objectName()); \
+    }
 
-    TEST_SMARTPOINTER(QPointer, QObject, TrackingPointerToQObject, qPointerFromVariant)
-    TEST_SMARTPOINTER(QPointer, QFile, TrackingPointerToQObject, qPointerFromVariant)
-    TEST_SMARTPOINTER(QPointer, QTemporaryFile, TrackingPointerToQObject, qPointerFromVariant)
-    TEST_SMARTPOINTER(QPointer, MyObject, TrackingPointerToQObject, qPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QObject, WeakPointerToQObject, qWeakPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QFile, WeakPointerToQObject, qWeakPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QTemporaryFile, WeakPointerToQObject, qWeakPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QWeakPointer, MyObject, WeakPointerToQObject, qWeakPointerFromVariant)
 
-#undef TEST_SMARTPOINTER
+    TEST_NONOWNING_SMARTPOINTER(QPointer, QObject, TrackingPointerToQObject, qPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QPointer, QFile, TrackingPointerToQObject, qPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QPointer, QTemporaryFile, TrackingPointerToQObject, qPointerFromVariant)
+    TEST_NONOWNING_SMARTPOINTER(QPointer, MyObject, TrackingPointerToQObject, qPointerFromVariant)
+#undef TEST_NONOWNING_SMARTPOINTER
 }
 
 template <typename T>

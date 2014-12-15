@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -289,7 +281,7 @@ void QPlainTextDocumentLayout::documentChanged(int from, int charsRemoved, int c
     Q_D(QPlainTextDocumentLayout);
     QTextDocument *doc = document();
     int newBlockCount = doc->blockCount();
-    int charsChanged = qMax(charsRemoved, charsAdded);
+    int charsChanged = charsRemoved + charsAdded;
 
     QTextBlock changeStartBlock = doc->findBlock(from);
     QTextBlock changeEndBlock = doc->findBlock(qMax(0, from + charsChanged - 1));
@@ -690,10 +682,9 @@ void QPlainTextEditPrivate::ensureVisible(int position, bool center, bool forceC
     QRectF br = control->blockBoundingRect(block);
     if (!br.isValid())
         return;
-    QRectF lr = br;
     QTextLine line = block.layout()->lineForTextPosition(position - block.position());
     Q_ASSERT(line.isValid());
-    lr = line.naturalTextRect().translated(br.topLeft());
+    QRectF lr = line.naturalTextRect().translated(br.topLeft());
 
     if (lr.bottom() >= visible.bottom() || (center && lr.top() < visible.top()) || forceCenter){
 
@@ -998,7 +989,8 @@ void QPlainTextEditPrivate::_q_adjustScrollbars()
 
     } else {
         vmax = qMax(0, doc->lineCount() - 1);
-        vSliderLength = viewport->height() / q->fontMetrics().lineSpacing();
+        int lineSpacing = q->fontMetrics().lineSpacing();
+        vSliderLength = lineSpacing != 0 ? viewport->height() / lineSpacing : 0;
     }
 
 
@@ -2277,11 +2269,8 @@ void QPlainTextEdit::wheelEvent(QWheelEvent *e)
     Q_D(QPlainTextEdit);
     if (!(d->control->textInteractionFlags() & Qt::TextEditable)) {
         if (e->modifiers() & Qt::ControlModifier) {
-            const int delta = e->delta();
-            if (delta < 0)
-                zoomOut();
-            else if (delta > 0)
-                zoomIn();
+            float delta = e->angleDelta().y() / 120.f;
+            zoomInF(delta);
             return;
         }
     }
@@ -2301,12 +2290,7 @@ void QPlainTextEdit::wheelEvent(QWheelEvent *e)
 */
 void QPlainTextEdit::zoomIn(int range)
 {
-    QFont f = font();
-    const int newSize = f.pointSize() + range;
-    if (newSize <= 0)
-        return;
-    f.setPointSize(newSize);
-    setFont(f);
+    zoomInF(range);
 }
 
 /*!
@@ -2322,7 +2306,22 @@ void QPlainTextEdit::zoomIn(int range)
 */
 void QPlainTextEdit::zoomOut(int range)
 {
-    zoomIn(-range);
+    zoomInF(-range);
+}
+
+/*!
+    \internal
+*/
+void QPlainTextEdit::zoomInF(float range)
+{
+    if (range == 0.f)
+        return;
+    QFont f = font();
+    const float newSize = f.pointSizeF() + range;
+    if (newSize <= 0)
+        return;
+    f.setPointSizeF(newSize);
+    setFont(f);
 }
 
 #ifndef QT_NO_CONTEXTMENU
@@ -2537,6 +2536,8 @@ void QPlainTextEdit::setReadOnly(bool ro)
     }
     setAttribute(Qt::WA_InputMethodEnabled, shouldEnableInputMethod(this));
     d->control->setTextInteractionFlags(flags);
+    QEvent event(QEvent::ReadOnlyChange);
+    QApplication::sendEvent(this, &event);
 }
 
 /*!

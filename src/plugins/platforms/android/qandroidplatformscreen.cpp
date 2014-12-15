@@ -1,40 +1,32 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,15 +40,18 @@
 #include "qandroidplatformscreen.h"
 #include "qandroidplatformbackingstore.h"
 #include "qandroidplatformintegration.h"
+#include "qandroidplatformwindow.h"
 #include "androidjnimain.h"
 #include "androidjnimenu.h"
-#include "qandroidplatformrasterwindow.h"
+#include "androiddeadlockprotector.h"
 
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
+#include <qguiapplication.h>
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
+#include <QtGui/private/qwindow_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -102,6 +97,7 @@ QAndroidPlatformScreen::QAndroidPlatformScreen():QObject(),QPlatformScreen()
     m_redrawTimer.setSingleShot(true);
     m_redrawTimer.setInterval(0);
     connect(&m_redrawTimer, SIGNAL(timeout()), this, SLOT(doRedraw()));
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &QAndroidPlatformScreen::applicationStateChanged);
 }
 
 QAndroidPlatformScreen::~QAndroidPlatformScreen()
@@ -109,8 +105,7 @@ QAndroidPlatformScreen::~QAndroidPlatformScreen()
     if (m_id != -1) {
         QtAndroid::destroySurface(m_id);
         m_surfaceWaitCondition.wakeOne();
-        if (m_nativeSurface)
-            ANativeWindow_release(m_nativeSurface);
+        releaseSurface();
     }
 }
 
@@ -133,7 +128,7 @@ QWindow *QAndroidPlatformScreen::topLevelAt(const QPoint &p) const
 
 void QAndroidPlatformScreen::addWindow(QAndroidPlatformWindow *window)
 {
-    if (window->parent())
+    if (window->parent() && window->isRaster())
         return;
 
     m_windowStack.prepend(window);
@@ -149,10 +144,11 @@ void QAndroidPlatformScreen::addWindow(QAndroidPlatformWindow *window)
 
 void QAndroidPlatformScreen::removeWindow(QAndroidPlatformWindow *window)
 {
-    if (window->parent())
+    if (window->parent() && window->isRaster())
         return;
 
     m_windowStack.removeOne(window);
+
     if (window->isRaster()) {
         m_rasterSurfaces.deref();
         setDirty(window->geometry());
@@ -165,7 +161,7 @@ void QAndroidPlatformScreen::removeWindow(QAndroidPlatformWindow *window)
 
 void QAndroidPlatformScreen::raise(QAndroidPlatformWindow *window)
 {
-    if (window->parent())
+    if (window->parent() && window->isRaster())
         return;
 
     int index = m_windowStack.indexOf(window);
@@ -182,7 +178,7 @@ void QAndroidPlatformScreen::raise(QAndroidPlatformWindow *window)
 
 void QAndroidPlatformScreen::lower(QAndroidPlatformWindow *window)
 {
-    if (window->parent())
+    if (window->parent() && window->isRaster())
         return;
 
     int index = m_windowStack.indexOf(window);
@@ -218,7 +214,7 @@ void QAndroidPlatformScreen::setPhysicalSize(const QSize &size)
 void QAndroidPlatformScreen::setSize(const QSize &size)
 {
     m_size = size;
-    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
 }
 
 void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
@@ -230,8 +226,7 @@ void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
     QRect oldGeometry = m_availableGeometry;
 
     m_availableGeometry = rect;
-    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry());
-    QWindowSystemInterface::handleScreenAvailableGeometryChange(QPlatformScreen::screen(), availableGeometry());
+    QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), geometry(), availableGeometry());
     resizeMaximizedWindows();
 
     if (oldGeometry.width() == 0 && oldGeometry.height() == 0 && rect.width() > 0 && rect.height() > 0) {
@@ -241,17 +236,28 @@ void QAndroidPlatformScreen::setAvailableGeometry(const QRect &rect)
             if (w->handle()) {
                 QRect geometry = w->handle()->geometry();
                 if (geometry.width() > 0 && geometry.height() > 0)
-                    QWindowSystemInterface::handleExposeEvent(w, QRegion(geometry));
+                    QWindowSystemInterface::handleExposeEvent(w, QRect(QPoint(0, 0), geometry.size()));
             }
         }
     }
 
     if (m_id != -1) {
-        if (m_nativeSurface) {
-            ANativeWindow_release(m_nativeSurface);
-            m_nativeSurface = 0;
-        }
+        releaseSurface();
         QtAndroid::setSurfaceGeometry(m_id, rect);
+    }
+}
+
+void QAndroidPlatformScreen::applicationStateChanged(Qt::ApplicationState state)
+{
+    foreach (QAndroidPlatformWindow *w, m_windowStack)
+        w->applicationStateChanged(state);
+
+    if (state <=  Qt::ApplicationHidden && QtAndroid::blockEventLoopsWhenSuspended()) {
+        lockSurface();
+        QtAndroid::destroySurface(m_id);
+        m_id = -1;
+        releaseSurface();
+        unlockSurface();
     }
 }
 
@@ -278,9 +284,25 @@ void QAndroidPlatformScreen::doRedraw()
     if (m_dirtyRect.isEmpty())
         return;
 
+    // Stop if there no visible raster windows. This is important because if we only have
+    // RasterGLSurface windows that have renderToTexture children (i.e. they need the
+    // OpenGL path) then we must bail out right now.
+    bool hasVisibleRasterWindows = false;
+    foreach (QAndroidPlatformWindow *window, m_windowStack) {
+        if (window->window()->isVisible() && window->isRaster() && !qt_window_private(window->window())->compositing) {
+            hasVisibleRasterWindows = true;
+            break;
+        }
+    }
+    if (!hasVisibleRasterWindows)
+        return;
+
     QMutexLocker lock(&m_surfaceMutex);
     if (m_id == -1 && m_rasterSurfaces) {
         m_id = QtAndroid::createSurface(this, m_availableGeometry, true, m_depth);
+        AndroidDeadlockProtector protector;
+        if (!protector.acquire())
+            return;
         m_surfaceWaitCondition.wait(&m_surfaceMutex);
     }
 
@@ -330,9 +352,9 @@ void QAndroidPlatformScreen::doRedraw()
 
             visibleRegion -= targetRect;
             QRect windowRect = targetRect.translated(-window->geometry().topLeft());
-            QAndroidPlatformBackingStore *backingStore = static_cast<QAndroidPlatformRasterWindow *>(window)->backingStore();
+            QAndroidPlatformBackingStore *backingStore = static_cast<QAndroidPlatformWindow *>(window)->backingStore();
             if (backingStore)
-                compositePainter.drawImage(targetRect.topLeft(), backingStore->image(), windowRect);
+                compositePainter.drawImage(targetRect.topLeft(), backingStore->toImage(), windowRect);
         }
     }
 
@@ -365,18 +387,22 @@ void QAndroidPlatformScreen::surfaceChanged(JNIEnv *env, jobject surface, int w,
 {
     lockSurface();
     if (surface && w && h) {
-        if (m_nativeSurface)
-            ANativeWindow_release(m_nativeSurface);
+        releaseSurface();
         m_nativeSurface = ANativeWindow_fromSurface(env, surface);
         QMetaObject::invokeMethod(this, "setDirty", Qt::QueuedConnection, Q_ARG(QRect, QRect(0, 0, w, h)));
     } else {
-        if (m_nativeSurface) {
-            ANativeWindow_release(m_nativeSurface);
-            m_nativeSurface = 0;
-        }
+        releaseSurface();
     }
     unlockSurface();
     m_surfaceWaitCondition.wakeOne();
+}
+
+void QAndroidPlatformScreen::releaseSurface()
+{
+    if (m_nativeSurface) {
+        ANativeWindow_release(m_nativeSurface);
+        m_nativeSurface = 0;
+    }
 }
 
 QT_END_NAMESPACE

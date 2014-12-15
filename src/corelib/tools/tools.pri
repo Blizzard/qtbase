@@ -9,6 +9,7 @@ HEADERS +=  \
         tools/qarraydatapointer.h \
         tools/qbitarray.h \
         tools/qbytearray.h \
+        tools/qbytearraylist.h \
         tools/qbytearraymatcher.h \
         tools/qbytedata_p.h \
         tools/qcache.h \
@@ -43,7 +44,6 @@ HEADERS +=  \
         tools/qqueue.h \
         tools/qrect.h \
         tools/qregexp.h \
-        tools/qregularexpression.h \
         tools/qringbuffer_p.h \
         tools/qrefcount.h \
         tools/qscopedpointer.h \
@@ -70,13 +70,15 @@ HEADERS +=  \
         tools/qunicodetables_p.h \
         tools/qunicodetools_p.h \
         tools/qvarlengtharray.h \
-        tools/qvector.h
+        tools/qvector.h \
+        tools/qversionnumber_p.h
 
 
 SOURCES += \
         tools/qarraydata.cpp \
         tools/qbitarray.cpp \
         tools/qbytearray.cpp \
+        tools/qbytearraylist.cpp \
         tools/qbytearraymatcher.cpp \
         tools/qcollator.cpp \
         tools/qcommandlineoption.cpp \
@@ -100,7 +102,6 @@ SOURCES += \
         tools/qcontiguouscache.cpp \
         tools/qrect.cpp \
         tools/qregexp.cpp \
-        tools/qregularexpression.cpp \
         tools/qrefcount.cpp \
         tools/qshareddata.cpp \
         tools/qsharedpointer.cpp \
@@ -115,7 +116,8 @@ SOURCES += \
         tools/qtimezoneprivate.cpp \
         tools/qunicodetools.cpp \
         tools/qvector.cpp \
-        tools/qvsnprintf.cpp
+        tools/qvsnprintf.cpp \
+        tools/qversionnumber.cpp
 
 NO_PCH_SOURCES = tools/qstring_compat.cpp
 msvc: NO_PCH_SOURCES += tools/qvector_msvc.cpp
@@ -176,10 +178,15 @@ contains(QT_CONFIG,icu) {
     SOURCES += tools/qcollator_posix.cpp
 }
 
-pcre {
-    include($$PWD/../../3rdparty/pcre.pri)
-} else {
-    LIBS_PRIVATE += -lpcre16
+!contains(QT_DISABLED_FEATURES, regularexpression) {
+    HEADERS += tools/qregularexpression.h
+    SOURCES += tools/qregularexpression.cpp
+
+    pcre {
+        include($$PWD/../../3rdparty/pcre.pri)
+    } else {
+        LIBS_PRIVATE += -lpcre16
+    }
 }
 
 INCLUDEPATH += ../3rdparty/harfbuzz/src
@@ -207,3 +214,4 @@ TR_EXCLUDE += ../3rdparty/*
 # MIPS DSP
 MIPS_DSP_ASM += tools/qstring_mips_dsp_asm.S
 MIPS_DSP_HEADERS += ../gui/painting/qt_mips_asm_dsp_p.h
+CONFIG += simd

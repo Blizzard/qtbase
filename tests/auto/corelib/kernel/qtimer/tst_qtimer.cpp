@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -77,6 +69,7 @@ private slots:
     void cancelLongTimer();
     void singleShotStaticFunctionZeroTimeout();
     void recurseOnTimeoutAndStopTimer();
+    void singleShotToFunctors();
 
     void dontBlockEvents();
     void postedEventsShouldNotStarveTimers();
@@ -586,6 +579,14 @@ void tst_QTimer::singleShotStaticFunctionZeroTimeout()
     QCOMPARE(helper.count, 1);
     QTest::qWait(500);
     QCOMPARE(helper.count, 1);
+
+    TimerHelper nhelper;
+
+    QTimer::singleShot(0, &nhelper, &TimerHelper::timeout);
+    QCoreApplication::processEvents();
+    QCOMPARE(nhelper.count, 1);
+    QCoreApplication::processEvents();
+    QCOMPARE(nhelper.count, 1);
 }
 
 class RecursOnTimeoutAndStopTimerTimer : public QObject
@@ -631,6 +632,96 @@ void tst_QTimer::recurseOnTimeoutAndStopTimer()
     QVERIFY(!t.two->isActive());
 }
 
+struct CountedStruct
+{
+    CountedStruct(int *count, QThread *t = Q_NULLPTR) : count(count), thread(t) { }
+    ~CountedStruct() { }
+    void operator()() const { ++(*count); if (thread) QCOMPARE(QThread::currentThread(), thread); }
+
+    int *count;
+    QThread *thread;
+};
+
+static QEventLoop _e;
+static QThread *_t = Q_NULLPTR;
+
+class StaticEventLoop
+{
+public:
+    static void quitEventLoop() { _e.quit(); if (_t) QCOMPARE(QThread::currentThread(), _t); }
+};
+
+void tst_QTimer::singleShotToFunctors()
+{
+    int count = 0;
+    QEventLoop e;
+
+    QTimer::singleShot(0, CountedStruct(&count));
+    QCoreApplication::processEvents();
+    QCOMPARE(count, 1);
+
+    QTimer::singleShot(0, &StaticEventLoop::quitEventLoop);
+    QCOMPARE(_e.exec(), 0);
+
+    QThread t1;
+    QObject c1;
+    c1.moveToThread(&t1);
+
+    QObject::connect(&t1, SIGNAL(started()), &e, SLOT(quit()));
+    t1.start();
+    QCOMPARE(e.exec(), 0);
+
+    QTimer::singleShot(0, &c1, CountedStruct(&count, &t1));
+    QTest::qWait(500);
+    QCOMPARE(count, 2);
+
+    t1.quit();
+    t1.wait();
+
+    _t = new QThread;
+    QObject c2;
+    c2.moveToThread(_t);
+
+    QObject::connect(_t, SIGNAL(started()), &e, SLOT(quit()));
+    _t->start();
+    QCOMPARE(e.exec(), 0);
+
+    QTimer::singleShot(0, &c2, &StaticEventLoop::quitEventLoop);
+    QCOMPARE(_e.exec(), 0);
+
+    _t->quit();
+    _t->wait();
+    _t->deleteLater();
+    _t = Q_NULLPTR;
+
+    {
+        QObject c3;
+        QTimer::singleShot(500, &c3, CountedStruct(&count));
+    }
+    QTest::qWait(800);
+    QCOMPARE(count, 2);
+
+#if defined(Q_COMPILER_LAMBDA)
+    QTimer::singleShot(0, [&count] { ++count; });
+    QCoreApplication::processEvents();
+    QCOMPARE(count, 3);
+
+    QObject context;
+    QThread thread;
+
+    context.moveToThread(&thread);
+    QObject::connect(&thread, SIGNAL(started()), &e, SLOT(quit()));
+    thread.start();
+    QCOMPARE(e.exec(), 0);
+
+    QTimer::singleShot(0, &context, [&count, &thread] { ++count; QCOMPARE(QThread::currentThread(), &thread); });
+    QTest::qWait(500);
+    QCOMPARE(count, 4);
+
+    thread.quit();
+    thread.wait();
+#endif
+}
 
 
 class DontBlockEvents : public QObject

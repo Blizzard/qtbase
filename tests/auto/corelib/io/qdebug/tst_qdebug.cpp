@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -56,11 +48,16 @@ private slots:
     void criticalWithoutDebug() const;
     void debugWithBool() const;
     void debugSpaceHandling() const;
+    void debugNoQuotes() const;
     void stateSaver() const;
     void veryLongWarningMessage() const;
+    void qDebugQChar() const;
     void qDebugQStringRef() const;
     void qDebugQLatin1String() const;
+    void qDebugQByteArray() const;
+    void qDebugQFlags() const;
     void textStreamModifiers() const;
+    void resetFormat() const;
     void defaultMessagehandler() const;
     void threadSafety() const;
 };
@@ -119,9 +116,13 @@ private:
  */
 void tst_QDebug::warningWithoutDebug() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
     { qWarning() << "A qWarning() message"; }
-    QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtWarningMsg);
     QCOMPARE(s_msg, QString::fromLatin1("A qWarning() message"));
     QCOMPARE(QString::fromLatin1(s_file), file);
@@ -134,9 +135,13 @@ void tst_QDebug::warningWithoutDebug() const
  */
 void tst_QDebug::criticalWithoutDebug() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
     { qCritical() << "A qCritical() message"; }
-    QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtCriticalMsg);
     QCOMPARE(s_msg, QString::fromLatin1("A qCritical() message"));
     QCOMPARE(QString::fromLatin1(s_file), file);
@@ -146,9 +151,13 @@ void tst_QDebug::criticalWithoutDebug() const
 
 void tst_QDebug::debugWithBool() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
     { qDebug() << false << true; }
-    QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtDebugMsg);
     QCOMPARE(s_msg, QString::fromLatin1("false true"));
     QCOMPARE(QString::fromLatin1(s_file), file);
@@ -167,7 +176,8 @@ public:
 QDebug operator<< (QDebug s, const MyPoint& point)
 {
     const QDebugStateSaver saver(s);
-    return s.nospace() << "MyPoint(" << point.v1 << ", " << point.v2 << ")";
+    s.nospace() << "MyPoint(" << point.v1 << ", " << point.v2 << ")";
+    return s;
 }
 
 class MyLine
@@ -203,10 +213,45 @@ void tst_QDebug::debugSpaceHandling() const
         d << 1 << 2;
         MyLine line(MyPoint(10, 11), MyPoint (12, 13));
         d << line;
+        d << "bar";
         // With the old implementation of MyPoint doing dbg.nospace() << ...; dbg.space() we ended up with
         // MyLine(MyPoint(10, 11) ,  MyPoint(12, 13) )
     }
-    QCOMPARE(s_msg, QString::fromLatin1("  foo key=value 1 2 MyLine(MyPoint(10, 11), MyPoint(12, 13))"));
+    QCOMPARE(s_msg, QString::fromLatin1("  foo key=value 1 2 MyLine(MyPoint(10, 11), MyPoint(12, 13)) bar"));
+
+    QVERIFY(qDebug().autoInsertSpaces());
+    qDebug() << QPoint(21, 22) << QRect(23, 24, 25, 26) << QLine(27, 28, 29, 30);
+    QCOMPARE(s_msg, QString::fromLatin1("QPoint(21,22) QRect(23,24 25x26) QLine(QPoint(27,28),QPoint(29,30))"));
+    qDebug() << QPointF(21, 22) << QRectF(23, 24, 25, 26) << QLineF(27, 28, 29, 30);
+    QCOMPARE(s_msg, QString::fromLatin1("QPointF(21,22) QRectF(23,24 25x26) QLineF(QPointF(27,28),QPointF(29,30))"));
+    qDebug() << QMimeType() << QMimeDatabase().mimeTypeForName("application/pdf") << "foo";
+    QCOMPARE(s_msg, QString::fromLatin1("QMimeType(invalid) QMimeType(\"application/pdf\") foo"));
+}
+
+void tst_QDebug::debugNoQuotes() const
+{
+    MessageHandlerSetter mhs(myMessageHandler);
+    {
+        QDebug d = qDebug();
+        d << QStringLiteral("Hello");
+        d.noquote();
+        d << QStringLiteral("Hello");
+        d.quote();
+        d << QStringLiteral("Hello");
+    }
+    QCOMPARE(s_msg, QString::fromLatin1("\"Hello\" Hello \"Hello\""));
+
+    {
+        QDebug d = qDebug();
+        d << QChar('H');
+        d << QLatin1String("Hello");
+        d << QByteArray("Hello");
+        d.noquote();
+        d << QChar('H');
+        d << QLatin1String("Hello");
+        d << QByteArray("Hello");
+    }
+    QCOMPARE(s_msg, QString::fromLatin1("'H' \"Hello\" \"Hello\" H Hello Hello"));
 }
 
 void tst_QDebug::stateSaver() const
@@ -214,17 +259,52 @@ void tst_QDebug::stateSaver() const
     MessageHandlerSetter mhs(myMessageHandler);
     {
         QDebug d = qDebug();
+        d << 42;
+        {
+            QDebugStateSaver saver(d);
+            d << 43;
+        }
+        d << 44;
+    }
+    QCOMPARE(s_msg, QString::fromLatin1("42 43 44"));
+
+    {
+        QDebug d = qDebug();
         {
             QDebugStateSaver saver(d);
             d.nospace() << hex << right << qSetFieldWidth(3) << qSetPadChar('0') << 42;
         }
-        d.space() << 42;
+        d << 42;
     }
     QCOMPARE(s_msg, QString::fromLatin1("02a 42"));
+
+    {
+        QDebug d = qDebug();
+        {
+            QDebugStateSaver saver(d);
+            d.nospace().noquote() << QStringLiteral("Hello");
+        }
+        d << QStringLiteral("World");
+    }
+    QCOMPARE(s_msg, QString::fromLatin1("Hello \"World\""));
+
+    {
+        QDebug d = qDebug();
+        d.noquote().nospace() << QStringLiteral("Hello") << hex << 42;
+        {
+            QDebugStateSaver saver(d);
+            d.resetFormat();
+            d << QStringLiteral("World") << 42;
+        }
+        d << QStringLiteral("!") << 42;
+    }
+    QCOMPARE(s_msg, QString::fromLatin1("Hello2a\"World\" 42!2a"));
 }
 
 void tst_QDebug::veryLongWarningMessage() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
     QString test;
     {
@@ -233,7 +313,9 @@ void tst_QDebug::veryLongWarningMessage() const
             test.append(part);
         qWarning("Test output:\n%s\nend", qPrintable(test));
     }
-    QString file = __FILE__; int line = __LINE__ - 2; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 3; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtWarningMsg);
     QCOMPARE(s_msg, QString::fromLatin1("Test output:\n")+test+QString::fromLatin1("\nend"));
     QCOMPARE(QString::fromLatin1(s_file), file);
@@ -241,16 +323,41 @@ void tst_QDebug::veryLongWarningMessage() const
     QCOMPARE(QString::fromLatin1(s_function), function);
 }
 
+void tst_QDebug::qDebugQChar() const
+{
+    QString file, function;
+    int line = 0;
+    MessageHandlerSetter mhs(myMessageHandler);
+    {
+        QDebug d = qDebug();
+        d << QChar('f');
+        d.nospace().noquote() << QChar('o') << QChar('o');
+    }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 5; function = Q_FUNC_INFO;
+#endif
+    QCOMPARE(s_msgType, QtDebugMsg);
+    QCOMPARE(s_msg, QString::fromLatin1("'f' oo"));
+    QCOMPARE(QString::fromLatin1(s_file), file);
+    QCOMPARE(s_line, line);
+    QCOMPARE(QString::fromLatin1(s_function), function);
+
+}
+
 void tst_QDebug::qDebugQStringRef() const
 {
     /* Use a basic string. */
     {
+        QString file, function;
+        int line = 0;
         const QString in(QLatin1String("input"));
         const QStringRef inRef(&in);
 
         MessageHandlerSetter mhs(myMessageHandler);
         { qDebug() << inRef; }
-        QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+        file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
         QCOMPARE(s_msgType, QtDebugMsg);
         QCOMPARE(s_msg, QString::fromLatin1("\"input\""));
         QCOMPARE(QString::fromLatin1(s_file), file);
@@ -260,11 +367,16 @@ void tst_QDebug::qDebugQStringRef() const
 
     /* Use a null QStringRef. */
     {
+        QString file, function;
+        int line = 0;
+
         const QStringRef inRef;
 
         MessageHandlerSetter mhs(myMessageHandler);
         { qDebug() << inRef; }
-        QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+        file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
         QCOMPARE(s_msgType, QtDebugMsg);
         QCOMPARE(s_msg, QString::fromLatin1("\"\""));
         QCOMPARE(QString::fromLatin1(s_file), file);
@@ -275,23 +387,101 @@ void tst_QDebug::qDebugQStringRef() const
 
 void tst_QDebug::qDebugQLatin1String() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
-    { qDebug() << QLatin1String("foo") << QLatin1String("") << QLatin1String("barbaz", 3); }
-    QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+    {
+        QDebug d = qDebug();
+        d << QLatin1String("foo") << QLatin1String("") << QLatin1String("barbaz", 3);
+        d.nospace().noquote() << QLatin1String("baz");
+    }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 5; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtDebugMsg);
-    QCOMPARE(s_msg, QString::fromLatin1("\"foo\" \"\" \"bar\""));
+    QCOMPARE(s_msg, QString::fromLatin1("\"foo\" \"\" \"bar\" baz"));
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);
 }
 
+void tst_QDebug::qDebugQByteArray() const
+{
+    QString file, function;
+    int line = 0;
+    MessageHandlerSetter mhs(myMessageHandler);
+    {
+        QDebug d = qDebug();
+        d << QByteArrayLiteral("foo") << QByteArrayLiteral("") << QByteArray("barbaz", 3);
+        d.nospace().noquote() << QByteArrayLiteral("baz");
+    }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 5; function = Q_FUNC_INFO;
+#endif
+    QCOMPARE(s_msgType, QtDebugMsg);
+    QCOMPARE(s_msg, QString::fromLatin1("\"foo\" \"\" \"bar\" baz"));
+    QCOMPARE(QString::fromLatin1(s_file), file);
+    QCOMPARE(s_line, line);
+    QCOMPARE(QString::fromLatin1(s_function), function);
+}
+
+enum TestEnum {
+    Flag1 = 0x1,
+    Flag2 = 0x10
+};
+
+Q_DECLARE_FLAGS(TestFlags, TestEnum)
+
+void tst_QDebug::qDebugQFlags() const
+{
+    QString file, function;
+    int line = 0;
+    QFlags<TestEnum> flags(Flag1 | Flag2);
+
+    MessageHandlerSetter mhs(myMessageHandler);
+    { qDebug() << flags; }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
+    QCOMPARE(s_msgType, QtDebugMsg);
+    QCOMPARE(s_msg, QString::fromLatin1("QFlags(0x1|0x10)"));
+    QCOMPARE(QString::fromLatin1(s_file), file);
+    QCOMPARE(s_line, line);
+    QCOMPARE(QString::fromLatin1(s_function), function);
+
+}
+
 void tst_QDebug::textStreamModifiers() const
 {
+    QString file, function;
+    int line = 0;
     MessageHandlerSetter mhs(myMessageHandler);
     { qDebug() << hex << short(0xf) << int(0xf) << unsigned(0xf) << long(0xf) << qint64(0xf) << quint64(0xf); }
-    QString file = __FILE__; int line = __LINE__ - 1; QString function = Q_FUNC_INFO;
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
     QCOMPARE(s_msgType, QtDebugMsg);
     QCOMPARE(s_msg, QString::fromLatin1("f f f f f f"));
+    QCOMPARE(QString::fromLatin1(s_file), file);
+    QCOMPARE(s_line, line);
+    QCOMPARE(QString::fromLatin1(s_function), function);
+}
+
+void tst_QDebug::resetFormat() const
+{
+    QString file, function;
+    int line = 0;
+    MessageHandlerSetter mhs(myMessageHandler);
+    {
+        QDebug d = qDebug();
+        d.nospace().noquote() << hex <<  int(0xf);
+        d.resetFormat() << int(0xf) << QStringLiteral("foo");
+    }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+    file = __FILE__; line = __LINE__ - 5; function = Q_FUNC_INFO;
+#endif
+    QCOMPARE(s_msgType, QtDebugMsg);
+    QCOMPARE(s_msg, QString::fromLatin1("f15 \"foo\""));
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);

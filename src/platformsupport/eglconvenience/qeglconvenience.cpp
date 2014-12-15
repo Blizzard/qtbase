@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,8 +37,8 @@
 #ifdef Q_OS_LINUX
 #include <sys/ioctl.h>
 #include <linux/fb.h>
-#include <private/qmath_p.h>
 #endif
+#include <private/qmath_p.h>
 
 #include "qeglconvenience_p.h"
 
@@ -456,10 +448,13 @@ void q_printEglConfig(EGLDisplay display, EGLConfig config)
     }
 }
 
-#ifdef Q_OS_LINUX
+#ifdef Q_OS_UNIX
 
 QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize)
 {
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
     const int defaultPhysicalDpi = 100;
     static QSizeF size;
 
@@ -474,10 +469,11 @@ QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize
             return size;
         }
 
-        struct fb_var_screeninfo vinfo;
         int w = -1;
         int h = -1;
         QSize screenResolution;
+#ifdef Q_OS_LINUX
+        struct fb_var_screeninfo vinfo;
 
         if (framebufferDevice != -1) {
             if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) == -1) {
@@ -487,7 +483,9 @@ QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize
                 h = vinfo.height;
                 screenResolution = QSize(vinfo.xres, vinfo.yres);
             }
-        } else {
+        } else
+#endif
+        {
             // Use the provided screen size, when available, since some platforms may have their own
             // specific way to query it. Otherwise try querying it from the framebuffer.
             screenResolution = screenSize.isEmpty() ? q_screenSizeFromFb(framebufferDevice) : screenSize;
@@ -495,6 +493,11 @@ QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize
 
         size.setWidth(w <= 0 ? screenResolution.width() * Q_MM_PER_INCH / defaultPhysicalDpi : qreal(w));
         size.setHeight(h <= 0 ? screenResolution.height() * Q_MM_PER_INCH / defaultPhysicalDpi : qreal(h));
+
+        if (w <= 0 || h <= 0)
+            qWarning("Unable to query physical screen size, defaulting to %d dpi.\n"
+                     "To override, set QT_QPA_EGLFS_PHYSICAL_WIDTH "
+                     "and QT_QPA_EGLFS_PHYSICAL_HEIGHT (in millimeters).", defaultPhysicalDpi);
     }
 
     return size;
@@ -502,6 +505,9 @@ QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize
 
 QSize q_screenSizeFromFb(int framebufferDevice)
 {
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
     const int defaultWidth = 800;
     const int defaultHeight = 600;
     static QSize size;
@@ -516,6 +522,7 @@ QSize q_screenSizeFromFb(int framebufferDevice)
             return size;
         }
 
+#ifdef Q_OS_LINUX
         struct fb_var_screeninfo vinfo;
         int xres = -1;
         int yres = -1;
@@ -531,6 +538,10 @@ QSize q_screenSizeFromFb(int framebufferDevice)
 
         size.setWidth(xres <= 0 ? defaultWidth : xres);
         size.setHeight(yres <= 0 ? defaultHeight : yres);
+#else
+        size.setWidth(defaultWidth);
+        size.setHeight(defaultHeight);
+#endif
     }
 
     return size;
@@ -538,10 +549,14 @@ QSize q_screenSizeFromFb(int framebufferDevice)
 
 int q_screenDepthFromFb(int framebufferDevice)
 {
+#ifndef Q_OS_LINUX
+    Q_UNUSED(framebufferDevice)
+#endif
     const int defaultDepth = 32;
     static int depth = qgetenv("QT_QPA_EGLFS_DEPTH").toInt();
 
     if (depth == 0) {
+#ifdef Q_OS_LINUX
         struct fb_var_screeninfo vinfo;
 
         if (framebufferDevice != -1) {
@@ -553,11 +568,14 @@ int q_screenDepthFromFb(int framebufferDevice)
 
         if (depth <= 0)
             depth = defaultDepth;
+#else
+        depth = defaultDepth;
+#endif
     }
 
     return depth;
 }
 
-#endif // Q_OS_LINUX
+#endif // Q_OS_UNIX
 
 QT_END_NAMESPACE

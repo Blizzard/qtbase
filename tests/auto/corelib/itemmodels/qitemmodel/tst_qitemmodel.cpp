@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -608,7 +600,7 @@ void tst_QItemModel::setData()
     QFETCH(QString, modelType);
     currentModel = testModels->createModel(modelType);
     QVERIFY(currentModel);
-    QSignalSpy spy(currentModel, SIGNAL(dataChanged(QModelIndex,QModelIndex)));
+    QSignalSpy spy(currentModel, &QAbstractItemModel::dataChanged);
     QVERIFY(spy.isValid());
     QCOMPARE(currentModel->setData(QModelIndex(), QVariant()), false);
     QCOMPARE(spy.count(), 0);
@@ -670,7 +662,7 @@ void tst_QItemModel::setHeaderData()
     QVERIFY(index.isValid());
 
     qRegisterMetaType<Qt::Orientation>("Qt::Orientation");
-    QSignalSpy spy(currentModel, SIGNAL(headerDataChanged(Qt::Orientation,int,int)));
+    QSignalSpy spy(currentModel, &QAbstractItemModel::headerDataChanged);
     QVERIFY(spy.isValid());
 
     QString text = "Index private pointers should always be the same";
@@ -711,7 +703,7 @@ void tst_QItemModel::sort()
     QVERIFY(currentModel->hasChildren(topIndex));
     QModelIndex index = currentModel->index(0, 0, topIndex);
     QVERIFY(index.isValid());
-    QSignalSpy spy(currentModel, SIGNAL(layoutChanged()));
+    QSignalSpy spy(currentModel, &QAbstractItemModel::layoutChanged);
     QVERIFY(spy.isValid());
     for (int i=-1; i < 10; ++i){
         currentModel->sort(i);
@@ -849,12 +841,12 @@ void tst_QItemModel::remove()
 
     // When a row or column is removed there should be two signals.
     // Watch to make sure they are emitted and get the row/column count when they do get emitted by connecting them to a slot
-    QSignalSpy columnsAboutToBeRemovedSpy(currentModel, SIGNAL(columnsAboutToBeRemoved(QModelIndex,int,int)));
-    QSignalSpy rowsAboutToBeRemovedSpy(currentModel, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)));
-    QSignalSpy columnsRemovedSpy(currentModel, SIGNAL(columnsRemoved(QModelIndex,int,int)));
-    QSignalSpy rowsRemovedSpy(currentModel, SIGNAL(rowsRemoved(QModelIndex,int,int)));
-    QSignalSpy modelResetSpy(currentModel, SIGNAL(modelReset()));
-    QSignalSpy modelLayoutChangedSpy(currentModel, SIGNAL(layoutChanged()));
+    QSignalSpy columnsAboutToBeRemovedSpy(currentModel, &QAbstractItemModel::columnsAboutToBeRemoved);
+    QSignalSpy rowsAboutToBeRemovedSpy(currentModel, &QAbstractItemModel::rowsAboutToBeRemoved);
+    QSignalSpy columnsRemovedSpy(currentModel, &QAbstractItemModel::columnsRemoved);
+    QSignalSpy rowsRemovedSpy(currentModel, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy modelResetSpy(currentModel, &QAbstractItemModel::modelReset);
+    QSignalSpy modelLayoutChangedSpy(currentModel, &QAbstractItemModel::layoutChanged);
 
     QVERIFY(columnsAboutToBeRemovedSpy.isValid());
     QVERIFY(rowsAboutToBeRemovedSpy.isValid());
@@ -1191,12 +1183,12 @@ void tst_QItemModel::insert()
 
     // When a row or column is inserted there should be two signals.
     // Watch to make sure they are emitted and get the row/column count when they do get emitted by connecting them to a slot
-    QSignalSpy columnsAboutToBeInsertedSpy(currentModel, SIGNAL(columnsAboutToBeInserted(QModelIndex,int,int)));
-    QSignalSpy rowsAboutToBeInsertedSpy(currentModel, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)));
-    QSignalSpy columnsInsertedSpy(currentModel, SIGNAL(columnsInserted(QModelIndex,int,int)));
-    QSignalSpy rowsInsertedSpy(currentModel, SIGNAL(rowsInserted(QModelIndex,int,int)));
-    QSignalSpy modelResetSpy(currentModel, SIGNAL(modelReset()));
-    QSignalSpy modelLayoutChangedSpy(currentModel, SIGNAL(layoutChanged()));
+    QSignalSpy columnsAboutToBeInsertedSpy(currentModel, &QAbstractItemModel::columnsAboutToBeInserted);
+    QSignalSpy rowsAboutToBeInsertedSpy(currentModel, &QAbstractItemModel::rowsAboutToBeInserted);
+    QSignalSpy columnsInsertedSpy(currentModel, &QAbstractItemModel::columnsInserted);
+    QSignalSpy rowsInsertedSpy(currentModel, &QAbstractItemModel::rowsInserted);
+    QSignalSpy modelResetSpy(currentModel, &QAbstractItemModel::modelReset);
+    QSignalSpy modelLayoutChangedSpy(currentModel, &QAbstractItemModel::layoutChanged);
 
     QVERIFY(columnsAboutToBeInsertedSpy.isValid());
     QVERIFY(rowsAboutToBeInsertedSpy.isValid());

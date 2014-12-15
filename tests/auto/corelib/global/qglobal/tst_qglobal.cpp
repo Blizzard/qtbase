@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,6 +34,11 @@
 
 #include <QtTest/QtTest>
 #include <QtCore/qtypetraits.h>
+
+#include <QPair>
+#include <QTextCodec>
+#include <QSysInfo>
+#include <QLatin1String>
 
 class tst_QGlobal: public QObject
 {
@@ -60,6 +57,9 @@ private slots:
     void isEnum();
     void qAlignOf();
     void integerForSize();
+    void qprintable();
+    void qprintable_data();
+    void buildAbiEndianness();
 };
 
 void tst_QGlobal::qIsNull()
@@ -586,6 +586,75 @@ void tst_QGlobal::integerForSize()
     Q_STATIC_ASSERT(sizeof(QIntegerForSize<2>::Unsigned) == 2);
     Q_STATIC_ASSERT(sizeof(QIntegerForSize<4>::Unsigned) == 4);
     Q_STATIC_ASSERT(sizeof(QIntegerForSize<8>::Unsigned) == 8);
+}
+
+typedef QPair<const char *, const char *> stringpair;
+Q_DECLARE_METATYPE(stringpair)
+
+void tst_QGlobal::qprintable()
+{
+    QFETCH(QList<stringpair>, localestrings);
+    QFETCH(int, utf8index);
+
+    QVERIFY(utf8index >= 0 && utf8index < localestrings.count());
+    if (utf8index < 0 || utf8index >= localestrings.count())
+        return;
+
+    const char *const utf8string = localestrings.at(utf8index).second;
+
+    QString string = QString::fromUtf8(utf8string);
+
+    foreach (const stringpair &pair, localestrings) {
+        QTextCodec *codec = QTextCodec::codecForName(pair.first);
+        if (!codec)
+            continue;
+        QTextCodec::setCodecForLocale(codec);
+        // test qPrintable()
+        QVERIFY(qstrcmp(qPrintable(string), pair.second) == 0);
+        foreach (const stringpair &pair2, localestrings) {
+            if (pair2.second == pair.second)
+                continue;
+            QVERIFY(qstrcmp(qPrintable(string), pair2.second) != 0);
+        }
+        // test qUtf8Printable()
+        QVERIFY(qstrcmp(qUtf8Printable(string), utf8string) == 0);
+        foreach (const stringpair &pair2, localestrings) {
+            if (qstrcmp(pair2.second, utf8string) == 0)
+                continue;
+            QVERIFY(qstrcmp(qUtf8Printable(string), pair2.second) != 0);
+        }
+    }
+
+    QTextCodec::setCodecForLocale(0);
+}
+
+void tst_QGlobal::qprintable_data()
+{
+    QTest::addColumn<QList<stringpair> >("localestrings");
+    QTest::addColumn<int>("utf8index"); // index of utf8 string
+
+    // Unicode: HIRAGANA LETTER A, I, U, E, O (U+3442, U+3444, U+3446, U+3448, U+344a)
+    static const char *const utf8string = "\xe3\x81\x82\xe3\x81\x84\xe3\x81\x86\xe3\x81\x88\xe3\x81\x8a";
+    static const char *const eucjpstring = "\xa4\xa2\xa4\xa4\xa4\xa6\xa4\xa8\xa4\xaa";
+    static const char *const sjisstring = "\x82\xa0\x82\xa2\x82\xa4\x82\xa6\x82\xa8";
+
+    QList<stringpair> japanesestrings;
+    japanesestrings << stringpair("UTF-8", utf8string)
+                    << stringpair("EUC-JP", eucjpstring)
+                    << stringpair("Shift_JIS", sjisstring);
+
+    QTest::newRow("Japanese") << japanesestrings << 0;
+
+}
+
+void tst_QGlobal::buildAbiEndianness()
+{
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+    QLatin1String endian("little_endian");
+#elif Q_BYTE_ORDER == Q_BIG_ENDIAN
+    QLatin1String endian("big_endian");
+#endif
+    QVERIFY(QSysInfo::buildAbi().contains(endian));
 }
 
 QTEST_APPLESS_MAIN(tst_QGlobal)

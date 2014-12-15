@@ -133,11 +133,16 @@ contains(CONFIG, plugin) {
     CMAKE_PLUGIN_NAME = $$PLUGIN_CLASS_NAME
 
     win32 {
-        isEmpty(CMAKE_STATIC_TYPE): CMAKE_PlUGIN_EXT = .dll
-        else: CMAKE_PlUGIN_EXT = .lib
-
-        CMAKE_PLUGIN_LOCATION_RELEASE = $$PLUGIN_TYPE/$${TARGET}$${CMAKE_PlUGIN_EXT}
-        CMAKE_PLUGIN_LOCATION_DEBUG = $$PLUGIN_TYPE/$${TARGET}d$${CMAKE_PlUGIN_EXT}
+        isEmpty(CMAKE_STATIC_TYPE) {
+            CMAKE_PLUGIN_LOCATION_RELEASE = $$PLUGIN_TYPE/$${TARGET}.dll
+            CMAKE_PLUGIN_LOCATION_DEBUG = $$PLUGIN_TYPE/$${TARGET}d.dll
+        } else:mingw {
+            CMAKE_PLUGIN_LOCATION_RELEASE = $$PLUGIN_TYPE/lib$${TARGET}.a
+            CMAKE_PLUGIN_LOCATION_DEBUG = $$PLUGIN_TYPE/lib$${TARGET}d.a
+        } else {                         # MSVC static
+            CMAKE_PLUGIN_LOCATION_RELEASE = $$PLUGIN_TYPE/$${TARGET}.lib
+            CMAKE_PLUGIN_LOCATION_DEBUG = $$PLUGIN_TYPE/$${TARGET}d.lib
+        }
     } else {
         mac {
             isEmpty(CMAKE_STATIC_TYPE): CMAKE_PlUGIN_EXT = .dylib
@@ -300,5 +305,7 @@ cmake_qt5_module_files.path = $$[QT_INSTALL_LIBS]/cmake/Qt5$${CMAKE_MODULE_NAME}
 # with 'CONFIG -= create_cmake'
 !equals(CMAKE_MODULE_TESTS, -) {
     isEmpty(CMAKE_MODULE_TESTS): CMAKE_MODULE_TESTS = $$MODULE_BASE_INDIR/tests/auto/cmake
-    !exists($$CMAKE_MODULE_TESTS): error("Missing CMake tests.")
+    !exists($$CMAKE_MODULE_TESTS): \
+        error("Missing CMake tests. Either create tests in tests/auto/cmake," \
+              "or disable cmake config file creation with CONFIG-=create_cmake.")
 }

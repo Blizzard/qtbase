@@ -57,8 +57,8 @@ signals:
     void fileDropped(const QString &fileName);
 
 protected:
-    void dragMoveEvent(QDragMoveEvent *event);
-    void dropEvent(QDropEvent *event);
+    void dragMoveEvent(QDragMoveEvent *event) Q_DECL_OVERRIDE;
+    void dropEvent(QDropEvent *event) Q_DECL_OVERRIDE;
 #endif
 };
 
@@ -69,8 +69,8 @@ class TorrentViewDelegate : public QItemDelegate
 public:
     inline TorrentViewDelegate(MainWindow *mainWindow) : QItemDelegate(mainWindow) {}
 
-    inline void paint(QPainter *painter, const QStyleOptionViewItem &option,
-                      const QModelIndex &index ) const
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+               const QModelIndex &index ) const Q_DECL_OVERRIDE
     {
         if (index.column() != 2) {
             QItemDelegate::paint(painter, option, index);
@@ -172,6 +172,10 @@ MainWindow::MainWindow(QWidget *parent)
     bottomBar->addWidget(uploadLimitSlider);
     bottomBar->addWidget((uploadLimitLabel = new QLabel(tr("0 KB/s"))));
     uploadLimitLabel->setFixedSize(QSize(fm.width(tr("99999 KB/s")), fm.lineSpacing()));
+
+#ifdef Q_OS_OSX
+    setUnifiedTitleAndToolBarOnMac(true);
+#endif
 
     // Set up connections
     connect(torrentView, SIGNAL(itemSelectionChanged()),

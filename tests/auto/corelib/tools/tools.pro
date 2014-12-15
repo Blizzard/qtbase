@@ -1,10 +1,12 @@
 TEMPLATE=subdirs
 SUBDIRS=\
+    collections \
     qalgorithms \
     qarraydata \
     qarraydata_strictiterators \
     qbitarray \
     qbytearray \
+    qbytearraylist \
     qbytearraymatcher \
     qbytedatabuffer \
     qcache \
@@ -58,4 +60,6 @@ SUBDIRS=\
     qtimeline \
     qvarlengtharray \
     qvector \
-    qvector_strictiterators
+    qvector_strictiterators \
+    qversionnumber
+

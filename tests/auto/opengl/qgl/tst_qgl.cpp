@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -1090,9 +1082,10 @@ void tst_QGL::glFBOSimpleRendering()
 
     fbo->bind();
 
-    glClearColor(1.0, 0.0, 0.0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glFinish();
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+    funcs->glClearColor(1.0, 0.0, 0.0, 1.0);
+    funcs->glClear(GL_COLOR_BUFFER_BIT);
+    funcs->glFinish();
 
     QImage fb = fbo->toImage().convertToFormat(QImage::Format_RGB32);
     QImage reference(fb.size(), QImage::Format_RGB32);
@@ -1390,11 +1383,11 @@ class RenderPixmapWidget : public QGLWidget
 protected:
     void initializeGL() {
         // Set some gl state:
-        glClearColor(1.0, 0.0, 0.0, 1.0);
+        QOpenGLContext::currentContext()->functions()->glClearColor(1.0, 0.0, 0.0, 1.0);
     }
 
     void paintGL() {
-        glClear(GL_COLOR_BUFFER_BIT);
+        QOpenGLContext::currentContext()->functions()->glClear(GL_COLOR_BUFFER_BIT);
     }
 };
 
@@ -1683,11 +1676,12 @@ protected:
     void paintEvent(QPaintEvent*)
     {
         // clear the stencil with junk
-        glStencilMask(0xFFFF);
-        glClearStencil(0xFFFF);
-        glDisable(GL_STENCIL_TEST);
-        glDisable(GL_SCISSOR_TEST);
-        glClear(GL_STENCIL_BUFFER_BIT);
+        QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+        funcs->glStencilMask(0xFFFF);
+        funcs->glClearStencil(0xFFFF);
+        funcs->glDisable(GL_STENCIL_TEST);
+        funcs->glDisable(GL_SCISSOR_TEST);
+        funcs->glClear(GL_STENCIL_BUFFER_BIT);
 
         QPainter painter(this);
         paint(&painter);
@@ -2029,26 +2023,27 @@ void tst_QGL::qglContextDefaultBindTexture()
     QVERIFY(QImagePixmapCleanupHooks::isImageCached(*boundImage));
     QVERIFY(QImagePixmapCleanupHooks::isPixmapCached(*boundPixmap));
 
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
     // Make sure the texture IDs returned are valid:
-    QCOMPARE((bool)glIsTexture(boundImageTextureId), GL_TRUE);
-    QCOMPARE((bool)glIsTexture(boundPixmapTextureId), GL_TRUE);
+    QCOMPARE((bool)funcs->glIsTexture(boundImageTextureId), GL_TRUE);
+    QCOMPARE((bool)funcs->glIsTexture(boundPixmapTextureId), GL_TRUE);
 
     // Make sure the textures are still valid after we delete the image/pixmap:
     // Also check that although the textures are left intact, the cache entries are removed:
     delete boundImage;
     boundImage = 0;
-    QCOMPARE((bool)glIsTexture(boundImageTextureId), GL_TRUE);
+    QCOMPARE((bool)funcs->glIsTexture(boundImageTextureId), GL_TRUE);
     QCOMPARE(QGLTextureCache::instance()->size(), startCacheItemCount+1);
     delete boundPixmap;
     boundPixmap = 0;
-    QCOMPARE((bool)glIsTexture(boundPixmapTextureId), GL_TRUE);
+    QCOMPARE((bool)funcs->glIsTexture(boundPixmapTextureId), GL_TRUE);
     QCOMPARE(QGLTextureCache::instance()->size(), startCacheItemCount);
 
     // Finally, make sure QGLContext::deleteTexture deletes the texture IDs:
     ctx->deleteTexture(boundImageTextureId);
     ctx->deleteTexture(boundPixmapTextureId);
-    QCOMPARE((bool)glIsTexture(boundImageTextureId), GL_FALSE);
-    QCOMPARE((bool)glIsTexture(boundPixmapTextureId), GL_FALSE);
+    QCOMPARE((bool)funcs->glIsTexture(boundImageTextureId), GL_FALSE);
+    QCOMPARE((bool)funcs->glIsTexture(boundPixmapTextureId), GL_FALSE);
 }
 #endif
 

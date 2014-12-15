@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -637,8 +629,8 @@ void tst_QSequentialAnimationGroup::pauseAndResume()
     sequence->addAnimation(a3_s_o1);
     sequence->setLoopCount(2);
 
-    QSignalSpy a1StateChangedSpy(a1_s_o1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy seqStateChangedSpy(sequence, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy a1StateChangedSpy(a1_s_o1, &QVariantAnimation::stateChanged);
+    QSignalSpy seqStateChangedSpy(sequence, &QAnimationGroup::stateChanged);
 
     QVERIFY(a1StateChangedSpy.isValid());
     QVERIFY(seqStateChangedSpy.isValid());
@@ -744,8 +736,8 @@ void tst_QSequentialAnimationGroup::restart()
 {
     // sequence operating on same object/property
     QAnimationGroup *sequence = new QSequentialAnimationGroup();
-    QSignalSpy seqCurrentAnimChangedSpy(sequence, SIGNAL(currentAnimationChanged(QAbstractAnimation*)));
-    QSignalSpy seqStateChangedSpy(sequence, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy seqCurrentAnimChangedSpy(static_cast<QSequentialAnimationGroup*>(sequence), &QSequentialAnimationGroup::currentAnimationChanged);
+    QSignalSpy seqStateChangedSpy(sequence, &QAnimationGroup::stateChanged);
 
     QVERIFY(seqCurrentAnimChangedSpy.isValid());
     QVERIFY(seqStateChangedSpy.isValid());
@@ -756,7 +748,7 @@ void tst_QSequentialAnimationGroup::restart()
     for (int i = 0; i < 3; i++) {
         anims[i] = new DummyPropertyAnimation;
         anims[i]->setDuration(100);
-        animsStateChanged[i] = new QSignalSpy(anims[i], SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+        animsStateChanged[i] = new QSignalSpy(anims[i], &QVariantAnimation::stateChanged);
         QVERIFY(animsStateChanged[i]->isValid());
     }
 
@@ -816,10 +808,10 @@ void tst_QSequentialAnimationGroup::looping()
     QAbstractAnimation *a2_s_o1 = new DummyPropertyAnimation;
     QAbstractAnimation *a3_s_o1 = new DummyPropertyAnimation;
 
-    QSignalSpy a1Spy(a1_s_o1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy a2Spy(a2_s_o1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy a3Spy(a3_s_o1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy seqSpy(sequence, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy a1Spy(a1_s_o1, &QAbstractAnimation::stateChanged);
+    QSignalSpy a2Spy(a2_s_o1, &QAbstractAnimation::stateChanged);
+    QSignalSpy a3Spy(a3_s_o1, &QAbstractAnimation::stateChanged);
+    QSignalSpy seqSpy(sequence, &QSequentialAnimationGroup::stateChanged);
 
     QVERIFY(a1Spy.isValid());
     QVERIFY(a2Spy.isValid());
@@ -833,7 +825,7 @@ void tst_QSequentialAnimationGroup::looping()
     sequence->setLoopCount(2);
 
     QSequentialAnimationGroup group;
-    QSignalSpy groupSpy(&group, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy groupSpy(&group, &QSequentialAnimationGroup::stateChanged);
     QVERIFY(groupSpy.isValid());
 
     group.addAnimation(sequence);
@@ -1101,8 +1093,8 @@ void tst_QSequentialAnimationGroup::updateChildrenWithRunningGroup()
     anim.setEndValue(100);
     anim.setDuration(200);
 
-    QSignalSpy groupStateChangedSpy(&group, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy childStateChangedSpy(&anim, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy groupStateChangedSpy(&group, &QSequentialAnimationGroup::stateChanged);
+    QSignalSpy childStateChangedSpy(&anim, &TestAnimation::stateChanged);
 
     QVERIFY(groupStateChangedSpy.isValid());
     QVERIFY(childStateChangedSpy.isValid());
@@ -1268,8 +1260,8 @@ void tst_QSequentialAnimationGroup::startGroupWithRunningChild()
     anim2->setEndValue(100);
     anim2->setDuration(200);
 
-    QSignalSpy stateChangedSpy1(anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy stateChangedSpy2(anim2, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy stateChangedSpy1(anim1, &TestAnimation::stateChanged);
+    QSignalSpy stateChangedSpy2(anim2, &TestAnimation::stateChanged);
 
     QVERIFY(stateChangedSpy1.isValid());
     QVERIFY(stateChangedSpy2.isValid());
@@ -1345,7 +1337,7 @@ void tst_QSequentialAnimationGroup::zeroDurationAnimation()
     anim3->setEndValue(100);
     anim3->setDuration(0);
 
-    QSignalSpy stateChangedSpy(anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy stateChangedSpy(anim1, &TestAnimation::stateChanged);
     QVERIFY(stateChangedSpy.isValid());
 
     group.addAnimation(anim1);
@@ -1417,7 +1409,7 @@ void tst_QSequentialAnimationGroup::finishWithUncontrolledAnimation()
     //first we test a group with one uncontrolled animation
     QSequentialAnimationGroup group;
     UncontrolledAnimation notTimeDriven(&o1, &group);
-    QSignalSpy spy(&group, SIGNAL(finished()));
+    QSignalSpy spy(&group, &QSequentialAnimationGroup::finished);
     QVERIFY(spy.isValid());
 
     group.start();
@@ -1437,7 +1429,7 @@ void tst_QSequentialAnimationGroup::finishWithUncontrolledAnimation()
     // lets make sure the seeking will work again
     spy.clear();
     DummyPropertyAnimation anim(&group);
-    QSignalSpy animStateChangedSpy(&anim, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy animStateChangedSpy(&anim, &DummyPropertyAnimation::stateChanged);
     QVERIFY(animStateChangedSpy.isValid());
 
     group.setCurrentTime(300);
@@ -1639,7 +1631,7 @@ void tst_QSequentialAnimationGroup::pauseResume()
     QPropertyAnimation *anim = new QPropertyAnimation(&dummy, "foo", &group);
     anim->setDuration(250);
     anim->setEndValue(250);
-    QSignalSpy spy(anim, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy spy(anim, &QPropertyAnimation::stateChanged);
     QVERIFY(spy.isValid());
     QCOMPARE(group.duration(), 250);
     group.start();

@@ -85,15 +85,18 @@ src_3rdparty_harfbuzzng.target = sub-3rdparty-harfbuzzng
 
 src_angle.subdir = $$PWD/angle
 src_angle.target = sub-angle
-angle_d3d11: src_angle.depends = src_corelib
 
 src_gui.subdir = $$PWD/gui
 src_gui.target = sub-gui
 src_gui.depends = src_corelib
 
+src_platformheaders.subdir = $$PWD/platformheaders
+src_platformheaders.target = sub-platformheaders
+src_platformheaders.depends = src_corelib src_gui
+
 src_platformsupport.subdir = $$PWD/platformsupport
 src_platformsupport.target = sub-platformsupport
-src_platformsupport.depends = src_corelib src_gui src_network
+src_platformsupport.depends = src_corelib src_gui src_network src_platformheaders
 
 src_widgets.subdir = $$PWD/widgets
 src_widgets.target = sub-widgets
@@ -141,14 +144,14 @@ contains(QT_CONFIG, concurrent):SUBDIRS += src_concurrent
         SUBDIRS += src_angle
         src_gui.depends += src_angle
     }
-    SUBDIRS += src_gui src_platformsupport
+    SUBDIRS += src_gui src_platformsupport src_platformheaders
     contains(QT_CONFIG, opengl(es2)?):SUBDIRS += src_openglextensions
-    src_plugins.depends += src_gui src_platformsupport
+    src_plugins.depends += src_gui src_platformsupport src_platformheaders
     !contains(QT_CONFIG, no-widgets) {
         SUBDIRS += src_tools_uic src_widgets
         TOOLS += src_tools_uic
         src_plugins.depends += src_widgets
-        contains(QT_CONFIG, opengl(es2)?):!contains(QT_CONFIG, dynamicgl) {
+        contains(QT_CONFIG, opengl(es2)?) {
             SUBDIRS += src_opengl
             src_plugins.depends += src_opengl
         }

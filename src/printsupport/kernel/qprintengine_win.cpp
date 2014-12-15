@@ -5,35 +5,27 @@
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -277,7 +269,8 @@ void QWin32PrintEngine::drawTextItem(const QPointF &p, const QTextItem &textItem
     bool fallBack = state->pen().brush().style() != Qt::SolidPattern
                     || qAlpha(brushColor) != 0xff
                     || d->txop >= QTransform::TxProject
-                    || ti.fontEngine->type() != QFontEngine::Win;
+                    || ti.fontEngine->type() != QFontEngine::Win
+                    || !d->embed_fonts;
 
     if (!fallBack) {
         const QVariantMap userData = ti.fontEngine->userData().toMap();
@@ -573,7 +566,13 @@ void QWin32PrintEngine::drawPixmap(const QRectF &targetRect,
                 width = (tw - (x * txinc));
             }
 
-            QPixmap p = pixmap.copy(tileSize * x, tileSize * y, imgw, imgh);
+
+            QImage img(QSize(imgw, imgh), QImage::Format_RGB32);
+            img.fill(Qt::white);
+            QPainter painter(&img);
+            painter.drawPixmap(0,0, pixmap, tileSize * x, tileSize * y, imgw, imgh);
+            QPixmap p = QPixmap::fromImage(img);
+
             HBITMAP hbitmap = qt_pixmapToWinHBITMAP(p, HBitmapNoAlpha);
             HDC display_dc = GetDC(0);
             HDC hbitmap_hdc = CreateCompatibleDC(display_dc);
@@ -718,8 +717,6 @@ void QWin32PrintEnginePrivate::fillPath_dev(const QPainterPath &path, const QCol
 
 void QWin32PrintEnginePrivate::strokePath_dev(const QPainterPath &path, const QColor &color, qreal penWidth)
 {
-    Q_Q(QWin32PrintEngine);
-
     composeGdiPath(path);
     LOGBRUSH brush;
     brush.lbStyle = BS_SOLID;
@@ -736,10 +733,7 @@ void QWin32PrintEnginePrivate::strokePath_dev(const QPainterPath &path, const QC
     else if (pen.joinStyle() == Qt::RoundJoin)
         joinStyle = PS_JOIN_ROUND;
 
-    bool cosmetic = qt_pen_is_cosmetic(pen, q->state->renderHints());
-
-    HPEN pen = ExtCreatePen((cosmetic ? PS_COSMETIC : PS_GEOMETRIC)
-                            | PS_SOLID | capStyle | joinStyle,
+    HPEN pen = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | capStyle | joinStyle,
                             (penWidth == 0) ? 1 : penWidth, &brush, 0, 0);
 
     HGDIOBJ old_pen = SelectObject(hdc, pen);
@@ -1008,11 +1002,6 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
     // The following keys are settings that are unsupported by the Windows PrintEngine
     case PPK_CustomBase:
         break;
-    case PPK_Duplex:
-        // TODO Add support using DEVMODE.dmDuplex
-        break;
-    case PPK_FontEmbedding:
-        break;
     case PPK_PageOrder:
         break;
     case PPK_PrinterProgram:
@@ -1021,6 +1010,10 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
         break;
 
     // The following keys are properties and settings that are supported by the Windows PrintEngine
+    case PPK_FontEmbedding:
+        d->embed_fonts = value.toBool();
+        break;
+
     case PPK_CollateCopies:
         {
             if (!d->devMode)
@@ -1050,6 +1043,33 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
         }
         d->docName = value.toString();
         break;
+
+    case PPK_Duplex: {
+        if (!d->devMode)
+            break;
+        QPrint::DuplexMode mode = QPrint::DuplexMode(value.toInt());
+        if (mode == property(PPK_Duplex).toInt() || !d->m_printDevice.supportedDuplexModes().contains(mode))
+            break;
+        switch (mode) {
+        case QPrinter::DuplexNone:
+            d->devMode->dmDuplex = DMDUP_SIMPLEX;
+            break;
+        case QPrinter::DuplexAuto:
+            d->devMode->dmDuplex = d->m_pageLayout.orientation() == QPageLayout::Landscape ? DMDUP_HORIZONTAL : DMDUP_VERTICAL;
+            break;
+        case QPrinter::DuplexLongSide:
+            d->devMode->dmDuplex = DMDUP_VERTICAL;
+            break;
+        case QPrinter::DuplexShortSide:
+            d->devMode->dmDuplex = DMDUP_HORIZONTAL;
+            break;
+        default:
+            // Don't change
+            break;
+        }
+        d->doReinit();
+        break;
+    }
 
     case PPK_FullPage:
         if (value.toBool())
@@ -1265,13 +1285,6 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
 
     // The following keys are settings that are unsupported by the Windows PrintEngine
     // Return sensible default values to ensure consistent behavior across platforms
-    case PPK_Duplex:
-        // TODO Add support using DEVMODE.dmDuplex
-        value = QPrinter::DuplexNone;
-        break;
-    case PPK_FontEmbedding:
-        value = false;
-        break;
     case PPK_PageOrder:
         value = QPrinter::FirstPageFirst;
         break;
@@ -1283,6 +1296,10 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
         break;
 
     // The following keys are properties and settings that are supported by the Windows PrintEngine
+    case PPK_FontEmbedding:
+        value = d->embed_fonts;
+        break;
+
     case PPK_CollateCopies:
         value = d->devMode->dmCollate == DMCOLLATE_TRUE;
         break;
@@ -1304,6 +1321,26 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
     case PPK_DocumentName:
         value = d->docName;
         break;
+
+    case PPK_Duplex: {
+        if (!d->devMode) {
+            value = QPrinter::DuplexNone;
+        } else {
+            switch (d->devMode->dmDuplex) {
+            case DMDUP_VERTICAL:
+                value = QPrinter::DuplexLongSide;
+                break;
+            case DMDUP_HORIZONTAL:
+                value = QPrinter::DuplexShortSide;
+                break;
+            case DMDUP_SIMPLEX:
+            default:
+                value = QPrinter::DuplexNone;
+                break;
+            }
+        }
+        break;
+    }
 
     case PPK_FullPage:
         value =  d->m_pageLayout.mode() == QPageLayout::FullPageMode;
@@ -1414,6 +1451,9 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
 
     case PPK_QPageLayout:
         value.setValue(d->m_pageLayout);
+        break;
+
+    case PPK_CustomBase:
         break;
 
     // No default so that compiler will complain if new keys added and not handled in this engine

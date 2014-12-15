@@ -16,15 +16,18 @@ HEADERS +=  \
         global/qsysinfo.h \
         global/qisenum.h \
         global/qtypetraits.h \
-        global/qflags.h
+        global/qflags.h \
+        global/qhooks_p.h
 
 SOURCES += \
+        global/archdetect.cpp \
 	global/qglobal.cpp \
         global/qglobalstatic.cpp \
         global/qlibraryinfo.cpp \
 	global/qmalloc.cpp \
         global/qnumeric.cpp \
-        global/qlogging.cpp
+        global/qlogging.cpp \
+        global/qhooks.cpp
 
 # qlibraryinfo.cpp includes qconfig.cpp
 INCLUDEPATH += $$QT_BUILD_TREE/src/corelib/global

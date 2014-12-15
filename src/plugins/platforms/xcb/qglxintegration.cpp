@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,7 @@
 
 #include "qglxintegration.h"
 #include <QtPlatformSupport/private/qglxconvenience_p.h>
+#include <QtPlatformHeaders/QGLXNativeContext>
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
 #include <dlfcn.h>
@@ -83,31 +76,32 @@ typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXC
 #define GL_CONTEXT_FLAG_DEBUG_BIT 0x00000002
 #endif
 
-static Window createDummyWindow(QXcbScreen *screen, XVisualInfo *visualInfo)
+static Window createDummyWindow(Display *dpy, XVisualInfo *visualInfo, int screenNumber, Window rootWin)
 {
-    Colormap cmap = XCreateColormap(DISPLAY_FROM_XCB(screen), screen->root(), visualInfo->visual, AllocNone);
+    Colormap cmap = XCreateColormap(dpy, rootWin, visualInfo->visual, AllocNone);
     XSetWindowAttributes a;
-    a.background_pixel = WhitePixel(DISPLAY_FROM_XCB(screen), screen->screenNumber());
-    a.border_pixel = BlackPixel(DISPLAY_FROM_XCB(screen), screen->screenNumber());
+    a.background_pixel = WhitePixel(dpy, screenNumber);
+    a.border_pixel = BlackPixel(dpy, screenNumber);
     a.colormap = cmap;
+    a.override_redirect = true;
 
-    Window window = XCreateWindow(DISPLAY_FROM_XCB(screen), screen->root(),
+    Window window = XCreateWindow(dpy, rootWin,
                                   0, 0, 100, 100,
                                   0, visualInfo->depth, InputOutput, visualInfo->visual,
-                                  CWBackPixel|CWBorderPixel|CWColormap, &a);
+                                  CWBackPixel|CWBorderPixel|CWColormap|CWOverrideRedirect, &a);
 #ifndef QT_NO_DEBUG
-    XStoreName(DISPLAY_FROM_XCB(screen), window, "Qt GLX dummy window");
+    XStoreName(dpy, window, "Qt GLX dummy window");
 #endif
-    XFreeColormap(DISPLAY_FROM_XCB(screen), cmap);
+    XFreeColormap(dpy, cmap);
     return window;
 }
 
-static Window createDummyWindow(QXcbScreen *screen, GLXFBConfig config)
+static Window createDummyWindow(Display *dpy, GLXFBConfig config, int screenNumber, Window rootWin)
 {
-    XVisualInfo *visualInfo = glXGetVisualFromFBConfig(DISPLAY_FROM_XCB(screen), config);
+    XVisualInfo *visualInfo = glXGetVisualFromFBConfig(dpy, config);
     if (!visualInfo)
         qFatal("Could not initialize GLX");
-    Window window = createDummyWindow(screen, visualInfo);
+    Window window = createDummyWindow(dpy, visualInfo, screenNumber, rootWin);
     XFree(visualInfo);
     return window;
 }
@@ -160,14 +154,25 @@ static void updateFormatFromContext(QSurfaceFormat &format)
     }
 }
 
-QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlatformOpenGLContext *share)
+QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlatformOpenGLContext *share,
+                         const QVariant &nativeHandle)
     : QPlatformOpenGLContext()
     , m_display(DISPLAY_FROM_XCB(screen))
+    , m_config(0)
     , m_context(0)
     , m_shareContext(0)
     , m_format(format)
     , m_isPBufferCurrent(false)
     , m_swapInterval(-1)
+    , m_ownsContext(nativeHandle.isNull())
+{
+    if (nativeHandle.isNull())
+        init(screen, share);
+    else
+        init(screen, share, nativeHandle);
+}
+
+void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
 {
     if (m_format.renderableType() == QSurfaceFormat::DefaultRenderableType)
         m_format.setRenderableType(QSurfaceFormat::OpenGL);
@@ -178,6 +183,7 @@ QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlat
         m_shareContext = static_cast<const QGLXContext*>(share)->glxContext();
 
     GLXFBConfig config = qglx_findConfig(DISPLAY_FROM_XCB(screen),screen->screenNumber(),m_format);
+    m_config = config;
     XVisualInfo *visualInfo = 0;
     Window window = 0; // Temporary window used to query OpenGL context
 
@@ -195,21 +201,21 @@ QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlat
                 && (m_format.renderableType() != QSurfaceFormat::OpenGLES || (supportsProfiles && glxExt.contains("GLX_EXT_create_context_es2_profile")))) {
             // Try to create an OpenGL context for each known OpenGL version in descending
             // order from the requested version.
-            const int requestedVersion = format.majorVersion() * 10 + qMin(format.minorVersion(), 9);
+            const int requestedVersion = m_format.majorVersion() * 10 + qMin(m_format.minorVersion(), 9);
 
             QVector<int> glVersions;
             if (m_format.renderableType() == QSurfaceFormat::OpenGL) {
-                if (requestedVersion > 43)
+                if (requestedVersion > 45)
                     glVersions << requestedVersion;
 
                 // Don't bother with versions below 2.0
-                glVersions << 43 << 42 << 41 << 40 << 33 << 32 << 31 << 30 << 21 << 20;
+                glVersions << 45 << 44 << 43 << 42 << 41 << 40 << 33 << 32 << 31 << 30 << 21 << 20;
             } else if (m_format.renderableType() == QSurfaceFormat::OpenGLES) {
-                if (requestedVersion > 30)
+                if (requestedVersion > 31)
                     glVersions << requestedVersion;
 
                 // Don't bother with versions below ES 2.0
-                glVersions << 30 << 20;
+                glVersions << 31 << 30 << 20;
                 // ES does not support any format option
                 m_format.setOptions(QSurfaceFormat::FormatOptions());
             }
@@ -282,10 +288,10 @@ QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlat
 
         // Get the basic surface format details
         if (m_context)
-            qglx_surfaceFormatFromGLXFBConfig(&m_format, DISPLAY_FROM_XCB(screen), config, m_context);
+            qglx_surfaceFormatFromGLXFBConfig(&m_format, DISPLAY_FROM_XCB(screen), config);
 
         // Create a temporary window so that we can make the new context current
-        window = createDummyWindow(screen, config);
+        window = createDummyWindow(DISPLAY_FROM_XCB(screen), config, screen->screenNumber(), screen->root());
     } else {
         // requesting an OpenGL ES context requires glXCreateContextAttribsARB, so bail out
         if (m_format.renderableType() == QSurfaceFormat::OpenGLES)
@@ -303,26 +309,141 @@ QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlat
         }
 
         // Create a temporary window so that we can make the new context current
-        window = createDummyWindow(screen, visualInfo);
+        window = createDummyWindow(DISPLAY_FROM_XCB(screen), visualInfo, screen->screenNumber(), screen->root());
         XFree(visualInfo);
     }
 
     // Query the OpenGL version and profile
     if (m_context && window) {
+        GLXContext prevContext = glXGetCurrentContext();
+        GLXDrawable prevDrawable = glXGetCurrentDrawable();
         glXMakeCurrent(m_display, window, m_context);
         updateFormatFromContext(m_format);
 
         // Make our context non-current
-        glXMakeCurrent(m_display, 0, 0);
+        glXMakeCurrent(m_display, prevDrawable, prevContext);
     }
 
     // Destroy our temporary window
     XDestroyWindow(m_display, window);
 }
 
+void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share, const QVariant &nativeHandle)
+{
+    if (!nativeHandle.canConvert<QGLXNativeContext>()) {
+        qWarning("QGLXContext: Requires a QGLXNativeContext");
+        return;
+    }
+    QGLXNativeContext handle = nativeHandle.value<QGLXNativeContext>();
+    GLXContext context = handle.context();
+    if (!context) {
+        qWarning("QGLXContext: No GLXContext given");
+        return;
+    }
+
+    // Use the provided Display, if available. If not, use our own. It may still work.
+    Display *dpy = handle.display();
+    if (!dpy)
+        dpy = DISPLAY_FROM_XCB(screen);
+
+    // Legacy contexts created using glXCreateContext are created using a visual
+    // and the FBConfig cannot be queried. The only way to adapt these contexts
+    // is to figure out the visual id.
+    XVisualInfo *vinfo = 0;
+    // If the VisualID is provided use it.
+    VisualID vid = handle.visualId();
+    if (!vid) {
+        // In the absence of the VisualID figure it out from the window.
+        Window wnd = handle.window();
+        if (wnd) {
+            XWindowAttributes attrs;
+            XGetWindowAttributes(dpy, wnd, &attrs);
+            vid = XVisualIDFromVisual(attrs.visual);
+        }
+    }
+    if (vid) {
+        XVisualInfo v;
+        v.screen = screen->screenNumber();
+        v.visualid = vid;
+        int n = 0;
+        vinfo = XGetVisualInfo(dpy, VisualScreenMask | VisualIDMask, &v, &n);
+        if (n < 1) {
+            XFree(vinfo);
+            vinfo = 0;
+        }
+    }
+
+    // For contexts created with an FBConfig using the modern functions providing the
+    // visual or window is not mandatory. Just query the config from the context.
+    GLXFBConfig config = 0;
+    if (!vinfo) {
+        int configId = 0;
+        if (glXQueryContext(dpy, context, GLX_FBCONFIG_ID, &configId) != Success) {
+            qWarning("QGLXContext: Failed to query config from the provided context");
+            return;
+        }
+
+        GLXFBConfig *configs;
+        int numConfigs = 0;
+        static const int attribs[] = { GLX_FBCONFIG_ID, configId, None };
+        configs = glXChooseFBConfig(dpy, screen->screenNumber(), attribs, &numConfigs);
+        if (!configs || numConfigs < 1) {
+            qWarning("QGLXContext: Failed to find config");
+            return;
+        }
+        if (configs && numConfigs > 1) // this is suspicious so warn but let it continue
+            qWarning("QGLXContext: Multiple configs for FBConfig ID %d", configId);
+
+        config = configs[0];
+        // Store the config.
+        m_config = config;
+    }
+
+    Q_ASSERT(vinfo || config);
+
+    int screenNumber = DefaultScreen(dpy);
+    Window window;
+    if (vinfo)
+        window = createDummyWindow(dpy, vinfo, screenNumber, RootWindow(dpy, screenNumber));
+    else
+        window = createDummyWindow(dpy, config, screenNumber, RootWindow(dpy, screenNumber));
+    if (!window) {
+        qWarning("QGLXContext: Failed to create dummy window");
+        return;
+    }
+
+    // Update OpenGL version and buffer sizes in our format.
+    GLXContext prevContext = glXGetCurrentContext();
+    GLXDrawable prevDrawable = glXGetCurrentDrawable();
+    if (!glXMakeCurrent(dpy, window, context)) {
+        qWarning("QGLXContext: Failed to make provided context current");
+        return;
+    }
+    m_format = QSurfaceFormat();
+    m_format.setRenderableType(QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL
+                               ? QSurfaceFormat::OpenGL : QSurfaceFormat::OpenGLES);
+    updateFormatFromContext(m_format);
+    if (vinfo)
+        qglx_surfaceFormatFromVisualInfo(&m_format, dpy, vinfo);
+    else
+        qglx_surfaceFormatFromGLXFBConfig(&m_format, dpy, config);
+    glXMakeCurrent(dpy, prevDrawable, prevContext);
+    XDestroyWindow(dpy, window);
+
+    if (vinfo)
+        XFree(vinfo);
+
+    // Success. Store the context. From this point on isValid() is true.
+    m_context = context;
+
+    if (share)
+        m_shareContext = static_cast<const QGLXContext*>(share)->glxContext();
+}
+
 QGLXContext::~QGLXContext()
 {
-    glXDestroyContext(m_display, m_context);
+    if (m_ownsContext)
+        glXDestroyContext(m_display, m_context);
 }
 
 static QXcbScreen *screenForPlatformSurface(QPlatformSurface *surface)
@@ -334,6 +455,11 @@ static QXcbScreen *screenForPlatformSurface(QPlatformSurface *surface)
         return static_cast<QXcbScreen *>(static_cast<QGLXPbuffer *>(surface)->screen());
     }
     return Q_NULLPTR;
+}
+
+QVariant QGLXContext::nativeHandle() const
+{
+    return QVariant::fromValue<QGLXNativeContext>(QGLXNativeContext(m_context));
 }
 
 bool QGLXContext::makeCurrent(QPlatformSurface *surface)
@@ -404,11 +530,11 @@ void QGLXContext::swapBuffers(QPlatformSurface *surface)
 
     if (surface->surface()->surfaceClass() == QSurface::Window) {
         QXcbWindow *platformWindow = static_cast<QXcbWindow *>(surface);
-        // OpenGL context might be bound to a non-gui thread
-        // use QueuedConnection to sync the window from the platformWindow's thread
-        // as QXcbWindow is no QObject, a wrapper slot in QXcbConnection is used.
+        // OpenGL context might be bound to a non-gui thread use QueuedConnection to sync
+        // the window from the platformWindow's thread as QXcbWindow is no QObject, an
+        // event is sent to QXcbConnection. (this is faster than a metacall)
         if (platformWindow->needsSync())
-            QMetaObject::invokeMethod(screenForPlatformSurface(surface)->connection(), "syncWindow", Qt::QueuedConnection, Q_ARG(QXcbWindow*, platformWindow));
+            platformWindow->postSyncWindowRequest();
     }
 }
 

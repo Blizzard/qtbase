@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -78,6 +70,7 @@ public slots:
 
 #ifndef QT_NO_SSL
 private slots:
+    void hash();
     void emptyConstructor();
     void constructor_data();
     void constructor();
@@ -105,14 +98,17 @@ private slots:
     void largeSerialNumber();
     void largeExpirationDate();
     void blacklistedCertificates();
+    void selfsignedCertificates();
     void toText();
     void multipleCommonNames();
     void subjectAndIssuerAttributes();
     void verify();
     void extensions();
+    void extensionsCritical();
     void threadSafeConstMethods();
     void version_data();
     void version();
+    void pkcs12();
 
     // helper for verbose test failure messages
     QString toString(const QList<QSslError>&);
@@ -168,6 +164,14 @@ void tst_QSslCertificate::cleanupTestCase()
 }
 
 #ifndef QT_NO_SSL
+
+void tst_QSslCertificate::hash()
+{
+    // mostly a compile-only test, to check that qHash(QSslCertificate) is found.
+    QSet<QSslCertificate> certs;
+    certs << QSslCertificate();
+    QCOMPARE(certs.size(), 1);
+}
 
 static QByteArray readFile(const QString &absFilePath)
 {
@@ -890,6 +894,13 @@ void tst_QSslCertificate::blacklistedCertificates()
     }
 }
 
+void tst_QSslCertificate::selfsignedCertificates()
+{
+    QVERIFY(QSslCertificate::fromPath(testDataDir + "/certificates/cert-ss.pem").first().isSelfSigned());
+    QVERIFY(!QSslCertificate::fromPath(testDataDir + "/certificates/cert.pem").first().isSelfSigned());
+    QVERIFY(!QSslCertificate().isSelfSigned());
+}
+
 void tst_QSslCertificate::toText()
 {
     QList<QSslCertificate> certList =
@@ -918,6 +929,9 @@ void tst_QSslCertificate::toText()
 
     QString txtcert = cert.toText();
 
+#ifdef QT_NO_OPENSSL
+    QEXPECT_FAIL("", "QTBUG-40884: QSslCertificate::toText is not implemented on WinRT", Continue);
+#endif
     QVERIFY(QString::fromLatin1(txt098) == txtcert ||
             QString::fromLatin1(txt100) == txtcert ||
             QString::fromLatin1(txt101) == txtcert ||
@@ -963,6 +977,9 @@ void tst_QSslCertificate::verify()
         qPrintable(QString("errors: %1").arg(toString(errors))) \
     )
 
+#ifdef QT_NO_OPENSSL
+    QEXPECT_FAIL("", "QTBUG-40884: WinRT API does not yet support verifying a chain", Abort);
+#endif
     // Empty chain is unspecified error
     errors = QSslCertificate::verify(toVerify);
     VERIFY_VERBOSE(errors.count() == 1);
@@ -1078,6 +1095,8 @@ void tst_QSslCertificate::extensions()
     QSslCertificateExtension unknown = extensions[unknown_idx];
     QVERIFY(unknown.oid() == QStringLiteral("1.3.6.1.5.5.7.1.12"));
     QVERIFY(unknown.name() == QStringLiteral("1.3.6.1.5.5.7.1.12"));
+    QVERIFY(!unknown.isCritical());
+    QVERIFY(!unknown.isSupported());
 
     QByteArray unknownValue = QByteArray::fromHex(
                         "3060A15EA05C305A305830561609696D6167652F6769663021301F300706052B0E03021A0414" \
@@ -1089,8 +1108,11 @@ void tst_QSslCertificate::extensions()
     QSslCertificateExtension aia = extensions[authority_info_idx];
     QVERIFY(aia.oid() == QStringLiteral("1.3.6.1.5.5.7.1.1"));
     QVERIFY(aia.name() == QStringLiteral("authorityInfoAccess"));
+    QVERIFY(!aia.isCritical());
+    QVERIFY(aia.isSupported());
 
     QVariantMap aiaValue = aia.value().toMap();
+    QCOMPARE(aiaValue.keys(), QList<QString>() << QStringLiteral("OCSP") << QStringLiteral("caIssuers"));
     QString ocsp = aiaValue[QStringLiteral("OCSP")].toString();
     QString caIssuers = aiaValue[QStringLiteral("caIssuers")].toString();
 
@@ -1101,25 +1123,76 @@ void tst_QSslCertificate::extensions()
     QSslCertificateExtension basic = extensions[basic_constraints_idx];
     QVERIFY(basic.oid() == QStringLiteral("2.5.29.19"));
     QVERIFY(basic.name() == QStringLiteral("basicConstraints"));
+    QVERIFY(!basic.isCritical());
+    QVERIFY(basic.isSupported());
 
     QVariantMap basicValue = basic.value().toMap();
+    QCOMPARE(basicValue.keys(), QList<QString>() << QStringLiteral("ca"));
     QVERIFY(basicValue[QStringLiteral("ca")].toBool() == false);
 
     // Subject key identifier
     QSslCertificateExtension subjectKey = extensions[subject_key_idx];
     QVERIFY(subjectKey.oid() == QStringLiteral("2.5.29.14"));
     QVERIFY(subjectKey.name() == QStringLiteral("subjectKeyIdentifier"));
+    QVERIFY(!subjectKey.isCritical());
+    QVERIFY(subjectKey.isSupported());
     QVERIFY(subjectKey.value().toString() == QStringLiteral("5F:90:23:CD:24:CA:52:C9:36:29:F0:7E:9D:B1:FE:08:E0:EE:69:F0"));
 
     // Authority key identifier
     QSslCertificateExtension authKey = extensions[auth_key_idx];
     QVERIFY(authKey.oid() == QStringLiteral("2.5.29.35"));
     QVERIFY(authKey.name() == QStringLiteral("authorityKeyIdentifier"));
+    QVERIFY(!authKey.isCritical());
+    QVERIFY(authKey.isSupported());
 
     QVariantMap authValue = authKey.value().toMap();
+    QCOMPARE(authValue.keys(), QList<QString>() << QStringLiteral("keyid"));
     QVERIFY(authValue[QStringLiteral("keyid")].toByteArray() ==
             QByteArray("4e43c81d76ef37537a4ff2586f94f338e2d5bddf"));
+}
 
+void tst_QSslCertificate::extensionsCritical()
+{
+    QList<QSslCertificate> certList =
+        QSslCertificate::fromPath(testDataDir + "/verify-certs/test-addons-mozilla-org-cert.pem");
+    QVERIFY2(certList.count() > 0, "Please run this test from the source directory");
+
+    QSslCertificate cert = certList[0];
+    QList<QSslCertificateExtension> extensions = cert.extensions();
+    QVERIFY(extensions.count() == 9);
+
+    int basic_constraints_idx = -1;
+    int key_usage_idx = -1;
+
+    for (int i=0; i < extensions.length(); ++i) {
+        QSslCertificateExtension ext = extensions[i];
+
+        if (ext.name() == QStringLiteral("basicConstraints"))
+            basic_constraints_idx = i;
+        if (ext.name() == QStringLiteral("keyUsage"))
+            key_usage_idx = i;
+    }
+
+    QVERIFY(basic_constraints_idx != -1);
+    QVERIFY(key_usage_idx != -1);
+
+    // Basic constraints
+    QSslCertificateExtension basic = extensions[basic_constraints_idx];
+    QVERIFY(basic.oid() == QStringLiteral("2.5.29.19"));
+    QVERIFY(basic.name() == QStringLiteral("basicConstraints"));
+    QVERIFY(basic.isCritical());
+    QVERIFY(basic.isSupported());
+
+    QVariantMap basicValue = basic.value().toMap();
+    QCOMPARE(basicValue.keys(), QList<QString>() << QStringLiteral("ca"));
+    QVERIFY(basicValue[QStringLiteral("ca")].toBool() == false);
+
+    // Key Usage
+    QSslCertificateExtension keyUsage = extensions[key_usage_idx];
+    QVERIFY(keyUsage.oid() == QStringLiteral("2.5.29.15"));
+    QVERIFY(keyUsage.name() == QStringLiteral("keyUsage"));
+    QVERIFY(keyUsage.isCritical());
+    QVERIFY(!keyUsage.isSupported());
 }
 
 class TestThread : public QThread
@@ -1219,6 +1292,51 @@ void tst_QSslCertificate::version()
     QFETCH(QSslCertificate, certificate);
     QFETCH(QByteArray, result);
     QCOMPARE(certificate.version(), result);
+}
+
+void tst_QSslCertificate::pkcs12()
+{
+    if (!QSslSocket::supportsSsl()) {
+        qWarning("SSL not supported, skipping test");
+        return;
+    }
+
+    QFile f(QLatin1String(SRCDIR "pkcs12/leaf.p12"));
+    bool ok = f.open(QIODevice::ReadOnly);
+    QVERIFY(ok);
+
+    QSslKey key;
+    QSslCertificate cert;
+    QList<QSslCertificate> caCerts;
+
+#ifdef QT_NO_OPENSSL
+    QEXPECT_FAIL("", "QTBUG-40884: WinRT API does not support pkcs12 imports", Abort);
+#endif
+    ok = QSslCertificate::importPkcs12(&f, &key, &cert, &caCerts);
+    QVERIFY(ok);
+    f.close();
+
+    QList<QSslCertificate> leafCert = QSslCertificate::fromPath(QLatin1String( SRCDIR "pkcs12/leaf.crt"));
+    QVERIFY(!leafCert.isEmpty());
+
+    QCOMPARE(cert, leafCert.first());
+
+    QFile f2(QLatin1String(SRCDIR "pkcs12/leaf.key"));
+    ok = f2.open(QIODevice::ReadOnly);
+    QVERIFY(ok);
+
+    QSslKey leafKey(&f2, QSsl::Rsa);
+    f2.close();
+
+    QVERIFY(!leafKey.isNull());
+    QCOMPARE(key, leafKey);
+
+    QList<QSslCertificate> caCert = QSslCertificate::fromPath(QLatin1String(SRCDIR "pkcs12/inter.crt"));
+    QVERIFY(!caCert.isEmpty());
+
+    QVERIFY(!caCerts.isEmpty());
+    QCOMPARE(caCerts.first(), caCert.first());
+    QCOMPARE(caCerts, caCert);
 }
 
 #endif // QT_NO_SSL

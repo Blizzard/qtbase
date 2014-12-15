@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -144,6 +136,22 @@ static inline QTabBar::Shape tabBarShapeFrom(QTabWidget::TabShape shape, QTabWid
     return QTabBar::RoundedNorth;
 }
 
+static int cascadedDeltaY(const QMdiArea *area)
+{
+    // Calculate the delta (dx, dy) between two cascaded subwindows.
+    const QWidget *subWindow = area->subWindowList().first();
+    const QStyle *style = subWindow->style();
+    QStyleOptionTitleBar options;
+    options.initFrom(subWindow);
+    int titleBarHeight = style->pixelMetric(QStyle::PM_TitleBarHeight, &options);
+    // ### Remove this after the QMacStyle has been fixed
+    if (style->inherits("QMacStyle"))
+        titleBarHeight -= 4;
+    const QFontMetrics fontMetrics = QFontMetrics(QApplication::font("QMdiSubWindowTitleBar"));
+    return qMax(titleBarHeight - (titleBarHeight - fontMetrics.height()) / 2, 1)
+        + style->pixelMetric(QStyle::PM_FocusFrameVMargin);
+}
+
 enum Arrangement {
     Tiled,
     Cascaded
@@ -155,7 +163,6 @@ static bool verifyArrangement(QMdiArea *mdiArea, Arrangement arrangement, const 
         return false;
 
     const QList<QMdiSubWindow *> subWindows = mdiArea->subWindowList();
-    const QMdiSubWindow *const firstSubWindow = subWindows.at(0);
 
     switch (arrangement) {
     case Tiled:
@@ -187,17 +194,7 @@ static bool verifyArrangement(QMdiArea *mdiArea, Arrangement arrangement, const 
     }
     case Cascaded:
     {
-        // Calculate the delta (dx, dy) between two cascaded subwindows.
-        QStyleOptionTitleBar options;
-        options.initFrom(firstSubWindow);
-        int titleBarHeight = firstSubWindow->style()->pixelMetric(QStyle::PM_TitleBarHeight, &options);
-#ifdef Q_OS_MAC
-        // ### Remove this after the mac style has been fixed
-        if (firstSubWindow->style()->inherits("QMacStyle"))
-            titleBarHeight -= 4;
-#endif
-        const QFontMetrics fontMetrics = QFontMetrics(QApplication::font("QMdiSubWindowTitleBar"));
-        const int dy = qMax(titleBarHeight - (titleBarHeight - fontMetrics.height()) / 2, 1);
+        const int dy =  cascadedDeltaY(mdiArea);
         const int dx = 10;
 
         // Current activation/stacking order.
@@ -237,6 +234,8 @@ public:
     tst_QMdiArea();
 public slots:
     void initTestCase();
+    void cleanup();
+
 protected slots:
     void activeChanged(QMdiSubWindow *child);
 
@@ -304,6 +303,11 @@ void tst_QMdiArea::initTestCase()
 #ifdef Q_OS_WINCE //disable magic for WindowsCE
     qApp->setAutoMaximizeThreshold(-1);
 #endif
+}
+
+void tst_QMdiArea::cleanup()
+{
+    QVERIFY(QApplication::topLevelWidgets().isEmpty());
 }
 
 // Old QWorkspace tests
@@ -514,6 +518,8 @@ void tst_QMdiArea::subWindowActivated2()
 #ifdef Q_OS_MAC
     QSKIP("QTBUG-25298: This test is unstable on Mac.");
 #endif
+    if (qApp->platformName().toLower() == QStringLiteral("xcb"))
+        QSKIP("QTBUG-25298: Unstable on some X11 window managers");
     QTRY_COMPARE(spy.count(), 1);
     QVERIFY(!mdiArea.activeSubWindow());
     QCOMPARE(mdiArea.currentSubWindow(), activeSubWindow);
@@ -1007,11 +1013,6 @@ void tst_QMdiArea::activeSubWindow()
     qApp->setActiveWindow(&mainWindow);
     QCOMPARE(mdiArea->activeSubWindow(), subWindow);
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WIN) && !defined(Q_OS_QNX)
-    qApp->setActiveWindow(0);
-    QVERIFY(!mdiArea->activeSubWindow());
-#endif
-
     //task 202657
     dockWidgetLineEdit->setFocus();
     qApp->setActiveWindow(&mainWindow);
@@ -1087,12 +1088,6 @@ void tst_QMdiArea::currentSubWindow()
     qApp->sendEvent(active, &windowActivate);
     QVERIFY(mdiArea.activeSubWindow());
     QVERIFY(mdiArea.currentSubWindow());
-
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WIN) && !defined(Q_OS_QNX)
-    qApp->setActiveWindow(0);
-    QVERIFY(!mdiArea.activeSubWindow());
-    QVERIFY(mdiArea.currentSubWindow());
-#endif
 }
 
 void tst_QMdiArea::addAndRemoveWindows()
@@ -1271,6 +1266,7 @@ void tst_QMdiArea::removeSubWindow_2()
     mdiArea.addSubWindow(subWindow);
     QVERIFY(numberOfConnectedSignals(subWindow) >= 2);
     subWindow->setParent(0);
+    QScopedPointer<MySubWindow> subWindowGuard(subWindow);
     QCOMPARE(numberOfConnectedSignals(subWindow), 0);
 }
 
@@ -1790,14 +1786,7 @@ void tst_QMdiArea::cascadeAndTileSubWindows()
     qApp->processEvents();
 
     // Check dy between two cascaded windows
-    QStyleOptionTitleBar options;
-    options.initFrom(windows.at(1));
-    int titleBarHeight = windows.at(1)->style()->pixelMetric(QStyle::PM_TitleBarHeight, &options);
-    // ### Remove this after the mac style has been fixed
-    if (windows.at(1)->style()->inherits("QMacStyle"))
-        titleBarHeight -= 4;
-    const QFontMetrics fontMetrics = QFontMetrics(QApplication::font("QMdiSubWindowTitleBar"));
-    const int dy = qMax(titleBarHeight - (titleBarHeight - fontMetrics.height()) / 2, 1);
+    const int dy = cascadedDeltaY(&workspace);
 #ifdef Q_OS_MAC
     QEXPECT_FAIL("", "QTBUG-25298", Abort);
 #endif
@@ -2340,7 +2329,7 @@ void tst_QMdiArea::setViewMode()
     QVERIFY(QTest::qWaitForWindowExposed(&mdiArea));
 
     QMdiSubWindow *activeSubWindow = mdiArea.activeSubWindow();
-    const QList<QMdiSubWindow *> subWindows = mdiArea.subWindowList();
+    QList<QMdiSubWindow *> subWindows = mdiArea.subWindowList();
 
     // Default.
     QVERIFY(!activeSubWindow->isMaximized());
@@ -2410,9 +2399,12 @@ void tst_QMdiArea::setViewMode()
 
     // Remove sub-windows and make sure the tab is removed.
     foreach (QMdiSubWindow *subWindow, subWindows) {
-        if (subWindow != activeSubWindow)
+        if (subWindow != activeSubWindow) {
             mdiArea.removeSubWindow(subWindow);
+            delete subWindow;
+        }
     }
+    subWindows.clear();
     QCOMPARE(tabBar->count(), 1);
 
     // Go back to default (QMdiArea::SubWindowView).

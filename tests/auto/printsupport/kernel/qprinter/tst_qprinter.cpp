@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -1030,9 +1022,9 @@ void tst_QPrinter::duplex()
 {
     // duplex()) / setDuplex() / PPK_Duplex
     // PdfFormat: Supported, default QPrinter::DuplexNone
-    // NativeFormat, Cups: Supported, default QPrinter::DuplexNone
-    // NativeFormat, Win: Unsupported, always QPrinter::DuplexNone
-    // NativeFormat, Mac: Unsupported, always QPrinter::DuplexNone
+    // NativeFormat, Cups: Supported, default to printer default
+    // NativeFormat, Win: Supported, default to printer default
+    // NativeFormat, Mac: Supported, default to printer default
 
     QPrinter pdf;
     pdf.setOutputFormat(QPrinter::PdfFormat);
@@ -1043,15 +1035,17 @@ void tst_QPrinter::duplex()
     QPrinter native;
     if (native.outputFormat() == QPrinter::NativeFormat) {
         // Test default
-        // TODO Printer specific, need QPrinterInfo::duplex()
-        //QCOMPARE(native.duplex(), QPrinter::DuplexNone);
-
-        // Test set/get
-        QPrinter::DuplexMode expected = QPrinter::DuplexAuto;
+        QPrinterInfo printerInfo = QPrinterInfo::defaultPrinter();
+        QPrinter::DuplexMode expected = printerInfo.defaultDuplexMode();
+        QCOMPARE(native.duplex(), expected);
+        // Test set/get (skipping Auto as that will return something different)
+        foreach (QPrinter::DuplexMode mode, printerInfo.supportedDuplexModes()) {
+            if (mode != expected && mode != QPrinter::DuplexAuto) {
+                expected = mode;
+                break;
+            }
+        }
         native.setDuplex(expected);
-#if defined Q_OS_MAC || defined Q_OS_WIN
-        expected = QPrinter::DuplexNone;
-#endif // Q_OS_MAC || Q_OS_WIN
         QCOMPARE(native.duplex(), expected);
 
         // Test value preservation
@@ -1059,6 +1053,12 @@ void tst_QPrinter::duplex()
         QCOMPARE(native.duplex(), expected);
         native.setOutputFormat(QPrinter::NativeFormat);
         QCOMPARE(native.duplex(), expected);
+
+        // Test setting invalid option
+        if (!printerInfo.supportedDuplexModes().contains(QPrinter::DuplexLongSide)) {
+            native.setDuplex(QPrinter::DuplexLongSide);
+            QCOMPARE(native.duplex(), expected);
+        }
     } else {
         QSKIP("No printers installed, cannot test NativeFormat, please install printers to test");
     }
@@ -1067,9 +1067,9 @@ void tst_QPrinter::duplex()
 void tst_QPrinter::doubleSidedPrinting()
 {
     // PdfFormat: Supported, default false
-    // NativeFormat, Cups: Supported, default false
-    // NativeFormat, Win: Unsupported, always false
-    // NativeFormat, Mac: Unsupported, always false
+    // NativeFormat, Cups: Supported, default to printer default
+    // NativeFormat, Win: Supported, default to printer default
+    // NativeFormat, Mac: Supported, default to printer default
 
     QPrinter pdf;
     pdf.setOutputFormat(QPrinter::PdfFormat);
@@ -1080,15 +1080,13 @@ void tst_QPrinter::doubleSidedPrinting()
     QPrinter native;
     if (native.outputFormat() == QPrinter::NativeFormat) {
         // Test default
-        // TODO Printer specific, need QPrinterInfo::duplex()
-        //QCOMPARE(native.doubleSidedPrinting(), false);
+        QPrinterInfo printerInfo;
+        bool expected = (printerInfo.defaultDuplexMode() != QPrinter::DuplexNone);
+        QCOMPARE(native.doubleSidedPrinting(), false);
 
         // Test set/get
-        bool expected = true;
+        expected = (printerInfo.supportedDuplexModes().count() > 1);
         native.setDoubleSidedPrinting(expected);
-#if defined Q_OS_MAC || defined Q_OS_WIN
-        expected = false;
-#endif // Q_OS_MAC || Q_OS_WIN
         QCOMPARE(native.doubleSidedPrinting(), expected);
 
         // Test value preservation
@@ -1105,9 +1103,7 @@ void tst_QPrinter::fontEmbedding()
 {
     // fontEmbeddingEnabled() / setFontEmbeddingEnabled() / PPK_FontEmbedding
     // PdfFormat: Supported, default true
-    // NativeFormat, Cups: Supported, default true
-    // NativeFormat, Win: Unsupported, always false
-    // NativeFormat, Mac: Unsupported, always false
+    // NativeFormat: Supported, default true
 
     QPrinter pdf;
     pdf.setOutputFormat(QPrinter::PdfFormat);
@@ -1118,25 +1114,17 @@ void tst_QPrinter::fontEmbedding()
     QPrinter native;
     if (native.outputFormat() == QPrinter::NativeFormat) {
         // Test default
-#if defined Q_OS_MAC || defined Q_OS_WIN
-        QCOMPARE(native.fontEmbeddingEnabled(), false);
-#else
         QCOMPARE(native.fontEmbeddingEnabled(), true);
-#endif // Q_OS_MAC || Q_OS_WIN
 
         // Test set/get
-        bool expected = true;
-        native.setFontEmbeddingEnabled(expected);
-#if defined Q_OS_MAC || defined Q_OS_WIN
-        expected = false;
-#endif // Q_OS_MAC || Q_OS_WIN
-        QCOMPARE(native.fontEmbeddingEnabled(), expected);
+        native.setFontEmbeddingEnabled(true);
+        QCOMPARE(native.fontEmbeddingEnabled(), true);
 
         // Test value preservation
         native.setOutputFormat(QPrinter::PdfFormat);
-        QCOMPARE(native.fontEmbeddingEnabled(), expected);
+        QCOMPARE(native.fontEmbeddingEnabled(), true);
         native.setOutputFormat(QPrinter::NativeFormat);
-        QCOMPARE(native.fontEmbeddingEnabled(), expected);
+        QCOMPARE(native.fontEmbeddingEnabled(), true);
     } else {
         QSKIP("No printers installed, cannot test NativeFormat, please install printers to test");
     }

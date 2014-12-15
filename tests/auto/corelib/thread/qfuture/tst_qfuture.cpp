@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,7 @@
 #include <qfuture.h>
 #include <qfuturewatcher.h>
 #include <qresultstore.h>
+#include <qthreadpool.h>
 #include <qexception.h>
 #include <private/qfutureinterface_p.h>
 
@@ -80,6 +73,7 @@ private slots:
     void exceptions();
     void nestedExceptions();
 #endif
+    void nonGlobalThreadPool();
 };
 
 void tst_QFuture::resultStore()
@@ -1442,6 +1436,53 @@ void tst_QFuture::nestedExceptions()
     } catch (int) {}
 
     QVERIFY(MyClass::caught);
+}
+
+void tst_QFuture::nonGlobalThreadPool()
+{
+    static Q_CONSTEXPR int Answer = 42;
+
+    struct UselessTask : QRunnable, QFutureInterface<int>
+    {
+        QFuture<int> start(QThreadPool *pool)
+        {
+            setRunnable(this);
+            setThreadPool(pool);
+            reportStarted();
+            QFuture<int> f = future();
+            pool->start(this);
+            return f;
+        }
+
+        void run() Q_DECL_OVERRIDE
+        {
+            const int ms = 100 + (qrand() % 100 - 100/2);
+            QThread::msleep(ms);
+            reportResult(Answer);
+            reportFinished();
+        }
+    };
+
+    QThreadPool pool;
+
+    const int numTasks = QThread::idealThreadCount();
+
+    QVector<QFuture<int> > futures;
+    futures.reserve(numTasks);
+
+    for (int i = 0; i < numTasks; ++i)
+        futures.push_back((new UselessTask)->start(&pool));
+
+    QVERIFY(!pool.waitForDone(0)); // pool is busy (meaning our tasks did end up executing there)
+
+    QVERIFY(pool.waitForDone(10000)); // max sleep time in UselessTask::run is 150ms, so 10s should be enough
+                                      // (and the call returns as soon as all tasks finished anyway, so the
+                                      // maximum wait time only matters when the test fails)
+
+    Q_FOREACH (const QFuture<int> &future, futures) {
+        QVERIFY(future.isFinished());
+        QCOMPARE(future.result(), Answer);
+    }
 }
 
 #endif // QT_NO_EXCEPTIONS

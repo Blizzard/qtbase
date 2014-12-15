@@ -2,7 +2,6 @@ body {
     font: normal 400 14px/1.2 Arial;
     margin-top: 85px;
     font-family: Arial, Helvetica;
-    color: #313131;
     text-align: left;
     margin-left: 5px;
     margin-right: 5px;
@@ -95,6 +94,10 @@ a[href*="http://"], a[href*="ftp://"], a[href*="https://"] {
 .flags {
     text-decoration: none;
     text-height: 24px;
+}
+
+.flags:target {
+    background-color: #FFFFD6;
 }
 
 /*
@@ -305,6 +308,10 @@ headers
         margin-left: 0px;
         margin-right: 0px;
     }
+    .subtitle, .small-subtitle {
+        display: block;
+        clear: left;
+    }
 }
 
 h1 {
@@ -321,6 +328,10 @@ h2, p.h2 {
     border-top: #E0E0DE 1px solid;
     border-bottom: #E0E0DE 1px solid;
     max-width: 99%;
+}
+
+h2:target {
+    background-color: #F2F3D4;
 }
 
 h3 {
@@ -347,6 +358,12 @@ h3.fn, span.fn {
     font-size: 14px;
     margin: 0px;
     margin-top: 45px;
+}
+h3.fn code {
+    float: right;
+}
+h3.fn:target {
+    background-color: #F6F6D6;
 }
 
 .name {
@@ -407,6 +424,10 @@ table, pre {
  table tr.odd {
      background-color: #F6F6F6;
      color: #66666E;
+ }
+
+ table tr:target {
+     background-color: #F6F6D6;
  }
 
  table thead {
@@ -686,8 +707,21 @@ Landing page
     float: left;
 }
 
-.icons1of3  h2 {
+.icons1of3 h2, .doc-column h2 {
     font-size: 15px;
     margin: 0px;
     padding: 0px;
+}
+
+div.multi-column {
+    position: relative;
+}
+
+div.multi-column div {
+    display: -moz-inline-box;
+    display: inline-block;
+    vertical-align: top;
+    margin-top: 1em;
+    margin-right: 4em;
+    width: 24em;
 }

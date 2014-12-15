@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -46,6 +38,11 @@
 
 #include <QtNetwork/qhostaddress.h>
 #include <QtNetwork/qnetworkproxy.h>
+
+#if !defined(QT_NO_SSL) && defined(QT_NO_OPENSSL) && defined(QT_BUILD_INTERNAL)
+#include "private/qsslkey_p.h"
+#define TEST_CRYPTO
+#endif
 
 class tst_QSslKey : public QObject
 {
@@ -87,7 +84,14 @@ private slots:
     void toEncryptedPemOrDer_data();
     void toEncryptedPemOrDer();
 
+    void passphraseChecks_data();
     void passphraseChecks();
+    void noPassphraseChecks();
+#ifdef TEST_CRYPTO
+    void encrypt_data();
+    void encrypt();
+#endif
+
 #endif
 private:
     QString testDataDir;
@@ -320,18 +324,10 @@ void tst_QSslKey::toEncryptedPemOrDer()
     }
 
     if (type == QSsl::PrivateKey) {
+        // verify that private keys are never "encrypted" by toDer() and
+        // instead an empty string is returned, see QTBUG-41038.
         QByteArray encryptedDer = key.toDer(pwBytes);
-        // ### at this point, encryptedDer is invalid, hence the below QEXPECT_FAILs
-        QVERIFY(!encryptedDer.isEmpty());
-        QSslKey keyDer(encryptedDer, algorithm, QSsl::Der, type, pwBytes);
-        if (type == QSsl::PrivateKey)
-            QEXPECT_FAIL(
-                QTest::currentDataTag(), "We're not able to decrypt these yet...", Continue);
-        QVERIFY(!keyDer.isNull());
-        if (type == QSsl::PrivateKey)
-            QEXPECT_FAIL(
-                QTest::currentDataTag(), "We're not able to decrypt these yet...", Continue);
-        QCOMPARE(keyDer.toPem(), key.toPem());
+        QVERIFY(encryptedDer.isEmpty());
     } else {
         // verify that public keys are never encrypted by toDer()
         QByteArray encryptedDer = key.toDer(pwBytes);
@@ -344,76 +340,191 @@ void tst_QSslKey::toEncryptedPemOrDer()
     // ### add a test to verify that public keys are _decrypted_ correctly (by the ctor)
 }
 
+void tst_QSslKey::passphraseChecks_data()
+{
+    QTest::addColumn<QString>("fileName");
+
+    QTest::newRow("DES") << QString(testDataDir + "/rsa-with-passphrase-des.pem");
+    QTest::newRow("3DES") << QString(testDataDir + "/rsa-with-passphrase-3des.pem");
+    QTest::newRow("RC2") << QString(testDataDir + "/rsa-with-passphrase-rc2.pem");
+}
+
 void tst_QSslKey::passphraseChecks()
 {
-    {
-        QString fileName(testDataDir + "/rsa-with-passphrase.pem");
-        QFile keyFile(fileName);
-        QVERIFY(keyFile.exists());
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey);
-            QVERIFY(key.isNull()); // null passphrase => should not be able to decode key
-        }
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "");
-            QVERIFY(key.isNull()); // empty passphrase => should not be able to decode key
-        }
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "WRONG!");
-            QVERIFY(key.isNull()); // wrong passphrase => should not be able to decode key
-        }
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "123");
-            QVERIFY(!key.isNull()); // correct passphrase
-        }
-    }
+    QFETCH(QString, fileName);
 
+    QFile keyFile(fileName);
+    QVERIFY(keyFile.exists());
     {
-        // be sure and check a key without passphrase too
-        QString fileName(testDataDir + "/rsa-without-passphrase.pem");
-        QFile keyFile(fileName);
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey);
-            QVERIFY(!key.isNull()); // null passphrase => should be able to decode key
-        }
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "");
-            QVERIFY(!key.isNull()); // empty passphrase => should be able to decode key
-        }
-        {
-            if (!keyFile.isOpen())
-                keyFile.open(QIODevice::ReadOnly);
-            else
-                keyFile.reset();
-            QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "xxx");
-            QVERIFY(!key.isNull()); // passphrase given but key is not encrypted anyway => should work
-        }
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey);
+        QVERIFY(key.isNull()); // null passphrase => should not be able to decode key
+    }
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "");
+        QVERIFY(key.isNull()); // empty passphrase => should not be able to decode key
+    }
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "WRONG!");
+        QVERIFY(key.isNull()); // wrong passphrase => should not be able to decode key
+    }
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "123");
+        QVERIFY(!key.isNull()); // correct passphrase
     }
 }
+
+void tst_QSslKey::noPassphraseChecks()
+{
+    // be sure and check a key without passphrase too
+    QString fileName(testDataDir + "/rsa-without-passphrase.pem");
+    QFile keyFile(fileName);
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey);
+        QVERIFY(!key.isNull()); // null passphrase => should be able to decode key
+    }
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "");
+        QVERIFY(!key.isNull()); // empty passphrase => should be able to decode key
+    }
+    {
+        if (!keyFile.isOpen())
+            keyFile.open(QIODevice::ReadOnly);
+        else
+            keyFile.reset();
+        QSslKey key(&keyFile,QSsl::Rsa,QSsl::Pem, QSsl::PrivateKey, "xxx");
+        QVERIFY(!key.isNull()); // passphrase given but key is not encrypted anyway => should work
+    }
+}
+
+#ifdef TEST_CRYPTO
+Q_DECLARE_METATYPE(QSslKeyPrivate::Cipher)
+
+void tst_QSslKey::encrypt_data()
+{
+    QTest::addColumn<QSslKeyPrivate::Cipher>("cipher");
+    QTest::addColumn<QByteArray>("key");
+    QTest::addColumn<QByteArray>("plainText");
+    QTest::addColumn<QByteArray>("cipherText");
+
+    QTest::newRow("DES-CBC, length 0")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray()
+        << QByteArray::fromHex("956585228BAF9B1F");
+    QTest::newRow("DES-CBC, length 1")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(1, 'a')
+        << QByteArray::fromHex("E6880AF202BA3C12");
+    QTest::newRow("DES-CBC, length 2")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(2, 'a')
+        << QByteArray::fromHex("A82492386EED6026");
+    QTest::newRow("DES-CBC, length 3")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(3, 'a')
+        << QByteArray::fromHex("90B76D5B79519CBA");
+    QTest::newRow("DES-CBC, length 4")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(4, 'a')
+        << QByteArray::fromHex("63E3DD6FED87052A");
+    QTest::newRow("DES-CBC, length 5")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(5, 'a')
+        << QByteArray::fromHex("03ACDB0EACBDFA94");
+    QTest::newRow("DES-CBC, length 6")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(6, 'a')
+        << QByteArray::fromHex("7D95024E42A3A88A");
+    QTest::newRow("DES-CBC, length 7")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(7, 'a')
+        << QByteArray::fromHex("5003436B8A8E42E9");
+    QTest::newRow("DES-CBC, length 8")
+        << QSslKeyPrivate::DesCbc << QByteArray("01234567")
+        << QByteArray(8, 'a')
+        << QByteArray::fromHex("E4C1F054BF5521C0A4A0FD4A2BC6C1B1");
+
+    QTest::newRow("DES-EDE3-CBC, length 0")
+        << QSslKeyPrivate::DesEde3Cbc << QByteArray("0123456789abcdefghijklmn")
+        << QByteArray()
+        << QByteArray::fromHex("3B2B4CD0B0FD495F");
+    QTest::newRow("DES-EDE3-CBC, length 8")
+        << QSslKeyPrivate::DesEde3Cbc << QByteArray("0123456789abcdefghijklmn")
+        << QByteArray(8, 'a')
+        << QByteArray::fromHex("F2A5A87763C54A72A3224103D90CDB03");
+
+    QTest::newRow("RC2-40-CBC, length 0")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("01234")
+        << QByteArray()
+        << QByteArray::fromHex("6D05D52392FF6E7A");
+    QTest::newRow("RC2-40-CBC, length 8")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("01234")
+        << QByteArray(8, 'a')
+        << QByteArray::fromHex("75768E64C5749072A5D168F3AFEB0005");
+
+    QTest::newRow("RC2-64-CBC, length 0")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("01234567")
+        << QByteArray()
+        << QByteArray::fromHex("ADAE6BF70F420130");
+    QTest::newRow("RC2-64-CBC, length 8")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("01234567")
+        << QByteArray(8, 'a')
+        << QByteArray::fromHex("C7BF5C80AFBE9FBEFBBB9FD935F6D0DF");
+
+    QTest::newRow("RC2-128-CBC, length 0")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("012345679abcdefg")
+        << QByteArray()
+        << QByteArray::fromHex("1E965D483A13C8FB");
+    QTest::newRow("RC2-128-CBC, length 8")
+        << QSslKeyPrivate::Rc2Cbc << QByteArray("012345679abcdefg")
+        << QByteArray(8, 'a')
+        << QByteArray::fromHex("5AEC1A5B295660B02613454232F7DECE");
+}
+
+void tst_QSslKey::encrypt()
+{
+    QFETCH(QSslKeyPrivate::Cipher, cipher);
+    QFETCH(QByteArray, key);
+    QFETCH(QByteArray, plainText);
+    QFETCH(QByteArray, cipherText);
+    QByteArray iv("abcdefgh");
+
+#ifdef Q_OS_WINRT
+    QEXPECT_FAIL("RC2-40-CBC, length 0", "WinRT treats RC2 as 128-bit", Abort);
+    QEXPECT_FAIL("RC2-40-CBC, length 8", "WinRT treats RC2 as 128-bit", Abort);
+    QEXPECT_FAIL("RC2-64-CBC, length 0", "WinRT treats RC2 as 128-bit", Abort);
+    QEXPECT_FAIL("RC2-64-CBC, length 8", "WinRT treats RC2 as 128-bit", Abort);
+#endif
+    QByteArray encrypted = QSslKeyPrivate::encrypt(cipher, plainText, key, iv);
+    QCOMPARE(encrypted, cipherText);
+
+    QByteArray decrypted = QSslKeyPrivate::decrypt(cipher, cipherText, key, iv);
+    QCOMPARE(decrypted, plainText);
+}
+#endif
 
 #endif
 

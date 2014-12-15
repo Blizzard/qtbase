@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -168,10 +160,19 @@ void QConnmanEngine::connectToId(const QString &id)
 
     QConnmanServiceInterface *serv = connmanServiceInterfaces.value(id);
 
-    if (!serv->isValid()) {
+    if (!serv || !serv->isValid()) {
         emit connectionError(id, QBearerEngineImpl::InterfaceLookupError);
     } else {
-        serv->connect();
+        if (serv->type() == QLatin1String("cellular")) {
+            if (serv->roaming()) {
+                if (!isRoamingAllowed(serv->path())) {
+                    emit connectionError(id, QBearerEngineImpl::OperationNotSupported);
+                    return;
+                }
+            }
+        }
+        if (serv->autoConnect())
+            serv->connect();
     }
 }
 
@@ -180,7 +181,7 @@ void QConnmanEngine::disconnectFromId(const QString &id)
     QMutexLocker locker(&mutex);
     QConnmanServiceInterface *serv = connmanServiceInterfaces.value(id);
 
-    if (!serv->isValid()) {
+    if (!serv || !serv->isValid()) {
         emit connectionError(id, DisconnectionError);
     } else {
         serv->disconnect();
@@ -232,6 +233,8 @@ QNetworkSession::State QConnmanEngine::sessionStateForId(const QString &id)
 
     QString service = id;
     QConnmanServiceInterface *serv = connmanServiceInterfaces.value(service);
+    if (!serv)
+        return QNetworkSession::Invalid;
 
     QString servState = serv->state();
 
@@ -329,13 +332,15 @@ void QConnmanEngine::serviceStateChanged(const QString &state)
     QConnmanServiceInterface *service = qobject_cast<QConnmanServiceInterface *>(sender());
     configurationChange(service);
 
-    if (state == QStringLiteral("failure")) {
+    if (state == QLatin1String("failure")) {
         emit connectionError(service->path(), ConnectError);
     }
 }
 
 void QConnmanEngine::configurationChange(QConnmanServiceInterface *serv)
 {
+    if (!serv)
+        return;
     QMutexLocker locker(&mutex);
     QString id = serv->path();
 
@@ -377,8 +382,10 @@ QNetworkConfiguration::StateFlags QConnmanEngine::getStateForService(const QStri
 {
     QMutexLocker locker(&mutex);
     QConnmanServiceInterface *serv = connmanServiceInterfaces.value(service);
-    QString state = serv->state();
+    if (!serv)
+        return QNetworkConfiguration::Undefined;
 
+    QString state = serv->state();
     QNetworkConfiguration::StateFlags flag = QNetworkConfiguration::Defined;
 
     if (serv->type() == QLatin1String("cellular")) {
@@ -435,7 +442,7 @@ QNetworkConfiguration::BearerType QConnmanEngine::ofonoTechToBearerType(const QS
         } else if (currentTechnology == QLatin1String("hspa")) {
             return QNetworkConfiguration::BearerHSPA;
         } else if (currentTechnology == QLatin1String("lte")) {
-            return QNetworkConfiguration::BearerWiMAX; //not exact
+            return QNetworkConfiguration::BearerLTE;
         }
     }
     return QNetworkConfiguration::BearerUnknown;
@@ -474,7 +481,7 @@ void QConnmanEngine::addServiceConfiguration(const QString &servicePath)
 {
     QMutexLocker locker(&mutex);
     if (!connmanServiceInterfaces.contains(servicePath)) {
-        QConnmanServiceInterface *serv = new QConnmanServiceInterface(servicePath);
+        QConnmanServiceInterface *serv = new QConnmanServiceInterface(servicePath, this);
         connmanServiceInterfaces.insert(serv->path(),serv);
     }
 
@@ -509,7 +516,7 @@ void QConnmanEngine::addServiceConfiguration(const QString &servicePath)
         cpPriv->id = servicePath;
         cpPriv->type = QNetworkConfiguration::InternetAccessPoint;
 
-        if (service->security() == QStringLiteral("none")) {
+        if (service->security() == QLatin1String("none")) {
             cpPriv->purpose = QNetworkConfiguration::PublicPurpose;
         } else {
             cpPriv->purpose = QNetworkConfiguration::PrivatePurpose;

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -182,6 +174,7 @@ private slots:
     void clickFocus();
     void windowFrameMargins();
     void QTBUG_6986_sendMouseEventToAlienWidget();
+    void mapToGlobal();
 };
 
 // Subclass that exposes the protected functions.
@@ -282,6 +275,9 @@ void tst_QGraphicsProxyWidget::initTestCase()
 #ifdef Q_OS_WINCE //disable magic for WindowsCE
     qApp->setAutoMaximizeThreshold(-1);
 #endif
+    // Disable menu animations to prevent the alpha widget from getting in the way
+    // in actionsContextMenu().
+    QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
 }
 
 // This will be called after the last test function is executed.
@@ -298,6 +294,7 @@ void tst_QGraphicsProxyWidget::init()
 // This will be called after every test function.
 void tst_QGraphicsProxyWidget::cleanup()
 {
+    QVERIFY(QApplication::topLevelWidgets().isEmpty());
 }
 
 void tst_QGraphicsProxyWidget::qgraphicsproxywidget_data()
@@ -840,10 +837,11 @@ void tst_QGraphicsProxyWidget::focusOutEvent()
     QTRY_VERIFY(view.isVisible());
     QTRY_COMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
-    QWidget *widget = new QWidget;
+    QScopedPointer<QWidget> widgetGuard(new QWidget);
+    QWidget *widget = widgetGuard.data();
     widget->setFocusPolicy(Qt::WheelFocus);
     if (hasWidget)
-        proxy->setWidget(widget);
+        proxy->setWidget(widgetGuard.take());
     proxy->show();
     proxy->setFocus();
     QVERIFY(proxy->hasFocus());
@@ -970,13 +968,14 @@ void tst_QGraphicsProxyWidget::hoverEnterLeaveEvent()
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     SubQGraphicsProxyWidget *proxy = new SubQGraphicsProxyWidget;
-    EventLogger *widget = new EventLogger;
+    QScopedPointer<EventLogger> widgetGuard(new EventLogger);
+    EventLogger *widget = widgetGuard.data();
     widget->resize(50, 50);
     widget->setAttribute(Qt::WA_Hover, hoverEnabled);
     widget->setMouseTracking(true);
     view.resize(100, 100);
     if (hasWidget)
-        proxy->setWidget(widget);
+        proxy->setWidget(widgetGuard.take());
     proxy->setPos(50, 0);
     scene.addItem(proxy);
     QTest::qWait(30);
@@ -986,7 +985,7 @@ void tst_QGraphicsProxyWidget::hoverEnterLeaveEvent()
     // in
     QTest::mouseMove(&view, QPoint(50, 50));
     QSKIP("QTBUG-25294");
-    QTRY_COMPARE(widget->testAttribute(Qt::WA_UnderMouse), hasWidget ? true : false);
+    QTRY_COMPARE(widget->testAttribute(Qt::WA_UnderMouse), hasWidget);
     // ### this attribute isn't supported
     QCOMPARE(widget->enterCount, hasWidget ? 1 : 0);
     QCOMPARE(widget->hoverEnter, (hasWidget && hoverEnabled) ? 1 : 0);
@@ -1001,9 +1000,6 @@ void tst_QGraphicsProxyWidget::hoverEnterLeaveEvent()
     QTRY_COMPARE(widget->hoverLeave, (hasWidget && hoverEnabled) ? 1 : 0);
     // does not work on all platforms
     //QCOMPARE(widget->moveCount, 0);
-
-    if (!hasWidget)
-        delete widget;
 }
 #endif
 
@@ -1371,7 +1367,7 @@ void tst_QGraphicsProxyWidget::sizeHint()
 void tst_QGraphicsProxyWidget::sizePolicy()
 {
     for (int p = 0; p < 2; ++p) {
-        bool hasWidget = (p == 0 ? true : false);
+        bool hasWidget = (p == 0);
         SubQGraphicsProxyWidget proxy;
         QWidget *widget = new QWidget;
         QSizePolicy proxyPol(QSizePolicy::Maximum, QSizePolicy::Expanding);
@@ -2447,6 +2443,13 @@ void tst_QGraphicsProxyWidget::setFocus_complexTwoWidgets()
 
 void tst_QGraphicsProxyWidget::popup_basic()
 {
+    QScopedPointer<QComboBox> box(new QComboBox);
+    QStyleOptionComboBox opt;
+    opt.initFrom(box.data());
+    opt.editable = box->isEditable();
+    if (box->style()->styleHint(QStyle::SH_ComboBox_Popup, &opt))
+        QSKIP("Does not work due to SH_Combobox_Popup");
+
     // ProxyWidget should automatically create proxy's when the widget creates a child
     QGraphicsScene *scene = new QGraphicsScene;
     QGraphicsView view(scene);
@@ -2455,12 +2458,11 @@ void tst_QGraphicsProxyWidget::popup_basic()
     view.show();
 
     SubQGraphicsProxyWidget *proxy = new SubQGraphicsProxyWidget;
-    QComboBox *box = new QComboBox;
     box->setGeometry(0, 0, 320, 40);
     box->addItems(QStringList() << "monday" << "tuesday" << "wednesday"
                   << "thursday" << "saturday" << "sunday");
     QCOMPARE(proxy->childItems().count(), 0);
-    proxy->setWidget(box);
+    proxy->setWidget(box.data());
     proxy->show();
     scene->addItem(proxy);
 
@@ -2480,12 +2482,7 @@ void tst_QGraphicsProxyWidget::popup_basic()
     QGraphicsProxyWidget *child = (QGraphicsProxyWidget*)(proxy->childItems())[0];
     QVERIFY(child->isWidget());
     QVERIFY(child->widget());
-    QStyleOptionComboBox opt;
-    opt.initFrom(box);
-    opt.editable = box->isEditable();
-    if (box->style()->styleHint(QStyle::SH_ComboBox_Popup, &opt))
-        QSKIP("Does not work due to SH_Combobox_Popup");
-    QCOMPARE(child->widget()->parent(), static_cast<QObject*>(box));
+    QCOMPARE(child->widget()->parent(), static_cast<QObject*>(box.data()));
 
     QTRY_COMPARE(proxy->pos(), QPointF(box->pos()));
     QCOMPARE(child->x(), qreal(box->x()));
@@ -2975,6 +2972,8 @@ void tst_QGraphicsProxyWidget::dontCrashWhenDie()
 
     QApplication::processEvents();
     delete w;
+    // This leaves an invisible proxy widget behind.
+    qDeleteAll(QApplication::topLevelWidgets());
 }
 
 void tst_QGraphicsProxyWidget::createProxyForChildWidget()
@@ -3472,7 +3471,8 @@ void tst_QGraphicsProxyWidget::clickFocus()
 {
     QGraphicsScene scene;
     scene.setItemIndexMethod(QGraphicsScene::NoIndex);
-    QGraphicsProxyWidget *proxy = scene.addWidget(new QLineEdit);
+    QLineEdit *le1 = new QLineEdit;
+    QGraphicsProxyWidget *proxy = scene.addWidget(le1);
 
     QGraphicsView view(&scene);
 
@@ -3524,6 +3524,7 @@ void tst_QGraphicsProxyWidget::clickFocus()
 
     scene.setFocusItem(0);
     proxy->setWidget(new QLineEdit); // resets focusWidget
+    delete le1;
 
     {
         QPointF lineEditCenter = proxy->mapToScene(proxy->boundingRect().center());
@@ -3657,6 +3658,33 @@ void tst_QGraphicsProxyWidget::QTBUG_6986_sendMouseEventToAlienWidget()
     QCursor::setPos(view.mapToGlobal(view.mapFromScene(scene.topButton->boundingRect().center())));
     QTest::mouseClick(view.viewport(), Qt::LeftButton, 0, view.mapFromScene(scene.topButton->scenePos()));
     QTRY_COMPARE(scene.hoverButton->hoverLeaveReceived, true);
+}
+
+void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
+{
+    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+    const QSize size = availableGeometry.size() / 5;
+    QGraphicsScene scene;
+    QGraphicsView view(&scene);
+    view.setWindowTitle(QTest::currentTestFunction());
+    view.resize(size);
+    view.move(availableGeometry.bottomRight() - QPoint(size.width(), size.height()) - QPoint(100, 100));
+    QWidget *embeddedWidget = new QWidget;
+    embeddedWidget->setFixedSize(size / 2);
+    scene.addWidget(embeddedWidget);
+    QApplication::setActiveWindow(&view);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const QPoint embeddedCenter = embeddedWidget->geometry().center();
+    const QPoint embeddedCenterGlobal = embeddedWidget->mapToGlobal(embeddedCenter);
+    QCOMPARE(embeddedWidget->mapFromGlobal(embeddedCenterGlobal), embeddedCenter);
+    // This should be equivalent to the view center give or take rounding
+    // errors due to odd window margins
+    const QPoint viewCenter = view.geometry().center();
+    QVERIFY2((viewCenter - embeddedCenterGlobal).manhattanLength() <= 2,
+             qPrintable(QStringLiteral("%1, %2 != %3, %4")
+                        .arg(viewCenter.x()).arg(viewCenter.y())
+                        .arg(embeddedCenterGlobal.x()).arg(embeddedCenterGlobal.y())));
 }
 
 QTEST_MAIN(tst_QGraphicsProxyWidget)

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -93,10 +85,11 @@ static int getFontWeight(const QString &weightString)
     QString s = weightString.toLower();
 
     // Test in decreasing order of commonness
-    if (s == QLatin1String("medium") ||
-        s == QLatin1String("normal")
+    if (s == QLatin1String("normal")
         || s.compare(QCoreApplication::translate("QFontDatabase", "Normal"), Qt::CaseInsensitive) == 0)
         return QFont::Normal;
+    if (s == QLatin1String("medium"))
+        return qt_mediumFontWeight;
     if (s == QLatin1String("bold")
         || s.compare(QCoreApplication::translate("QFontDatabase", "Bold"), Qt::CaseInsensitive) == 0)
         return QFont::Bold;
@@ -108,6 +101,10 @@ static int getFontWeight(const QString &weightString)
         return QFont::Black;
     if (s == QLatin1String("light"))
         return QFont::Light;
+    if (s == QLatin1String("thin"))
+        return qt_thinFontWeight;
+    if (s == QLatin1String("extralight"))
+        return qt_extralightFontWeight;
 
     if (s.contains(QLatin1String("bold"))
         || s.contains(QCoreApplication::translate("QFontDatabase", "Bold"), Qt::CaseInsensitive)) {
@@ -596,7 +593,7 @@ struct QtFontDesc
 
 static int match(int script, const QFontDef &request,
                  const QString &family_name, const QString &foundry_name, int force_encoding_id,
-                 QtFontDesc *desc, const QList<int> &blacklisted, bool fallback);
+                 QtFontDesc *desc, const QList<int> &blacklisted);
 
 static void initFontDef(const QtFontDesc &desc, const QFontDef &request, QFontDef *fontDef, bool multi)
 {
@@ -1086,7 +1083,7 @@ static bool matchFamilyName(const QString &familyName, QtFontFamily *f)
 */
 static int match(int script, const QFontDef &request,
                  const QString &family_name, const QString &foundry_name, int force_encoding_id,
-                 QtFontDesc *desc, const QList<int> &blacklistedFamilies, bool fallback = false)
+                 QtFontDesc *desc, const QList<int> &blacklistedFamilies)
 {
     Q_UNUSED(force_encoding_id);
     int result = -1;
@@ -1139,7 +1136,7 @@ static int match(int script, const QFontDef &request,
             load(test.family->name, script);
 
         // Check if family is supported in the script we want
-        if (!fallback && script != QChar::Script_Common && !(test.family->writingSystems[writingSystem] & QtFontFamily::Supported))
+        if (script != QChar::Script_Common && !(test.family->writingSystems[writingSystem] & QtFontFamily::Supported))
             continue;
 
         // as we know the script is supported, we can be sure
@@ -2457,7 +2454,7 @@ bool QFontDatabase::supportsThreadedFontRendering()
 */
 QFontEngine *
 QFontDatabase::findFont(int script, const QFontPrivate *fp,
-                        const QFontDef &request, bool multi, bool fallback)
+                        const QFontDef &request, bool multi)
 {
     QMutexLocker locker(fontDatabaseMutex());
 
@@ -2485,7 +2482,7 @@ QFontDatabase::findFont(int script, const QFontPrivate *fp,
 
     QtFontDesc desc;
     QList<int> blackListed;
-    int index = match(script, request, family_name, foundry_name, force_encoding_id, &desc, blackListed, fallback);
+    int index = match(script, request, family_name, foundry_name, force_encoding_id, &desc, blackListed);
     if (index >= 0) {
         engine = loadEngine(script, request, desc.family, desc.foundry, desc.style, desc.size);
         if (!engine)

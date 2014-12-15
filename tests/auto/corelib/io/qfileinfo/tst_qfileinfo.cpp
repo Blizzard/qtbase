@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -78,9 +70,79 @@
 #define Q_NO_SYMLINKS
 #endif
 
-QT_BEGIN_NAMESPACE
-extern Q_AUTOTEST_EXPORT bool qIsLikelyToBeNfs(int /* handle */);
-QT_END_NAMESPACE
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
+inline bool qt_isEvilFsTypeName(const char *name)
+{
+    return (qstrncmp(name, "nfs", 3) == 0
+            || qstrncmp(name, "autofs", 6) == 0
+            || qstrncmp(name, "cachefs", 7) == 0);
+}
+
+#if defined(Q_OS_BSD4) && !defined(Q_OS_NETBSD)
+# include <sys/param.h>
+# include <sys/mount.h>
+
+bool qIsLikelyToBeNfs(int handle)
+{
+    struct statfs buf;
+    if (fstatfs(handle, &buf) != 0)
+        return false;
+    return qt_isEvilFsTypeName(buf.f_fstypename);
+}
+
+#elif defined(Q_OS_LINUX) || defined(Q_OS_HURD)
+
+# include <sys/vfs.h>
+# ifdef QT_LINUXBASE
+   // LSB 3.2 has fstatfs in sys/statfs.h, sys/vfs.h is just an empty dummy header
+#  include <sys/statfs.h>
+# endif
+
+# ifndef NFS_SUPER_MAGIC
+#  define NFS_SUPER_MAGIC       0x00006969
+# endif
+# ifndef AUTOFS_SUPER_MAGIC
+#  define AUTOFS_SUPER_MAGIC    0x00000187
+# endif
+# ifndef AUTOFSNG_SUPER_MAGIC
+#  define AUTOFSNG_SUPER_MAGIC  0x7d92b1a0
+# endif
+
+bool qIsLikelyToBeNfs(int handle)
+{
+    struct statfs buf;
+    if (fstatfs(handle, &buf) != 0)
+        return false;
+    return buf.f_type == NFS_SUPER_MAGIC
+           || buf.f_type == AUTOFS_SUPER_MAGIC
+           || buf.f_type == AUTOFSNG_SUPER_MAGIC;
+}
+
+#elif defined(Q_OS_SOLARIS) || defined(Q_OS_IRIX) || defined(Q_OS_AIX) || defined(Q_OS_HPUX) \
+      || defined(Q_OS_OSF) || defined(Q_OS_QNX) || defined(Q_OS_SCO) \
+      || defined(Q_OS_UNIXWARE) || defined(Q_OS_RELIANT) || defined(Q_OS_NETBSD)
+
+# include <sys/statvfs.h>
+
+bool qIsLikelyToBeNfs(int handle)
+{
+    struct statvfs buf;
+    if (fstatvfs(handle, &buf) != 0)
+        return false;
+#if defined(Q_OS_NETBSD)
+    return qt_isEvilFsTypeName(buf.f_fstypename);
+#else
+    return qt_isEvilFsTypeName(buf.f_basetype);
+#endif
+}
+#else
+inline bool qIsLikelyToBeNfs(int /* handle */)
+{
+    return false;
+}
+#endif
+#endif
 
 class tst_QFileInfo : public QObject
 {

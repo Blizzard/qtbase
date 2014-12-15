@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -346,6 +338,24 @@ void registerMyObjectPeer(const QString & path, QDBusConnection::RegisterOptions
     QDBusMessage reply = QDBusConnection::sessionBus().call(req);
 }
 
+void syncPeer()
+{
+    static int counter = 0;
+    QString reqId = QString::number(++counter);
+
+    // wait for the sync signal with the right ID
+    QEventLoop loop;
+    QDBusConnection con("peer");
+    con.connect(serviceName, objectPath, interfaceName, "syncReceived",
+                QStringList() << reqId, QString(), &loop, SLOT(quit()));
+
+    QDBusMessage req = QDBusMessage::createMethodCall(serviceName, objectPath, interfaceName, "requestSync");
+    req << reqId;
+    QDBusConnection::sessionBus().send(req);
+
+    loop.exec();
+}
+
 void emitSignalPeer(const QString &interface, const QString &name, const QVariant &parameter)
 {
     if (parameter.isValid())
@@ -363,8 +373,6 @@ void emitSignalPeer(const QString &interface, const QString &name, const QVarian
         req << name;
         QDBusConnection::sessionBus().send(req);
     }
-
-    QTest::qWait(1000);
 }
 
 QString slotSpyPeer()
@@ -492,7 +500,6 @@ void tst_QDBusAbstractAdaptor::initTestCase()
 
     WaitForQMyServer w;
     QVERIFY(w.ok());
-    //QTest::qWait(2000);
 
     // get peer server address
     QDBusMessage req = QDBusMessage::createMethodCall(serviceName, objectPath, interfaceName, "address");
@@ -616,8 +623,6 @@ static void emitSignal(MyObject *obj, const QString &iface, const QString &name,
         obj->if4->emitSignal(name, parameter);
     else
         obj->emitSignal(name, parameter);
-
-    QTest::qWait(200);
 }
 
 void tst_QDBusAbstractAdaptor::signalEmissions_data()
@@ -670,7 +675,7 @@ void tst_QDBusAbstractAdaptor::signalEmissions()
 
         emitSignal(&obj, interface, name, parameter);
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -689,7 +694,7 @@ void tst_QDBusAbstractAdaptor::signalEmissions()
         emitSignal(&obj, "local.MyObject", "scriptableSignalInt", QVariant(1));
         emitSignal(&obj, "local.MyObject", "scriptableSignalString", QVariant("foo"));
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -710,9 +715,8 @@ void tst_QDBusAbstractAdaptor::sameSignalDifferentPaths()
     QDBusSignalSpy spy;
     con.connect(con.baseService(), "/p1", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     obj.if2->emitSignal(QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 1);
+    QTRY_COMPARE(spy.count, 1);
     QCOMPARE(spy.interface, QString("local.Interface2"));
     QCOMPARE(spy.name, QString("signal"));
     QVERIFY(spy.signature.isEmpty());
@@ -721,9 +725,8 @@ void tst_QDBusAbstractAdaptor::sameSignalDifferentPaths()
     spy.count = 0;
     con.connect(con.baseService(), "/p2", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     obj.if2->emitSignal(QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 2);
+    QTRY_COMPARE(spy.count, 2);
 }
 
 void tst_QDBusAbstractAdaptor::sameObjectDifferentPaths()
@@ -740,9 +743,8 @@ void tst_QDBusAbstractAdaptor::sameObjectDifferentPaths()
     con.connect(con.baseService(), "/p1", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     con.connect(con.baseService(), "/p2", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     obj.if2->emitSignal(QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 1);
+    QTRY_COMPARE(spy.count, 1);
     QCOMPARE(spy.interface, QString("local.Interface2"));
     QCOMPARE(spy.name, QString("signal"));
     QVERIFY(spy.signature.isEmpty());
@@ -848,7 +850,7 @@ void tst_QDBusAbstractAdaptor::overloadedSignalEmission()
 
         emitSignal(&obj, interface, name, parameter);
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -864,7 +866,7 @@ void tst_QDBusAbstractAdaptor::overloadedSignalEmission()
         emitSignal(&obj, "local.Interface4", "signal", QVariant(1));
         emitSignal(&obj, "local.Interface4", "signal", QVariant("foo"));
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -1175,6 +1177,8 @@ void tst_QDBusAbstractAdaptor::signalEmissionsPeer()
 
     // connect all signals and emit only one
     {
+        syncPeer();
+
         QDBusSignalSpy spy;
         con.connect(QString(), "/", "local.Interface2", "signal",
                     &spy, SLOT(slot(QDBusMessage)));
@@ -1193,7 +1197,7 @@ void tst_QDBusAbstractAdaptor::signalEmissionsPeer()
 
         emitSignalPeer(interface, name, parameter);
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -1202,6 +1206,8 @@ void tst_QDBusAbstractAdaptor::signalEmissionsPeer()
 
     // connect one signal and emit them all
     {
+        syncPeer();
+
         QDBusSignalSpy spy;
         con.connect(QString(), "/", interface, name, &spy, SLOT(slot(QDBusMessage)));
         emitSignalPeer("local.Interface2", "signal", QVariant());
@@ -1212,7 +1218,7 @@ void tst_QDBusAbstractAdaptor::signalEmissionsPeer()
         emitSignalPeer("local.MyObject", "scriptableSignalInt", QVariant(1));
         emitSignalPeer("local.MyObject", "scriptableSignalString", QVariant("foo"));
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -1230,12 +1236,12 @@ void tst_QDBusAbstractAdaptor::sameSignalDifferentPathsPeer()
     registerMyObjectPeer("/p1");
     registerMyObjectPeer("/p2");
 
+    syncPeer();
     QDBusSignalSpy spy;
     con.connect(QString(), "/p1", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     emitSignalPeer("local.Interface2", QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 1);
+    QTRY_COMPARE(spy.count, 1);
     QCOMPARE(spy.interface, QString("local.Interface2"));
     QCOMPARE(spy.name, QString("signal"));
     QVERIFY(spy.signature.isEmpty());
@@ -1244,9 +1250,8 @@ void tst_QDBusAbstractAdaptor::sameSignalDifferentPathsPeer()
     spy.count = 0;
     con.connect(QString(), "/p2", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     emitSignalPeer("local.Interface2", QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 2);
+    QTRY_COMPARE(spy.count, 2);
 }
 
 void tst_QDBusAbstractAdaptor::sameObjectDifferentPathsPeer()
@@ -1259,13 +1264,13 @@ void tst_QDBusAbstractAdaptor::sameObjectDifferentPathsPeer()
     registerMyObjectPeer("/p1");
     registerMyObjectPeer("/p2", 0); // don't export anything
 
+    syncPeer();
     QDBusSignalSpy spy;
     con.connect(QString(), "/p1", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     con.connect(QString(), "/p2", "local.Interface2", "signal", &spy, SLOT(slot(QDBusMessage)));
     emitSignalPeer("local.Interface2", QString(), QVariant());
-    QTest::qWait(200);
 
-    QCOMPARE(spy.count, 1);
+    QTRY_COMPARE(spy.count, 1);
     QCOMPARE(spy.interface, QString("local.Interface2"));
     QCOMPARE(spy.name, QString("signal"));
     QVERIFY(spy.signature.isEmpty());
@@ -1282,6 +1287,7 @@ void tst_QDBusAbstractAdaptor::scriptableSignalOrNotPeer()
         registerMyObjectPeer("/p1", QDBusConnection::ExportScriptableSignals);
         registerMyObjectPeer("/p2", 0); // don't export anything
 
+        syncPeer();
         QDBusSignalSpy spy;
         con.connect(QString(), "/p1", "local.MyObject", "scriptableSignalVoid", &spy, SLOT(slot(QDBusMessage)));
         con.connect(QString(), "/p2", "local.MyObject", "scriptableSignalVoid", &spy, SLOT(slot(QDBusMessage)));
@@ -1305,6 +1311,7 @@ void tst_QDBusAbstractAdaptor::scriptableSignalOrNotPeer()
         registerMyObjectPeer("/p2", QDBusConnection::ExportScriptableSignals
                                 | QDBusConnection::ExportNonScriptableSignals);
 
+        syncPeer();
         QDBusSignalSpy spy;
         con.connect(QString(), "/p1", "local.MyObject", "nonScriptableSignalVoid", &spy, SLOT(slot(QDBusMessage)));
         con.connect(QString(), "/p2", "local.MyObject", "nonScriptableSignalVoid", &spy, SLOT(slot(QDBusMessage)));
@@ -1357,6 +1364,7 @@ void tst_QDBusAbstractAdaptor::overloadedSignalEmissionPeer()
 
     // connect all signals and emit only one
     {
+        syncPeer();
         QDBusSignalSpy spy;
         con.connect(QString(), "/", "local.Interface4", "signal", "",
                     &spy, SLOT(slot(QDBusMessage)));
@@ -1367,7 +1375,7 @@ void tst_QDBusAbstractAdaptor::overloadedSignalEmissionPeer()
 
         emitSignalPeer(interface, name, parameter);
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");
@@ -1377,13 +1385,14 @@ void tst_QDBusAbstractAdaptor::overloadedSignalEmissionPeer()
     QFETCH(QString, signature);
     // connect one signal and emit them all
     {
+        syncPeer();
         QDBusSignalSpy spy;
         con.connect(QString(), "/", interface, name, signature, &spy, SLOT(slot(QDBusMessage)));
         emitSignalPeer("local.Interface4", "signal", QVariant());
         emitSignalPeer("local.Interface4", "signal", QVariant(1));
         emitSignalPeer("local.Interface4", "signal", QVariant("foo"));
 
-        QCOMPARE(spy.count, 1);
+        QTRY_COMPARE(spy.count, 1);
         QCOMPARE(spy.interface, interface);
         QCOMPARE(spy.name, name);
         QTEST(spy.signature, "signature");

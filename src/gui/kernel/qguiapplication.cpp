@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -82,6 +74,7 @@
 #include <qpa/qwindowsysteminterface_p.h>
 #include "private/qwindow_p.h"
 #include "private/qcursor_p.h"
+#include "private/qopenglcontext_p.h"
 
 #include "private/qdnd_p.h"
 #include <qpa/qplatformthemefactory_p.h>
@@ -118,7 +111,7 @@ Qt::KeyboardModifiers QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
 
 QPointF QGuiApplicationPrivate::lastCursorPosition(qInf(), qInf());
 
-bool QGuiApplicationPrivate::tabletState = false;
+Qt::MouseButtons QGuiApplicationPrivate::tabletState = Qt::NoButton;
 QWindow *QGuiApplicationPrivate::tabletPressTarget = 0;
 QWindow *QGuiApplicationPrivate::currentMouseWindow = 0;
 
@@ -509,6 +502,7 @@ static QWindowGeometrySpecification windowGeometrySpecification;
         \li \c {-qwindowgeometry} \e geometry, specifies window geometry for
             the main window using the X11-syntax. For example:
             \c {-qwindowgeometry 100x100+50+50}
+        \li \c {-qwindowicon}, sets the default window icon
         \li \c {-qwindowtitle}, sets the title of the first window
         \li \c{-reverse}, sets the application's layout direction to
             Qt::RightToLeft. This option is intended to aid debugging and should
@@ -588,6 +582,7 @@ QGuiApplication::~QGuiApplication()
 #endif //QT_NO_SESSIONMANAGER
 
     clearPalette();
+    QFontDatabase::removeAllApplicationFonts();
 
 #ifndef QT_NO_CURSOR
     d->cursor_list.clear();
@@ -605,7 +600,8 @@ QGuiApplicationPrivate::QGuiApplicationPrivate(int &argc, char **argv, int flags
     : QCoreApplicationPrivate(argc, argv, flags),
       styleHints(0),
       inputMethod(0),
-      lastTouchType(QEvent::TouchEnd)
+      lastTouchType(QEvent::TouchEnd),
+      ownGlobalShareContext(false)
 {
     self = this;
     application_type = QCoreApplicationPrivate::Gui;
@@ -902,7 +898,19 @@ QList<QScreen *> QGuiApplication::screens()
 
     This signal is emitted whenever a new screen \a screen has been added to the system.
 
-    \sa screens(), primaryScreen()
+    \sa screens(), primaryScreen(), screenRemoved()
+*/
+
+/*!
+    \fn void QGuiApplication::screenRemoved(QScreen *screen)
+
+    This signal is emitted whenever a \a screen is removed from the system. It
+    provides an opportunity to manage the windows on the screen before Qt falls back
+    to moving them to the primary screen.
+
+    \sa screens(), screenAdded(), QObject::destroyed(), QWindow::setScreen()
+
+    \since 5.4
 */
 
 
@@ -1114,12 +1122,15 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 
     // Get command line params
 
+    QString icon;
+
     int j = argc ? 1 : 0;
     for (int i=1; i<argc; i++) {
         if (argv[i] && *argv[i] != '-') {
             argv[j++] = argv[i];
             continue;
         }
+        const bool isXcb = platformName == "xcb";
         QByteArray arg = argv[i];
         if (arg.startsWith("--"))
             arg.remove(0, 1);
@@ -1132,12 +1143,16 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         } else if (arg == "-platformtheme") {
             if (++i < argc)
                 platformThemeName = QString::fromLocal8Bit(argv[i]);
-        } else if (arg == "-qwindowgeometry" || (platformName == "xcb" && arg == "-geometry")) {
+        } else if (arg == "-qwindowgeometry" || (isXcb && arg == "-geometry")) {
             if (++i < argc)
                 windowGeometrySpecification = QWindowGeometrySpecification::fromArgument(argv[i]);
-        } else if (arg == "-qwindowtitle" || (platformName == "xcb" && arg == "-title")) {
+        } else if (arg == "-qwindowtitle" || (isXcb && arg == "-title")) {
             if (++i < argc)
                 firstWindowTitle = QString::fromLocal8Bit(argv[i]);
+        } else if (arg == "-qwindowicon" || (isXcb && arg == "-icon")) {
+            if (++i < argc) {
+                icon = QString::fromLocal8Bit(argv[i]);
+            }
         } else {
             argv[j++] = argv[i];
         }
@@ -1150,6 +1165,8 @@ void QGuiApplicationPrivate::createPlatformIntegration()
 
     init_platform(QLatin1String(platformName), platformPluginPath, platformThemeName, argc, argv);
 
+    if (!icon.isEmpty())
+        forcedWindowIcon = QDir::isAbsolutePath(icon) ? QIcon(icon) : QIcon::fromTheme(icon);
 }
 
 /*!
@@ -1184,7 +1201,7 @@ void QGuiApplicationPrivate::eventDispatcherReady()
 static bool runningUnderDebugger()
 {
     const QFileInfo parentProcExe(QStringLiteral("/proc/") + QString::number(getppid()) + QStringLiteral("/exe"));
-    return parentProcExe.isSymLink() && parentProcExe.symLinkTarget().endsWith(QStringLiteral("/gdb"));
+    return parentProcExe.isSymLink() && parentProcExe.symLinkTarget().endsWith(QLatin1String("/gdb"));
 }
 #endif
 
@@ -1295,6 +1312,17 @@ void QGuiApplicationPrivate::init()
     qRegisterGuiGetInterpolator();
 #endif
 
+    // set a global share context when enabled unless there is already one
+#ifndef QT_NO_OPENGL
+    if (qApp->testAttribute(Qt::AA_ShareOpenGLContexts) && !qt_gl_global_share_context()) {
+        QOpenGLContext *ctx = new QOpenGLContext;
+        ctx->setFormat(QSurfaceFormat::defaultFormat());
+        ctx->create();
+        qt_gl_set_global_share_context(ctx);
+        ownGlobalShareContext = true;
+    }
+#endif
+
     QWindowSystemInterfacePrivate::eventTime.start();
 
     is_app_running = true;
@@ -1355,6 +1383,13 @@ QGuiApplicationPrivate::~QGuiApplicationPrivate()
     qt_cleanupFontDatabase();
 
     QPixmapCache::clear();
+
+#ifndef QT_NO_OPENGL
+    if (ownGlobalShareContext) {
+        delete qt_gl_global_share_context();
+        qt_gl_set_global_share_context(0);
+    }
+#endif
 
     delete platform_theme;
     platform_theme = 0;
@@ -1450,6 +1485,20 @@ QPlatformNativeInterface *QGuiApplication::platformNativeInterface()
 {
     QPlatformIntegration *pi = QGuiApplicationPrivate::platformIntegration();
     return pi ? pi->nativeInterface() : 0;
+}
+
+/*!
+    Returns a function pointer from the platformplugin matching \a function
+*/
+QFunctionPointer QGuiApplication::platformFunction(const QByteArray &function)
+{
+    QPlatformIntegration *pi = QGuiApplicationPrivate::platformIntegration();
+    if (!pi) {
+        qWarning() << "QGuiApplication::platformFunction(): Must construct a QGuiApplication before accessing a platform function";
+        return Q_NULLPTR;
+    }
+
+    return pi->nativeInterface() ? pi->nativeInterface()->platformFunction(function) : Q_NULLPTR;
 }
 
 /*!
@@ -1575,11 +1624,13 @@ void QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePriv
     case QWindowSystemInterfacePrivate::WindowScreenChanged:
         QGuiApplicationPrivate::processWindowScreenChangedEvent(static_cast<QWindowSystemInterfacePrivate::WindowScreenChangedEvent *>(e));
         break;
-    case QWindowSystemInterfacePrivate::ApplicationStateChanged:
-        QGuiApplicationPrivate::setApplicationState(static_cast<QWindowSystemInterfacePrivate::ApplicationStateChangedEvent *>(e)->newState);
+    case QWindowSystemInterfacePrivate::ApplicationStateChanged: {
+        QWindowSystemInterfacePrivate::ApplicationStateChangedEvent * changeEvent = static_cast<QWindowSystemInterfacePrivate::ApplicationStateChangedEvent *>(e);
+        QGuiApplicationPrivate::setApplicationState(changeEvent->newState, changeEvent->forcePropagate); }
         break;
-    case QWindowSystemInterfacePrivate::FlushEvents:
-        QWindowSystemInterface::deferredFlushWindowSystemEvents();
+    case QWindowSystemInterfacePrivate::FlushEvents: {
+        QWindowSystemInterfacePrivate::FlushEventsEvent *flushEventsEvent = static_cast<QWindowSystemInterfacePrivate::FlushEventsEvent *>(e);
+        QWindowSystemInterface::deferredFlushWindowSystemEvents(flushEventsEvent->flags); }
         break;
     case QWindowSystemInterfacePrivate::Close:
         QGuiApplicationPrivate::processCloseEvent(
@@ -1592,10 +1643,6 @@ void QGuiApplicationPrivate::processWindowSystemEvent(QWindowSystemInterfacePriv
     case QWindowSystemInterfacePrivate::ScreenGeometry:
         QGuiApplicationPrivate::reportGeometryChange(
                 static_cast<QWindowSystemInterfacePrivate::ScreenGeometryEvent *>(e));
-        break;
-    case QWindowSystemInterfacePrivate::ScreenAvailableGeometry:
-        QGuiApplicationPrivate::reportAvailableGeometryChange(
-                static_cast<QWindowSystemInterfacePrivate::ScreenAvailableGeometryEvent *>(e));
         break;
     case QWindowSystemInterfacePrivate::ScreenLogicalDotsPerInch:
         QGuiApplicationPrivate::reportLogicalDotsPerInchChange(
@@ -1663,7 +1710,8 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
         // with the current event, we fake a move-only event that we recurse and process first. This
         // will update the global mouse position and cause the second event to be a button only event.
         QWindowSystemInterfacePrivate::MouseEvent moveEvent(e->window.data(),
-                e->timestamp, e->type, e->localPos, e->globalPos, buttons, e->modifiers);
+                e->timestamp, e->type, e->localPos, e->globalPos, buttons, e->modifiers, e->source);
+        moveEvent.synthetic = e->synthetic;
         processMouseEvent(&moveEvent);
         Q_ASSERT(e->globalPos == QGuiApplicationPrivate::lastCursorPosition);
         // continue with processing mouse button change event
@@ -1853,13 +1901,17 @@ void QGuiApplicationPrivate::processKeyEvent(QWindowSystemInterfacePrivate::KeyE
         ev.setAccepted(false);
 
     static bool backKeyPressAccepted = false;
+    static bool menuKeyPressAccepted = false;
     if (e->keyType == QEvent::KeyPress) {
         backKeyPressAccepted = e->key == Qt::Key_Back && ev.isAccepted();
-    } else if (e->keyType == QEvent::KeyRelease && e->key == Qt::Key_Back && !backKeyPressAccepted && !ev.isAccepted()) {
-        if (!window)
-            qApp->quit();
-        else
-            QWindowSystemInterface::handleCloseEvent(window);
+        menuKeyPressAccepted = e->key == Qt::Key_Menu && ev.isAccepted();
+    } else if (e->keyType == QEvent::KeyRelease) {
+        if (e->key == Qt::Key_Back && !backKeyPressAccepted && !ev.isAccepted()) {
+            if (window)
+                QWindowSystemInterface::handleCloseEvent(window);
+        } else if (e->key == Qt::Key_Menu && !menuKeyPressAccepted && !ev.isAccepted()) {
+            platform_theme->showPlatformMenuBar();
+        }
     }
 #endif
 }
@@ -1971,7 +2023,7 @@ void QGuiApplicationPrivate::processWindowScreenChangedEvent(QWindowSystemInterf
 {
     if (QWindow *window  = wse->window.data()) {
         if (QScreen *screen = wse->screen.data())
-            window->d_func()->setScreen(screen, false /* recreate */);
+            window->d_func()->setTopLevelScreen(screen, false /* recreate */);
         else // Fall back to default behavior, and try to find some appropriate screen
             window->setScreen(0);
     }
@@ -2057,10 +2109,8 @@ void QGuiApplicationPrivate::processTabletEvent(QWindowSystemInterfacePrivate::T
 {
 #ifndef QT_NO_TABLETEVENT
     QEvent::Type type = QEvent::TabletMove;
-    if (e->down != tabletState) {
-        type = e->down ? QEvent::TabletPress : QEvent::TabletRelease;
-        tabletState = e->down;
-    }
+    if (e->buttons != tabletState)
+        type = (e->buttons > tabletState) ? QEvent::TabletPress : QEvent::TabletRelease;
 
     QWindow *window = e->window.data();
     modifier_buttons = e->modifiers;
@@ -2092,12 +2142,21 @@ void QGuiApplicationPrivate::processTabletEvent(QWindowSystemInterfacePrivate::T
         QPointF delta = e->global - e->global.toPoint();
         local = window->mapFromGlobal(e->global.toPoint()) + delta;
     }
+    Qt::MouseButtons stateChange = e->buttons ^ tabletState;
+    Qt::MouseButton button = Qt::NoButton;
+    for (int check = Qt::LeftButton; check <= int(Qt::MaxMouseButton); check = check << 1) {
+        if (check & stateChange) {
+            button = Qt::MouseButton(check);
+            break;
+        }
+    }
     QTabletEvent ev(type, local, e->global,
                     e->device, e->pointerType, e->pressure, e->xTilt, e->yTilt,
                     e->tangentialPressure, e->rotation, e->z,
-                    e->modifiers, e->uid);
+                    e->modifiers, e->uid, button, e->buttons);
     ev.setTimestamp(e->timestamp);
     QGuiApplication::sendSpontaneousEvent(window, &ev);
+    tabletState = e->buttons;
 #else
     Q_UNUSED(e)
 #endif
@@ -2109,7 +2168,7 @@ void QGuiApplicationPrivate::processTabletEnterProximityEvent(QWindowSystemInter
     QTabletEvent ev(QEvent::TabletEnterProximity, QPointF(), QPointF(),
                     e->device, e->pointerType, 0, 0, 0,
                     0, 0, 0,
-                    Qt::NoModifier, e->uid);
+                    Qt::NoModifier, e->uid, Qt::NoButton, tabletState);
     ev.setTimestamp(e->timestamp);
     QGuiApplication::sendSpontaneousEvent(qGuiApp, &ev);
 #else
@@ -2123,7 +2182,7 @@ void QGuiApplicationPrivate::processTabletLeaveProximityEvent(QWindowSystemInter
     QTabletEvent ev(QEvent::TabletLeaveProximity, QPointF(), QPointF(),
                     e->device, e->pointerType, 0, 0, 0,
                     0, 0, 0,
-                    Qt::NoModifier, e->uid);
+                    Qt::NoModifier, e->uid, Qt::NoButton, tabletState);
     ev.setTimestamp(e->timestamp);
     QGuiApplication::sendSpontaneousEvent(qGuiApp, &ev);
 #else
@@ -2212,7 +2271,7 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
                                                                e->timestamp,
                                                                synthIt->pos,
                                                                synthIt->screenPos,
-                                                               Qt::NoButton,
+                                                               buttons & ~Qt::LeftButton,
                                                                e->modifiers,
                                                                Qt::MouseEventSynthesizedByQt);
                 fake.synthetic = true;
@@ -2414,7 +2473,9 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
                         QWindowSystemInterfacePrivate::MouseEvent fake(w, e->timestamp,
                                                                        touchPoint.pos(),
                                                                        touchPoint.screenPos(),
-                                                                       b, e->modifiers);
+                                                                       b | (buttons & ~Qt::LeftButton),
+                                                                       e->modifiers,
+                                                                       Qt::MouseEventSynthesizedByQt);
                         fake.synthetic = true;
                         processMouseEvent(&fake);
                         break;
@@ -2482,40 +2543,36 @@ void QGuiApplicationPrivate::reportGeometryChange(QWindowSystemInterfacePrivate:
         return;
 
     QScreen *s = e->screen.data();
+
+    bool geometryChanged = e->geometry != s->d_func()->geometry;
     s->d_func()->geometry = e->geometry;
 
-    Qt::ScreenOrientation primaryOrientation = s->primaryOrientation();
-    s->d_func()->updatePrimaryOrientation();
-
-    emit s->geometryChanged(s->geometry());
-    emit s->physicalSizeChanged(s->physicalSize());
-    emit s->physicalDotsPerInchChanged(s->physicalDotsPerInch());
-    emit s->logicalDotsPerInchChanged(s->logicalDotsPerInch());
-    foreach (QScreen* sibling, s->virtualSiblings())
-        emit sibling->virtualGeometryChanged(sibling->virtualGeometry());
-
-    if (s->primaryOrientation() != primaryOrientation)
-        emit s->primaryOrientationChanged(s->primaryOrientation());
-
-    if (s->d_func()->orientation == Qt::PrimaryOrientation)
-        updateFilteredScreenOrientation(s);
-}
-
-void QGuiApplicationPrivate::reportAvailableGeometryChange(
-        QWindowSystemInterfacePrivate::ScreenAvailableGeometryEvent *e)
-{
-    // This operation only makes sense after the QGuiApplication constructor runs
-    if (QCoreApplication::startingUp())
-        return;
-
-    if (!e->screen)
-        return;
-
-    QScreen *s = e->screen.data();
+    bool availableGeometryChanged = e->availableGeometry != s->d_func()->availableGeometry;
     s->d_func()->availableGeometry = e->availableGeometry;
 
-    foreach (QScreen* sibling, s->virtualSiblings())
-        emit sibling->virtualGeometryChanged(sibling->virtualGeometry());
+    if (geometryChanged) {
+        Qt::ScreenOrientation primaryOrientation = s->primaryOrientation();
+        s->d_func()->updatePrimaryOrientation();
+
+        emit s->geometryChanged(s->geometry());
+        emit s->physicalSizeChanged(s->physicalSize());
+        emit s->physicalDotsPerInchChanged(s->physicalDotsPerInch());
+        emit s->logicalDotsPerInchChanged(s->logicalDotsPerInch());
+
+        if (s->primaryOrientation() != primaryOrientation)
+            emit s->primaryOrientationChanged(s->primaryOrientation());
+
+        if (s->d_func()->orientation == Qt::PrimaryOrientation)
+            updateFilteredScreenOrientation(s);
+    }
+
+    if (availableGeometryChanged)
+        emit s->availableGeometryChanged(s->geometry());
+
+    if (geometryChanged || availableGeometryChanged) {
+        foreach (QScreen* sibling, s->virtualSiblings())
+            emit sibling->virtualGeometryChanged(sibling->virtualGeometry());
+    }
 }
 
 void QGuiApplicationPrivate::reportLogicalDotsPerInchChange(QWindowSystemInterfacePrivate::ScreenLogicalDotsPerInchEvent *e)
@@ -2655,6 +2712,15 @@ QClipboard * QGuiApplication::clipboard()
 #endif
 
 /*!
+    \since 5.4
+    \fn void QGuiApplication::paletteChanged(const QPalette &palette)
+
+    This signal is emitted when the \a palette of the application changes.
+
+    \sa palette()
+*/
+
+/*!
     Returns the default application palette.
 
     \sa setPalette()
@@ -2680,6 +2746,7 @@ void QGuiApplication::setPalette(const QPalette &pal)
     else
         *QGuiApplicationPrivate::app_pal = pal;
     applicationResourceFlags |= ApplicationPaletteExplicitlySet;
+    emit qGuiApp->paletteChanged(*QGuiApplicationPrivate::app_pal);
 }
 
 QRect QGuiApplicationPrivate::applyWindowGeometrySpecification(const QRect &windowGeometry, const QWindow *window)
@@ -2889,9 +2956,9 @@ Qt::ApplicationState QGuiApplication::applicationState()
     \sa applicationState()
 */
 
-void QGuiApplicationPrivate::setApplicationState(Qt::ApplicationState state)
+void QGuiApplicationPrivate::setApplicationState(Qt::ApplicationState state, bool forcePropagate)
 {
-    if (applicationState == state)
+    if ((applicationState == state) && !forcePropagate)
         return;
 
     applicationState = state;
@@ -3092,6 +3159,8 @@ void QGuiApplicationPrivate::saveState()
     On system start-up, the default layout direction depends on the
     application's language.
 
+    The notifier signal was introduced in Qt 5.4.
+
     \sa QWidget::layoutDirection, isLeftToRight(), isRightToLeft()
  */
 
@@ -3102,7 +3171,10 @@ void QGuiApplication::setLayoutDirection(Qt::LayoutDirection direction)
 
     layout_direction = direction;
 
-    QGuiApplicationPrivate::self->notifyLayoutDirectionChange();
+    if (qGuiApp) {
+        emit qGuiApp->layoutDirectionChanged(direction);
+        QGuiApplicationPrivate::self->notifyLayoutDirectionChange();
+    }
 }
 
 Qt::LayoutDirection QGuiApplication::layoutDirection()

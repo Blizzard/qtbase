@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -55,6 +47,7 @@
 
 #include <qmenu.h>
 #include <qstyle.h>
+#include <QTimer>
 #include <qdebug.h>
 
 Q_DECLARE_METATYPE(Qt::Key);
@@ -132,6 +125,7 @@ private:
     enum { num_builtins = 10 };
     QAction *activated, *highlighted, *builtins[num_builtins];
     QString statustip;
+    bool m_onStatusTipTimerExecuted;
 };
 
 // Testing get/set functions
@@ -158,6 +152,7 @@ void tst_QMenu::getSetCheck()
 }
 
 tst_QMenu::tst_QMenu()
+    : m_onStatusTipTimerExecuted(false)
 {
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
 }
@@ -193,6 +188,7 @@ void tst_QMenu::init()
 {
     activated = highlighted = 0;
     lastMenu = 0;
+    m_onStatusTipTimerExecuted = false;
 }
 
 void tst_QMenu::createActions()
@@ -492,8 +488,13 @@ void tst_QMenu::statusTip()
 
     //because showMenu calls QMenu::exec, we need to use a singleshot
     //to continue the test
-    QTimer::singleShot(200,this, SLOT(onStatusTipTimer()));
+    QTimer timer;
+    timer.setSingleShot(true);
+    connect(&timer, &QTimer::timeout, this, &tst_QMenu::onStatusTipTimer);
+    timer.setInterval(200);
+    timer.start();
     btn->showMenu();
+    QVERIFY(m_onStatusTipTimerExecuted);
     QVERIFY(statustip.isEmpty());
 }
 
@@ -513,6 +514,7 @@ void tst_QMenu::onStatusTipTimer()
 
     QCOMPARE(st, QString("sub action"));
     QVERIFY(menu->isVisible() == false);
+    m_onStatusTipTimerExecuted = true;
 }
 
 void tst_QMenu::widgetActionFocus()
@@ -1037,6 +1039,14 @@ void tst_QMenu::QTBUG_37933_ampersands_data()
     QTest::newRow("simple") << QString("Test") << QString("Test");
     QTest::newRow("ampersand") << QString("&Test") << QString("Test");
     QTest::newRow("double_ampersand") << QString("&Test && more") << QString("Test & more");
+    QTest::newRow("ampersand_in_parentheses") << QString("Test(&T) (&&) more") << QString("Test (&) more");
+    QTest::newRow("ampersand_in_parentheses_after_space") << QString("Test (&T)") << QString("Test");
+    QTest::newRow("ampersand_in_parentheses_after_spaces") << QString("Test  (&T)") << QString("Test");
+    QTest::newRow("ampersand_in_parentheses_before_space") << QString("Test(&T) ") << QString("Test ");
+    QTest::newRow("only_ampersand_in_parentheses") << QString("(&T)") << QString("");
+    QTest::newRow("only_ampersand_in_parentheses_after_space") << QString(" (&T)") << QString("");
+    QTest::newRow("parentheses_after_space") << QString(" (Dummy)") << QString(" (Dummy)");
+    QTest::newRow("ampersand_after_space") << QString("About &Qt Project") << QString("About Qt Project");
 }
 
 void tst_qmenu_QTBUG_37933_ampersands();

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,34 +34,34 @@
 
 #include <QtTest/QtTest>
 
-#include <qcoreapplication.h>
+#include <qapplication.h>
 #include <qdebug.h>
+#include <qprogressbar.h>
 #include <qprogressdialog.h>
+#include <qpushbutton.h>
 #include <qlabel.h>
+#include <qpointer.h>
 #include <qthread.h>
+#include <qtranslator.h>
 
 class tst_QProgressDialog : public QObject
 {
-Q_OBJECT
+    Q_OBJECT
 
-public:
-    tst_QProgressDialog();
-    virtual ~tst_QProgressDialog();
-
-private slots:
+private Q_SLOTS:
+    void cleanup();
     void autoShow_data();
     void autoShow();
     void getSetCheck();
     void task198202();
     void QTBUG_31046();
+    void settingCustomWidgets();
+    void i18n();
 };
 
-tst_QProgressDialog::tst_QProgressDialog()
+void tst_QProgressDialog::cleanup()
 {
-}
-
-tst_QProgressDialog::~tst_QProgressDialog()
-{
+    QVERIFY(QApplication::topLevelWindows().empty());
 }
 
 void tst_QProgressDialog::autoShow_data()
@@ -188,6 +180,88 @@ void tst_QProgressDialog::QTBUG_31046()
     QThread::msleep(200);
     dlg.setValue(50);
     QCOMPARE(50, dlg.value());
+}
+
+void tst_QProgressDialog::settingCustomWidgets()
+{
+    QPointer<QLabel> l = new QLabel;
+    QPointer<QPushButton> btn = new QPushButton;
+    QPointer<QProgressBar> bar = new QProgressBar;
+    QVERIFY(!l->parent());
+    QVERIFY(!btn->parent());
+    QVERIFY(!bar->parent());
+
+    {
+        QProgressDialog dlg;
+
+        QVERIFY(!dlg.isAncestorOf(l));
+        dlg.setLabel(l);
+        QVERIFY(dlg.isAncestorOf(l));
+        QTest::ignoreMessage(QtWarningMsg, "QProgressDialog::setLabel: Attempt to set the same label again");
+        dlg.setLabel(l);          // setting the same widget again should not crash
+        QVERIFY(l);               // and not delete the (old == new) widget
+
+        QVERIFY(!dlg.isAncestorOf(btn));
+        dlg.setCancelButton(btn);
+        QVERIFY(dlg.isAncestorOf(btn));
+        QTest::ignoreMessage(QtWarningMsg, "QProgressDialog::setCancelButton: Attempt to set the same button again");
+        dlg.setCancelButton(btn); // setting the same widget again should not crash
+        QVERIFY(btn);             // and not delete the (old == new) widget
+
+        QVERIFY(!dlg.isAncestorOf(bar));
+        dlg.setBar(bar);
+        QVERIFY(dlg.isAncestorOf(bar));
+        QTest::ignoreMessage(QtWarningMsg, "QProgressDialog::setBar: Attempt to set the same progress bar again");
+        dlg.setBar(bar);          // setting the same widget again should not crash
+        QVERIFY(bar);             // and not delete the (old == new) widget
+    }
+
+    QVERIFY(!l);
+    QVERIFY(!btn);
+    QVERIFY(!bar);
+}
+
+class QTestTranslator : public QTranslator
+{
+    const QString m_str;
+public:
+    explicit QTestTranslator(QString str) : m_str(qMove(str)) {}
+
+    QString translate(const char *, const char *sourceText, const char *, int) const Q_DECL_OVERRIDE
+    { return m_str + sourceText + m_str; }
+
+    bool isEmpty() const Q_DECL_OVERRIDE { return false; }
+};
+
+template <typename Translator>
+class QTranslatorGuard {
+    Translator t;
+public:
+    template <typename Arg>
+    explicit QTranslatorGuard(Arg a) : t(qMove(a))
+    { qApp->installTranslator(&t); }
+    ~QTranslatorGuard()
+    { qApp->removeTranslator(&t); }
+};
+
+void tst_QProgressDialog::i18n()
+{
+    QProgressDialog dlg;
+    QPushButton *btn = dlg.findChild<QPushButton*>();
+    QVERIFY(btn);
+    const QString xxx = QStringLiteral("xxx");
+    {
+        QTranslatorGuard<QTestTranslator> guard(xxx);
+        {
+            QPushButton *btn = dlg.findChild<QPushButton*>();
+            QVERIFY(btn);
+            QTRY_COMPARE(btn->text(), QProgressDialog::tr("Cancel"));
+            QVERIFY(btn->text().startsWith(xxx));
+        }
+    }
+    QVERIFY(btn);
+    QTRY_COMPARE(btn->text(), QProgressDialog::tr("Cancel"));
+    QVERIFY(!btn->text().startsWith(xxx));
 }
 
 QTEST_MAIN(tst_QProgressDialog)

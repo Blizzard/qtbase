@@ -1,0 +1,12 @@
+[ioGetFromBuiltinHttp:http+limited]
+osx
+[ioGetFromBuiltinHttp:https+limited]
+osx
+[synchronousRequest:https]
+osx
+[SslHandshakeFailedError]
+osx
+[httpAbort]
+*
+[backgroundRequestInterruption:ftp, bg, nobg]
+*

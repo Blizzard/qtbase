@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -125,6 +117,9 @@ private slots:
     void selectColumn_data();
     void selectColumn();
 
+    void selectall_data();
+    void selectall();
+
     void visualRect_data();
     void visualRect();
 
@@ -178,6 +173,8 @@ private slots:
     void spansAfterColumnInsertion();
     void spansAfterRowRemoval();
     void spansAfterColumnRemoval();
+    void editSpanFromDirections_data();
+    void editSpanFromDirections();
 
     void checkHeaderReset();
     void checkHeaderMinSize();
@@ -1240,28 +1237,28 @@ void tst_QTableView::moveCursorStrikesBack_data()
             << IntList()
             << QRect(1, 2, 2, 3)
             << 2 << 0 << (IntList() << int(QtTestTableView::MoveNext))
-            << 2 << 2;
+            << 2 << 1;
 
     QTest::newRow("Span, anchor column disabled") << -1 << -1
             << IntList()
             << (IntList() << 1)
             << QRect(1, 2, 2, 3)
             << 2 << 0 << (IntList() << int(QtTestTableView::MoveNext))
-            << 2 << 2;
+            << 2 << 1;
 
     QTest::newRow("Span, anchor row hidden") << 2 << -1
             << IntList()
             << IntList()
             << QRect(1, 2, 2, 3)
             << 1 << 2 << (IntList() << int(QtTestTableView::MoveDown))
-            << 3 << 2;
+            << 2 << 1;
 
     QTest::newRow("Span, anchor row disabled") << -1 << -1
             << (IntList() << 2)
             << IntList()
             << QRect(1, 2, 2, 3)
             << 1 << 2 << (IntList() << int(QtTestTableView::MoveDown))
-            << 3 << 2;
+            << 2 << 1;
 
     QTest::newRow("Move through span right") << -1 << -1
             << IntList()
@@ -1888,6 +1885,162 @@ void tst_QTableView::selectColumn()
     QCOMPARE(view.selectionModel()->selectedIndexes().count(), selectedItems);
     for (int i = 0; selectedItems > 0 && i < columnCount; ++i)
         QCOMPARE(view.selectionModel()->selectedIndexes().at(i).column(), column);
+}
+
+void tst_QTableView::selectall_data()
+{
+    QTest::addColumn<int>("rowCount");
+    QTest::addColumn<int>("columnCount");
+    QTest::addColumn<int>("row");
+    QTest::addColumn<int>("column");
+    QTest::addColumn<int>("rowSpan");
+    QTest::addColumn<int>("columnSpan");
+    QTest::addColumn<int>("hideRow");
+    QTest::addColumn<int>("hideColumn");
+    QTest::addColumn<int>("moveRowFrom");
+    QTest::addColumn<int>("moveRowTo");
+    QTest::addColumn<int>("moveColumnFrom");
+    QTest::addColumn<int>("moveColumnTo");
+    QTest::addColumn<int>("rowHeight");
+    QTest::addColumn<int>("columnWidth");
+    QTest::addColumn<int>("selectedCount"); // ### make this more detailed
+
+    QTest::newRow("no span, no hidden, no moved")
+      << 10 << 10                          // dim
+      << -1 << -1                          // pos
+      << 1 << 1                            // span
+      << -1 << -1                          // hide
+      << -1 << -1                          // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 100;                              // selected count
+
+    QTest::newRow("row span, no hidden, no moved")
+      << 10 << 10                          // dim
+      << 1 << 1                            // pos
+      << 2 << 1                            // span
+      << -1 << -1                          // hide
+      << -1 << -1                          // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 99;                               // selected count
+
+    QTest::newRow("col span, no hidden, no moved")
+      << 10 << 10                          // dim
+      << 1 << 1                            // pos
+      << 1 << 2                            // span
+      << -1 << -1                          // hide
+      << -1 << -1                          // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 99;                               // selected count
+
+    QTest::newRow("no span, row hidden, no moved")
+      << 10 << 10                          // dim
+      << -1 << -1                          // pos
+      << 1 << 1                            // span
+      << 1 << -1                           // hide
+      << -1 << -1                          // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 90;                               // selected count
+
+    QTest::newRow("no span, col hidden, no moved")
+      << 10 << 10                          // dim
+      << -1 << -1                          // pos
+      << 1 << 1                            // span
+      << -1 << 1                           // hide
+      << -1 << -1                          // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 90;                               // selected count
+
+    QTest::newRow("no span, no hidden, row moved")
+      << 10 << 10                          // dim
+      << -1 << -1                          // pos
+      << 1 << 1                            // span
+      << -1 << -1                          // hide
+      << 1 << 3                            // move row
+      << -1 << -1                          // move col
+      << 40 << 40                          // cell size
+      << 100;                              // selected count
+
+    QTest::newRow("no span, no hidden, col moved")
+      << 10 << 10                          // dim
+      << -1 << -1                          // pos
+      << 1 << 1                            // span
+      << -1 << -1                          // hide
+      << -1 << -1                          // move row
+      << 1 << 3                            // move col
+      << 40 << 40                          // cell size
+      << 100;                              // selected count
+}
+
+void QTest__keySequence(QWidget* widget, QKeySequence ks)
+{
+    for (int i=0; i<ks.count(); ++i)
+    {
+        Qt::Key key = Qt::Key(ks[i] & ~Qt::KeyboardModifierMask);
+        Qt::KeyboardModifiers modifiers = Qt::KeyboardModifiers(ks[i] & Qt::KeyboardModifierMask);
+        QTest::keyClick(widget, key, modifiers);
+    }
+}
+
+void tst_QTableView::selectall()
+{
+    QFETCH(int, rowCount);
+    QFETCH(int, columnCount);
+    QFETCH(int, row);
+    QFETCH(int, column);
+    QFETCH(int, rowSpan);
+    QFETCH(int, columnSpan);
+    QFETCH(int, hideRow);
+    QFETCH(int, hideColumn);
+    QFETCH(int, moveRowFrom);
+    QFETCH(int, moveRowTo);
+    QFETCH(int, moveColumnFrom);
+    QFETCH(int, moveColumnTo);
+    QFETCH(int, rowHeight);
+    QFETCH(int, columnWidth);
+    QFETCH(int, selectedCount);
+
+    QtTestTableModel model(rowCount, columnCount);
+
+    QtTestTableView view;
+    view.show();
+    view.setModel(&model);
+
+    view.setSpan(row, column, rowSpan, columnSpan);
+
+    view.hideRow(hideRow);
+    view.hideColumn(hideColumn);
+
+    view.verticalHeader()->moveSection(moveRowFrom, moveRowTo);
+    view.horizontalHeader()->moveSection(moveColumnFrom, moveColumnTo);
+
+    for (int r = 0; r < rowCount; ++r)
+        view.setRowHeight(r, rowHeight);
+    for (int c = 0; c < columnCount; ++c)
+        view.setColumnWidth(c, columnWidth);
+
+    // try slot first
+    view.clearSelection();
+    QCOMPARE(view.selectedIndexes().count(), 0);
+    view.selectAll();
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
+
+    // try by key sequence
+    view.clearSelection();
+    QCOMPARE(view.selectedIndexes().count(), 0);
+    QTest__keySequence(&view, QKeySequence(QKeySequence::SelectAll));
+    QCOMPARE(view.selectedIndexes().count(), selectedCount);
+
+    // check again with no selection mode
+    view.clearSelection();
+    view.setSelectionMode(QAbstractItemView::NoSelection);
+    QCOMPARE(view.selectedIndexes().count(), 0);
+    QTest__keySequence(&view, QKeySequence(QKeySequence::SelectAll));
+    QCOMPARE(view.selectedIndexes().count(), 0);
 }
 
 void tst_QTableView::visualRect_data()
@@ -3276,6 +3429,159 @@ void tst_QTableView::spansAfterColumnRemoval()
     }
 
     VERIFY_SPANS_CONSISTENCY(&view);
+}
+
+Q_DECLARE_METATYPE(Qt::Key)
+
+void tst_QTableView::editSpanFromDirections_data()
+{
+    QTest::addColumn<QList<Qt::Key> >("keyPresses");
+    QTest::addColumn<QSharedPointer<QStandardItemModel> >("model");
+    QTest::addColumn<int>("row");
+    QTest::addColumn<int>("column");
+    QTest::addColumn<int>("rowSpan");
+    QTest::addColumn<int>("columnSpan");
+    QTest::addColumn<QModelIndex>("expectedVisualCursorIndex");
+    QTest::addColumn<QModelIndex>("expectedEditedIndex");
+
+    /* x = the cell that should be edited
+       c = the cell that should actually be the current index
+       +---+---+
+       |   |   |
+       +---+---+
+       |   | x |
+       +---+   +
+       |   | c |
+       +---+---+
+       |   | ^ |
+       +---+---+ */
+    QList<Qt::Key> keyPresses;
+    keyPresses << Qt::Key_Right << Qt::Key_PageDown << Qt::Key_Up;
+    QSharedPointer<QStandardItemModel> model(new QStandardItemModel(4, 2));
+    QTest::newRow("row span, bottom up")
+        << keyPresses << model << 1 << 1 << 2 << 1 << model->index(2, 1) << model->index(1, 1);
+
+    /* +---+---+
+       |   | v |
+       +---+---+
+       |   |x,c|
+       +---+   +
+       |   |   |
+       +---+---+
+       |   |   |
+       +---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_Right << Qt::Key_Down;
+    model.reset(new QStandardItemModel(4, 2));
+    QTest::newRow("row span, top down")
+        << keyPresses << model << 1 << 1 << 2 << 1 << model->index(1, 1) << model->index(1, 1);
+
+    /* +---+---+---+
+       |   |   |   |
+       +---+---+---+
+       |   |x,c| < |
+       +---+   +---+
+       |   |   |   |
+       +---+---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_End << Qt::Key_Down << Qt::Key_Left;
+    model.reset(new QStandardItemModel(3, 3));
+    QTest::newRow("row span, right to left")
+        << keyPresses << model << 1 << 1 << 2 << 1 << model->index(1, 1) << model->index(1, 1);
+
+    /* +---+---+---+
+       |   |   |   |
+       +---+---+---+
+       |   | x |   |
+       +---+   +---+
+       | > | c |   |
+       +---+---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_PageDown << Qt::Key_Right;
+    model.reset(new QStandardItemModel(3, 3));
+    QTest::newRow("row span, left to right")
+        << keyPresses << model << 1 << 1 << 2 << 1 << model->index(2, 1) << model->index(1, 1);
+
+    /* +---+---+---+
+       |   |   |   |
+       +---+---+---+
+       |x,c        |
+       +---+---+---+
+       | ^ |   |   |
+       +---+---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_PageDown << Qt::Key_Up;
+    model.reset(new QStandardItemModel(3, 3));
+    QTest::newRow("col span, bottom up")
+        << keyPresses << model << 1 << 0 << 1 << 3 << model->index(1, 0) << model->index(1, 0);
+
+    /* +---+---+---+
+       |   |   |   |
+       +---+---+---+
+       | x   c     |
+       +---+---+---+
+       |   | ^ |   |
+       +---+---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_PageDown << Qt::Key_Right << Qt::Key_Up;
+    model.reset(new QStandardItemModel(3, 3));
+    QTest::newRow("col span, bottom up #2")
+        << keyPresses << model << 1 << 0 << 1 << 3 << model->index(1, 1) << model->index(1, 0);
+
+    /* +---+---+---+
+       |   |   | v |
+       +---+---+---+
+       | x       c |
+       +---+---+---+
+       |   |   |   |
+       +---+---+---+ */
+    keyPresses.clear();
+    keyPresses << Qt::Key_End << Qt::Key_Down;
+    model.reset(new QStandardItemModel(3, 3));
+    QTest::newRow("col span, top down")
+        << keyPresses << model << 1 << 0 << 1 << 3 << model->index(1, 2) << model->index(1, 0);
+}
+
+class TableViewWithCursorExposed : public QTableView
+{
+public:
+    TableViewWithCursorExposed() :
+        QTableView() {
+    }
+
+public:
+    QModelIndex visualCursorIndex() {
+        QTableViewPrivate *d = static_cast<QTableViewPrivate*>(qt_widget_private(this));
+        return d->model->index(d->visualCursor.y(), d->visualCursor.x());
+    }
+};
+
+void tst_QTableView::editSpanFromDirections()
+{
+    QFETCH(QList<Qt::Key>, keyPresses);
+    QFETCH(QSharedPointer<QStandardItemModel>, model);
+    QFETCH(int, row);
+    QFETCH(int, column);
+    QFETCH(int, rowSpan);
+    QFETCH(int, columnSpan);
+    QFETCH(QModelIndex, expectedVisualCursorIndex);
+    QFETCH(QModelIndex, expectedEditedIndex);
+
+    TableViewWithCursorExposed view;
+    view.setModel(model.data());
+    view.setSpan(row, column, rowSpan, columnSpan);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+
+    foreach (Qt::Key key, keyPresses) {
+        QTest::keyClick(&view, key);
+    }
+    QCOMPARE(view.visualCursorIndex(), expectedVisualCursorIndex);
+    QCOMPARE(view.selectionModel()->currentIndex(), expectedEditedIndex);
+
+    QTest::keyClick(&view, Qt::Key_X);
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Enter);
+    QTRY_COMPARE(view.model()->data(expectedEditedIndex).toString(), QLatin1String("x"));
 }
 
 class Model : public QAbstractTableModel {

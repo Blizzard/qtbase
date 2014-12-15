@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -64,7 +56,7 @@ static inline void setFrameless(QWidget *w)
     w->setWindowFlags(flags);
 }
 
-class tst_QWidget_window : public QWidget
+class tst_QWidget_window : public QObject
 {
     Q_OBJECT
 
@@ -74,6 +66,7 @@ public:
 public slots:
     void initTestCase();
     void cleanupTestCase();
+    void cleanup();
 
 private slots:
     void tst_min_max_size();
@@ -99,8 +92,11 @@ private slots:
 #endif
 
     void tst_qtbug35600();
+    void tst_updateWinId_QTBUG40681();
     void tst_recreateWindow_QTBUG40817();
 
+    void tst_resize_count();
+    void tst_move_count();
 };
 
 void tst_QWidget_window::initTestCase()
@@ -111,9 +107,13 @@ void tst_QWidget_window::cleanupTestCase()
 {
 }
 
+void tst_QWidget_window::cleanup()
+{
+    QVERIFY(QApplication::topLevelWidgets().isEmpty());
+}
+
 /* Test if the maximum/minimum size constraints
- * are propagated from the wid  src/widgets/kernel/qwidgetwindow_qpa_p.h
-get to the QWidgetWindow
+ * are propagated from the widget to the QWidgetWindow
  * independently of whether they were set before or after
  * window creation (QTBUG-26745). */
 
@@ -603,6 +603,34 @@ void tst_QWidget_window::tst_qtbug35600()
     // QTBUG-35600: program may crash here or on exit
 }
 
+void tst_QWidget_window::tst_updateWinId_QTBUG40681()
+{
+    QWidget w;
+    QVBoxLayout *vl = new QVBoxLayout(&w);
+    QLabel *lbl = new QLabel("HELLO1");
+    lbl->setAttribute(Qt::WA_NativeWindow);
+    lbl->setObjectName("label1");
+    vl->addWidget(lbl);
+    w.setMinimumWidth(200);
+
+    w.show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+
+    QCOMPARE(lbl->winId(), lbl->windowHandle()->winId());
+
+     // simulate screen change and notification
+    QWindow *win = w.windowHandle();
+    w.windowHandle()->destroy();
+    lbl->windowHandle()->destroy();
+    w.windowHandle()->create();
+    lbl->windowHandle()->create();
+    QWindowPrivate *p = qt_window_private(win);
+    p->emitScreenChangedRecursion(win->screen());
+
+    QCOMPARE(lbl->winId(), lbl->windowHandle()->winId());
+}
+
 void tst_QWidget_window::tst_recreateWindow_QTBUG40817()
 {
     QTabWidget tab;
@@ -634,6 +662,105 @@ void tst_QWidget_window::tst_recreateWindow_QTBUG40817()
     tab.setCurrentIndex(1);
 }
 
+class ResizeWidget : public QWidget
+{
+Q_OBJECT
+public:
+    ResizeWidget(QWidget *parent = 0)
+        : QWidget(parent)
+        , resizeCount(0)
+    { }
+
+    int resizeCount;
+
+protected:
+    void resizeEvent(QResizeEvent *) Q_DECL_OVERRIDE
+    {
+        resizeCount++;
+    }
+};
+
+void tst_QWidget_window::tst_resize_count()
+{
+    {
+        ResizeWidget resize;
+        resize.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&resize));
+        QCOMPARE(resize.resizeCount, 1);
+        resize.resizeCount = 0;
+        QSize size = resize.size();
+        size.rwidth() += 10;
+        resize.resize(size);
+        QGuiApplication::sync();
+        QTRY_COMPARE(resize.resizeCount, 1);
+
+        resize.resizeCount = 0;
+
+        ResizeWidget child(&resize);
+        child.resize(200,200);
+        child.winId();
+        child.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&child));
+        QGuiApplication::sync();
+        QTRY_COMPARE(child.resizeCount, 1);
+        child.resizeCount = 0;
+        size = child.size();
+        size.rwidth() += 10;
+        child.resize(size);
+        QGuiApplication::sync();
+        QCOMPARE(resize.resizeCount, 0);
+        QCOMPARE(child.resizeCount, 1);
+    }
+    {
+        ResizeWidget parent;
+        ResizeWidget child(&parent);
+        child.resize(200,200);
+        child.winId();
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        parent.resizeCount = 0;
+        QGuiApplication::sync();
+        QTRY_COMPARE(child.resizeCount, 1);
+        child.resizeCount = 0;
+        QSize size = child.size();
+        size.rwidth() += 10;
+        child.resize(size);
+        QGuiApplication::sync();
+        QCOMPARE(parent.resizeCount, 0);
+        QCOMPARE(child.resizeCount, 1);
+    }
+
+}
+
+class MoveWidget : public QWidget
+{
+Q_OBJECT
+public:
+    MoveWidget(QWidget *parent = 0)
+        : QWidget(parent)
+        , moveCount(0)
+    { }
+
+    void moveEvent(QMoveEvent *) Q_DECL_OVERRIDE
+    {
+        moveCount++;
+    }
+
+    int moveCount;
+};
+
+void tst_QWidget_window::tst_move_count()
+{
+    MoveWidget move;
+    move.move(500,500);
+    move.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&move));
+    QTRY_VERIFY(move.moveCount >= 1);
+    move.moveCount = 0;
+
+    move.move(220,250);
+    QTRY_VERIFY(move.moveCount >= 1);
+}
 
 QTEST_MAIN(tst_QWidget_window)
 #include "tst_qwidget_window.moc"

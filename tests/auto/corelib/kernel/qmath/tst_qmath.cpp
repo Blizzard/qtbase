@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Copyright (C) 2013 Laszlo Papp <lpapp@kde.org>
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,14 @@ private slots:
     void degreesToRadians();
     void radiansToDegrees_data();
     void radiansToDegrees();
+    void qNextPowerOfTwo32S_data();
+    void qNextPowerOfTwo32S();
+    void qNextPowerOfTwo64S_data();
+    void qNextPowerOfTwo64S();
+    void qNextPowerOfTwo32U_data();
+    void qNextPowerOfTwo32U();
+    void qNextPowerOfTwo64U_data();
+    void qNextPowerOfTwo64U();
 };
 
 void tst_QMath::fastSinCos()
@@ -135,6 +135,117 @@ void tst_QMath::radiansToDegrees()
 
     QCOMPARE(qRadiansToDegrees(radiansFloat), degreesFloat);
     QCOMPARE(qRadiansToDegrees(radiansDouble), degreesDouble);
+}
+
+
+void tst_QMath::qNextPowerOfTwo32S_data()
+{
+    QTest::addColumn<qint32>("input");
+    QTest::addColumn<quint32>("output");
+
+    QTest::newRow("0") << 0 << 1U;
+    QTest::newRow("1") << 1 << 2U;
+    QTest::newRow("2") << 2 << 4U;
+    QTest::newRow("17") << 17 << 32U;
+    QTest::newRow("128") << 128 << 256U;
+    QTest::newRow("65535") << 65535 << 65536U;
+    QTest::newRow("65536") << 65536 << 131072U;
+    QTest::newRow("2^30") << (1 << 30) << (1U << 31);
+    QTest::newRow("2^30 + 1") << (1 << 30) + 1 << (1U << 31);
+    QTest::newRow("2^31 - 1") << 0x7FFFFFFF << (1U<<31);
+    QTest::newRow("-1") << -1 << 0U;
+    QTest::newRow("-128") << -128 << 0U;
+    QTest::newRow("-(2^31)") << int(0x80000000) << 0U;
+}
+
+void tst_QMath::qNextPowerOfTwo32S()
+{
+    QFETCH(qint32, input);
+    QFETCH(quint32, output);
+
+    QCOMPARE(qNextPowerOfTwo(input), output);
+}
+
+void tst_QMath::qNextPowerOfTwo32U_data()
+{
+    QTest::addColumn<quint32>("input");
+    QTest::addColumn<quint32>("output");
+
+    QTest::newRow("0") << 0U << 1U;
+    QTest::newRow("1") << 1U << 2U;
+    QTest::newRow("2") << 2U << 4U;
+    QTest::newRow("17") << 17U << 32U;
+    QTest::newRow("128") << 128U << 256U;
+    QTest::newRow("65535") << 65535U << 65536U;
+    QTest::newRow("65536") << 65536U << 131072U;
+    QTest::newRow("2^30") << (1U << 30) << (1U << 31);
+    QTest::newRow("2^30 + 1") << (1U << 30) + 1 << (1U << 31);
+    QTest::newRow("2^31 - 1") << 2147483647U << 2147483648U;
+    QTest::newRow("2^31") << 2147483648U << 0U;
+    QTest::newRow("2^31 + 1") << 2147483649U << 0U;
+}
+
+void tst_QMath::qNextPowerOfTwo32U()
+{
+    QFETCH(quint32, input);
+    QFETCH(quint32, output);
+
+    QCOMPARE(qNextPowerOfTwo(input), output);
+}
+
+void tst_QMath::qNextPowerOfTwo64S_data()
+{
+    QTest::addColumn<qint64>("input");
+    QTest::addColumn<quint64>("output");
+
+    QTest::newRow("0") << Q_INT64_C(0) << Q_UINT64_C(1);
+    QTest::newRow("1") << Q_INT64_C(1) << Q_UINT64_C(2);
+    QTest::newRow("2") << Q_INT64_C(2) << Q_UINT64_C(4);
+    QTest::newRow("17") << Q_INT64_C(17) << Q_UINT64_C(32);
+    QTest::newRow("128") << Q_INT64_C(128) << Q_UINT64_C(256);
+    QTest::newRow("65535") << Q_INT64_C(65535) << Q_UINT64_C(65536);
+    QTest::newRow("65536") << Q_INT64_C(65536) << Q_UINT64_C(131072);
+    QTest::newRow("2^31 - 1") << Q_INT64_C(2147483647) << Q_UINT64_C(0x80000000);
+    QTest::newRow("2^31") << Q_INT64_C(2147483648) << Q_UINT64_C(0x100000000);
+    QTest::newRow("2^31 + 1") << Q_INT64_C(2147483649) << Q_UINT64_C(0x100000000);
+    QTest::newRow("2^63 - 1") << Q_INT64_C(0x7FFFFFFFFFFFFFFF) << Q_UINT64_C(0x8000000000000000);
+    QTest::newRow("-1") << Q_INT64_C(-1) << Q_UINT64_C(0);
+    QTest::newRow("-128") << Q_INT64_C(-128) << Q_UINT64_C(0);
+    QTest::newRow("-(2^31)") << -Q_INT64_C(0x80000000) << Q_UINT64_C(0);
+    QTest::newRow("-(2^63)") << (qint64)Q_INT64_C(0x8000000000000000) << Q_UINT64_C(0);
+}
+
+void tst_QMath::qNextPowerOfTwo64S()
+{
+    QFETCH(qint64, input);
+    QFETCH(quint64, output);
+
+    QCOMPARE(qNextPowerOfTwo(input), output);
+}
+
+void tst_QMath::qNextPowerOfTwo64U_data()
+{
+    QTest::addColumn<quint64>("input");
+    QTest::addColumn<quint64>("output");
+
+    QTest::newRow("0") << Q_UINT64_C(0) << Q_UINT64_C(1);
+    QTest::newRow("1") << Q_UINT64_C(1) << Q_UINT64_C(2);
+    QTest::newRow("2") << Q_UINT64_C(2) << Q_UINT64_C(4);
+    QTest::newRow("17") << Q_UINT64_C(17) << Q_UINT64_C(32);
+    QTest::newRow("128") << Q_UINT64_C(128) << Q_UINT64_C(256);
+    QTest::newRow("65535") << Q_UINT64_C(65535) << Q_UINT64_C(65536);
+    QTest::newRow("65536") << Q_UINT64_C(65536) << Q_UINT64_C(131072);
+    QTest::newRow("2^63 - 1") << Q_UINT64_C(0x7FFFFFFFFFFFFFFF)  << Q_UINT64_C(0x8000000000000000);
+    QTest::newRow("2^63") << Q_UINT64_C(0x8000000000000000) << Q_UINT64_C(0);
+    QTest::newRow("2^63 + 1") << Q_UINT64_C(0x8000000000000001) << Q_UINT64_C(0);
+}
+
+void tst_QMath::qNextPowerOfTwo64U()
+{
+    QFETCH(quint64, input);
+    QFETCH(quint64, output);
+
+    QCOMPARE(qNextPowerOfTwo(input), output);
 }
 
 QTEST_APPLESS_MAIN(tst_QMath)

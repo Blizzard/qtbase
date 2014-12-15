@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -172,14 +164,18 @@ void tst_QObjectRace::moveToThreadRace()
 
 class MyObject : public QObject
 {   Q_OBJECT
+        bool ok;
+    public:
+        MyObject() : ok(true) {}
+        ~MyObject() { Q_ASSERT(ok); ok = false; }
     public slots:
-        void slot1() { emit signal1(); }
-        void slot2() { emit signal2(); }
-        void slot3() { emit signal3(); }
-        void slot4() { emit signal4(); }
-        void slot5() { emit signal5(); }
-        void slot6() { emit signal6(); }
-        void slot7() { emit signal7(); }
+        void slot1() { Q_ASSERT(ok); }
+        void slot2() { Q_ASSERT(ok); }
+        void slot3() { Q_ASSERT(ok); }
+        void slot4() { Q_ASSERT(ok); }
+        void slot5() { Q_ASSERT(ok); }
+        void slot6() { Q_ASSERT(ok); }
+        void slot7() { Q_ASSERT(ok); }
     signals:
         void signal1();
         void signal2();
@@ -237,6 +233,10 @@ public:
             disconnect(objects[((i+4)*41) % nAlive], _signalsPMF[(18*i)%7], objects[((i+5)*43) % nAlive],  _slotsPMF[(19*i+2)%7] );
 
             QMetaObject::Connection c = connect(objects[((i+5)*43) % nAlive], _signalsPMF[(9*i+1)%7], Functor());
+
+            for (int f = 0; f < 7; ++f)
+                emit (objects[i]->*_signalsPMF[f])();
+
             disconnect(c);
 
             disconnect(objects[i], _signalsPMF[(10*i+5)%7], 0, 0);
@@ -249,6 +249,9 @@ public:
 
             delete objects[i];
         }
+
+        //run the possible queued slots
+        qApp->processEvents();
     }
 };
 

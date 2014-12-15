@@ -5,35 +5,27 @@
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,11 +40,12 @@
 #include "qwindowsdirect2ddevicecontext.h"
 
 #include "qwindowsfontengine.h"
-#include "qwindowsfontenginedirectwrite.h"
 #include "qwindowsfontdatabase.h"
 #include "qwindowsintegration.h"
 
+#include <QtCore/QtMath>
 #include <QtCore/QStack>
+#include <QtCore/QSettings>
 #include <QtGui/private/qpaintengine_p.h>
 #include <QtGui/private/qtextengine_p.h>
 #include <QtGui/private/qfontengine_p.h>
@@ -107,6 +100,16 @@ Q_GUI_EXPORT QImage qt_imageForBrush(int brushStyle, bool invert);
 static inline ID2D1Factory1 *factory()
 {
     return QWindowsDirect2DContext::instance()->d2dFactory();
+}
+
+static inline D2D1_MATRIX_3X2_F transformFromLine(const QLineF &line, qreal penWidth)
+{
+    const qreal halfWidth = penWidth / 2;
+    const qreal angle = -qDegreesToRadians(line.angle());
+    QTransform transform = QTransform::fromTranslate(line.p1().x() + qSin(angle) * halfWidth,
+                                                     line.p1().y() - qCos(angle) * halfWidth);
+    transform.rotateRadians(angle);
+    return to_d2d_matrix_3x2_f(transform);
 }
 
 class Direct2DPathGeometryWriter
@@ -226,9 +229,10 @@ class QWindowsDirect2DPaintEnginePrivate : public QPaintEngineExPrivate
 {
     Q_DECLARE_PUBLIC(QWindowsDirect2DPaintEngine)
 public:
-    QWindowsDirect2DPaintEnginePrivate(QWindowsDirect2DBitmap *bm)
+    QWindowsDirect2DPaintEnginePrivate(QWindowsDirect2DBitmap *bm, QWindowsDirect2DPaintEngine::Flags flags)
         : bitmap(bm)
         , clipFlags(0)
+        , flags(flags)
     {
         pen.reset();
         brush.reset();
@@ -237,25 +241,29 @@ public:
     }
 
     QWindowsDirect2DBitmap *bitmap;
+    QImage fallbackImage;
 
     unsigned int clipFlags;
     QStack<ClipType> pushedClips;
+    QWindowsDirect2DPaintEngine::Flags flags;
 
     QPointF currentBrushOrigin;
 
-    QHash< QFont, ComPtr<IDWriteFontFace> > fontCache;
+    QHash< QFontDef, ComPtr<IDWriteFontFace> > fontCache;
 
     struct {
         bool emulate;
         QPen qpen;
         ComPtr<ID2D1Brush> brush;
         ComPtr<ID2D1StrokeStyle1> strokeStyle;
+        ComPtr<ID2D1BitmapBrush1> dashBrush;
 
         inline void reset() {
             emulate = false;
             qpen = QPen();
             brush.Reset();
             strokeStyle.Reset();
+            dashBrush.Reset();
         }
     } pen;
 
@@ -289,6 +297,14 @@ public:
         Q_Q(const QWindowsDirect2DPaintEngine);
         return (q->state()->renderHints & QPainter::Antialiasing) ? D2D1_ANTIALIAS_MODE_PER_PRIMITIVE
                                                                   : D2D1_ANTIALIAS_MODE_ALIASED;
+    }
+
+    inline D2D1_LAYER_OPTIONS1 layerOptions() const
+    {
+        if (flags & QWindowsDirect2DPaintEngine::TranslucentTopLevelWindow)
+            return D2D1_LAYER_OPTIONS1_NONE;
+        else
+            return D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND;
     }
 
     void updateTransform(const QTransform &transform)
@@ -336,7 +352,7 @@ public:
                                                    D2D1::IdentityMatrix(),
                                                    1.0,
                                                    NULL,
-                                                   D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND),
+                                                   layerOptions()),
                             NULL);
             pushedClips.push(LayerClip);
         }
@@ -391,7 +407,10 @@ public:
             break;
 
         default:
-            qWarning("Unsupported composition mode: %d", mode);
+            // Activating an unsupported mode at any time will cause the QImage
+            // fallback to be used for the remainder of the active paint session
+            dc()->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_COPY);
+            flags |= QWindowsDirect2DPaintEngine::EmulateComposition;
             break;
         }
     }
@@ -522,12 +541,31 @@ public:
         if (props.dashStyle == D2D1_DASH_STYLE_CUSTOM) {
             QVector<qreal> dashes = newPen.dashPattern();
             QVector<FLOAT> converted(dashes.size());
-
+            qreal penWidth = pen.qpen.widthF();
+            qreal brushWidth = 0;
             for (int i = 0; i < dashes.size(); i++) {
                 converted[i] = dashes[i];
+                brushWidth += penWidth * dashes[i];
             }
 
             hr = factory()->CreateStrokeStyle(props, converted.constData(), converted.size(), &pen.strokeStyle);
+
+            // Create a combined brush/dash pattern for optimized line drawing
+            QWindowsDirect2DBitmap bitmap;
+            bitmap.resize(ceil(brushWidth), ceil(penWidth));
+            bitmap.deviceContext()->begin();
+            bitmap.deviceContext()->get()->SetAntialiasMode(antialiasMode());
+            bitmap.deviceContext()->get()->SetTransform(D2D1::IdentityMatrix());
+            bitmap.deviceContext()->get()->Clear();
+            const qreal offsetX = (qreal(bitmap.size().width()) - brushWidth) / 2;
+            const qreal offsetY = qreal(bitmap.size().height()) / 2;
+            bitmap.deviceContext()->get()->DrawLine(D2D1::Point2F(offsetX, offsetY),
+                                                    D2D1::Point2F(brushWidth, offsetY),
+                                                    pen.brush.Get(), penWidth, pen.strokeStyle.Get());
+            bitmap.deviceContext()->end();
+            D2D1_BITMAP_BRUSH_PROPERTIES1 bitmapBrushProperties = D2D1::BitmapBrushProperties1(
+                        D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_CLAMP, D2D1_INTERPOLATION_MODE_LINEAR);
+            hr = dc()->CreateBitmapBrush(bitmap.bitmap(), bitmapBrushProperties, &pen.dashBrush);
         } else {
             hr = factory()->CreateStrokeStyle(props, NULL, 0, &pen.strokeStyle);
         }
@@ -836,10 +874,79 @@ public:
     {
         dc()->SetAntialiasMode(antialiasMode());
     }
+
+    void drawGlyphRun(const D2D1_POINT_2F &pos,
+                      IDWriteFontFace *fontFace,
+                      const QFontDef &fontDef,
+                      int numGlyphs,
+                      const UINT16 *glyphIndices,
+                      const FLOAT *glyphAdvances,
+                      const DWRITE_GLYPH_OFFSET *glyphOffsets,
+                      bool rtl)
+    {
+        Q_Q(QWindowsDirect2DPaintEngine);
+
+        DWRITE_GLYPH_RUN glyphRun = {
+            fontFace,          //    IDWriteFontFace           *fontFace;
+            fontDef.pixelSize, //    FLOAT                     fontEmSize;
+            numGlyphs,         //    UINT32                    glyphCount;
+            glyphIndices,      //    const UINT16              *glyphIndices;
+            glyphAdvances,     //    const FLOAT               *glyphAdvances;
+            glyphOffsets,      //    const DWRITE_GLYPH_OFFSET *glyphOffsets;
+            FALSE,             //    BOOL                      isSideways;
+            rtl ? 1 : 0        //    UINT32                    bidiLevel;
+        };
+
+        const bool antiAlias = bool((q->state()->renderHints & QPainter::TextAntialiasing)
+                                    && !(fontDef.styleStrategy & QFont::NoAntialias));
+        const D2D1_TEXT_ANTIALIAS_MODE antialiasMode = (flags & QWindowsDirect2DPaintEngine::TranslucentTopLevelWindow)
+                ? D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE : D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE;
+        dc()->SetTextAntialiasMode(antiAlias ? antialiasMode : D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
+
+        dc()->DrawGlyphRun(pos,
+                           &glyphRun,
+                           NULL,
+                           pen.brush.Get(),
+                           DWRITE_MEASURING_MODE_GDI_CLASSIC);
+    }
+
+    ComPtr<IDWriteFontFace> fontFaceFromFontEngine(QFontEngine *fe)
+    {
+        const QFontDef fontDef = fe->fontDef;
+        ComPtr<IDWriteFontFace> fontFace = fontCache.value(fontDef);
+        if (fontFace)
+            return fontFace;
+
+        LOGFONT lf = QWindowsFontDatabase::fontDefToLOGFONT(fontDef);
+
+        // Get substitute name
+        static const char keyC[] = "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes";
+        const QString familyName = QString::fromWCharArray(lf.lfFaceName);
+        const QString nameSubstitute = QSettings(QLatin1String(keyC), QSettings::NativeFormat).value(familyName, familyName).toString();
+        memcpy(lf.lfFaceName, nameSubstitute.utf16(), sizeof(wchar_t) * qMin(nameSubstitute.length() + 1, LF_FACESIZE));
+
+        ComPtr<IDWriteFont> dwriteFont;
+        HRESULT hr = QWindowsDirect2DContext::instance()->dwriteGdiInterop()->CreateFontFromLOGFONT(&lf, &dwriteFont);
+        if (FAILED(hr)) {
+            qDebug("%s: CreateFontFromLOGFONT failed: %#x", __FUNCTION__, hr);
+            return fontFace;
+        }
+
+        hr = dwriteFont->CreateFontFace(&fontFace);
+        if (FAILED(hr)) {
+            qDebug("%s: CreateFontFace failed: %#x", __FUNCTION__, hr);
+            return fontFace;
+        }
+
+        if (fontFace)
+            fontCache.insert(fontDef, fontFace);
+
+        return fontFace;
+    }
 };
 
-QWindowsDirect2DPaintEngine::QWindowsDirect2DPaintEngine(QWindowsDirect2DBitmap *bitmap)
-    : QPaintEngineEx(*(new QWindowsDirect2DPaintEnginePrivate(bitmap)))
+QWindowsDirect2DPaintEngine::QWindowsDirect2DPaintEngine(QWindowsDirect2DBitmap *bitmap, Flags flags)
+    : QPaintEngineEx(*(new QWindowsDirect2DPaintEnginePrivate(bitmap, flags)))
 {
     QPaintEngine::PaintEngineFeatures unsupported =
             // As of 1.1 Direct2D does not natively support complex composition modes
@@ -878,7 +985,7 @@ bool QWindowsDirect2DPaintEngine::begin(QPaintDevice * pdev)
                                                D2D1::IdentityMatrix(),
                                                1.0,
                                                NULL,
-                                               D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND),
+                                               d->layerOptions()),
                         NULL);
     } else {
         QRect clip(0, 0, pdev->width(), pdev->height());
@@ -897,7 +1004,17 @@ bool QWindowsDirect2DPaintEngine::begin(QPaintDevice * pdev)
 bool QWindowsDirect2DPaintEngine::end()
 {
     Q_D(QWindowsDirect2DPaintEngine);
-    // First pop any user-applied clipping
+
+    // Always clear all emulation-related things so we are in a clean state for our next painting run
+    const bool emulatingComposition = d->flags.testFlag(EmulateComposition);
+    d->flags &= ~QWindowsDirect2DPaintEngine::EmulateComposition;
+    if (!d->fallbackImage.isNull()) {
+        if (emulatingComposition)
+            drawImage(d->fallbackImage.rect(), d->fallbackImage, d->fallbackImage.rect());
+        d->fallbackImage = QImage();
+    }
+
+    // Pop any user-applied clipping
     d->clearClips();
     // Now the system clip from begin() above
     if (d->clipFlags & SimpleSystemClip) {
@@ -906,6 +1023,7 @@ bool QWindowsDirect2DPaintEngine::end()
     } else {
         d->dc()->PopLayer();
     }
+
     return d->bitmap->deviceContext()->end();
 }
 
@@ -1210,7 +1328,12 @@ void QWindowsDirect2DPaintEngine::drawLines(const QLine *lines, int lineCount)
             D2D1_POINT_2F d2d_p1 = to_d2d_point_2f(p1);
             D2D1_POINT_2F d2d_p2 = to_d2d_point_2f(p2);
 
-            d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.brush.Get(), d->pen.qpen.widthF(), d->pen.strokeStyle.Get());
+            if (!d->pen.dashBrush || state()->renderHints.testFlag(QPainter::HighQualityAntialiasing)) {
+                d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.brush.Get(), d->pen.qpen.widthF(), d->pen.strokeStyle.Get());
+            } else {
+                d->pen.dashBrush->SetTransform(transformFromLine(lines[i], d->pen.qpen.widthF()));
+                d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.dashBrush.Get(), d->pen.qpen.widthF(), NULL);
+            }
         }
     }
 }
@@ -1246,7 +1369,12 @@ void QWindowsDirect2DPaintEngine::drawLines(const QLineF *lines, int lineCount)
             D2D1_POINT_2F d2d_p1 = to_d2d_point_2f(p1);
             D2D1_POINT_2F d2d_p2 = to_d2d_point_2f(p2);
 
-            d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.brush.Get(), d->pen.qpen.widthF(), d->pen.strokeStyle.Get());
+            if (!d->pen.dashBrush || state()->renderHints.testFlag(QPainter::HighQualityAntialiasing)) {
+                d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.brush.Get(), d->pen.qpen.widthF(), d->pen.strokeStyle.Get());
+            } else {
+                d->pen.dashBrush->SetTransform(transformFromLine(lines[i], d->pen.qpen.widthF()));
+                d->dc()->DrawLine(d2d_p1, d2d_p2, d->pen.dashBrush.Get(), d->pen.qpen.widthF(), NULL);
+            }
         }
     }
 }
@@ -1335,6 +1463,20 @@ void QWindowsDirect2DPaintEngine::drawPixmap(const QRectF &r,
         return;
     }
 
+    if (d->flags.testFlag(EmulateComposition)) {
+        const qreal points[] = {
+            r.x(), r.y(),
+            r.x() + r.width(), r.y(),
+            r.x() + r.width(), r.y() + r.height(),
+            r.x(), r.y() + r.height()
+        };
+        const QVectorPath vp(points, 4, 0, QVectorPath::RectangleHint);
+        QBrush brush(sr.isValid() ? pm.copy(sr.toRect()) : pm);
+        brush.setTransform(QTransform::fromTranslate(r.x(), r.y()));
+        rasterFill(vp, brush);
+        return;
+    }
+
     QWindowsDirect2DPlatformPixmap *pp = static_cast<QWindowsDirect2DPlatformPixmap *>(pm.handle());
     QWindowsDirect2DBitmap *bitmap = pp->bitmap();
 
@@ -1411,7 +1553,7 @@ void QWindowsDirect2DPaintEngine::drawStaticTextItem(QStaticTextItem *staticText
         return;
     }
 
-    ComPtr<IDWriteFontFace> fontFace = fontFaceFromFontEngine(staticTextItem->font, staticTextItem->fontEngine());
+    ComPtr<IDWriteFontFace> fontFace = d->fontFaceFromFontEngine(staticTextItem->fontEngine());
     if (!fontFace) {
         qWarning("%s: Could not find font - falling back to slow text rendering path.", __FUNCTION__);
         QPaintEngineEx::drawStaticTextItem(staticTextItem);
@@ -1432,14 +1574,14 @@ void QWindowsDirect2DPaintEngine::drawStaticTextItem(QStaticTextItem *staticText
         glyphOffsets[i].ascenderOffset = staticTextItem->glyphPositions[i].y.toReal() * -1;
     }
 
-    drawGlyphRun(D2D1::Point2F(0, 0),
-                 fontFace.Get(),
-                 staticTextItem->font,
-                 staticTextItem->numGlyphs,
-                 glyphIndices.constData(),
-                 glyphAdvances.constData(),
-                 glyphOffsets.constData(),
-                 false);
+    d->drawGlyphRun(D2D1::Point2F(0, 0),
+                    fontFace.Get(),
+                    staticTextItem->fontEngine()->fontDef,
+                    staticTextItem->numGlyphs,
+                    glyphIndices.constData(),
+                    glyphAdvances.constData(),
+                    glyphOffsets.constData(),
+                    false);
 }
 
 void QWindowsDirect2DPaintEngine::drawTextItem(const QPointF &p, const QTextItem &textItem)
@@ -1459,7 +1601,7 @@ void QWindowsDirect2DPaintEngine::drawTextItem(const QPointF &p, const QTextItem
         return;
     }
 
-    ComPtr<IDWriteFontFace> fontFace = fontFaceFromFontEngine(*ti.f, ti.fontEngine);
+    ComPtr<IDWriteFontFace> fontFace = d->fontFaceFromFontEngine(ti.fontEngine);
     if (!fontFace) {
         qWarning("%s: Could not find font - falling back to slow text rendering path.", __FUNCTION__);
         QPaintEngine::drawTextItem(p, textItem);
@@ -1482,72 +1624,14 @@ void QWindowsDirect2DPaintEngine::drawTextItem(const QPointF &p, const QTextItem
     const bool rtl = (ti.flags & QTextItem::RightToLeft);
     const QPointF offset(rtl ? ti.width.toReal() : 0, 0);
 
-    drawGlyphRun(to_d2d_point_2f(p + offset),
-                 fontFace.Get(),
-                 ti.font(),
-                 ti.glyphs.numGlyphs,
-                 glyphIndices.constData(),
-                 glyphAdvances.constData(),
-                 glyphOffsets.constData(),
-                 rtl);
-}
-
-inline static FLOAT pointSizeToDIP(qreal pointSize, FLOAT dpiY)
-{
-    return (pointSize + (pointSize / qreal(3.0))) * (dpiY / 96.0f);
-}
-
-inline static FLOAT pixelSizeToDIP(int pixelSize, FLOAT dpiY)
-{
-    return FLOAT(pixelSize) * 96.0f / dpiY;
-}
-
-inline static FLOAT fontSizeInDIP(const QFont &font)
-{
-    FLOAT dpiX, dpiY;
-    QWindowsDirect2DContext::instance()->d2dFactory()->GetDesktopDpi(&dpiX, &dpiY);
-
-    if (font.pixelSize() == -1) {
-        // font size was set as points
-        return pointSizeToDIP(font.pointSizeF(), dpiY);
-    } else {
-        // font size was set as pixels
-        return pixelSizeToDIP(font.pixelSize(), dpiY);
-    }
-}
-
-void QWindowsDirect2DPaintEngine::drawGlyphRun(const D2D1_POINT_2F &pos,
-                                               IDWriteFontFace *fontFace,
-                                               const QFont &font,
-                                               int numGlyphs,
-                                               const UINT16 *glyphIndices,
-                                               const FLOAT *glyphAdvances,
-                                               const DWRITE_GLYPH_OFFSET *glyphOffsets,
-                                               bool rtl)
-{
-    Q_D(QWindowsDirect2DPaintEngine);
-
-    DWRITE_GLYPH_RUN glyphRun = {
-        fontFace,               //    IDWriteFontFace           *fontFace;
-        fontSizeInDIP(font),    //    FLOAT                     fontEmSize;
-        numGlyphs,              //    UINT32                    glyphCount;
-        glyphIndices,           //    const UINT16              *glyphIndices;
-        glyphAdvances,          //    const FLOAT               *glyphAdvances;
-        glyphOffsets,           //    const DWRITE_GLYPH_OFFSET *glyphOffsets;
-        FALSE,                  //    BOOL                      isSideways;
-        rtl ? 1 : 0             //    UINT32                    bidiLevel;
-    };
-
-    const bool antiAlias = bool((state()->renderHints & QPainter::TextAntialiasing)
-                                && !(font.styleStrategy() & QFont::NoAntialias));
-    d->dc()->SetTextAntialiasMode(antiAlias ? D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE
-                                            : D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
-
-    d->dc()->DrawGlyphRun(pos,
-                          &glyphRun,
-                          NULL,
-                          d->pen.brush.Get(),
-                          DWRITE_MEASURING_MODE_GDI_CLASSIC);
+    d->drawGlyphRun(to_d2d_point_2f(p + offset),
+                    fontFace.Get(),
+                    ti.fontEngine->fontDef,
+                    ti.glyphs.numGlyphs,
+                    glyphIndices.constData(),
+                    glyphAdvances.constData(),
+                    glyphOffsets.constData(),
+                    rtl);
 }
 
 void QWindowsDirect2DPaintEngine::ensureBrush()
@@ -1576,9 +1660,17 @@ void QWindowsDirect2DPaintEngine::rasterFill(const QVectorPath &path, const QBru
 {
     Q_D(QWindowsDirect2DPaintEngine);
 
-    QImage img(d->bitmap->size(), QImage::Format_ARGB32);
-    img.fill(Qt::transparent);
+    if (d->fallbackImage.isNull()) {
+        if (d->flags.testFlag(EmulateComposition)) {
+            QWindowsDirect2DPaintEngineSuspender suspender(this);
+            d->fallbackImage = d->bitmap->toImage();
+        } else {
+            d->fallbackImage = QImage(d->bitmap->size(), QImage::Format_ARGB32_Premultiplied);
+            d->fallbackImage.fill(Qt::transparent);
+        }
+    }
 
+    QImage &img = d->fallbackImage;
     QPainter p;
     QPaintEngine *engine = img.paintEngine();
 
@@ -1625,11 +1717,14 @@ void QWindowsDirect2DPaintEngine::rasterFill(const QVectorPath &path, const QBru
         if (!p.end())
             qWarning("%s: Paint Engine end returned false", __FUNCTION__);
 
-        d->updateClipEnabled(false);
-        d->updateTransform(QTransform());
-        drawImage(img.rect(), img, img.rect());
-        transformChanged();
-        clipEnabledChanged();
+        if (!d->flags.testFlag(EmulateComposition)) { // Emulated fallback will be flattened in end()
+            d->updateClipEnabled(false);
+            d->updateTransform(QTransform());
+            drawImage(img.rect(), img, img.rect());
+            d->fallbackImage = QImage();
+            transformChanged();
+            clipEnabledChanged();
+        }
     } else {
         qWarning("%s: Could not fall back to QImage", __FUNCTION__);
     }
@@ -1638,6 +1733,9 @@ void QWindowsDirect2DPaintEngine::rasterFill(const QVectorPath &path, const QBru
 bool QWindowsDirect2DPaintEngine::emulationRequired(EmulationType type) const
 {
     Q_D(const QWindowsDirect2DPaintEngine);
+
+    if (d->flags.testFlag(EmulateComposition))
+        return true;
 
     if (!state()->matrix.isAffine())
         return true;
@@ -1678,49 +1776,71 @@ void QWindowsDirect2DPaintEngine::adjustForAliasing(QPointF *point)
         (*point) += adjustment;
 }
 
-Microsoft::WRL::ComPtr<IDWriteFontFace> QWindowsDirect2DPaintEngine::fontFaceFromFontEngine(const QFont &font, QFontEngine *fe)
+void QWindowsDirect2DPaintEngine::suspend()
 {
-    Q_D(QWindowsDirect2DPaintEngine);
+    end();
+}
 
-    ComPtr<IDWriteFontFace> fontFace = d->fontCache.value(font);
-    if (fontFace)
-        return fontFace;
+void QWindowsDirect2DPaintEngine::resume()
+{
+    begin(paintDevice());
+    clipEnabledChanged();
+    penChanged();
+    brushChanged();
+    brushOriginChanged();
+    opacityChanged();
+    compositionModeChanged();
+    renderHintsChanged();
+    transformChanged();
+}
 
-    switch (fe->type()) {
-    case QFontEngine::Win:
+class QWindowsDirect2DPaintEngineSuspenderImpl
+{
+    Q_DISABLE_COPY(QWindowsDirect2DPaintEngineSuspenderImpl)
+    QWindowsDirect2DPaintEngine *m_engine;
+    bool m_active;
+public:
+    QWindowsDirect2DPaintEngineSuspenderImpl(QWindowsDirect2DPaintEngine *engine)
+        : m_engine(engine)
+        , m_active(engine->isActive())
     {
-        QWindowsFontEngine *wfe = static_cast<QWindowsFontEngine *>(fe);
-        QSharedPointer<QWindowsFontEngineData> wfed = wfe->fontEngineData();
-
-        HGDIOBJ oldfont = wfe->selectDesignFont();
-        HRESULT hr = QWindowsDirect2DContext::instance()->dwriteGdiInterop()->CreateFontFaceFromHdc(wfed->hdc, &fontFace);
-        DeleteObject(SelectObject(wfed->hdc, oldfont));
-        if (FAILED(hr))
-            qWarning("%s: Could not create DirectWrite fontface from HDC: %#x", __FUNCTION__, hr);
-
+        if (m_active)
+            m_engine->suspend();
     }
-        break;
 
-#ifndef QT_NO_DIRECTWRITE
-
-    case QFontEngine::DirectWrite:
+    ~QWindowsDirect2DPaintEngineSuspenderImpl()
     {
-        QWindowsFontEngineDirectWrite *wfedw = static_cast<QWindowsFontEngineDirectWrite *>(fe);
-        fontFace = wfedw->directWriteFontFace();
+        if (m_active)
+            m_engine->resume();
     }
-        break;
+};
 
-#endif // QT_NO_DIRECTWRITE
-
-    default:
-        qWarning("%s: Unknown font engine!", __FUNCTION__);
-        break;
+class QWindowsDirect2DPaintEngineSuspenderPrivate
+{
+public:
+    QWindowsDirect2DPaintEngineSuspenderPrivate(QWindowsDirect2DPaintEngine *engine)
+        : engineSuspender(engine)
+        , dcSuspender(static_cast<QWindowsDirect2DPaintEnginePrivate *>(engine->d_ptr.data())->bitmap->deviceContext())
+    {
     }
 
-    if (fontFace)
-        d->fontCache.insert(font, fontFace);
+    QWindowsDirect2DPaintEngineSuspenderImpl engineSuspender;
+    QWindowsDirect2DDeviceContextSuspender dcSuspender;
+};
 
-    return fontFace;
+QWindowsDirect2DPaintEngineSuspender::QWindowsDirect2DPaintEngineSuspender(QWindowsDirect2DPaintEngine *engine)
+    : d_ptr(new QWindowsDirect2DPaintEngineSuspenderPrivate(engine))
+{
+
+}
+
+QWindowsDirect2DPaintEngineSuspender::~QWindowsDirect2DPaintEngineSuspender()
+{
+}
+
+void QWindowsDirect2DPaintEngineSuspender::resume()
+{
+    d_ptr.reset();
 }
 
 QT_END_NAMESPACE

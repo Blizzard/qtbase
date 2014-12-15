@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -51,19 +43,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
-
 #ifdef Q_OS_WINCE
 #include <QtCore/QString>
 #endif
 
+#ifdef min // windows.h without NOMINMAX is included by the benchmark headers.
+#  undef min
+#endif
+#ifdef max
+#  undef max
+#endif
+
 #include <QtCore/QByteArray>
 #include <QtCore/qmath.h>
+#include <QtCore/QLibraryInfo>
 
 #ifdef Q_OS_ANDROID
 #  include <android/log.h>
+#endif
+
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -81,6 +81,10 @@ namespace QTest {
             return "FAIL!  ";
         case QAbstractTestLogger::XPass:
             return "XPASS  ";
+        case QAbstractTestLogger::BlacklistedPass:
+            return "BPASS  ";
+        case QAbstractTestLogger::BlacklistedFail:
+            return "BFAIL  ";
         }
         return "??????";
     }
@@ -198,7 +202,7 @@ namespace QTest {
 }
 
 #if defined(Q_OS_WIN)
-Q_CORE_EXPORT bool qWinLogToStderr(); // defined in qlogging.cpp
+Q_CORE_EXPORT bool qt_logging_to_console(); // defined in qlogging.cpp
 #endif
 
 void QPlainTestLogger::outputMessage(const char *str)
@@ -214,7 +218,7 @@ void QPlainTestLogger::outputMessage(const char *str)
     if (stream != stdout)
 #elif defined(Q_OS_WIN)
     // log to system log only if output is not redirected, and no console is attached
-    if (!qWinLogToStderr() && stream == stdout) {
+    if (!qt_logging_to_console() && stream == stdout) {
         OutputDebugStringA(str);
         return;
     }
@@ -334,7 +338,7 @@ void QPlainTestLogger::startLogging()
         qsnprintf(buf, sizeof(buf),
                   "********* Start testing of %s *********\n"
                   "Config: Using QtTest library " QTEST_VERSION_STR
-                  ", Qt %s\n", QTestResult::currentTestObjectName(), qVersion());
+                  ", %s\n", QTestResult::currentTestObjectName(), QLibraryInfo::build());
     }
     outputMessage(buf);
 }
@@ -343,15 +347,16 @@ void QPlainTestLogger::stopLogging()
 {
     char buf[1024];
     if (QTestLog::verboseLevel() < 0) {
-        qsnprintf(buf, sizeof(buf), "Totals: %d passed, %d failed, %d skipped\n",
+        qsnprintf(buf, sizeof(buf), "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n",
                   QTestLog::passCount(), QTestLog::failCount(),
-                  QTestLog::skipCount());
+                  QTestLog::skipCount(), QTestLog::blacklistCount());
     } else {
         qsnprintf(buf, sizeof(buf),
-                  "Totals: %d passed, %d failed, %d skipped\n"
+                  "Totals: %d passed, %d failed, %d skipped, %d blacklisted\n"
                   "********* Finished testing of %s *********\n",
                   QTestLog::passCount(), QTestLog::failCount(),
-                  QTestLog::skipCount(), QTestResult::currentTestObjectName());
+                  QTestLog::skipCount(), QTestLog::blacklistCount(),
+                  QTestResult::currentTestObjectName());
     }
     outputMessage(buf);
 

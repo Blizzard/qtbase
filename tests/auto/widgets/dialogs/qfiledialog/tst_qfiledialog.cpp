@@ -5,35 +5,27 @@
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -114,8 +106,8 @@ public:
     virtual ~tst_QFiledialog();
 
 public slots:
+    void initTestCase();
     void init();
-    void cleanup();
 
 private slots:
     void currentChangedSignal();
@@ -171,7 +163,7 @@ private slots:
     void tildeExpansion();
 #endif // QT_BUILD_INTERNAL
 #endif
-    void getFileUrl();
+    void rejectModalDialogs();
 
 private:
     QByteArray userSettings;
@@ -185,26 +177,23 @@ tst_QFiledialog::~tst_QFiledialog()
 {
 }
 
+void tst_QFiledialog::initTestCase()
+{
+    QStandardPaths::setTestModeEnabled(true);
+}
+
 void tst_QFiledialog::init()
 {
-    // Save the developers settings so they don't get mad when their sidebar folders are gone.
+    // clean up the sidebar between each test
     QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
     settings.beginGroup(QLatin1String("Qt"));
-    userSettings = settings.value(QLatin1String("filedialog")).toByteArray();
     settings.remove(QLatin1String("filedialog"));
 
-    // populate it with some default settings
+    // populate the sidebar with some default settings
     QNonNativeFileDialog fd;
 #if defined(Q_OS_WINCE)
     QTest::qWait(1000);
 #endif
-}
-
-void tst_QFiledialog::cleanup()
-{
-    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    settings.beginGroup(QLatin1String("Qt"));
-    settings.setValue(QLatin1String("filedialog"), userSettings);
 }
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -252,7 +241,10 @@ void tst_QFiledialog::directoryEnteredSignal()
 
     // sidebar
     QSidebar *sidebar = fd.findChild<QSidebar*>("sidebar");
-    sidebar->setCurrentIndex(sidebar->model()->index(1, 0));
+    QVERIFY(sidebar->model()->rowCount() >= 2);
+    QModelIndex secondItem = sidebar->model()->index(1, 0);
+    QVERIFY(secondItem.isValid());
+    sidebar->setCurrentIndex(secondItem);
     QTest::keyPress(sidebar->viewport(), Qt::Key_Return);
     QCOMPARE(spyDirectoryEntered.count(), 1);
     spyDirectoryEntered.clear();
@@ -437,26 +429,18 @@ void tst_QFiledialog::completer_data()
     QTest::addColumn<QString>("input");
     QTest::addColumn<int>("expected");
 
-    QTest::newRow("r, 10")   << "" << "r"   << 10;
-    QTest::newRow("x, 0")    << "" << "x"   << 0;
-    QTest::newRow("../, -1") << "" << "../" << -1;
+    const QString rootPath = QDir::rootPath();
 
-    QTest::newRow("goto root")     << QString()        << QDir::rootPath() << -1;
-    QTest::newRow("start at root") << QDir::rootPath() << QString()        << -1;
+    QTest::newRow("r, 10")   << QString() << "r"   << 10;
+    QTest::newRow("x, 0")    << QString() << "x"   << 0;
+    QTest::newRow("../, -1") << QString() << "../" << -1;
 
-    QDir root = QDir::root();
-    QStringList list = root.entryList();
-    QString folder;
-    for (int i = 0; i < list.count(); ++i) {
-        if (list[i].at(0) == QChar('.'))
-            continue;
-        QFileInfo info(QDir::rootPath() + list[i]);
-        if (info.isDir()) {
-            folder = QDir::rootPath() + list[i];
-            break;
-        }
-    }
+    QTest::newRow("goto root")     << QString()        << rootPath << -1;
+    QTest::newRow("start at root") << rootPath << QString()        << -1;
 
+    QFileInfoList list = QDir::root().entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    QVERIFY(!list.isEmpty());
+    const QString folder = list.first().absoluteFilePath();
     QTest::newRow("start at one below root r") << folder << "r" << -1;
     QTest::newRow("start at one below root ../") << folder << "../" << -1;
 }
@@ -465,27 +449,35 @@ void tst_QFiledialog::completer()
 {
     typedef QSharedPointer<QTemporaryFile> TemporaryFilePtr;
 
+#ifdef Q_OS_WIN
+    static const Qt::CaseSensitivity caseSensitivity = Qt::CaseInsensitive;
+#else
+    static const Qt::CaseSensitivity caseSensitivity = Qt::CaseSensitive;
+#endif
+
     QFETCH(QString, input);
     QFETCH(QString, startPath);
     QFETCH(int, expected);
 
-    QTemporaryDir tempDir;
-    QVERIFY(tempDir.isValid());
-
-    const QString tempPath = tempDir.path();
-    startPath = startPath.isEmpty() ? tempPath : QDir::cleanPath(startPath);
-
     // make temp dir and files
+    QScopedPointer<QTemporaryDir> tempDir;
     QList<TemporaryFilePtr> files;
-    QT_TRY {
-    for (int i = 0; i < 10; ++i) {
-        TemporaryFilePtr file(new QTemporaryFile(tempPath + QStringLiteral("/rXXXXXX")));
-        QVERIFY(file->open());
-        files.append(file);
+
+    if (startPath.isEmpty()) {
+        tempDir.reset(new QTemporaryDir);
+        QVERIFY(tempDir->isValid());
+        startPath = tempDir->path();
+        for (int i = 0; i < 10; ++i) {
+            TemporaryFilePtr file(new QTemporaryFile(startPath + QStringLiteral("/rXXXXXX")));
+            QVERIFY(file->open());
+            files.append(file);
+        }
     }
 
     // ### flesh this out more
-    QNonNativeFileDialog fd(0,QString("Test it"),startPath);
+    QNonNativeFileDialog fd(0, QLatin1String(QTest::currentTestFunction())
+                            + QStringLiteral(" \"") + QLatin1String(QTest::currentDataTag())
+                            + QLatin1Char('"'), startPath);
     fd.setOptions(QFileDialog::DontUseNativeDialog);
     fd.show();
     QVERIFY(QTest::qWaitForWindowExposed(&fd));
@@ -517,10 +509,20 @@ void tst_QFiledialog::completer()
     QCOMPARE(model->index(fd.directory().path()), model->index(startPath));
 
     if (input.isEmpty()) {
-        QModelIndex r = model->index(model->rootPath());
-        QVERIFY(model->rowCount(r) > 0);
-        QModelIndex idx = model->index(0, 0, r);
-        input = idx.data().toString().at(0);
+        // Try to find a suitable directory under root that does not
+        // start with 'C' to avoid issues with completing to "C:" drives on Windows.
+        const QString rootPath = model->rootPath();
+        const QChar rootPathFirstChar = rootPath.at(0).toLower();
+        QModelIndex rootIndex = model->index(rootPath);
+        const int rowCount = model->rowCount(rootIndex);
+        QVERIFY(rowCount > 0);
+        for (int row = 0; row < rowCount && input.isEmpty(); ++row) {
+            const QString name = model->index(row, 0, rootIndex).data().toString();
+            const QChar firstChar = name.at(0);
+            if (firstChar.isLetter() && firstChar.toLower() != rootPathFirstChar)
+                input = firstChar;
+        }
+        QVERIFY2(!input.isEmpty(), "Unable to find a suitable input directory");
     }
 
     // press 'keys' for the input
@@ -533,7 +535,7 @@ void tst_QFiledialog::completer()
         if (!fullPath.endsWith(QLatin1Char('/')))
             fullPath.append(QLatin1Char('/'));
         fullPath.append(input);
-        if (input.startsWith(QDir::rootPath())) {
+        if (input.startsWith(QDir::rootPath(), caseSensitivity)) {
             fullPath = input;
             input.clear();
         }
@@ -544,29 +546,13 @@ void tst_QFiledialog::completer()
         expected = 0;
         if (input.startsWith(".."))
             input.clear();
-        for (int ii = 0; ii < expectedFiles.count(); ++ii) {
-#if defined(Q_OS_WIN)
-            if (expectedFiles.at(ii).startsWith(input,Qt::CaseInsensitive))
-#else
-            if (expectedFiles.at(ii).startsWith(input))
-#endif
+        foreach (const QString &expectedFile, expectedFiles) {
+            if (expectedFile.startsWith(input, caseSensitivity))
                 ++expected;
         }
     }
 
-    QTest::qWait(1000);
-    if (cModel->rowCount() != expected) {
-        for (int i = 0; i < cModel->rowCount(); ++i) {
-            QString file = cModel->index(i, 0).data().toString();
-            expectedFiles.removeAll(file);
-        }
-        //qDebug() << expectedFiles;
-    }
-
     QTRY_COMPARE(cModel->rowCount(), expected);
-    } QT_CATCH(...) {
-        QT_RETHROW;
-    }
 }
 
 void tst_QFiledialog::completer_up()
@@ -1451,7 +1437,7 @@ public slots:
     }
 };
 
-void tst_QFiledialog::getFileUrl()
+void tst_QFiledialog::rejectModalDialogs()
 {
     // QTBUG-38672 , static functions should return empty Urls
     const QFileDialog::Options options = QFileDialog::DontUseNativeDialog;
@@ -1472,6 +1458,18 @@ void tst_QFiledialog::getFileUrl()
     QVERIFY(url.isEmpty());
     QVERIFY(!url.isValid());
 
+    // Same test with local files
+    QString file = QFileDialog::getOpenFileName(0, QStringLiteral("getOpenFileName"),
+                                                QString(), QString(), Q_NULLPTR, options);
+    QVERIFY(file.isEmpty());
+
+    file = QFileDialog::getExistingDirectory(0, QStringLiteral("getExistingDirectory"),
+                                             QString(), options | QFileDialog::ShowDirsOnly);
+    QVERIFY(file.isEmpty());
+
+    file = QFileDialog::getSaveFileName(0, QStringLiteral("getSaveFileName"),
+                                             QString(), QString(), Q_NULLPTR, options);
+    QVERIFY(file.isEmpty());
 }
 
 QTEST_MAIN(tst_QFiledialog)

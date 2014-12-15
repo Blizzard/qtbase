@@ -5,35 +5,27 @@
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -93,6 +85,8 @@ private slots:
     void transactionalWriteNoPermissionsOnFile();
     void transactionalWriteCanceled();
     void transactionalWriteErrorRenaming();
+    void symlink();
+    void directory();
 };
 
 static inline QByteArray msgCannotOpen(const QFileDevice &f)
@@ -338,6 +332,143 @@ void tst_QSaveFile::transactionalWriteErrorRenaming()
     QVERIFY(!QFile::exists(targetFile)); // renaming failed
 #endif
     QCOMPARE(file.error(), QFile::RenameError);
+}
+
+void tst_QSaveFile::symlink()
+{
+#ifdef Q_OS_UNIX
+    QByteArray someData = "some data";
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QString targetFile = dir.path() + QLatin1String("/outfile");
+    const QString linkFile = dir.path() + QLatin1String("/linkfile");
+    {
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::WriteOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.write("Hello"), Q_INT64_C(5));
+        file.close();
+    }
+
+    QVERIFY(QFile::link(targetFile, linkFile));
+
+    QString canonical = QFileInfo(linkFile).canonicalFilePath();
+    QCOMPARE(canonical, QFileInfo(targetFile).canonicalFilePath());
+
+    // Try saving into it
+    {
+        QSaveFile saveFile(linkFile);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        //Check that the linkFile is still a link and still has the same canonical path
+        QFileInfo info(linkFile);
+        QVERIFY(info.isSymLink());
+        QCOMPARE(QFileInfo(linkFile).canonicalFilePath(), canonical);
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+        file.remove();
+    }
+
+    // Save into a symbolic link that point to a removed file
+    someData = "more stuff";
+    {
+        QSaveFile saveFile(linkFile);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFileInfo info(linkFile);
+        QVERIFY(info.isSymLink());
+        QCOMPARE(QFileInfo(linkFile).canonicalFilePath(), canonical);
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    // link to a link in another directory
+    QTemporaryDir dir2;
+    QVERIFY(dir2.isValid());
+
+    const QString linkFile2 = dir2.path() + QLatin1String("/linkfile");
+    QVERIFY(QFile::link(linkFile, linkFile2));
+    QCOMPARE(QFileInfo(linkFile2).canonicalFilePath(), canonical);
+
+
+    someData = "hello everyone";
+
+    {
+        QSaveFile saveFile(linkFile2);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFile file(targetFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    //cyclic link
+    const QString cyclicLink = dir.path() + QLatin1String("/cyclic");
+    QVERIFY(QFile::link(cyclicLink, cyclicLink));
+    {
+        QSaveFile saveFile(cyclicLink);
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        QFile file(cyclicLink);
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+
+    //cyclic link2
+    QVERIFY(QFile::link(cyclicLink + QLatin1Char('1'), cyclicLink + QLatin1Char('2')));
+    QVERIFY(QFile::link(cyclicLink + QLatin1Char('2'), cyclicLink + QLatin1Char('1')));
+
+    {
+        QSaveFile saveFile(cyclicLink + QLatin1Char('1'));
+        QVERIFY(saveFile.open(QIODevice::WriteOnly));
+        QCOMPARE(saveFile.write(someData), someData.size());
+        saveFile.commit();
+
+        // the explicit file becomes a file instead of a link
+        QVERIFY(!QFileInfo(cyclicLink + QLatin1Char('1')).isSymLink());
+        QVERIFY(QFileInfo(cyclicLink + QLatin1Char('2')).isSymLink());
+
+        QFile file(cyclicLink + QLatin1Char('1'));
+        QVERIFY2(file.open(QIODevice::ReadOnly), msgCannotOpen(file).constData());
+        QCOMPARE(file.readAll(), someData);
+    }
+#endif
+}
+
+void tst_QSaveFile::directory()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+
+    const QString subdir = dir.path() + QLatin1String("/subdir");
+    QVERIFY(QDir(dir.path()).mkdir(QStringLiteral("subdir")));
+    {
+        QFile sf(subdir);
+        QVERIFY(!sf.open(QIODevice::WriteOnly));
+    }
+
+#ifdef Q_OS_UNIX
+    //link to a directory
+    const QString linkToDir = dir.path() + QLatin1String("/linkToDir");
+    QVERIFY(QFile::link(subdir, linkToDir));
+
+    {
+        QFile sf(linkToDir);
+        QVERIFY(!sf.open(QIODevice::WriteOnly));
+    }
+#endif
 }
 
 QTEST_MAIN(tst_QSaveFile)

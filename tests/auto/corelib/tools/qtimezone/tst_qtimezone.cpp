@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,6 +52,8 @@ private slots:
     void availableTimeZoneIds();
     void stressTest();
     void windowsId();
+    void isValidId_data();
+    void isValidId();
     // Backend tests
     void utcTest();
     void icuTest();
@@ -519,6 +513,65 @@ void tst_QTimeZone::windowsId()
     list.clear();
     QCOMPARE(QTimeZone::windowsIdToIanaIds(QByteArray()), list);
     QCOMPARE(QTimeZone::windowsIdToIanaIds(QByteArray(), QLocale::AnyCountry), list);
+}
+
+void tst_QTimeZone::isValidId_data()
+{
+#ifdef QT_BUILD_INTERNAL
+    QTest::addColumn<QByteArray>("input");
+    QTest::addColumn<bool>("valid");
+
+#define TESTSET(name, section, valid) \
+    QTest::newRow(name " front")  << QByteArray(section "/xyz/xyz")    << valid; \
+    QTest::newRow(name " middle") << QByteArray("xyz/" section "/xyz") << valid; \
+    QTest::newRow(name " back")   << QByteArray("xyz/xyz/" section)    << valid
+
+    TESTSET("empty", "", false);
+    TESTSET("minimal", "m", true);
+    TESTSET("maximal", "12345678901234", true);
+    TESTSET("too long", "123456789012345", false);
+
+    TESTSET("bad hyphen", "-hyphen", false);
+    TESTSET("good hyphen", "hy-phen", true);
+
+    TESTSET("valid char _", "_", true);
+    TESTSET("valid char .", ".", true);
+    TESTSET("valid char :", ":", true);
+    TESTSET("valid char +", "+", true);
+    TESTSET("valid char A", "A", true);
+    TESTSET("valid char Z", "Z", true);
+    TESTSET("valid char a", "a", true);
+    TESTSET("valid char z", "z", true);
+    TESTSET("valid char 0", "0", true);
+    TESTSET("valid char 9", "9", true);
+
+    TESTSET("invalid char ^", "^", false);
+    TESTSET("invalid char \"", "\"", false);
+    TESTSET("invalid char $", "$", false);
+    TESTSET("invalid char %", "%", false);
+    TESTSET("invalid char &", "&", false);
+    TESTSET("invalid char (", "(", false);
+    TESTSET("invalid char )", ")", false);
+    TESTSET("invalid char =", "=", false);
+    TESTSET("invalid char ?", "?", false);
+    TESTSET("invalid char ß", "ß", false);
+    TESTSET("invalid char \\x01", "\x01", false);
+    TESTSET("invalid char ' '", " ", false);
+
+#undef TESTSET
+#endif // QT_BUILD_INTERNAL
+}
+
+void tst_QTimeZone::isValidId()
+{
+#ifdef QT_BUILD_INTERNAL
+    QFETCH(QByteArray, input);
+    QFETCH(bool, valid);
+
+    QCOMPARE(QTimeZonePrivate::isValidId(input), valid);
+#else
+    QSKIP("This test requires a Qt -developer-build.");
+#endif
 }
 
 void tst_QTimeZone::utcTest()

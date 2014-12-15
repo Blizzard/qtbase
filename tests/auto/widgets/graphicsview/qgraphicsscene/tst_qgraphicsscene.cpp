@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -250,6 +242,7 @@ private slots:
     void style();
     void sorting_data();
     void sorting();
+    void insertionOrder();
     void changedSignal_data();
     void changedSignal();
     void stickyFocus_data();
@@ -267,6 +260,7 @@ private slots:
     void removeFullyTransparentItem();
     void zeroScale();
     void focusItemChangedSignal();
+    void minimumRenderSize();
 
     // task specific tests below me
     void task139710_bspTreeCrash();
@@ -3640,6 +3634,42 @@ void tst_QGraphicsScene::sorting()
              << t_1);
 }
 
+void tst_QGraphicsScene::insertionOrder()
+{
+    QGraphicsScene scene;
+    const int numItems = 5;
+    QList<QGraphicsItem*> items;
+
+    for (int i = 0; i < numItems; ++i) {
+        QGraphicsRectItem* item = new QGraphicsRectItem(i * 20, i * 20, 200, 200);
+        item->setData(0, i);
+        items.append(item);
+        scene.addItem(item);
+    }
+
+    {
+        QList<QGraphicsItem*> itemList = scene.items();
+        QCOMPARE(itemList.count(), numItems);
+        for (int i = 0; i < itemList.count(); ++i) {
+            QCOMPARE(numItems-1-i, itemList.at(i)->data(0).toInt());
+        }
+    }
+
+    for (int i = 0; i < items.size(); ++i)
+    {
+        scene.removeItem(items.at(i));
+        scene.addItem(items.at(i));
+    }
+
+    {
+        QList<QGraphicsItem*> itemList = scene.items();
+        QCOMPARE(itemList.count(), numItems);
+        for (int i = 0; i < itemList.count(); ++i) {
+            QCOMPARE(numItems-1-i, itemList.at(i)->data(0).toInt());
+        }
+    }
+}
+
 class ChangedListener : public QObject
 {
     Q_OBJECT
@@ -4676,6 +4706,78 @@ void tst_QGraphicsScene::focusItemChangedSignal()
         QCOMPARE(qVariantValue<Qt::FocusReason>(arguments.at(2)), Qt::ActiveWindowFocusReason);
     }
 
+}
+
+class ItemCountsPaintCalls : public QGraphicsRectItem
+{
+public:
+    ItemCountsPaintCalls(const QRectF & rect, QGraphicsItem *parent = 0)
+        : QGraphicsRectItem(rect, parent), repaints(0) {}
+    void paint ( QPainter * painter, const QStyleOptionGraphicsItem * option, QWidget * widget = 0 )
+    {
+        QGraphicsRectItem::paint(painter, option, widget);
+        ++repaints;
+    }
+    int repaints;
+};
+
+void tst_QGraphicsScene::minimumRenderSize()
+{
+    Q_CHECK_PAINTEVENTS
+
+    ItemCountsPaintCalls *bigParent = new ItemCountsPaintCalls(QRectF(0,0,100,100));
+    ItemCountsPaintCalls *smallChild = new ItemCountsPaintCalls(QRectF(0,0,10,10), bigParent);
+    ItemCountsPaintCalls *smallerGrandChild = new ItemCountsPaintCalls(QRectF(0,0,1,1), smallChild);
+    QGraphicsScene scene;
+    scene.addItem(bigParent);
+
+    CustomView view;
+    view.setScene(&scene);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    qApp->processEvents();
+
+    // Initially, everything should be repainted the same number of times
+    int viewRepaints = 0;
+    QTRY_VERIFY(view.repaints > viewRepaints);
+    viewRepaints = view.repaints;
+
+    QVERIFY(viewRepaints == bigParent->repaints);
+    QVERIFY(viewRepaints == smallChild->repaints);
+    QVERIFY(viewRepaints == smallerGrandChild->repaints);
+
+    // Setting a minimum render size should cause a repaint
+    scene.setMinimumRenderSize(0.5);
+    qApp->processEvents();
+
+    QTRY_VERIFY(view.repaints > viewRepaints);
+    viewRepaints = view.repaints;
+
+    QVERIFY(viewRepaints == bigParent->repaints);
+    QVERIFY(viewRepaints == smallChild->repaints);
+    QVERIFY(viewRepaints == smallerGrandChild->repaints);
+
+    // Scaling should cause a repaint of big items only.
+    view.scale(0.1, 0.1);
+    qApp->processEvents();
+
+    QTRY_VERIFY(view.repaints > viewRepaints);
+    viewRepaints = view.repaints;
+
+    QVERIFY(viewRepaints == bigParent->repaints);
+    QVERIFY(viewRepaints == smallChild->repaints);
+    QVERIFY(smallChild->repaints > smallerGrandChild->repaints);
+
+    // Scaling further should cause even fewer items to be repainted
+    view.scale(0.1, 0.1); // Stacks with previous scale
+    qApp->processEvents();
+
+    QTRY_VERIFY(view.repaints > viewRepaints);
+    viewRepaints = view.repaints;
+
+    QVERIFY(viewRepaints == bigParent->repaints);
+    QVERIFY(bigParent->repaints > smallChild->repaints);
+    QVERIFY(smallChild->repaints > smallerGrandChild->repaints);
 }
 
 void tst_QGraphicsScene::taskQTBUG_15977_renderWithDeviceCoordinateCache()

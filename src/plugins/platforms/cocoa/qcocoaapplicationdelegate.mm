@@ -163,6 +163,9 @@ static void cleanupCocoaApplicationDelegate()
 - (NSMenu *)applicationDockMenu:(NSApplication *)sender
 {
     Q_UNUSED(sender);
+    // Manually invoke the delegate's -menuWillOpen: method.
+    // See QTBUG-39604 (and its fix) for details.
+    [[dockMenu delegate] menuWillOpen:dockMenu];
     return [[dockMenu retain] autorelease];
 }
 
@@ -340,6 +343,7 @@ static void cleanupCocoaApplicationDelegate()
         && [reflectionDelegate respondsToSelector:@selector(applicationDidBecomeActive:)])
         [reflectionDelegate applicationDidBecomeActive:notification];
 
+    QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationActive);
 /*
     onApplicationChangedActivation(true);
 
@@ -363,6 +367,7 @@ static void cleanupCocoaApplicationDelegate()
         && [reflectionDelegate respondsToSelector:@selector(applicationDidResignActive:)])
         [reflectionDelegate applicationDidResignActive:notification];
 
+    QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationInactive);
 /*
     onApplicationChangedActivation(false);
 
@@ -372,6 +377,26 @@ static void cleanupCocoaApplicationDelegate()
     qt_last_native_mouse_receiver = 0;
     qt_button_down = 0;
 */
+}
+
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)theApplication hasVisibleWindows:(BOOL)flag
+{
+    Q_UNUSED(theApplication);
+    Q_UNUSED(flag);
+    if (reflectionDelegate
+        && [reflectionDelegate respondsToSelector:@selector(applicationShouldHandleReopen:hasVisibleWindows:)])
+        return [reflectionDelegate applicationShouldHandleReopen:theApplication hasVisibleWindows:flag];
+
+    /*
+       true to force delivery of the event even if the application state is already active,
+       because rapp (handle reopen) events are sent each time the dock icon is clicked regardless
+       of the active state of the application or number of visible windows. For example, a browser
+       app that has no windows opened would need the event be to delivered even if it was already
+       active in order to create a new window as per OS X conventions.
+     */
+    QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationActive, true /*forcePropagate*/);
+
+    return YES;
 }
 
 - (void)setReflectionDelegate:(NSObject <NSApplicationDelegate> *)oldDelegate

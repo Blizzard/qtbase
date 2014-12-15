@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -251,6 +243,11 @@ void tst_QTemporaryFile::autoRemove()
         QTemporaryFile file("tempXXXXXX");
         QVERIFY(file.open());
         fileName = file.fileName();
+        // QTBUG-39976, file mappings should be cleared as well.
+        QVERIFY(file.write("test"));
+        QVERIFY(file.flush());
+        uchar *mapped = file.map(0, file.size());
+        QVERIFY(mapped);
         file.close();
     }
     QVERIFY(!QFile::exists(fileName));
@@ -441,13 +438,15 @@ void tst_QTemporaryFile::rename()
 void tst_QTemporaryFile::renameFdLeak()
 {
 #ifdef Q_OS_UNIX
+    const QByteArray sourceFile = QFile::encodeName(QFINDTESTDATA(__FILE__));
+    QVERIFY(!sourceFile.isEmpty());
     // Test this on Unix only
 
     // Open a bunch of files to force the fd count to go up
     static const int count = 10;
     int bunch_of_files[count];
     for (int i = 0; i < count; ++i) {
-        bunch_of_files[i] = ::open(qPrintable(QFINDTESTDATA("tst_qtemporaryfile.cpp")), O_RDONLY);
+        bunch_of_files[i] = ::open(sourceFile.constData(), O_RDONLY);
         QVERIFY(bunch_of_files[i] != -1);
     }
 
@@ -642,8 +641,10 @@ void tst_QTemporaryFile::createNativeFile_data()
     QTest::addColumn<bool>("valid");
     QTest::addColumn<QByteArray>("content");
 
-    QTest::newRow("nativeFile") << QFINDTESTDATA("resources/test.txt") << (qint64)-1 << false << QByteArray();
-    QTest::newRow("nativeFileWithPos") << QFINDTESTDATA("resources/test.txt") << (qint64)5 << false << QByteArray();
+    const QString nativeFilePath = QFINDTESTDATA("resources/test.txt");
+
+    QTest::newRow("nativeFile") << nativeFilePath << (qint64)-1 << false << QByteArray();
+    QTest::newRow("nativeFileWithPos") << nativeFilePath << (qint64)5 << false << QByteArray();
     QTest::newRow("resourceFile") << ":/resources/test.txt" << (qint64)-1 << true << QByteArray("This is a test");
     QTest::newRow("resourceFileWithPos") << ":/resources/test.txt" << (qint64)5 << true << QByteArray("This is a test");
 }

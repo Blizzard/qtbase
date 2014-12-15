@@ -222,7 +222,8 @@ QCocoaMenu::QCocoaMenu() :
     m_enabled(true),
     m_visible(true),
     m_tag(0),
-    m_menuBar(0)
+    m_menuBar(0),
+    m_containingMenuItem(0)
 {
     m_delegate = [[QCocoaMenuDelegate alloc] initWithMenu:this];
     m_nativeItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
@@ -238,6 +239,10 @@ QCocoaMenu::~QCocoaMenu()
         if (COCOA_MENU_ANCESTOR(item) == this)
             SET_COCOA_MENU_ANCESTOR(item, 0);
     }
+
+    if (m_containingMenuItem)
+        m_containingMenuItem->clearMenu(this);
+
     QCocoaAutoReleasePool pool;
     [m_nativeItem setSubmenu:nil];
     [m_nativeMenu release];
@@ -361,9 +366,14 @@ void QCocoaMenu::syncMenuItem(QPlatformMenuItem *menuItem)
     }
 
     bool wasMerged = cocoaItem->isMerged();
-    NSMenu *oldMenu = wasMerged ? [getMenuLoader() applicationMenu] : m_nativeMenu;
-    NSMenuItem *oldItem = [oldMenu itemWithTag:(NSInteger) cocoaItem];
+    NSMenu *oldMenu = m_nativeMenu;
+    if (wasMerged) {
+        QPlatformMenuItem::MenuRole role = cocoaItem->effectiveRole();
+        if (role >= QPlatformMenuItem::ApplicationSpecificRole && role < QPlatformMenuItem::CutRole)
+            oldMenu = [getMenuLoader() applicationMenu];
+    }
 
+    NSMenuItem *oldItem = [oldMenu itemWithTag:(NSInteger) cocoaItem];
     if (cocoaItem->sync() != oldItem) {
         // native item was changed for some reason
         if (oldItem) {
@@ -433,10 +443,11 @@ void QCocoaMenu::setVisible(bool visible)
     m_visible = visible;
 }
 
-void QCocoaMenu::showPopup(const QWindow *parentWindow, QPoint pos, const QPlatformMenuItem *item)
+void QCocoaMenu::showPopup(const QWindow *parentWindow, const QRect &targetRect, const QPlatformMenuItem *item)
 {
     QCocoaAutoReleasePool pool;
 
+    QPoint pos =  QPoint(targetRect.left(), targetRect.top() + targetRect.height());
     QCocoaWindow *cocoaWindow = parentWindow ? static_cast<QCocoaWindow *>(parentWindow->handle()) : 0;
     NSView *view = cocoaWindow ? cocoaWindow->contentView() : nil;
     NSMenuItem *nsItem = item ? ((QCocoaMenuItem *)item)->nsItem() : nil;
@@ -463,9 +474,8 @@ void QCocoaMenu::showPopup(const QWindow *parentWindow, QPoint pos, const QPlatf
         // Else, we need to transform 'pos' to window or screen coordinates.
         NSPoint nsPos = NSMakePoint(pos.x() - 1, pos.y());
         if (view) {
-            // Flip y-coordinate first, the convert to content view space.
-            nsPos.y = view.frame.size.height - nsPos.y;
-            nsPos = [view convertPoint:nsPos toView:view.window.contentView];
+            // convert coordinates from view to the view's window
+            nsPos = [view convertPoint:nsPos toView:nil];
         } else if (!QGuiApplication::screens().isEmpty()) {
             QScreen *screen = QGuiApplication::screens().at(0);
             nsPos.y = screen->availableVirtualSize().height() - nsPos.y;
@@ -566,6 +576,16 @@ void QCocoaMenu::setMenuBar(QCocoaMenuBar *menuBar)
 QCocoaMenuBar *QCocoaMenu::menuBar() const
 {
     return m_menuBar;
+}
+
+void QCocoaMenu::setContainingMenuItem(QCocoaMenuItem *menuItem)
+{
+    m_containingMenuItem = menuItem;
+}
+
+QCocoaMenuItem *QCocoaMenu::containingMenuItem() const
+{
+    return m_containingMenuItem;
 }
 
 QT_END_NAMESPACE

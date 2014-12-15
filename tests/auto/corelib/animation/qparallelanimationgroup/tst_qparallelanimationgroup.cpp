@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -256,10 +248,10 @@ void tst_QParallelAnimationGroup::stateChanged()
     group.addAnimation(anim3);
     group.addAnimation(anim4);
 
-    QSignalSpy spy1(anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy spy2(anim2, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy spy3(anim3, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy spy4(anim4, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy spy1(anim1, &TestAnimation::stateChanged);
+    QSignalSpy spy2(anim2, &TestAnimation::stateChanged);
+    QSignalSpy spy3(anim3, &TestAnimation::stateChanged);
+    QSignalSpy spy4(anim4, &TestAnimation::stateChanged);
 
     QVERIFY(spy1.isValid());
     QVERIFY(spy2.isValid());
@@ -434,8 +426,8 @@ void tst_QParallelAnimationGroup::updateChildrenWithRunningGroup()
     anim.setEndValue(100);
     anim.setDuration(200);
 
-    QSignalSpy groupStateChangedSpy(&group, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy childStateChangedSpy(&anim, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy groupStateChangedSpy(&group, &QParallelAnimationGroup::stateChanged);
+    QSignalSpy childStateChangedSpy(&anim, &TestAnimation::stateChanged);
 
     QVERIFY(groupStateChangedSpy.isValid());
     QVERIFY(childStateChangedSpy.isValid());
@@ -601,8 +593,8 @@ void tst_QParallelAnimationGroup::startGroupWithRunningChild()
     anim2.setEndValue(100);
     anim2.setDuration(200);
 
-    QSignalSpy stateChangedSpy1(&anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy stateChangedSpy2(&anim2, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy stateChangedSpy1(&anim1, &TestAnimation::stateChanged);
+    QSignalSpy stateChangedSpy2(&anim2, &TestAnimation::stateChanged);
 
     QVERIFY(stateChangedSpy1.isValid());
     QVERIFY(stateChangedSpy2.isValid());
@@ -669,20 +661,20 @@ void tst_QParallelAnimationGroup::zeroDurationAnimation()
     anim3.setEndValue(100);
     anim3.setDuration(10);
 
-    QSignalSpy stateChangedSpy1(&anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy finishedSpy1(&anim1, SIGNAL(finished()));
+    QSignalSpy stateChangedSpy1(&anim1, &TestAnimation::stateChanged);
+    QSignalSpy finishedSpy1(&anim1, &TestAnimation::finished);
 
     QVERIFY(stateChangedSpy1.isValid());
     QVERIFY(finishedSpy1.isValid());
 
-    QSignalSpy stateChangedSpy2(&anim2, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy finishedSpy2(&anim2, SIGNAL(finished()));
+    QSignalSpy stateChangedSpy2(&anim2, &TestAnimation::stateChanged);
+    QSignalSpy finishedSpy2(&anim2, &TestAnimation::finished);
 
     QVERIFY(stateChangedSpy2.isValid());
     QVERIFY(finishedSpy2.isValid());
 
-    QSignalSpy stateChangedSpy3(&anim3, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
-    QSignalSpy finishedSpy3(&anim3, SIGNAL(finished()));
+    QSignalSpy stateChangedSpy3(&anim3, &TestAnimation::stateChanged);
+    QSignalSpy finishedSpy3(&anim3, &TestAnimation::finished);
 
     QVERIFY(stateChangedSpy3.isValid());
     QVERIFY(finishedSpy3.isValid());
@@ -760,7 +752,7 @@ void tst_QParallelAnimationGroup::stopUncontrolledAnimations()
     loopsForever.setDuration(100);
     loopsForever.setLoopCount(-1);
 
-    QSignalSpy stateChangedSpy(&anim1, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy stateChangedSpy(&anim1, &TestAnimation::stateChanged);
     QVERIFY(stateChangedSpy.isValid());
 
     group.addAnimation(&anim1);
@@ -968,7 +960,7 @@ void tst_QParallelAnimationGroup::pauseResume()
 {
     QParallelAnimationGroup group;
     TestAnimation2 *anim = new TestAnimation2(250, &group);      // 0, duration = 250;
-    QSignalSpy spy(anim, SIGNAL(stateChanged(QAbstractAnimation::State,QAbstractAnimation::State)));
+    QSignalSpy spy(anim, &TestAnimation::stateChanged);
     QVERIFY(spy.isValid());
     QCOMPARE(group.duration(), 250);
     group.start();

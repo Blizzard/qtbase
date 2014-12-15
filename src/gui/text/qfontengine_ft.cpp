@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -132,6 +124,7 @@ static bool ft_getSfntTable(void *user_data, uint tag, uchar *buffer, uint *leng
     return result;
 }
 
+static QFontEngineFT::Glyph emptyGlyph = {0, 0, 0, 0, 0, 0, 0, 0};
 
 // -------------------------- Freetype support ------------------------------
 
@@ -678,6 +671,7 @@ QFontEngineFT::QFontEngineFT(const QFontDef &fd)
     const QByteArray env = qgetenv("QT_NO_FT_CACHE");
     cacheEnabled = env.isEmpty() || env.toInt() == 0;
     m_subPixelPositionCount = 4;
+    forceAutoHint = false;
 }
 
 QFontEngineFT::~QFontEngineFT()
@@ -813,11 +807,11 @@ int QFontEngineFT::loadFlags(QGlyphSet *set, GlyphFormat format, int flags,
     if (format == Format_Mono) {
         load_target = FT_LOAD_TARGET_MONO;
     } else if (format == Format_A32) {
-        if (subpixelType == QFontEngineFT::Subpixel_RGB || subpixelType == QFontEngineFT::Subpixel_BGR) {
+        if (subpixelType == Subpixel_RGB || subpixelType == Subpixel_BGR) {
             if (default_hint_style == HintFull)
                 load_target = FT_LOAD_TARGET_LCD;
             hsubpixel = true;
-        } else if (subpixelType == QFontEngineFT::Subpixel_VRGB || subpixelType == QFontEngineFT::Subpixel_VBGR) {
+        } else if (subpixelType == Subpixel_VRGB || subpixelType == Subpixel_VBGR) {
             if (default_hint_style == HintFull)
                 load_target = FT_LOAD_TARGET_LCD_V;
             vfactor = 3;
@@ -825,12 +819,15 @@ int QFontEngineFT::loadFlags(QGlyphSet *set, GlyphFormat format, int flags,
     }
 
     if (set && set->outline_drawing)
-        load_flags = FT_LOAD_NO_BITMAP;
+        load_flags |= FT_LOAD_NO_BITMAP;
 
     if (default_hint_style == HintNone || (flags & DesignMetrics) || (set && set->outline_drawing))
         load_flags |= FT_LOAD_NO_HINTING;
     else
         load_flags |= load_target;
+
+    if (forceAutoHint)
+        load_flags |= FT_LOAD_FORCE_AUTOHINT;
 
     return load_flags;
 }
@@ -853,6 +850,9 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
     Glyph *g = set ? set->getGlyph(glyph, subPixelPosition) : 0;
     if (g && g->format == format && (fetchMetricsOnly || g->data))
         return g;
+
+    if (!g && set && set->isGlyphMissing(glyph))
+        return &emptyGlyph;
 
     QFontEngineFT::GlyphInfo info;
 
@@ -890,8 +890,12 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
         load_flags |= FT_LOAD_FORCE_AUTOHINT;
         err = FT_Load_Glyph(face, glyph, load_flags);
     }
-    if (err != FT_Err_Ok)
+    if (err != FT_Err_Ok) {
         qWarning("load glyph failed err=%x face=%p, glyph=%d", err, face, glyph);
+        if (set)
+            set->setGlyphMissing(glyph);
+        return &emptyGlyph;
+    }
 
     FT_GlyphSlot slot = face->glyph;
 
@@ -977,9 +981,9 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
         glyph_buffer = new uchar[glyph_buffer_size];
 
         if (hsubpixel)
-            convertRGBToARGB(slot->bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, slot->bitmap.pitch, subpixelType != QFontEngineFT::Subpixel_RGB, false);
+            convertRGBToARGB(slot->bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, slot->bitmap.pitch, subpixelType != Subpixel_RGB, false);
         else if (vfactor != 1)
-            convertRGBToARGB_V(slot->bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, slot->bitmap.pitch, subpixelType != QFontEngineFT::Subpixel_VRGB, false);
+            convertRGBToARGB_V(slot->bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, slot->bitmap.pitch, subpixelType != Subpixel_VRGB, false);
     } else
 #endif
     {
@@ -1058,6 +1062,7 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
                  (format == Format_A8 ? (info.width + 3) & ~3 : info.width * 4));
     glyph_buffer_size = pitch * info.height;
     glyph_buffer = new uchar[glyph_buffer_size];
+    memset(glyph_buffer, 0, glyph_buffer_size);
 
     if (slot->format == FT_GLYPH_FORMAT_OUTLINE) {
         FT_Bitmap bitmap;
@@ -1091,10 +1096,10 @@ QFontEngineFT::Glyph *QFontEngineFT::loadGlyph(QGlyphSet *set, uint glyph,
                 convoluteBitmap(bitmap.buffer, convoluted, bitmap.width, info.height, bitmap.pitch);
                 buffer = convoluted;
             }
-            convertRGBToARGB(buffer + 1, (uint *)glyph_buffer, info.width, info.height, bitmap.pitch, subpixelType != QFontEngineFT::Subpixel_RGB, useLegacyLcdFilter);
+            convertRGBToARGB(buffer + 1, (uint *)glyph_buffer, info.width, info.height, bitmap.pitch, subpixelType != Subpixel_RGB, useLegacyLcdFilter);
             delete [] convoluted;
         } else if (vfactor != 1) {
-            convertRGBToARGB_V(bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, bitmap.pitch, subpixelType != QFontEngineFT::Subpixel_VRGB, true);
+            convertRGBToARGB_V(bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, bitmap.pitch, subpixelType != Subpixel_VRGB, true);
         } else if (format == Format_A32 && bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
             convertGRAYToARGB(bitmap.buffer, (uint *)glyph_buffer, info.width, info.height, bitmap.pitch);
         }
@@ -1629,9 +1634,12 @@ void QFontEngineFT::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlag
             if (!face)
                 face = lockFace();
             g = loadGlyph(cacheEnabled ? &defaultGlyphSet : 0, glyphs->glyphs[i], 0, Format_None, true);
-            glyphs->advances[i] = design ? QFixed::fromFixed(face->glyph->linearHoriAdvance >> 10)
-                                         : QFixed::fromFixed(face->glyph->metrics.horiAdvance).round();
-            if (!cacheEnabled)
+            if (g)
+                glyphs->advances[i] = design ? QFixed::fromFixed(g->linearAdvance) : QFixed(g->advance);
+            else
+                glyphs->advances[i] = design ? QFixed::fromFixed(face->glyph->linearHoriAdvance >> 10)
+                                             : QFixed::fromFixed(face->glyph->metrics.horiAdvance).round();
+            if (!cacheEnabled && g != &emptyGlyph)
                 delete g;
         }
     }
@@ -1670,7 +1678,7 @@ glyph_metrics_t QFontEngineFT::boundingBox(const QGlyphLayout &glyphs)
             xmax = qMax(xmax, x + g->width);
             ymax = qMax(ymax, y + g->height);
             overall.xoff += g->advance;
-            if (!cacheEnabled)
+            if (!cacheEnabled && g != &emptyGlyph)
                 delete g;
         } else {
             int left  = FLOOR(face->glyph->metrics.horiBearingX);
@@ -1713,7 +1721,7 @@ glyph_metrics_t QFontEngineFT::boundingBox(glyph_t glyph)
         overall.xoff = g->advance;
         if (fontDef.styleStrategy & QFont::ForceIntegerMetrics)
             overall.xoff = overall.xoff.round();
-        if (!cacheEnabled)
+        if (!cacheEnabled && g != &emptyGlyph)
             delete g;
     } else {
         int left  = FLOOR(face->glyph->metrics.horiBearingX);
@@ -1804,7 +1812,7 @@ glyph_metrics_t QFontEngineFT::alphaMapBoundingBox(glyph_t glyph, QFixed subPixe
         overall.width = g->width;
         overall.height = g->height;
         overall.xoff = g->advance;
-        if (!glyphSet)
+        if (!glyphSet && g != &emptyGlyph)
             delete g;
     } else {
         int left  = FLOOR(face->glyph->metrics.horiBearingX);

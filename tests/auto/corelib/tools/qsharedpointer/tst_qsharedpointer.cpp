@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Copyright (C) 2012 Intel Corporation.
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -74,6 +66,7 @@ private slots:
     void useOfForwardDeclared();
     void memoryManagement();
     void dropLastReferenceOfForwardDeclared();
+    void lock();
     void downCast();
     void functionCallDownCast();
     void upCast();
@@ -111,6 +104,7 @@ private slots:
     void invalidConstructs();
 
     void qvariantCast();
+    void sharedFromThis();
 
 public slots:
     void cleanup() { safetyCheck(); }
@@ -391,12 +385,56 @@ void tst_QSharedPointer::swap()
     QVERIFY(p2 != control);
     QVERIFY(p2.isNull());
     QVERIFY(*p1 == 42);
+
+    QWeakPointer<int> w1, w2 = control;
+
+    QVERIFY(w1.isNull());
+    QVERIFY(!w2.isNull());
+    QVERIFY(w2.lock() == control);
+    QVERIFY(!w1.lock());
+
+    w1.swap(w2);
+    QVERIFY(w2.isNull());
+    QVERIFY(!w1.isNull());
+    QVERIFY(w1.lock() == control);
+    QVERIFY(!w2.lock());
+
+    qSwap(w1, w2);
+    QVERIFY(w1.isNull());
+    QVERIFY(w2.lock() == control);
+
+    p1.reset();
+    p2.reset();
+    control.reset();
+
+    QVERIFY(w1.isNull());
+    QVERIFY(w2.isNull());
 }
 
 void tst_QSharedPointer::useOfForwardDeclared()
 {
     // this just a compile test: use the forward-declared class
     QSharedPointer<ForwardDeclared> sp;
+
+    // copying should work, too:
+    QSharedPointer<ForwardDeclared> sp2 = sp;
+
+    // and assignment:
+    QSharedPointer<ForwardDeclared> sp3;
+    sp3 = sp;
+
+    // move assignment:
+    QSharedPointer<ForwardDeclared> sp4;
+    sp4 = qMove(sp);
+
+    // and move constuction:
+    QSharedPointer<ForwardDeclared> sp5 = qMove(sp2);
+
+    // swapping:
+    sp4.swap(sp3);
+    qSwap(sp4, sp3);
+
+    // and, of course, destruction
 }
 
 
@@ -472,6 +510,22 @@ void tst_QSharedPointer::dropLastReferenceOfForwardDeclared()
     forwardDeclaredDestructorRunCount = 0;
     delete forwardPointer();
     QCOMPARE(forwardDeclaredDestructorRunCount, 1);
+}
+
+void tst_QSharedPointer::lock()
+{
+    QSharedPointer<int> sp = QSharedPointer<int>::create();
+    QVERIFY(sp);
+    QWeakPointer<int> wp = sp;
+    QVERIFY(sp == wp);
+    QVERIFY(sp == wp.lock());
+    QVERIFY(sp == wp.toStrongRef());
+
+    sp.reset();
+    QVERIFY(!wp);
+    QVERIFY(sp != wp); // this is why op(shared_ptr, weak_ptr) is a bad idea (apart from MT races)...
+    QVERIFY(sp == wp.lock());
+    QVERIFY(sp == wp.toStrongRef());
 }
 
 class DerivedData: public Data
@@ -846,6 +900,7 @@ void tst_QSharedPointer::objectCast()
         ptr.clear();
         QVERIFY(ptr.isNull());
         QVERIFY(weakptr.toStrongRef().isNull());
+        QVERIFY(weakptr.lock().isNull());
 
         // verify that the object casts fail without crash
         QSharedPointer<OtherObject> otherptr = qSharedPointerObjectCast<OtherObject>(weakptr);
@@ -2057,7 +2112,8 @@ void tst_QSharedPointer::qvariantCast()
     // Intentionally does not compile.
 //     QWeakPointer<int> sop = qWeakPointerFromVariant<int>(v);
 
-    QWeakPointer<QFile> tracking = new QFile;
+    QFile file;
+    QWeakPointer<QFile> tracking = &file;
     tracking.data()->setObjectName("A test name");
     v = QVariant::fromValue(tracking);
 
@@ -2077,6 +2133,228 @@ void tst_QSharedPointer::qvariantCast()
         QWeakPointer<QThread> other = qWeakPointerFromVariant<QThread>(v);
         QVERIFY(!other);
     }
+}
+
+class SomeClass : public QEnableSharedFromThis<SomeClass>
+{
+public:
+    SomeClass()
+    {
+    }
+
+    QSharedPointer<SomeClass> getSharedPtr()
+    {
+        return sharedFromThis();
+    }
+
+    QSharedPointer<const SomeClass> getSharedPtr() const
+    {
+        return sharedFromThis();
+    }
+
+    Data data;
+};
+
+void tst_QSharedPointer::sharedFromThis()
+{
+    const int generations = Data::generationCounter;
+    const int destructions = Data::destructorCounter;
+
+    {
+        SomeClass sc;
+        QSharedPointer<SomeClass> scp = sc.sharedFromThis();
+        QVERIFY(scp.isNull());
+        QCOMPARE(Data::generationCounter, generations + 1);
+        QCOMPARE(Data::destructorCounter, destructions);
+
+        QSharedPointer<const SomeClass> const_scp = sc.sharedFromThis();
+        QVERIFY(const_scp.isNull());
+        QCOMPARE(Data::generationCounter, generations + 1);
+        QCOMPARE(Data::destructorCounter, destructions);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 1);
+    QCOMPARE(Data::destructorCounter, destructions + 1);
+
+    {
+        const SomeClass sc;
+        QSharedPointer<const SomeClass> const_scp = sc.sharedFromThis();
+        QVERIFY(const_scp.isNull());
+        QCOMPARE(Data::generationCounter, generations + 2);
+        QCOMPARE(Data::destructorCounter, destructions + 1);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 2);
+    QCOMPARE(Data::destructorCounter, destructions + 2);
+
+    {
+        SomeClass *sc = new SomeClass;
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        QSharedPointer<SomeClass> scp;
+        QVERIFY(scp.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp = sc->sharedFromThis();
+        QVERIFY(scp.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp = QSharedPointer<SomeClass>(sc);
+        QVERIFY(!scp.isNull());
+        QCOMPARE(scp.data(), sc);
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        QSharedPointer<SomeClass> scp2;
+        QVERIFY(scp2.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp2 = sc->sharedFromThis();
+        QVERIFY(!scp2.isNull());
+        QVERIFY(scp == scp2);
+        QCOMPARE(scp2.data(), sc);
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        QSharedPointer<const SomeClass> scp3;
+        QVERIFY(scp3.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp3 = sc->sharedFromThis();
+        QVERIFY(!scp3.isNull());
+        QVERIFY(scp == scp3);
+        QVERIFY(scp2 == scp3);
+        QCOMPARE(scp3.data(), sc);
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        QSharedPointer<SomeClass> scp4;
+        QVERIFY(scp4.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp4 = sc->getSharedPtr();
+        QVERIFY(!scp4.isNull());
+        QVERIFY(scp == scp4);
+        QVERIFY(scp2 == scp4);
+        QVERIFY(scp3 == scp4);
+        QCOMPARE(scp4.data(), sc);
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        QSharedPointer<const SomeClass> scp5;
+        QVERIFY(scp5.isNull());
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+
+        scp5 = const_cast<const SomeClass *>(sc)->getSharedPtr();
+        QVERIFY(!scp4.isNull());
+        QVERIFY(scp == scp5);
+        QVERIFY(scp2 == scp5);
+        QVERIFY(scp3 == scp5);
+        QVERIFY(scp4 == scp5);
+        QCOMPARE(scp5.data(), sc);
+        QCOMPARE(Data::generationCounter, generations + 3);
+        QCOMPARE(Data::destructorCounter, destructions + 2);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 3);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+
+    QSharedPointer<SomeClass> scp;
+
+    QVERIFY(scp.isNull());
+
+    {
+        QSharedPointer<SomeClass> scp2(new SomeClass());
+        QVERIFY(!scp2.isNull());
+
+        scp = scp2->sharedFromThis();
+        QVERIFY(!scp.isNull());
+
+        QVERIFY(scp == scp2);
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+    }
+
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+    QVERIFY(!scp.isNull());
+
+    {
+        QSharedPointer<const SomeClass> scp2;
+        scp2 = scp->sharedFromThis();
+        QVERIFY(!scp2.isNull());
+
+        QVERIFY(scp == scp2);
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+    QVERIFY(!scp.isNull());
+
+    {
+        QSharedPointer<SomeClass> scp2;
+        scp2 = scp->getSharedPtr();
+        QVERIFY(!scp2.isNull());
+
+        QVERIFY(scp == scp2);
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+    QVERIFY(!scp.isNull());
+
+    {
+        QSharedPointer<const SomeClass> scp2;
+        scp2 = qSharedPointerConstCast<const SomeClass>(scp)->getSharedPtr();
+        QVERIFY(!scp2.isNull());
+
+        QVERIFY(scp == scp2);
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+    QVERIFY(!scp.isNull());
+
+    {
+        QSharedPointer<SomeClass> scp2;
+        scp2 = scp->sharedFromThis();
+        QVERIFY(!scp2.isNull());
+
+        QVERIFY(scp == scp2);
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+
+        scp2.clear();
+
+        QCOMPARE(Data::generationCounter, generations + 4);
+        QCOMPARE(Data::destructorCounter, destructions + 3);
+        QVERIFY(!scp.isNull());
+        QVERIFY(scp2.isNull());
+    }
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 3);
+    QVERIFY(!scp.isNull());
+
+    scp.clear();
+
+    QCOMPARE(Data::generationCounter, generations + 4);
+    QCOMPARE(Data::destructorCounter, destructions + 4);
+
 }
 
 namespace ReentrancyWhileDestructing {

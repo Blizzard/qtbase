@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtXml module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -2956,29 +2948,12 @@ bool QXmlSimpleReader::feature(const QString& name, bool *ok) const
          \li If enabled, the original prefixed names
             and attributes used for namespace declarations are
             reported.
-    \row \li \e http://trolltech.com/xml/features/report-whitespace-only-CharData
-         \li true
-         \li Obsolete, use the following string instead.
-            If enabled, CharData that consist of
-            only whitespace characters are reported
-            using QXmlContentHandler::characters(). If disabled, whitespace is silently
-            discarded.
     \row \li \e http://qt-project.org/xml/features/report-whitespace-only-CharData
          \li true
          \li If enabled, CharData that consist of
             only whitespace characters are reported
             using QXmlContentHandler::characters(). If disabled, whitespace is silently
             discarded.
-    \row \li \e http://trolltech.com/xml/features/report-start-end-entity
-         \li false
-         \li Obsolete, use the following string instead.
-            If enabled, the parser reports
-            QXmlContentHandler::startEntity() and
-            QXmlContentHandler::endEntity() events, so character data
-            might be reported in chunks.
-            If disabled, the parser does not report these events, but
-            silently substitutes the entities, and reports the character
-            data in one chunk.
     \row \li \e http://qt-project.org/xml/features/report-start-end-entity
          \li false
          \li If enabled, the parser reports
@@ -5265,7 +5240,12 @@ bool QXmlSimpleReaderPrivate::parsePEReference()
                                 return false;
                             }
                             if (ret) {
-                                xmlRefString = ret->data();
+                                QString buffer = ret->data();
+                                while (!buffer.isEmpty()) {
+                                    xmlRefString += buffer;
+                                    ret->fetchData();
+                                    buffer = ret->data();
+                                }
                                 delete ret;
                                 if (!stripTextDecl(xmlRefString)) {
                                     reportParseError(QLatin1String(XMLERR_ERRORINTEXTDECL));
@@ -7614,7 +7594,14 @@ bool QXmlSimpleReaderPrivate::processReference()
                                     return false;
                                 }
                                 if (ret) {
-                                    QString xmlRefString = ret->data();
+                                    QString xmlRefString;
+                                    QString buffer = ret->data();
+                                    while (!buffer.isEmpty()) {
+                                        xmlRefString += buffer;
+                                        ret->fetchData();
+                                        buffer = ret->data();
+                                    }
+
                                     delete ret;
                                     if (!stripTextDecl(xmlRefString)) {
                                         reportParseError(QLatin1String(XMLERR_ERRORINTEXTDECL));

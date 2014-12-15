@@ -125,7 +125,7 @@
            to author a plugin. This includes avoiding loading our nib for the main
            menu and not taking possession of the native menu bar. When setting this
            attribute to true will also set the AA_DontUseNativeMenuBar attribute
-           to true.
+           to true. It also disables native event filters.
 
     \value AA_DontUseNativeMenuBar All menubars created while this attribute is
            set to true won't be used as a native menubar (e.g, the menubar at
@@ -134,7 +134,7 @@
     \value AA_MacDontSwapCtrlAndMeta On Mac OS X by default, Qt swaps the
            Control and Meta (Command) keys (i.e., whenever Control is pressed, Qt
            sends Meta, and whenever Meta is pressed Control is sent). When this
-           attribute is true, Qt will not do the flip. QKeySequence::StandardShortcuts
+           attribute is true, Qt will not do the flip. \l QKeySequence::StandardKey
            will also flip accordingly (i.e., QKeySequence::Copy will be
            Command+C on the keyboard regardless of the value set, though what is output for
            QKeySequence::toString(QKeySequence::PortableText) will be different).
@@ -144,7 +144,7 @@
            to be consistent in pixels-per-point across devices rather than
            defining 1 point as 1/72 inch.
 
-    \value AA_X11InitThreads Calls XInitThreads() as part of the QApplication
+    \value AA_X11InitThreads Calls \c XInitThreads() as part of the QApplication
            construction in order to make Xlib calls thread-safe. This
            attribute must be set before QApplication is constructed.
 
@@ -159,22 +159,40 @@
 
     \value AA_UseHighDpiPixmaps Make QIcon::pixmap() generate high-dpi pixmaps
            that can be larger than the requested size. Such pixmaps will have
-           devicePixelRatio set to a value higher than 1.
+           \l {QPixmap::devicePixelRatio}{devicePixelRatio()} set to a value higher than 1.
 
-           After setting this attribute application code that uses pixmap
+           After setting this attribute, application code that uses pixmap
            sizes in layout geometry calculations should typically divide by
-           QPixmap::devicePixelRatio() to get device-independent layout geometry.
+           \l {QPixmap::devicePixelRatio}{devicePixelRatio()} to get device-independent layout geometry.
 
     \value AA_ForceRasterWidgets Make top-level widgets use pure raster surfaces,
            and do not support non-native GL-based child widgets.
 
-    \value AA_UseDesktopOpenGL Forces the usage of the desktop OpenGL on
+    \value AA_UseDesktopOpenGL Forces the usage of desktop OpenGL (for example,
+           \e opengl32.dll or \e libGL.so) on platforms that use dynamic loading
+           of the OpenGL implementation.
+           This value has been added in Qt 5.3.
+
+    \value AA_UseOpenGLES Forces the usage of OpenGL ES 2.0 or higher on
            platforms that use dynamic loading of the OpenGL implementation.
            This value has been added in Qt 5.3.
 
-    \value AA_UseOpenGLES Forces the usage of OpenGL ES 2.0 on platforms that
-           use dynamic loading of the OpenGL implementation.
-           This value has been added in Qt 5.3.
+    \value AA_UseSoftwareOpenGL Forces the usage of a software based OpenGL
+           implementation on platforms that use dynamic loading of the OpenGL
+           implementation. This will typically be a patched build of
+           \l{http://www.mesa3d.org/llvmpipe.html}{Mesa llvmpipe}, providing
+           OpenGL 2.1. The value may have no effect if no such OpenGL
+           implementation is available. The default name of this library is
+           \c opengl32sw.dll and can be overridden by setting the environment
+           variable \e QT_OPENGL_DLL. See the platform-specific pages, for
+           instance \l{Qt for Windows}, for more information.  This value has
+           been added in Qt 5.4.
+
+    \value AA_ShareOpenGLContexts Enables resource sharing between the OpenGL
+           contexts used by classes like QOpenGLWidget and QQuickWidget. This
+           allows sharing OpenGL resources, like textures, between QOpenGLWidget
+           instances that belong to different top-level windows. This value has
+           been added in Qt 5.4.
 
     The following values are obsolete:
 
@@ -204,7 +222,7 @@
 
     \value AllButtons      This value corresponds to a mask of all
            possible mouse buttons. Use to set the 'acceptedButtons'
-           property of a mouseArea to accept ALL mouse buttons.
+           property of a MouseArea to accept ALL mouse buttons.
 
     \value LeftButton      The left button is pressed, or an event refers
            to the left button. (The left button may be the right button on
@@ -1190,6 +1208,13 @@
     \value WA_X11DoNotAcceptFocus Asks the window manager to not give focus
     to this top level window. This attribute has no effect on non-X11
     platforms.
+
+    \value WA_AlwaysStackOnTop Since Qt 5.4, this value forces QOpenGLWidget and
+    QQuickWidget to be drawn last, on top of other widgets. Ignored for other
+    type of widgets. Setting this attribute breaks the stacking order, but
+    allows having a semi-transparent OpenGL widget with other widgets visible
+    underneath. It is strongly recommended to call update() on the widget's
+    top-level window after enabling or disabling this attribute.
 
     \omitvalue WA_SetLayoutDirection
     \omitvalue WA_InputMethodTransparent
@@ -2419,7 +2444,7 @@
 
     \value ImhExclusiveInputMask     This mask yields nonzero if any of the exclusive flags are used.
 
-    \note If several exclusive flags are ORed together, the resulting character set will
+    \note If several exclusive flags are OR-ed together, the resulting character set will
           consist of the union of the specified sets. For instance specifying \c ImhNumbersOnly and
           \c ImhUppercaseOnly would yield a set consisting of numbers and uppercase letters.
 
@@ -2945,8 +2970,8 @@
     This enum provides additional information concerning a QMouseEvent.
 
     \value MouseEventCreatedDoubleClick Indicates that Qt has created a
-    MouseButtonDblClick event from this event. The flag is set in the causing
-    MouseButtonPress, and not in the resulting MouseButtonDblCLick.
+    \l {QEvent::MouseButtonDblClick}{MouseButtonDblClick} event from this event. The flag is set in the causing
+    \l {QEvent::MouseButtonPress}{MouseButtonPress}, and not in the resulting \l {QEvent::MouseButtonDblClick}{MouseButtonDblClick}.
 
     \omitvalue MouseEventFlagMask
 */

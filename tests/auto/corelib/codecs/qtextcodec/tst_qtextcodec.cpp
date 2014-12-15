@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -204,10 +196,9 @@ void tst_QTextCodec::fromUnicode_data()
     QTest::newRow("windows-1257") << "windows-1257" << true;
     QTest::newRow("windows-1258") << "windows-1258" << true;
 
-    QTest::newRow("macintosh") << "macintosh" << true;
+    QTest::newRow("Apple Roman") << "Apple Roman" << true;
     //QTest::newRow("WINSAMI2") << "WINSAMI2" << true;
     QTest::newRow("TIS-620") << "TIS-620" << true;
-//    QTest::newRow("hp-roman8") << "hp-roman8" << true;
     QTest::newRow("SJIS") << "SJIS" << false;
 
     // all codecs from documentation
@@ -217,20 +208,17 @@ void tst_QTextCodec::fromUnicode_data()
     QTest::newRow("windows-949") << "windows-949" << false;
     QTest::newRow("EUC-JP") << "EUC-JP" << false;
     QTest::newRow("EUC-KR") << "EUC-KR" << false;
-    //QTest::newRow("GB18030-0") << "GB18030-0" << false; // only GB18030 works
     QTest::newRow("GB18030") << "GB18030" << false;
+    QTest::newRow("HP-ROMAN8") << "HP-ROMAN8" << false;
     QTest::newRow("IBM 850") << "IBM 850" << false;
     QTest::newRow("IBM 866") << "IBM 866" << false;
     QTest::newRow("IBM 874") << "IBM 874" << false;
     QTest::newRow("ISO 2022-JP") << "ISO 2022-JP" << false;
     //ISO 8859-1 to 10 and  ISO 8859-13 to 16 tested previously
     // Iscii-Bng, Dev, Gjr, Knd, Mlm, Ori, Pnj, Tlg, and Tml  tested in Iscii test
-    //QTest::newRow("JIS X 0201") << "JIS X 0201" << false; // actually not there
-    //QTest::newRow("JIS X 0208") << "JIS X 0208" << false; // actually not there
     QTest::newRow("KOI8-R") << "KOI8-R" << false;
     QTest::newRow("KOI8-U") << "KOI8-U" << false;
-    //QTest::newRow("MuleLao-1") << "MuleLao-1" << false; //only on x11
-    QTest::newRow("ROMAN8") << "ROMAN8" << false;
+    QTest::newRow("Macintosh") << "Macintosh" << true;
     QTest::newRow("Shift-JIS") << "Shift-JIS" << false;
     QTest::newRow("TIS-620") << "TIS-620" << false;
     QTest::newRow("TSCII") << "TSCII" << false;
@@ -2008,6 +1996,10 @@ void tst_QTextCodec::codecForHtml_data()
         "auto; word-spacing: 0px; -webkit-text-size-adjust: auto; -webkit-text-stroke-width: 0px; display: inline !important; float: "
         "none;\">&#x37b</span>\000";
     QTest::newRow("greek text UTF-8") << html << 106 << 106;
+
+    html = "<!DOCTYPE html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=unicode\">"
+            "<head/><body><p>bla</p></body></html>"; // QTBUG-41998, ICU will return UTF-16.
+    QTest::newRow("legacy unicode UTF-8") << html << 106 << 106;
 }
 
 void tst_QTextCodec::codecForHtml()

@@ -12,7 +12,6 @@ load(qt_module)
 
 contains(QT_CONFIG, opengl):CONFIG += opengl
 contains(QT_CONFIG, opengles2):CONFIG += opengles2
-contains(QT_CONFIG, egl):CONFIG += egl
 
 HEADERS += qgl.h \
            qgl_p.h \
@@ -54,5 +53,3 @@ SOURCES +=  qglshaderprogram.cpp \
             gl2paintengineex/qpaintengineex_opengl2.cpp \
             gl2paintengineex/qglcustomshaderstage.cpp \
             gl2paintengineex/qtextureglyphcache_gl.cpp
-
-SOURCES +=  qgl_qpa.cpp

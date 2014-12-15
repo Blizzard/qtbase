@@ -1,47 +1,57 @@
 /****************************************************************************
  **
- ** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+ ** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
  ** Contact: http://www.qt-project.org/legal
  **
  ** This file is part of the test suite of the Qt Toolkit.
  **
- ** $QT_BEGIN_LICENSE:LGPL$
+ ** $QT_BEGIN_LICENSE:LGPL21$
  ** Commercial License Usage
  ** Licensees holding valid commercial Qt licenses may use this file in
  ** accordance with the commercial license agreement provided with the
  ** Software or, alternatively, in accordance with the terms contained in
- ** a written agreement between you and Digia.  For licensing terms and
- ** conditions see http://qt.digia.com/licensing.  For further information
+ ** a written agreement between you and Digia. For licensing terms and
+ ** conditions see http://qt.digia.com/licensing. For further information
  ** use the contact form at http://qt.digia.com/contact-us.
  **
  ** GNU Lesser General Public License Usage
  ** Alternatively, this file may be used under the terms of the GNU Lesser
- ** General Public License version 2.1 as published by the Free Software
- ** Foundation and appearing in the file LICENSE.LGPL included in the
- ** packaging of this file.  Please review the following information to
- ** ensure the GNU Lesser General Public License version 2.1 requirements
- ** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+ ** General Public License version 2.1 or version 3 as published by the Free
+ ** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+ ** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+ ** following information to ensure the GNU Lesser General Public License
+ ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+ ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
  **
  ** In addition, as a special exception, Digia gives you certain additional
- ** rights.  These rights are described in the Digia Qt LGPL Exception
+ ** rights. These rights are described in the Digia Qt LGPL Exception
  ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
- **
- ** GNU General Public License Usage
- ** Alternatively, this file may be used under the terms of the GNU
- ** General Public License version 3.0 as published by the Free Software
- ** Foundation and appearing in the file LICENSE.GPL included in the
- ** packaging of this file.  Please review the following information to
- ** ensure the GNU General Public License version 3.0 requirements will be
- ** met: http://www.gnu.org/copyleft/gpl.html.
- **
  **
  ** $QT_END_LICENSE$
  **
  ****************************************************************************/
 
-#include <QtCore>
-#include <QtGui>
-#include <QtWidgets>
+#include <QMainWindow>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QApplication>
+#include <QAction>
+#include <QStyle>
+#include <QToolBar>
+#include <QPushButton>
+#include <QLineEdit>
+#include <QScrollBar>
+#include <QSlider>
+#include <QSpinBox>
+#include <QTabBar>
+#include <QIcon>
+#include <QPainter>
+#include <QWindow>
+#include <QScreen>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
 
 
 class PixmapPainter : public QWidget
@@ -74,7 +84,7 @@ PixmapPainter::PixmapPainter()
     qtIcon.addFile(":/qticon32@2x.png");
 }
 
-void PixmapPainter::paintEvent(QPaintEvent *event)
+void PixmapPainter::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.fillRect(QRect(QPoint(0, 0), size()), QBrush(Qt::gray));
@@ -187,7 +197,7 @@ MainWindow::MainWindow()
 class StandardIcons : public QWidget
 {
 public:
-    void paintEvent(QPaintEvent *event)
+    void paintEvent(QPaintEvent *)
     {
         int x = 10;
         int y = 10;
@@ -203,13 +213,13 @@ public:
                 y+=dy;
             x = ((x + dx) % maxX);
         }
-    };
+    }
 };
 
 class Caching : public QWidget
 {
 public:
-    void paintEvent(QPaintEvent *event)
+    void paintEvent(QPaintEvent *)
     {
         QSize layoutSize(75, 75);
 
@@ -232,7 +242,7 @@ public:
 
         {
             const qreal devicePixelRatio = this->windowHandle()->devicePixelRatio();
-            QImage cache = QImage(layoutSize * devicePixelRatio, QImage::QImage::Format_ARGB32_Premultiplied);
+            QImage cache = QImage(layoutSize * devicePixelRatio, QImage::Format_ARGB32_Premultiplied);
             cache.setDevicePixelRatio(devicePixelRatio);
 
             QPainter cachedPainter(&cache);
@@ -282,7 +292,7 @@ public:
 class Fonts : public QWidget
 {
 public:
-    void paintEvent(QPaintEvent *event)
+    void paintEvent(QPaintEvent *)
     {
         QPainter painter(this);
         int y = 40;
@@ -333,28 +343,22 @@ void apiTest()
 class IconDrawing : public QWidget
 {
 public:
-    QIcon *iconHighDPI;
-    QIcon *iconNormalDpi;
-
     IconDrawing()
     {
-        QFile::copy(":/qticon32.png", "/tmp/qticon32-2.png");
+        const QString tempPath = m_temporaryDir.path();
+        const QString path32 = tempPath + "/qticon32.png";
+        const QString path32_2 = tempPath + "/qticon32-2.png";
+        const QString path32_2x = tempPath + "/qticon32@2x.png";
 
-        QFile::copy(":/qticon32.png", "/tmp/qticon32.png");
-        QFile::copy(":/qticon32@2x.png", "/tmp/qticon32@2x.png");
+        QFile::copy(":/qticon32.png", path32_2);
+        QFile::copy(":/qticon32.png", path32);
+        QFile::copy(":/qticon32@2x.png", path32_2x);
 
-        iconHighDPI = new QIcon("/tmp/qticon32.png"); // will auto-load @2x version.
-        iconNormalDpi = new QIcon("/tmp/qticon32-2.png"); // does not have a 2x version.
+        iconHighDPI.reset(new QIcon(path32)); // will auto-load @2x version.
+        iconNormalDpi.reset(new QIcon(path32_2)); // does not have a 2x version.
     }
 
-    ~IconDrawing()
-    {
-        delete iconHighDPI;
-        delete iconNormalDpi;
-//        Qile::
-    }
-
-    void paintEvent(QPaintEvent *event)
+    void paintEvent(QPaintEvent *)
     {
         int x = 10;
         int y = 10;
@@ -366,7 +370,7 @@ public:
         int sizeIncrement = 5;
 
         // Disable high-dpi icons
-        qApp->setAttribute(Qt::AA_UseHighDpiPixmaps, false);
+        QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps, false);
 
         // normal icon
         for (int size = minSize; size < maxSize; size += sizeIncrement) {
@@ -392,7 +396,7 @@ public:
         y+=dy;
 
         // Enable high-dpi icons
-        qApp->setAttribute(Qt::AA_UseHighDpiPixmaps, true);
+        QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps, true);
 
         // normal icon
         for (int size = minSize; size < maxSize; size += sizeIncrement) {
@@ -417,7 +421,12 @@ public:
         x = 10;
         y+=dy;
 
-    };
+    }
+
+private:
+    QTemporaryDir m_temporaryDir;
+    QScopedPointer<QIcon> iconHighDPI;
+    QScopedPointer<QIcon> iconNormalDpi;
 };
 
 // Icons on buttons
@@ -456,38 +465,93 @@ public:
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
-    qApp->setAttribute(Qt::AA_UseHighDpiPixmaps);
+    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    QCoreApplication::setApplicationVersion(QT_VERSION_STR);
 
-    PixmapPainter pixmapPainter;
-    pixmapPainter.show();
+    QCommandLineParser parser;
+    parser.setApplicationDescription("High DPI tester");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    QCommandLineOption pixmapPainterOption("pixmap", "Test pixmap painter");
+    parser.addOption(pixmapPainterOption);
+    QCommandLineOption labelOption("label", "Test Labels");
+    parser.addOption(labelOption);
+    QCommandLineOption mainWindowOption("mainwindow", "Test QMainWindow");
+    parser.addOption(mainWindowOption);
+    QCommandLineOption standardIconsOption("standard-icons", "Test standard icons");
+    parser.addOption(standardIconsOption);
+    QCommandLineOption cachingOption("caching", "Test caching");
+    parser.addOption(cachingOption);
+    QCommandLineOption styleOption("styles", "Test style");
+    parser.addOption(styleOption);
+    QCommandLineOption fontsOption("fonts", "Test fonts");
+    parser.addOption(fontsOption);
+    QCommandLineOption iconDrawingOption("icondrawing", "Test icon drawing");
+    parser.addOption(iconDrawingOption);
+    QCommandLineOption buttonsOption("buttons", "Test buttons");
+    parser.addOption(buttonsOption);
 
-    Labels label;
-    label.resize(200, 200);
-//    label.show();
+    parser.process(app);
 
-    MainWindow mainWindow;
-//    mainWindow.show();
+    QScopedPointer<PixmapPainter> pixmapPainter;
+    if (parser.isSet(pixmapPainterOption)) {
+        pixmapPainter.reset(new PixmapPainter);
+        pixmapPainter->show();
+    }
 
-    StandardIcons icons;
-    icons.resize(510, 510);
-//    icons.show();
+    QScopedPointer<Labels> label;
+    if (parser.isSet(labelOption)) {
+        label.reset(new Labels);
+        label->resize(200, 200);
+        label->show();
+    }
 
-    Caching caching;
-    caching.resize(300, 300);
-//    caching.show();
+    QScopedPointer<MainWindow> mainWindow;
+    if (parser.isSet(mainWindowOption)) {
+        mainWindow.reset(new MainWindow);
+        mainWindow->show();
+    }
 
-    Style style;
-//    style.show();
+    QScopedPointer<StandardIcons> icons;
+    if (parser.isSet(standardIconsOption)) {
+        icons.reset(new StandardIcons);
+        icons->resize(510, 510);
+        icons->show();
+    }
 
-    Fonts fonts;
-//    fonts.show();
+    QScopedPointer<Caching> caching;
+    if (parser.isSet(cachingOption)) {
+        caching.reset(new Caching);
+        caching->resize(300, 300);
+        caching->show();
+    }
 
-    IconDrawing iconDrawing;
-//    iconDrawing.show();
+    QScopedPointer<Style> style;
+    if (parser.isSet(styleOption)) {
+        style.reset(new Style);
+        style->show();
+    }
 
-    Buttons buttons;
-//    buttons.show();
+    QScopedPointer<Fonts> fonts;
+    if (parser.isSet(fontsOption)) {
+        fonts.reset(new Fonts);
+        fonts->show();
+    }
 
+    QScopedPointer<IconDrawing> iconDrawing;
+    if (parser.isSet(iconDrawingOption)) {
+        iconDrawing.reset(new IconDrawing);
+        iconDrawing->show();
+    }
+
+    QScopedPointer<Buttons> buttons;
+    if (parser.isSet(buttonsOption)) {
+        buttons.reset(new Buttons);
+        buttons->show();
+    }
+
+    if (QApplication::topLevelWidgets().isEmpty())
+        parser.showHelp(0);
 
     return app.exec();
 }

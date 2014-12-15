@@ -89,7 +89,7 @@ contains(qt_module_deps, qml): \
     }
 
     # run qmlimportscanner
-    qtPrepareTool(QMLIMPORTSCANNER, qmlimportscanner)
+    qtPrepareTool(QMLIMPORTSCANNER, qmlimportscanner, , system)
     for (QMLPATH, QMLPATHS): \
         IMPORTPATHS += -importPath $$QMLPATH
 

@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -157,6 +149,8 @@ public:
     mutable bool wrongIndex;
     QVector<QVector<QString> > table;
 };
+
+Q_DECLARE_METATYPE(QAbstractItemModel::LayoutChangeHint);
 
 QtTestModel::QtTestModel(int rows, int columns, QObject *parent)
     : QAbstractItemModel(parent), cCount(columns), rCount(rows), wrongIndex(false)
@@ -353,6 +347,8 @@ void tst_QAbstractItemModel::init()
     insertCommand->setStartRow(0);
     insertCommand->setEndRow(9);
     insertCommand->doCommand();
+
+    qRegisterMetaType<QAbstractItemModel::LayoutChangeHint>();
 }
 
 void tst_QAbstractItemModel::cleanup()
@@ -807,8 +803,8 @@ void tst_QAbstractItemModel::removeRows()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy rowsAboutToBeRemovedSpy(&model, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)));
-    QSignalSpy rowsRemovedSpy(&model, SIGNAL(rowsRemoved(QModelIndex,int,int)));
+    QSignalSpy rowsAboutToBeRemovedSpy(&model, &QtTestModel::rowsAboutToBeRemoved);
+    QSignalSpy rowsRemovedSpy(&model, &QtTestModel::rowsRemoved);
 
     QVERIFY(rowsAboutToBeRemovedSpy.isValid());
     QVERIFY(rowsRemovedSpy.isValid());
@@ -822,8 +818,8 @@ void tst_QAbstractItemModel::removeColumns()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy columnsAboutToBeRemovedSpy(&model, SIGNAL(columnsAboutToBeRemoved(QModelIndex,int,int)));
-    QSignalSpy columnsRemovedSpy(&model, SIGNAL(columnsRemoved(QModelIndex,int,int)));
+    QSignalSpy columnsAboutToBeRemovedSpy(&model, &QtTestModel::columnsAboutToBeRemoved);
+    QSignalSpy columnsRemovedSpy(&model, &QtTestModel::columnsRemoved);
 
     QVERIFY(columnsAboutToBeRemovedSpy.isValid());
     QVERIFY(columnsRemovedSpy.isValid());
@@ -837,8 +833,8 @@ void tst_QAbstractItemModel::insertRows()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy rowsAboutToBeInsertedSpy(&model, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)));
-    QSignalSpy rowsInsertedSpy(&model, SIGNAL(rowsInserted(QModelIndex,int,int)));
+    QSignalSpy rowsAboutToBeInsertedSpy(&model, &QtTestModel::rowsAboutToBeInserted);
+    QSignalSpy rowsInsertedSpy(&model, &QtTestModel::rowsInserted);
 
     QVERIFY(rowsAboutToBeInsertedSpy.isValid());
     QVERIFY(rowsInsertedSpy.isValid());
@@ -852,8 +848,8 @@ void tst_QAbstractItemModel::insertColumns()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy columnsAboutToBeInsertedSpy(&model, SIGNAL(columnsAboutToBeInserted(QModelIndex,int,int)));
-    QSignalSpy columnsInsertedSpy(&model, SIGNAL(columnsInserted(QModelIndex,int,int)));
+    QSignalSpy columnsAboutToBeInsertedSpy(&model, &QtTestModel::columnsAboutToBeInserted);
+    QSignalSpy columnsInsertedSpy(&model, &QtTestModel::columnsInserted);
 
     QVERIFY(columnsAboutToBeInsertedSpy.isValid());
     QVERIFY(columnsInsertedSpy.isValid());
@@ -867,8 +863,8 @@ void tst_QAbstractItemModel::moveRows()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy rowsAboutToBeMovedSpy(&model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy rowsMovedSpy(&model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy rowsAboutToBeMovedSpy(&model, &QtTestModel::rowsAboutToBeMoved);
+    QSignalSpy rowsMovedSpy(&model, &QtTestModel::rowsMoved);
 
     QVERIFY(rowsAboutToBeMovedSpy.isValid());
     QVERIFY(rowsMovedSpy.isValid());
@@ -882,8 +878,8 @@ void tst_QAbstractItemModel::moveColumns()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy columnsAboutToBeMovedSpy(&model, SIGNAL(columnsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy columnsMovedSpy(&model, SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy columnsAboutToBeMovedSpy(&model, &QtTestModel::columnsAboutToBeMoved);
+    QSignalSpy columnsMovedSpy(&model, &QtTestModel::columnsMoved);
 
     QVERIFY(columnsAboutToBeMovedSpy.isValid());
     QVERIFY(columnsMovedSpy.isValid());
@@ -901,7 +897,7 @@ void tst_QAbstractItemModel::reset()
 {
     QtTestModel model(10, 10);
 
-    QSignalSpy resetSpy(&model, SIGNAL(modelReset()));
+    QSignalSpy resetSpy(&model, &QtTestModel::modelReset);
     QVERIFY(resetSpy.isValid());
     model.reset();
     QCOMPARE(resetSpy.count(), 1);
@@ -1023,8 +1019,8 @@ void tst_QAbstractItemModel::testMoveSameParentDown()
         }
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1138,8 +1134,8 @@ void tst_QAbstractItemModel::testMoveSameParentUp()
         }
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1287,8 +1283,8 @@ void tst_QAbstractItemModel::testMoveToGrandParent()
         }
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1427,8 +1423,8 @@ void tst_QAbstractItemModel::testMoveToSibling()
         persistentList << QPersistentModelIndex(idx);
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1577,8 +1573,8 @@ void tst_QAbstractItemModel::testMoveToUncle()
         persistentList << QPersistentModelIndex(idx);
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1684,8 +1680,8 @@ void tst_QAbstractItemModel::testMoveToDescendants()
         persistentList << QPersistentModelIndex(idx);
     }
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1748,8 +1744,8 @@ void tst_QAbstractItemModel::testMoveWithinOwnRange()
     QFETCH(int, endRow);
     QFETCH(int, destRow);
 
-    QSignalSpy beforeSpy(m_model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
-    QSignalSpy afterSpy(m_model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QSignalSpy beforeSpy(m_model, &DynamicTreeModel::rowsAboutToBeMoved);
+    QSignalSpy afterSpy(m_model, &DynamicTreeModel::rowsMoved);
 
     QVERIFY(beforeSpy.isValid());
     QVERIFY(afterSpy.isValid());
@@ -1841,8 +1837,8 @@ void ListenerObject::slotReset()
 
 void tst_QAbstractItemModel::testReset()
 {
-    QSignalSpy beforeResetSpy(m_model, SIGNAL(modelAboutToBeReset()));
-    QSignalSpy afterResetSpy(m_model, SIGNAL(modelReset()));
+    QSignalSpy beforeResetSpy(m_model, &DynamicTreeModel::modelAboutToBeReset);
+    QSignalSpy afterResetSpy(m_model, &DynamicTreeModel::modelReset);
 
     QVERIFY(beforeResetSpy.isValid());
     QVERIFY(afterResetSpy.isValid());
@@ -1874,8 +1870,8 @@ void tst_QAbstractItemModel::testReset()
     // Delete it because its slots test things which are not true after this point.
     delete listener;
 
-    QSignalSpy proxyBeforeResetSpy(nullProxy, SIGNAL(modelAboutToBeReset()));
-    QSignalSpy proxyAfterResetSpy(nullProxy, SIGNAL(modelReset()));
+    QSignalSpy proxyBeforeResetSpy(nullProxy, &QSortFilterProxyModel::modelAboutToBeReset);
+    QSignalSpy proxyAfterResetSpy(nullProxy, &QSortFilterProxyModel::modelReset);
 
     // Before setting it, it does not have custom roles.
     QCOMPARE(nullProxy->roleNames().value(Qt::UserRole + 1), QByteArray());
@@ -1925,8 +1921,8 @@ void tst_QAbstractItemModel::testDataChanged()
 {
     CustomRoleModel model;
 
-    QSignalSpy withRoles(&model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)));
-    QSignalSpy withoutRoles(&model, SIGNAL(dataChanged(QModelIndex,QModelIndex)));
+    QSignalSpy withRoles(&model, &CustomRoleModel::dataChanged);
+    QSignalSpy withoutRoles(&model, &CustomRoleModel::dataChanged);
 
     QVERIFY(withRoles.isValid());
     QVERIFY(withoutRoles.isValid());
@@ -2027,8 +2023,8 @@ void tst_QAbstractItemModel::testChildrenLayoutsChanged()
         QCOMPARE(model.rowCount(p1), 10);
         QCOMPARE(model.rowCount(p2), 10);
 
-        QSignalSpy beforeSpy(&model, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-        QSignalSpy afterSpy(&model, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
+        QSignalSpy beforeSpy(&model, &DynamicTreeModel::layoutAboutToBeChanged);
+        QSignalSpy afterSpy(&model, &DynamicTreeModel::layoutChanged);
 
         QVERIFY(beforeSpy.isValid());
         QVERIFY(afterSpy.isValid());
@@ -2043,8 +2039,8 @@ void tst_QAbstractItemModel::testChildrenLayoutsChanged()
 
         const QVariantList beforeSignal = beforeSpy.first();
         const QVariantList afterSignal = afterSpy.first();
-        QCOMPARE(beforeSignal.size(), 1);
-        QCOMPARE(afterSignal.size(), 1);
+        QCOMPARE(beforeSignal.size(), 2);
+        QCOMPARE(afterSignal.size(), 2);
 
         const QList<QPersistentModelIndex> beforeParents = beforeSignal.first().value<QList<QPersistentModelIndex> >();
         QCOMPARE(beforeParents.size(), 2);
@@ -2093,8 +2089,8 @@ void tst_QAbstractItemModel::testChildrenLayoutsChanged()
         const QPersistentModelIndex p2FirstPersistent = model.index(0, 0, p2);
         const QPersistentModelIndex p2LastPersistent = model.index(9, 0, p2);
 
-        QSignalSpy beforeSpy(&model, SIGNAL(layoutAboutToBeChanged(QList<QPersistentModelIndex>)));
-        QSignalSpy afterSpy(&model, SIGNAL(layoutChanged(QList<QPersistentModelIndex>)));
+        QSignalSpy beforeSpy(&model, &DynamicTreeModel::layoutAboutToBeChanged);
+        QSignalSpy afterSpy(&model, &DynamicTreeModel::layoutChanged);
 
         QVERIFY(beforeSpy.isValid());
         QVERIFY(afterSpy.isValid());
@@ -2116,8 +2112,8 @@ void tst_QAbstractItemModel::testChildrenLayoutsChanged()
 
         const QVariantList beforeSignal = beforeSpy.first();
         const QVariantList afterSignal = afterSpy.first();
-        QCOMPARE(beforeSignal.size(), 1);
-        QCOMPARE(afterSignal.size(), 1);
+        QCOMPARE(beforeSignal.size(), 2);
+        QCOMPARE(afterSignal.size(), 2);
 
         QVERIFY(p1FirstPersistent.row() == 1);
         QVERIFY(p1LastPersistent.row() == 0);

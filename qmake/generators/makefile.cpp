@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -69,11 +61,6 @@
 #include <sys/stat.h>
 
 QT_BEGIN_NAMESPACE
-
-// Well, Windows doesn't have this, so here's the macro
-#ifndef S_ISDIR
-#  define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
-#endif
 
 bool MakefileGenerator::canExecute(const QStringList &cmdline, int *a) const
 {
@@ -1749,23 +1736,7 @@ MakefileGenerator::verifyExtraCompiler(const ProString &comp, const QString &fil
         QString tmp_out = project->values(ProKey(comp + ".output")).first().toQString();
         if(tmp_out.isEmpty())
             return false;
-        QString tmp_cmd;
-        const ProKey ckey(comp + ".commands");
-        if (!project->isEmpty(ckey)) {
-            int argv0 = -1;
-            ProStringList cmdline = project->values(ckey);
-            for(int i = 0; i < cmdline.count(); ++i) {
-                if(!cmdline.at(i).contains('=')) {
-                    argv0 = i;
-                    break;
-                }
-            }
-            if(argv0 != -1) {
-                cmdline[argv0] = Option::fixPathToTargetOS(cmdline.at(argv0).toQString(), false);
-                tmp_cmd = cmdline.join(' ');
-            }
-        }
-
+        const QString tmp_cmd = project->values(ProKey(comp + ".commands")).join(' ');
         if (config.indexOf("combine") != -1) {
             QString cmd = replaceExtraCompilerVariables(tmp_cmd, QString(), tmp_out);
             if(system(cmd.toLatin1().constData()))
@@ -1829,42 +1800,10 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
     for (ProStringList::ConstIterator it = quc.begin(); it != quc.end(); ++it) {
         QString tmp_out = fileFixify(project->first(ProKey(*it + ".output")).toQString(),
                                      Option::output_dir, Option::output_dir);
-        QString tmp_cmd;
-        const ProKey ckey(*it + ".commands");
-        if (!project->isEmpty(ckey)) {
-            QStringList cmdline = project->values(ckey).toQStringList();
-            int argv0 = findExecutable(cmdline);
-            if(argv0 != -1) {
-                cmdline[argv0] = escapeFilePath(Option::fixPathToTargetOS(cmdline.at(argv0), false));
-                tmp_cmd = cmdline.join(' ');
-            }
-        }
-        QString tmp_dep_cmd;
+        const QString tmp_cmd = project->values(ProKey(*it + ".commands")).join(' ');
+        const QString tmp_dep_cmd = project->values(ProKey(*it + ".depend_command")).join(' ');
         QString dep_cd_cmd;
-        const ProKey dckey(*it + ".depend_command");
-        if (!project->isEmpty(dckey)) {
-            int argv0 = -1;
-            ProStringList cmdline = project->values(dckey);
-            for(int i = 0; i < cmdline.count(); ++i) {
-                if(!cmdline.at(i).contains('=')) {
-                    argv0 = i;
-                    break;
-                }
-            }
-            if(argv0 != -1) {
-                QString arg = cmdline.at(argv0).toQString();
-                const QString c = Option::fixPathToLocalOS(arg, true);
-                if(exists(c)) {
-                    arg = escapeFilePath(Option::fixPathToLocalOS(arg, false));
-                } else {
-                    arg = escapeFilePath(arg);
-                }
-                QFileInfo cmdFileInfo(arg);
-                if (!cmdFileInfo.isAbsolute() || cmdFileInfo.exists()) {
-                    cmdline[argv0] = arg;
-                    tmp_dep_cmd = cmdline.join(' ');
-                }
-            }
+        if (!tmp_dep_cmd.isEmpty()) {
             dep_cd_cmd = QLatin1String("cd ")
                  + escapeFilePath(Option::fixPathToLocalOS(Option::output_dir, false))
                  + QLatin1String(" && ");
@@ -2254,6 +2193,25 @@ MakefileGenerator::writeMakefile(QTextStream &t)
     return true;
 }
 
+void
+MakefileGenerator::writeDefaultVariables(QTextStream &t)
+{
+    t << "QMAKE         = " << var("QMAKE_QMAKE") << endl;
+    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
+    t << "CHK_DIR_EXISTS= " << var("QMAKE_CHK_DIR_EXISTS") << endl;
+    t << "MKDIR         = " << var("QMAKE_MKDIR") << endl;
+    t << "COPY          = " << var("QMAKE_COPY") << endl;
+    t << "COPY_FILE     = " << var("QMAKE_COPY_FILE") << endl;
+    t << "COPY_DIR      = " << var("QMAKE_COPY_DIR") << endl;
+    t << "INSTALL_FILE  = " << var("QMAKE_INSTALL_FILE") << endl;
+    t << "INSTALL_PROGRAM = " << var("QMAKE_INSTALL_PROGRAM") << endl;
+    t << "INSTALL_DIR   = " << var("QMAKE_INSTALL_DIR") << endl;
+    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
+    t << "SYMLINK       = " << var("QMAKE_SYMBOLIC_LINK") << endl;
+    t << "DEL_DIR       = " << var("QMAKE_DEL_DIR") << endl;
+    t << "MOVE          = " << var("QMAKE_MOVE") << endl;
+}
+
 QString MakefileGenerator::fixifySpecdir(const QString &spec, const QString &outdir)
 {
     if (QFileInfo(spec).isAbsolute())
@@ -2464,20 +2422,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
         t << "include " << (*qeui_it) << endl;
 
     if (!(flags & SubTargetSkipDefaultVariables)) {
-        t << "QMAKE         = " << var("QMAKE_QMAKE") << endl;
-        t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
-        t << "CHK_DIR_EXISTS= " << var("QMAKE_CHK_DIR_EXISTS") << endl;
-        t << "MKDIR         = " << var("QMAKE_MKDIR") << endl;
-        t << "COPY          = " << var("QMAKE_COPY") << endl;
-        t << "COPY_FILE     = " << var("QMAKE_COPY_FILE") << endl;
-        t << "COPY_DIR      = " << var("QMAKE_COPY_DIR") << endl;
-        t << "INSTALL_FILE  = " << var("QMAKE_INSTALL_FILE") << endl;
-        t << "INSTALL_PROGRAM = " << var("QMAKE_INSTALL_PROGRAM") << endl;
-        t << "INSTALL_DIR   = " << var("QMAKE_INSTALL_DIR") << endl;
-        t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
-        t << "SYMLINK       = " << var("QMAKE_SYMBOLIC_LINK") << endl;
-        t << "DEL_DIR       = " << var("QMAKE_DEL_DIR") << endl;
-        t << "MOVE          = " << var("QMAKE_MOVE") << endl;
+        writeDefaultVariables(t);
         t << "SUBTARGETS    = ";     // subtargets are sub-directory
         for(int target = 0; target < targets.size(); ++target)
             t << " \\\n\t\t" << targets.at(target)->target;

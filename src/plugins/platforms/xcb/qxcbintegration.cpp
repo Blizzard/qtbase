@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -83,6 +75,7 @@
 #include "qxcbeglsurface.h"
 #include <QtPlatformSupport/private/qeglplatformcontext_p.h>
 #include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtPlatformHeaders/QEGLNativeContext>
 #endif
 
 #include <QtGui/QOpenGLContext>
@@ -187,8 +180,8 @@ class QEGLXcbPlatformContext : public QEGLPlatformContext
 {
 public:
     QEGLXcbPlatformContext(const QSurfaceFormat &glFormat, QPlatformOpenGLContext *share,
-                           EGLDisplay display, QXcbConnection *c)
-        : QEGLPlatformContext(glFormat, share, display)
+                           EGLDisplay display, QXcbConnection *c, const QVariant &nativeHandle)
+        : QEGLPlatformContext(glFormat, share, display, 0, nativeHandle)
         , m_connection(c)
     {
         Q_XCB_NOOP(m_connection);
@@ -224,6 +217,10 @@ public:
             return static_cast<QEGLPbuffer *>(surface)->pbuffer();
     }
 
+    QVariant nativeHandle() const {
+        return QVariant::fromValue<QEGLNativeContext>(QEGLNativeContext(eglContext(), eglDisplay()));
+    }
+
 private:
     QXcbConnection *m_connection;
 };
@@ -234,10 +231,18 @@ QPlatformOpenGLContext *QXcbIntegration::createPlatformOpenGLContext(QOpenGLCont
 {
     QXcbScreen *screen = static_cast<QXcbScreen *>(context->screen()->handle());
 #if defined(XCB_USE_GLX)
-    return new QGLXContext(screen, context->format(), context->shareHandle());
+    QGLXContext *platformContext = new QGLXContext(screen, context->format(),
+                                                   context->shareHandle(), context->nativeHandle());
+    context->setNativeHandle(platformContext->nativeHandle());
+    return platformContext;
 #elif defined(XCB_USE_EGL)
-    return new QEGLXcbPlatformContext(context->format(), context->shareHandle(),
-        screen->connection()->egl_display(), screen->connection());
+    QEGLXcbPlatformContext *platformContext = new QEGLXcbPlatformContext(context->format(),
+                                                                         context->shareHandle(),
+                                                                         screen->connection()->egl_display(),
+                                                                         screen->connection(),
+                                                                         context->nativeHandle());
+    context->setNativeHandle(platformContext->nativeHandle());
+    return platformContext;
 #else
     Q_UNUSED(screen);
     qWarning("QXcbIntegration: Cannot create platform OpenGL context, neither GLX nor EGL are enabled");
@@ -412,10 +417,8 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
     case QPlatformIntegration::StartDragDistance: {
         // The default (in QPlatformTheme::defaultThemeHint) is 10 pixels, but
         // on a high-resolution screen it makes sense to increase it.
-        const QList<QXcbScreen *> &screens = defaultConnection()->screens();
         qreal dpi = 100.0;
-        if (screens.length() > 0) {
-            const QXcbScreen *screen = screens.at(defaultConnection()->primaryScreen());
+        if (const QXcbScreen *screen = defaultConnection()->primaryScreen()) {
             if (screen->logicalDpi().first > dpi)
                 dpi = screen->logicalDpi().first;
             if (screen->logicalDpi().second > dpi)

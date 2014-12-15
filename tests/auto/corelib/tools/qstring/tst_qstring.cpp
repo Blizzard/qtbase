@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -76,6 +68,10 @@ class tst_QString : public QObject
 {
     Q_OBJECT
 
+    template<typename List, class RegExp>
+    void split_regexp(const QString &string, const QString &pattern, QStringList result);
+    template<typename List>
+    void split(const QString &string, const QString &separator, QStringList result);
 public:
     tst_QString();
 public slots:
@@ -221,6 +217,14 @@ private slots:
     void split();
     void split_regexp_data();
     void split_regexp();
+    void split_regularexpression_data();
+    void split_regularexpression();
+    void splitRef_data();
+    void splitRef();
+    void splitRef_regexp_data();
+    void splitRef_regexp();
+    void splitRef_regularexpression_data();
+    void splitRef_regularexpression();
     void fromUtf16_data();
     void fromUtf16();
     void fromUtf16_char16_data();
@@ -4170,11 +4174,17 @@ void tst_QString::arg()
     QCOMPARE( s4.arg(Q_INT64_C(9223372036854775807)), // LLONG_MAX
              QString("[9223372036854775807]") );
 
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\" , 0");
     QCOMPARE( QString().arg(0), QString() );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"\" , 0");
     QCOMPARE( QString("").arg(0), QString("") );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \" \" , 0");
     QCOMPARE( QString(" ").arg(0), QString(" ") );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%\" , 0");
     QCOMPARE( QString("%").arg(0), QString("%") );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%\" , 0");
     QCOMPARE( QString("%%").arg(0), QString("%%") );
+    QTest::ignoreMessage(QtWarningMsg, "QString::arg: Argument missing: \"%%%\" , 0");
     QCOMPARE( QString("%%%").arg(0), QString("%%%") );
     QCOMPARE( QString("%%%1%%%2").arg("foo").arg("bar"), QString("%%foo%%bar") );
 
@@ -4983,16 +4993,49 @@ void tst_QString::split_data()
     QTest::newRow("sep-empty") << "abc" << "" << (QStringList() << "" << "a" << "b" << "c" << "");
 }
 
-void tst_QString::split()
+template<class> struct StringSplitWrapper;
+template<> struct StringSplitWrapper<QString>
 {
-    QFETCH(QString, str);
-    QFETCH(QString, sep);
-    QFETCH(QStringList, result);
+    const QString &string;
 
+    QStringList split(const QString &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts, Qt::CaseSensitivity cs = Qt::CaseSensitive) const { return string.split(sep, behavior, cs); }
+    QStringList split(QChar sep, QString::SplitBehavior behavior = QString::KeepEmptyParts, Qt::CaseSensitivity cs = Qt::CaseSensitive) const { return string.split(sep, behavior, cs); }
+    QStringList split(const QRegExp &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts) const { return string.split(sep, behavior); }
+    QStringList split(const QRegularExpression &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts) const { return string.split(sep, behavior); }
+};
+
+template<> struct StringSplitWrapper<QStringRef>
+{
+    const QString &string;
+    QVector<QStringRef> split(const QString &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts, Qt::CaseSensitivity cs = Qt::CaseSensitive) const { return string.splitRef(sep, behavior, cs); }
+    QVector<QStringRef> split(QChar sep, QString::SplitBehavior behavior = QString::KeepEmptyParts, Qt::CaseSensitivity cs = Qt::CaseSensitive) const { return string.splitRef(sep, behavior, cs); }
+    QVector<QStringRef> split(const QRegExp &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts) const { return string.splitRef(sep, behavior); }
+    QVector<QStringRef> split(const QRegularExpression &sep, QString::SplitBehavior behavior = QString::KeepEmptyParts) const { return string.splitRef(sep, behavior); }
+};
+
+static bool operator ==(const QStringList &left, const QVector<QStringRef> &right)
+{
+    if (left.size() != right.size())
+        return false;
+
+    QStringList::const_iterator iLeft = left.constBegin();
+    QVector<QStringRef>::const_iterator iRight = right.constBegin();
+    for (; iLeft != left.end(); ++iLeft, ++iRight) {
+        if (*iLeft != *iRight)
+            return false;
+    }
+    return true;
+}
+static inline bool operator ==(const QVector<QStringRef> &left, const QStringList &right) { return right == left; }
+
+template<class List>
+void tst_QString::split(const QString &string, const QString &sep, QStringList result)
+{
     QRegExp rx = QRegExp(QRegExp::escape(sep));
     QRegularExpression re(QRegularExpression::escape(sep));
 
-    QStringList list;
+    List list;
+    StringSplitWrapper<typename List::value_type> str = {string};
 
     list = str.split(sep);
     QVERIFY(list == result);
@@ -5029,6 +5072,27 @@ void tst_QString::split()
     }
 }
 
+void tst_QString::split()
+{
+    QFETCH(QString, str);
+    QFETCH(QString, sep);
+    QFETCH(QStringList, result);
+    split<QStringList>(str, sep, result);
+}
+
+void tst_QString::splitRef_data()
+{
+    split_data();
+}
+
+void tst_QString::splitRef()
+{
+    QFETCH(QString, str);
+    QFETCH(QString, sep);
+    QFETCH(QStringList, result);
+    split<QVector<QStringRef> >(str, sep, result);
+}
+
 void tst_QString::split_regexp_data()
 {
     QTest::addColumn<QString>("string");
@@ -5048,24 +5112,66 @@ void tst_QString::split_regexp_data()
                             << (QStringList() << "" << "Now" << ": " << "this" << " " << "sentence" << " " << "fragment" << ".");
 }
 
+template<class List, class RegExp>
+void tst_QString::split_regexp(const QString &_string, const QString &pattern, QStringList result)
+{
+    List list;
+    StringSplitWrapper<typename List::value_type> string = {_string};
+
+    list = string.split(RegExp(pattern));
+    QVERIFY(list == result);
+
+    result.removeAll(QString());
+
+    list = string.split(RegExp(pattern), QString::SkipEmptyParts);
+    QVERIFY(list == result);
+}
+
 void tst_QString::split_regexp()
 {
     QFETCH(QString, string);
     QFETCH(QString, pattern);
     QFETCH(QStringList, result);
+    split_regexp<QStringList, QRegExp>(string, pattern, result);
+}
 
-    QStringList list;
-    list = string.split(QRegExp(pattern));
-    QCOMPARE(list, result);
-    list = string.split(QRegularExpression(pattern));
-    QCOMPARE(list, result);
+void tst_QString::split_regularexpression_data()
+{
+    split_regexp_data();
+}
 
-    result.removeAll(QString());
+void tst_QString::split_regularexpression()
+{
+    QFETCH(QString, string);
+    QFETCH(QString, pattern);
+    QFETCH(QStringList, result);
+    split_regexp<QStringList, QRegularExpression>(string, pattern, result);
+}
 
-    list = string.split(QRegExp(pattern), QString::SkipEmptyParts);
-    QCOMPARE(list, result);
-    list = string.split(QRegularExpression(pattern), QString::SkipEmptyParts);
-    QCOMPARE(list, result);
+void tst_QString::splitRef_regularexpression_data()
+{
+    split_regexp_data();
+}
+
+void tst_QString::splitRef_regularexpression()
+{
+    QFETCH(QString, string);
+    QFETCH(QString, pattern);
+    QFETCH(QStringList, result);
+    split_regexp<QVector<QStringRef>, QRegularExpression>(string, pattern, result);
+}
+
+void tst_QString::splitRef_regexp_data()
+{
+    split_regexp_data();
+}
+
+void tst_QString::splitRef_regexp()
+{
+    QFETCH(QString, string);
+    QFETCH(QString, pattern);
+    QFETCH(QStringList, result);
+    split_regexp<QVector<QStringRef>, QRegExp>(string, pattern, result);
 }
 
 void tst_QString::fromUtf16_data()

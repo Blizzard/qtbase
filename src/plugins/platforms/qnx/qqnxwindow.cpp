@@ -5,35 +5,27 @@
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -83,7 +75,7 @@ QT_BEGIN_NAMESPACE
     the default behavior suffices, some circumstances require greater control over the
     interaction with screen.
 
-    \section1 Window types
+    \section1 Window Types
 
     The QNX QPA plugin can operate in two modes, with or without a root window. The
     selection of mode is made via the \e rootwindow and \e no-rootwindow options to the
@@ -252,7 +244,7 @@ void QQnxWindow::setGeometry(const QRect &rect)
         setGeometryHelper(newGeometry);
 
     if (isExposed())
-        QWindowSystemInterface::handleExposeEvent(window(), newGeometry);
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), newGeometry.size()));
 }
 
 void QQnxWindow::setGeometryHelper(const QRect &rect)
@@ -306,7 +298,7 @@ void QQnxWindow::setVisible(bool visible)
 
     root->updateVisibility(root->m_visible);
 
-    QWindowSystemInterface::handleExposeEvent(window(), window()->geometry());
+    QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), window()->geometry().size()));
 
     if (visible) {
         applyWindowState();
@@ -345,7 +337,7 @@ void QQnxWindow::setExposed(bool exposed)
 
     if (m_exposed != exposed) {
         m_exposed = exposed;
-        QWindowSystemInterface::handleExposeEvent(window(), window()->geometry());
+        QWindowSystemInterface::handleExposeEvent(window(), QRect(QPoint(0, 0), window()->geometry().size()));
     }
 }
 

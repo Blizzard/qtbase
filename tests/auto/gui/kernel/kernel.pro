@@ -20,6 +20,9 @@ SUBDIRS=\
    qtouchevent \
    qwindow \
    qguiapplication \
+   qpixelformat \
+   qopenglwindow \
+   qrasterwindow
 
 !qtHaveModule(widgets): SUBDIRS -= \
    qmouseevent_modal \
@@ -27,3 +30,5 @@ SUBDIRS=\
 
 !qtHaveModule(network): SUBDIRS -= \
    qguieventloop
+
+!contains(QT_CONFIG, opengl(es2)?): SUBDIRS -= qopenglwindow

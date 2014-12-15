@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -138,7 +130,9 @@ private slots:
     void peerCertificate();
     void peerCertificateChain();
     void privateKey();
+#ifndef QT_NO_OPENSSL
     void privateKeyOpaque();
+#endif
     void protocol();
     void protocolServerSide_data();
     void protocolServerSide();
@@ -186,7 +180,9 @@ private slots:
     void writeBigChunk();
     void blacklistedCertificates();
     void versionAccessors();
+#ifndef QT_NO_OPENSSL
     void sslOptions();
+#endif
     void encryptWithoutConnecting();
     void resume_data();
     void resume();
@@ -810,6 +806,7 @@ void tst_QSslSocket::privateKey()
 {
 }
 
+#ifndef QT_NO_OPENSSL
 void tst_QSslSocket::privateKeyOpaque()
 {
     if (!QSslSocket::supportsSsl())
@@ -839,6 +836,7 @@ void tst_QSslSocket::privateKeyOpaque()
     if (setProxy && !socket->waitForEncrypted(10000))
         QSKIP("Skipping flaky test - See QTBUG-29941");
 }
+#endif
 
 void tst_QSslSocket::protocol()
 {
@@ -1027,17 +1025,17 @@ protected:
         if (m_interFile.isEmpty()) {
             QList<QSslCertificate> localCert = QSslCertificate::fromPath(m_certFile);
             QVERIFY(!localCert.isEmpty());
-            QVERIFY(localCert.first().handle());
+            QVERIFY(!localCert.first().isNull());
             socket->setLocalCertificate(localCert.first());
         }
         else {
             QList<QSslCertificate> localCert = QSslCertificate::fromPath(m_certFile);
             QVERIFY(!localCert.isEmpty());
-            QVERIFY(localCert.first().handle());
+            QVERIFY(!localCert.first().isNull());
 
             QList<QSslCertificate> interCert = QSslCertificate::fromPath(m_interFile);
             QVERIFY(!interCert.isEmpty());
-            QVERIFY(interCert.first().handle());
+            QVERIFY(!interCert.first().isNull());
 
             socket->setLocalCertificateChain(localCert + interCert);
         }
@@ -1090,7 +1088,7 @@ void tst_QSslSocket::protocolServerSide_data()
 #endif
     QTest::newRow("ssl3-tls1.0") << QSsl::SslV3 << QSsl::TlsV1_0 << false;
     QTest::newRow("ssl3-tls1ssl3") << QSsl::SslV3 << QSsl::TlsV1SslV3 << true;
-    QTest::newRow("ssl3-secure") << QSsl::SslV3 << QSsl::SecureProtocols << true;
+    QTest::newRow("ssl3-secure") << QSsl::SslV3 << QSsl::SecureProtocols << false;
 #ifndef OPENSSL_NO_SSL2
     QTest::newRow("ssl3-any") << QSsl::SslV3 << QSsl::AnyProtocol << false; // we won't set a SNI header here because we connect to a
                                                                             // numerical IP, so OpenSSL will send a SSL 2 handshake
@@ -1122,7 +1120,7 @@ void tst_QSslSocket::protocolServerSide_data()
 #ifndef OPENSSL_NO_SSL2
     QTest::newRow("secure-ssl2") << QSsl::SecureProtocols << QSsl::SslV2 << false;
 #endif
-    QTest::newRow("secure-ssl3") << QSsl::SecureProtocols << QSsl::SslV3 << true;
+    QTest::newRow("secure-ssl3") << QSsl::SecureProtocols << QSsl::SslV3 << false;
     QTest::newRow("secure-tls1.0") << QSsl::SecureProtocols << QSsl::TlsV1_0 << true;
     QTest::newRow("secure-tls1ssl3") << QSsl::SecureProtocols << QSsl::TlsV1SslV3 << true;
     QTest::newRow("secure-any") << QSsl::SecureProtocols << QSsl::AnyProtocol << true;
@@ -1462,25 +1460,25 @@ void tst_QSslSocket::systemCaCertificates()
 void tst_QSslSocket::wildcardCertificateNames()
 {
     // Passing CN matches
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("www.example.com"), QString("www.example.com")), true );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.example.com"), QString("www.example.com")), true );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("xxx*.example.com"), QString("xxxwww.example.com")), true );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("f*.example.com"), QString("foo.example.com")), true );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("192.168.0.0"), QString("192.168.0.0")), true );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("www.example.com"), QString("www.example.com")), true );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.example.com"), QString("www.example.com")), true );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("xxx*.example.com"), QString("xxxwww.example.com")), true );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("f*.example.com"), QString("foo.example.com")), true );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("192.168.0.0"), QString("192.168.0.0")), true );
 
     // Failing CN matches
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("xxx.example.com"), QString("www.example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*"), QString("www.example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.*.com"), QString("www.example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.example.com"), QString("baa.foo.example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("f*.example.com"), QString("baa.example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.com"), QString("example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*fail.com"), QString("example.com")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.example."), QString("www.example.")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.example."), QString("www.example")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString(""), QString("www")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*"), QString("www")), false );
-    QCOMPARE( QSslSocketBackendPrivate::isMatchingHostname(QString("*.168.0.0"), QString("192.168.0.0")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("xxx.example.com"), QString("www.example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*"), QString("www.example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.*.com"), QString("www.example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.example.com"), QString("baa.foo.example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("f*.example.com"), QString("baa.example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.com"), QString("example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*fail.com"), QString("example.com")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.example."), QString("www.example.")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.example."), QString("www.example")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString(""), QString("www")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*"), QString("www")), false );
+    QCOMPARE( QSslSocketPrivate::isMatchingHostname(QString("*.168.0.0"), QString("192.168.0.0")), false );
 }
 
 void tst_QSslSocket::wildcard()
@@ -1527,7 +1525,7 @@ protected:
         // Only set the certificate
         QList<QSslCertificate> localCert = QSslCertificate::fromPath(SRCDIR "certs/fluke.cert");
         QVERIFY(!localCert.isEmpty());
-        QVERIFY(localCert.first().handle());
+        QVERIFY(!localCert.first().isNull());
         socket->setLocalCertificate(localCert.first());
 
         QVERIFY(socket->setSocketDescriptor(socketDescriptor, QAbstractSocket::ConnectedState));
@@ -1762,7 +1760,7 @@ protected:
 
         QList<QSslCertificate> localCert = QSslCertificate::fromPath(SRCDIR "certs/fluke.cert");
         QVERIFY(!localCert.isEmpty());
-        QVERIFY(localCert.first().handle());
+        QVERIFY(!localCert.first().isNull());
         socket->setLocalCertificate(localCert.first());
 
         QVERIFY(socket->setSocketDescriptor(socketDescriptor, QAbstractSocket::ConnectedState));
@@ -1992,10 +1990,23 @@ void tst_QSslSocket::peerVerifyError()
     socket->connectToHostEncrypted(QHostInfo::fromName(QtNetworkSettings::serverName()).addresses().first().toString(), 443);
     if (socket->waitForEncrypted(10000))
         QSKIP("Skipping flaky test - See QTBUG-29941");
+
+    // check HostNameMismatch was emitted by peerVerifyError
     QVERIFY(!peerVerifyErrorSpy.isEmpty());
+    SslErrorList peerErrors;
+    const QList<QVariantList> &peerVerifyList = peerVerifyErrorSpy;
+    foreach (const QVariantList &args, peerVerifyList)
+        peerErrors << qvariant_cast<QSslError>(args.first()).error();
+    QVERIFY(peerErrors.contains(QSslError::HostNameMismatch));
+
+    // check HostNameMismatch was emitted by sslErrors
     QVERIFY(!sslErrorsSpy.isEmpty());
-    QCOMPARE(qvariant_cast<QSslError>(peerVerifyErrorSpy.last().at(0)).error(), QSslError::HostNameMismatch);
-    QCOMPARE(qvariant_cast<QList<QSslError> >(sslErrorsSpy.at(0).at(0)).size(), peerVerifyErrorSpy.size());
+    SslErrorList sslErrors;
+    foreach (const QSslError &err, qvariant_cast<QList<QSslError> >(sslErrorsSpy.first().first()))
+        sslErrors << err.error();
+    QVERIFY(peerErrors.contains(QSslError::HostNameMismatch));
+
+    QCOMPARE(sslErrors.size(), peerErrors.size());
 }
 
 void tst_QSslSocket::disconnectFromHostWhenConnecting()
@@ -2280,6 +2291,7 @@ void tst_QSslSocket::versionAccessors()
     qDebug() << QString::number(QSslSocket::sslLibraryVersionNumber(), 16);
 }
 
+#ifndef QT_NO_OPENSSL
 void tst_QSslSocket::sslOptions()
 {
     if (!QSslSocket::supportsSsl())
@@ -2288,28 +2300,28 @@ void tst_QSslSocket::sslOptions()
 #ifdef SSL_OP_NO_COMPRESSION
     QCOMPARE(QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SecureProtocols,
                                                            QSslConfigurationPrivate::defaultSslOptions),
-             long(SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_COMPRESSION));
+             long(SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_COMPRESSION));
 #else
     QCOMPARE(QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SecureProtocols,
                                                            QSslConfigurationPrivate::defaultSslOptions),
-             long(SSL_OP_ALL|SSL_OP_NO_SSLv2));
+             long(SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3));
 #endif
 
     QCOMPARE(QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SecureProtocols,
                                                            QSsl::SslOptionDisableEmptyFragments
                                                            |QSsl::SslOptionDisableLegacyRenegotiation),
-             long(SSL_OP_ALL|SSL_OP_NO_SSLv2));
+             long(SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3));
 
 #ifdef SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
     QCOMPARE(QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SecureProtocols,
                                                            QSsl::SslOptionDisableEmptyFragments),
-             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)));
+             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION)));
 #endif
 
 #ifdef SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS
     QCOMPARE(QSslSocketBackendPrivate::setupOpenSslOptions(QSsl::SecureProtocols,
                                                            QSsl::SslOptionDisableLegacyRenegotiation),
-             long((SSL_OP_ALL|SSL_OP_NO_SSLv2) & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS));
+             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3) & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS));
 #endif
 
 #ifdef SSL_OP_NO_TICKET
@@ -2317,7 +2329,7 @@ void tst_QSslSocket::sslOptions()
                                                            QSsl::SslOptionDisableEmptyFragments
                                                            |QSsl::SslOptionDisableLegacyRenegotiation
                                                            |QSsl::SslOptionDisableSessionTickets),
-             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_TICKET)));
+             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TICKET)));
 #endif
 
 #ifdef SSL_OP_NO_TICKET
@@ -2327,10 +2339,11 @@ void tst_QSslSocket::sslOptions()
                                                            |QSsl::SslOptionDisableLegacyRenegotiation
                                                            |QSsl::SslOptionDisableSessionTickets
                                                            |QSsl::SslOptionDisableCompression),
-             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_TICKET|SSL_OP_NO_COMPRESSION)));
+             long((SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TICKET|SSL_OP_NO_COMPRESSION)));
 #endif
 #endif
 }
+#endif
 
 void tst_QSslSocket::encryptWithoutConnecting()
 {
@@ -2458,7 +2471,7 @@ void WebSocket::_startServerEncryption (void)
 
     QList<QSslCertificate> localCert = QSslCertificate::fromPath(m_certFile);
     QVERIFY(!localCert.isEmpty());
-    QVERIFY(localCert.first().handle());
+    QVERIFY(!localCert.first().isNull());
     setLocalCertificate(localCert.first());
 
     QVERIFY(!peerAddress().isNull());
@@ -2638,7 +2651,7 @@ void tst_QSslSocket::qtbug18498_peek2()
 
     QList<QSslCertificate> localCert = QSslCertificate::fromPath(SRCDIR "certs/fluke.cert");
     QVERIFY(!localCert.isEmpty());
-    QVERIFY(localCert.first().handle());
+    QVERIFY(!localCert.first().isNull());
     server->setLocalCertificate(localCert.first());
 
     server->setProtocol(QSsl::AnyProtocol);

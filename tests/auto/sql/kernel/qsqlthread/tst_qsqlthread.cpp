@@ -5,35 +5,27 @@
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -48,10 +40,6 @@
 #include <QtCore>
 #include <QtSql>
 #include "qdebug.h"
-
-#ifdef Q_OS_LINUX
-#include <sched.h>
-#endif
 
 const QString qtest(qTableName("qtest", __FILE__, QSqlDatabase()));
 // set this define if Oracle is built with threading support
@@ -81,7 +69,10 @@ public slots:
     void cleanup();
 
 protected slots:
-    void threadFinished() { ++threadFinishedCount; }
+    void threadFinished() {
+        ++threadFinishedCount;
+        qDebug("Thread finished, total finished: %d", threadFinishedCount);
+    }
 
 private slots:
     void simpleThreading_data() { generic_data(); }
@@ -158,9 +149,7 @@ public:
             q.bindValue(1, "threaddy");
             q.bindValue(2, 10);
             QVERIFY_SQL(q, exec());
-#ifdef Q_OS_LINUX
-            sched_yield();
-#endif
+            QThread::yieldCurrentThread();
         }
     }
 
@@ -196,9 +185,7 @@ public:
             q2.bindValue("id", q1.value(0));
             q1.clear();
             QVERIFY_SQL(q2, exec());
-#ifdef Q_OS_LINUX
-            sched_yield();
-#endif
+            QThread::yieldCurrentThread();
         }
     }
 
@@ -391,8 +378,7 @@ void tst_QSqlThread::simpleThreading()
     t1.start();
     t2.start();
 
-    while (threadFinishedCount < 2)
-        QTest::qWait(100);
+    QTRY_VERIFY(threadFinishedCount >= 2);
 }
 
 // This test creates two threads that clone their db connection and read
@@ -417,8 +403,7 @@ void tst_QSqlThread::readWriteThreading()
     producer.start();
     consumer.start();
 
-    while (threadFinishedCount < 2)
-        QTest::qWait(100);
+    QTRY_VERIFY(threadFinishedCount >= 2);
 }
 
 // run with n threads in parallel. Change this constant to hammer the poor DB server even more
@@ -441,8 +426,7 @@ void tst_QSqlThread::readFromSingleConnection()
         reader->start();
     }
 
-    while (threadFinishedCount < maxThreadCount)
-        QTest::qWait(100);
+    QTRY_VERIFY(threadFinishedCount >= maxThreadCount);
 #endif
 }
 
@@ -467,8 +451,7 @@ void tst_QSqlThread::readWriteFromSingleConnection()
         writer->start();
     }
 
-    while (threadFinishedCount < maxThreadCount * 2)
-        QTest::qWait(100);
+    QTRY_VERIFY(threadFinishedCount >= maxThreadCount * 2);
 #endif
 }
 
@@ -493,8 +476,7 @@ void tst_QSqlThread::preparedReadWriteFromSingleConnection()
         writer->start();
     }
 
-    while (threadFinishedCount < maxThreadCount * 2)
-        QTest::qWait(100);
+    QTRY_VERIFY(threadFinishedCount >= maxThreadCount * 2);
 #endif
 }
 

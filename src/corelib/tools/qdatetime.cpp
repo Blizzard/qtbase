@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -204,7 +196,7 @@ static void rfcDateImpl(const QString &s, QDate *dd = 0, QTime *dt = 0, int *utc
                 min = rex.cap(5).toInt();
                 sec = rex.cap(6).toInt();
             }
-            positiveOffset = (rex.cap(7) == QStringLiteral("+"));
+            positiveOffset = (rex.cap(7) == QLatin1String("+"));
             hourOffset = rex.cap(8).toInt();
             minOffset = rex.cap(9).toInt();
         }
@@ -225,7 +217,7 @@ static void rfcDateImpl(const QString &s, QDate *dd = 0, QTime *dt = 0, int *utc
                     min = rex.cap(4).toInt();
                     sec = rex.cap(5).toInt();
                 }
-                positiveOffset = (rex.cap(7) == QStringLiteral("+"));
+                positiveOffset = (rex.cap(7) == QLatin1String("+"));
                 hourOffset = rex.cap(8).toInt();
                 minOffset = rex.cap(9).toInt();
             }
@@ -866,9 +858,9 @@ QString QDate::longDayName(int weekday, MonthNameType type)
     Qt::DefaultLocaleLongDate, the string format depends on the
     default application locale. This is the locale set with
     QLocale::setDefault(), or the system locale if no default locale
-    has been set. Identical to calling QLocale().toString(date,
-    QLocale::ShortFormat) or QLocale().toString(date,
-    QLocale::LongFormat).
+    has been set. Identical to calling
+    \l {QLocale::toString()}{QLocale().toString(date, QLocale::ShortFormat) } or
+    \l {QLocale::toString()}{QLocale().toString(date, QLocale::LongFormat)}.
 
     If the \a format is Qt::RFC2822Date, the string is formatted in
     an \l{RFC 2822} compatible way. An example of this formatting is
@@ -1623,9 +1615,10 @@ int QTime::msec() const
     Qt::DefaultLocaleLongDate, the string format depends on the
     default application locale. This is the locale set with
     QLocale::setDefault(), or the system locale if no default locale
-    has been set. Identical to calling QLocale().toString(time,
-    QLocale::ShortFormat) or QLocale().toString(time,
-    QLocale::LongFormat).
+    has been set. Identical to calling
+
+    \l {QLocale::toString()}{QLocale().toString(time, QLocale::ShortFormat)} or
+    \l {QLocale::toString()}{QLocale().toString(time, QLocale::LongFormat)}.
 
     If the \a format is Qt::RFC2822Date, the string is formatted in
     an \l{RFC 2822} compatible way. An example of this formatting is
@@ -3194,7 +3187,7 @@ QTimeZone QDateTime::timeZone() const
         return d->m_timeZone;
     case Qt::UTC:
         if (!d->m_timeZone.isValid())
-            d->m_timeZone = QTimeZone("UTC");
+            d->m_timeZone = QTimeZone(QTimeZonePrivate::utcQByteArray());
         return d->m_timeZone;
     case Qt::TimeZone :
         return d->m_timeZone;
@@ -3254,9 +3247,9 @@ QString QDateTime::timeZoneAbbreviation() const
 {
     switch (d->m_spec) {
     case Qt::UTC:
-        return QStringLiteral("UTC");
+        return QTimeZonePrivate::utcQString();
     case Qt::OffsetFromUTC:
-        return QLatin1String("UTC") + toOffsetString(Qt::ISODate, d->m_offsetFromUtc);
+        return QTimeZonePrivate::utcQString() + toOffsetString(Qt::ISODate, d->m_offsetFromUtc);
     case Qt::TimeZone:
 #ifndef QT_BOOTSTRAPPED
         return d->m_timeZone.d->abbreviation(d->toMSecsSinceEpoch());
@@ -4426,7 +4419,7 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
         if (size == 10)
             return QDateTime(date);
 
-        isoString = isoString.right(11);
+        isoString = isoString.right(isoString.length() - 11);
         int offset = 0;
         // Check end of string for Time Zone definition, either Z for UTC or [+-]HH:MM for Offset
         if (isoString.endsWith(QLatin1Char('Z'))) {
@@ -4976,7 +4969,7 @@ QDataStream &operator>>(QDataStream &in, QDateTime &dateTime)
 #if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_NO_DATESTRING)
 QDebug operator<<(QDebug dbg, const QDate &date)
 {
-    dbg.nospace() << "QDate(" << date.toString(QStringLiteral("yyyy-MM-dd")) << ')';
+    dbg.nospace() << "QDate(" << date.toString(Qt::ISODate) << ')';
     return dbg.space();
 }
 

@@ -5,35 +5,27 @@
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -1262,9 +1254,17 @@ QColorShower::QColorShower(QColorDialog *parent)
     lblHtml->setBuddy(htEd);
 #endif
 
+#if !defined(QT_NO_REGULAREXPRESSION)
     QRegularExpression regExp(QStringLiteral("#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})"));
     QRegularExpressionValidator *validator = new QRegularExpressionValidator(regExp, this);
     htEd->setValidator(validator);
+#elif !defined(QT_NO_REGEXP)
+    QRegExp regExp(QStringLiteral("#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})"));
+    QRegExpValidator *validator = new QRegExpValidator(regExp, this);
+    htEd->setValidator(validator);
+#else
+    htEd->setReadOnly(true);
+#endif
 
     lblHtml->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
     gl->addWidget(lblHtml, 5, 1);
@@ -1460,38 +1460,46 @@ void QColorDialogPrivate::setCurrentQColor(const QColor &color)
     }
 }
 
+// size of standard and custom color selector
+enum {
+    colorColumns = 8,
+    standardColorRows = 6,
+    customColorRows = 2
+};
+
 bool QColorDialogPrivate::selectColor(const QColor &col)
 {
     QRgb color = col.rgb();
-    int i = 0, j = 0;
     // Check standard colors
     if (standard) {
         const QRgb *standardColors = QColorDialogOptions::standardColors();
-        for (i = 0; i < 6; i++) {
-            for (j = 0; j < 8; j++) {
-                if (color == standardColors[i + j*6]) {
-                    _q_newStandard(i, j);
-                    standard->setCurrent(i, j);
-                    standard->setSelected(i, j);
-                    standard->setFocus();
-                    return true;
-                }
-            }
+        const QRgb *standardColorsEnd = standardColors + standardColorRows * colorColumns;
+        const QRgb *match = std::find(standardColors, standardColorsEnd, color);
+        if (match != standardColorsEnd) {
+            const int index = int(match - standardColors);
+            const int row = index / standardColorRows;
+            const int column = index % standardColorRows;
+            _q_newStandard(row, column);
+            standard->setCurrent(row, column);
+            standard->setSelected(row, column);
+            standard->setFocus();
+            return true;
         }
     }
     // Check custom colors
     if (custom) {
         const QRgb *customColors = QColorDialogOptions::customColors();
-        for (i = 0; i < 2; i++) {
-            for (j = 0; j < 8; j++) {
-                if (color == customColors[i + j*2]) {
-                    _q_newCustom(i, j);
-                    custom->setCurrent(i, j);
-                    custom->setSelected(i, j);
-                    custom->setFocus();
-                    return true;
-                }
-            }
+        const QRgb *customColorsEnd = customColors + customColorRows * colorColumns;
+        const QRgb *match = std::find(customColors, customColorsEnd, color);
+        if (match != customColorsEnd) {
+            const int index = int(match - customColors);
+            const int row = index / customColorRows;
+            const int column = index % customColorRows;
+            _q_newCustom(row, column);
+            custom->setCurrent(row, column);
+            custom->setSelected(row, column);
+            custom->setFocus();
+            return true;
         }
     }
     return false;
@@ -1519,12 +1527,12 @@ void QColorDialogPrivate::_q_newColorTypedIn(QRgb rgb)
 
 void QColorDialogPrivate::_q_nextCustom(int r, int c)
 {
-    nextCust = r + 2 * c;
+    nextCust = r + customColorRows * c;
 }
 
 void QColorDialogPrivate::_q_newCustom(int r, int c)
 {
-    const int i = r + 2 * c;
+    const int i = r + customColorRows * c;
     setCurrentRgbColor(QColorDialogOptions::customColor(i));
     if (standard)
         standard->setSelected(-1,-1);
@@ -1545,12 +1553,10 @@ void QColorDialogPrivate::_q_pickScreenColor()
     q->installEventFilter(colorPickingEventFilter);
     // If user pushes Escape, the last color before picking will be restored.
     beforeScreenColorPicking = cs->currentColor();
-    /*For some reason, q->grabMouse(Qt::CrossCursor) doesn't change
-     * the cursor, and therefore I have to change it manually.
-     */
-    q->grabMouse();
 #ifndef QT_NO_CURSOR
-    q->setCursor(Qt::CrossCursor);
+    q->grabMouse(Qt::CrossCursor);
+#else
+    q->grabMouse();
 #endif
     q->grabKeyboard();
     /* With setMouseTracking(true) the desired color can be more precisedly picked up,
@@ -1575,9 +1581,6 @@ void QColorDialogPrivate::releaseColorPicking()
     q->removeEventFilter(colorPickingEventFilter);
     q->releaseMouse();
     q->releaseKeyboard();
-#ifndef QT_NO_CURSOR
-    q->setCursor(Qt::ArrowCursor);
-#endif
     q->setMouseTracking(false);
     lblScreenColorInfo->setText(QLatin1String("\n"));
     addCusBt->setDisabled(false);
@@ -1635,7 +1638,7 @@ void QColorDialogPrivate::initWidgets()
     }
 
     if (!smallDisplay) {
-        standard = new QColorWell(q, 6, 8, QColorDialogOptions::standardColors());
+        standard = new QColorWell(q, standardColorRows, colorColumns, QColorDialogOptions::standardColors());
         lblBasicColors = new QLabel(q);
 #ifndef QT_NO_SHORTCUT
         lblBasicColors->setBuddy(standard);
@@ -1657,7 +1660,7 @@ void QColorDialogPrivate::initWidgets()
         leftLay->addStretch();
 #endif
 
-        custom = new QColorWell(q, 2, 8, QColorDialogOptions::customColors());
+        custom = new QColorWell(q, customColorRows, colorColumns, QColorDialogOptions::customColors());
         custom->setAcceptDrops(true);
 
         q->connect(custom, SIGNAL(selected(int,int)), SLOT(_q_newCustom(int,int)));

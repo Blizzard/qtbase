@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -62,6 +54,7 @@ public:
     tst_QImage();
 
 private slots:
+    void initTestCase();
     void swap();
     void create();
     void createInvalidXPM();
@@ -173,12 +166,29 @@ private slots:
 
     void scaled_QTBUG35972();
 
+    void convertToPixelFormat();
+    void convertToImageFormat_data();
+    void convertToImageFormat();
+
+    void invertPixelsRGB_data();
+    void invertPixelsRGB();
+
+    void exifOrientation();
+
     void cleanupFunctions();
+
+private:
+    const QString m_prefix;
 };
 
 tst_QImage::tst_QImage()
-
+    : m_prefix(QFINDTESTDATA("images/"))
 {
+}
+
+void tst_QImage::initTestCase()
+{
+    QVERIFY(!m_prefix.isEmpty());
 }
 
 void tst_QImage::swap()
@@ -287,21 +297,17 @@ void tst_QImage::formatHandlersInput_data()
     QTest::addColumn<QString>("testFormat");
     QTest::addColumn<QString>("testFile");
 
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-
     // add a new line here when a file is added
-    QTest::newRow("ICO") << "ICO" << prefix + "image.ico";
-    QTest::newRow("PNG") << "PNG" << prefix + "image.png";
-    QTest::newRow("GIF") << "GIF" << prefix + "image.gif";
-    QTest::newRow("BMP") << "BMP" << prefix + "image.bmp";
-    QTest::newRow("JPEG") << "JPEG" << prefix + "image.jpg";
-    QTest::newRow("PBM") << "PBM" << prefix + "image.pbm";
-    QTest::newRow("PGM") << "PGM" << prefix + "image.pgm";
-    QTest::newRow("PPM") << "PPM" << prefix + "image.ppm";
-    QTest::newRow("XBM") << "XBM" << prefix + "image.xbm";
-    QTest::newRow("XPM") << "XPM" << prefix + "image.xpm";
+    QTest::newRow("ICO") << "ICO" << m_prefix + "image.ico";
+    QTest::newRow("PNG") << "PNG" << m_prefix + "image.png";
+    QTest::newRow("GIF") << "GIF" << m_prefix + "image.gif";
+    QTest::newRow("BMP") << "BMP" << m_prefix + "image.bmp";
+    QTest::newRow("JPEG") << "JPEG" << m_prefix + "image.jpg";
+    QTest::newRow("PBM") << "PBM" << m_prefix + "image.pbm";
+    QTest::newRow("PGM") << "PGM" << m_prefix + "image.pgm";
+    QTest::newRow("PPM") << "PPM" << m_prefix + "image.ppm";
+    QTest::newRow("XBM") << "XBM" << m_prefix + "image.xbm";
+    QTest::newRow("XPM") << "XPM" << m_prefix + "image.xpm";
 }
 
 void tst_QImage::formatHandlersInput()
@@ -762,6 +768,13 @@ void tst_QImage::convertToFormat_data()
                                          << int(QImage::Format_ARGB32_Premultiplied) << 0x7f7f7f7fu;
     QTest::newRow("semiblack rgba8888 -> argb pm") << int(QImage::Format_RGBA8888) << 0x7f000000u
                                          << int(QImage::Format_ARGB32_Premultiplied) << 0x7f000000u;
+
+    QTest::newRow("red rgb30 -> argb32") << int(QImage::Format_RGB30) << 0xffff0000
+                                         << int(QImage::Format_ARGB32) << 0xffff0000;
+    QTest::newRow("green rgb30 -> argb32") << int(QImage::Format_RGB30) << 0xff00ff00
+                                           << int(QImage::Format_ARGB32) << 0xff00ff00;
+    QTest::newRow("blue rgb30 -> argb32") << int(QImage::Format_RGB30) << 0xff0000ff
+                                          << int(QImage::Format_ARGB32) << 0xff0000ff;
 }
 
 
@@ -1074,10 +1087,7 @@ void tst_QImage::copy()
 
 void tst_QImage::load()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("image.jpg");
+    const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage dest(filePath);
     QVERIFY(!dest.isNull());
@@ -1089,10 +1099,7 @@ void tst_QImage::load()
 
 void tst_QImage::loadFromData()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("image.jpg");
+    const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage original(filePath);
     QVERIFY(!original.isNull());
@@ -1118,10 +1125,7 @@ void tst_QImage::loadFromData()
 #if !defined(QT_NO_DATASTREAM)
 void tst_QImage::loadFromDataStream()
 {
-    const QString prefix = QFINDTESTDATA("images/");
-    if (prefix.isEmpty())
-        QFAIL("can not find images directory!");
-    const QString filePath = prefix + QLatin1String("image.jpg");
+    const QString filePath = m_prefix + QLatin1String("image.jpg");
 
     QImage original(filePath);
     QVERIFY(!original.isNull());
@@ -1214,6 +1218,18 @@ void tst_QImage::setPixel_data()
     QTest::newRow("RGBA8888 blue") << int(QImage::Format_RGBA8888)
                                  << 0xff0000ffu << 0xffff0000u;
 #endif
+    QTest::newRow("A2BGR30_Premultiplied red") << int(QImage::Format_A2BGR30_Premultiplied)
+                                 << 0xffff0000u << 0xc00003ffu;
+    QTest::newRow("A2BGR30_Premultiplied green") << int(QImage::Format_A2BGR30_Premultiplied)
+                                   << 0xff00ff00u << 0xc00ffc00u;
+    QTest::newRow("A2BGR30_Premultiplied blue") << int(QImage::Format_A2BGR30_Premultiplied)
+                                 << 0xff0000ffu << 0xfff00000u;
+    QTest::newRow("RGB30 red") << int(QImage::Format_RGB30)
+                               << 0xffff0000u << 0xfff00000u;
+    QTest::newRow("RGB30 green") << int(QImage::Format_RGB30)
+                                 << 0xff00ff00u << 0xc00ffc00u;
+    QTest::newRow("RGB30 blue") << int(QImage::Format_RGB30)
+                                << 0xff0000ffu << 0xc00003ffu;
 }
 
 void tst_QImage::setPixel()
@@ -1240,6 +1256,8 @@ void tst_QImage::setPixel()
     case int(QImage::Format_RGBX8888):
     case int(QImage::Format_RGBA8888):
     case int(QImage::Format_RGBA8888_Premultiplied):
+    case int(QImage::Format_A2BGR30_Premultiplied):
+    case int(QImage::Format_RGB30):
     {
         for (int y = 0; y < h; ++y) {
             const quint32 *row = (const quint32*)(img.scanLine(y));
@@ -1959,6 +1977,8 @@ void tst_QImage::fillColor_data()
         "ARGB4444pm",
         "RGBx8888",
         "RGBA8888pm",
+        "BGR30",
+        "A2RGB30pm",
         0
     };
 
@@ -1978,6 +1998,8 @@ void tst_QImage::fillColor_data()
         QImage::Format_ARGB4444_Premultiplied,
         QImage::Format_RGBX8888,
         QImage::Format_RGBA8888_Premultiplied,
+        QImage::Format_BGR30,
+        QImage::Format_A2RGB30_Premultiplied,
     };
 
     for (int i=0; names[i] != 0; ++i) {
@@ -1996,6 +2018,7 @@ void tst_QImage::fillColor_data()
     QTest::newRow("ARGB32, transparent") << QImage::Format_ARGB32 << Qt::transparent << 0x00000000u;
     QTest::newRow("ARGB32pm, transparent") << QImage::Format_ARGB32_Premultiplied << Qt::transparent << 0x00000000u;
     QTest::newRow("RGBA8888pm, transparent") << QImage::Format_RGBA8888_Premultiplied << Qt::transparent << 0x00000000u;
+    QTest::newRow("A2RGB30pm, transparent") << QImage::Format_A2RGB30_Premultiplied << Qt::transparent << 0x00000000u;
 }
 
 void tst_QImage::fillColor()
@@ -2112,6 +2135,8 @@ void tst_QImage::rgbSwapped_data()
     QTest::newRow("Format_RGB444") << QImage::Format_RGB444;
     QTest::newRow("Format_RGBX8888") << QImage::Format_RGBX8888;
     QTest::newRow("Format_RGBA8888_Premultiplied") << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("Format_A2BGR30_Premultiplied") << QImage::Format_A2BGR30_Premultiplied;
+    QTest::newRow("Format_RGB30") << QImage::Format_RGB30;
 }
 
 void tst_QImage::rgbSwapped()
@@ -2180,6 +2205,8 @@ void tst_QImage::mirrored_data()
     QTest::newRow("Format_RGB444, vertical") << QImage::Format_RGB444 << true << false << 16 << 16;
     QTest::newRow("Format_RGBX8888, vertical") << QImage::Format_RGBX8888 << true << false << 16 << 16;
     QTest::newRow("Format_RGBA8888_Premultiplied, vertical") << QImage::Format_RGBA8888_Premultiplied << true << false << 16 << 16;
+    QTest::newRow("Format_A2BGR30_Premultiplied, vertical") << QImage::Format_A2BGR30_Premultiplied << true << false << 16 << 16;
+    QTest::newRow("Format_RGB30, vertical") << QImage::Format_RGB30 << true << false << 16 << 16;
     QTest::newRow("Format_Indexed8, vertical") << QImage::Format_Indexed8 << true << false << 16 << 16;
     QTest::newRow("Format_Mono, vertical") << QImage::Format_Mono << true << false << 16 << 16;
     QTest::newRow("Format_MonoLSB, vertical") << QImage::Format_MonoLSB << true << false << 16 << 16;
@@ -2279,6 +2306,7 @@ void tst_QImage::inplaceRgbSwapped_data()
 
     QTest::newRow("Format_ARGB32_Premultiplied") << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("Format_RGBA8888") << QImage::Format_RGBA8888;
+    QTest::newRow("Format_A2RGB30_Premultiplied") << QImage::Format_A2RGB30_Premultiplied;
     QTest::newRow("Format_RGB888") << QImage::Format_RGB888;
     QTest::newRow("Format_RGB16") << QImage::Format_RGB16;
     QTest::newRow("Format_Indexed8") << QImage::Format_Indexed8;
@@ -2521,6 +2549,97 @@ void tst_QImage::scaled_QTBUG35972()
     int size = dest.width()*dest.height();
     for (int i = 0; i < size; ++i)
         QCOMPARE(pixels[i], 0xffffffff);
+}
+
+void tst_QImage::convertToPixelFormat()
+{
+    QPixelFormat rgb565 = qPixelFormatRgba(5,6,5,0,QPixelFormat::IgnoresAlpha, QPixelFormat::AtBeginning, QPixelFormat::NotPremultiplied, QPixelFormat::UnsignedShort);
+    QPixelFormat rgb565ImageFormat = QImage::toPixelFormat(QImage::Format_RGB16);
+    QCOMPARE(rgb565, rgb565ImageFormat);
+}
+
+void tst_QImage::convertToImageFormat_data()
+{
+    QTest::addColumn<QImage::Format>("image_format");
+    QTest::newRow("Convert Format_Invalid") << QImage::Format_Invalid;
+    QTest::newRow("Convert Format_Mono") << QImage::Format_Mono;
+    //This ends up being a QImage::Format_Mono since we cant specify LSB in QPixelFormat
+    //QTest::newRow("Convert Format_MonoLSB") << QImage::Format_MonoLSB;
+    QTest::newRow("Convert Format_Indexed8") << QImage::Format_Indexed8;
+    QTest::newRow("Convert Format_RGB32") << QImage::Format_RGB32;
+    QTest::newRow("Convert Format_ARGB32") << QImage::Format_ARGB32;
+    QTest::newRow("Convert Format_ARGB32_Premultiplied") << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("Convert Format_RGB16") << QImage::Format_RGB16;
+    QTest::newRow("Convert Format_ARGB8565_Premultiplied") << QImage::Format_ARGB8565_Premultiplied;
+    QTest::newRow("Convert Format_RGB666") << QImage::Format_RGB666;
+    QTest::newRow("Convert Format_ARGB6666_Premultiplied") << QImage::Format_ARGB6666_Premultiplied;
+    QTest::newRow("Convert Format_RGB555") << QImage::Format_RGB555;
+    QTest::newRow("Convert Format_ARGB8555_Premultiplied") << QImage::Format_ARGB8555_Premultiplied;
+    QTest::newRow("Convert Format_RGB888") << QImage::Format_RGB888;
+    QTest::newRow("Convert Format_RGB444") << QImage::Format_RGB444;
+    QTest::newRow("Convert Format_ARGB4444_Premultiplied") << QImage::Format_ARGB4444_Premultiplied;
+    QTest::newRow("Convert Format_RGBX8888") << QImage::Format_RGBX8888;
+    QTest::newRow("Convert Format_RGBA8888") << QImage::Format_RGBA8888;
+    QTest::newRow("Convert Format_RGBA8888_Premultiplied") << QImage::Format_RGBA8888_Premultiplied;
+}
+
+void tst_QImage::convertToImageFormat()
+{
+    QFETCH(QImage::Format, image_format);
+
+    QPixelFormat pixel_format = QImage::toPixelFormat(image_format);
+    QImage::Format format = QImage::toImageFormat(pixel_format);
+    QCOMPARE(format, image_format);
+}
+
+void tst_QImage::invertPixelsRGB_data()
+{
+    QTest::addColumn<QImage::Format>("image_format");
+
+    QTest::newRow("invertPixels RGB16") << QImage::Format_RGB16;
+    QTest::newRow("invertPixels RGB32") << QImage::Format_RGB32;
+    QTest::newRow("invertPixels BGR30") << QImage::Format_BGR30;
+    QTest::newRow("invertPixels RGB444") << QImage::Format_RGB444;
+    QTest::newRow("invertPixels RGB555") << QImage::Format_RGB555;
+    QTest::newRow("invertPixels RGB888") << QImage::Format_RGB888;
+
+    QTest::newRow("invertPixels ARGB32") << QImage::Format_ARGB32;
+    QTest::newRow("invertPixels ARGB32pm") << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("invertPixels RGBA8888") << QImage::Format_RGBA8888;
+    QTest::newRow("invertPixels RGBA8888pm") << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("invertPixels RGBA4444pm") << QImage::Format_ARGB4444_Premultiplied;
+}
+
+void tst_QImage::invertPixelsRGB()
+{
+    QFETCH(QImage::Format, image_format);
+
+    QImage image(1, 1, image_format);
+    image.fill(QColor::fromRgb(32, 64, 96));
+    image.invertPixels();
+
+    QCOMPARE(image.format(), image_format);
+
+    uint pixel = image.pixel(0, 0);
+    QCOMPARE(qRed(pixel) >> 4, (255 - 32) >> 4);
+    QCOMPARE(qGreen(pixel) >> 4, (255 - 64) >> 4);
+    QCOMPARE(qBlue(pixel) >> 4, (255 - 96) >> 4);
+}
+
+void tst_QImage::exifOrientation()
+{
+    for (unsigned int i = 1; i <= 8; ++i) {
+        QImage img;
+        QRgb px;
+
+        QVERIFY(img.load(m_prefix + QString::fromLatin1("jpeg_exif_orientation_value_%1.jpg").arg(i)));
+
+        px = img.pixel(0, 0);
+        QVERIFY(qRed(px) > 250 && qGreen(px) < 5 && qBlue(px) < 5);
+
+        px = img.pixel(img.width() - 1, 0);
+        QVERIFY(qRed(px) < 5 && qGreen(px) < 5 && qBlue(px) > 250);
+    }
 }
 
 static void cleanupFunction(void* info)

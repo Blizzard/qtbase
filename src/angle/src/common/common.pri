@@ -7,6 +7,11 @@ INCLUDEPATH += \
 
 LIBS_PRIVATE = $$QMAKE_LIBS_CORE $$QMAKE_LIBS_GUI
 
+lib_replace.match = $$[QT_INSTALL_LIBS/get]
+lib_replace.replace = $$[QT_INSTALL_LIBS/raw]
+lib_replace.CONFIG = path
+QMAKE_PRL_INSTALL_REPLACE += lib_replace
+
 # DirectX is included in the Windows 8 Kit, but everything else requires the DX SDK.
 win32-msvc2012|win32-msvc2013|winrt {
     FXC = fxc.exe
@@ -46,12 +51,15 @@ static: DEFINES *= QT_OPENGL_ES_2_ANGLE_STATIC
 HEADERS +=  \
     $$ANGLE_DIR/src/common/angleutils.h \
     $$ANGLE_DIR/src/common/debug.h \
-    $$ANGLE_DIR/src/common/event_tracer.h \
+    $$ANGLE_DIR/src/common/mathutil.h \
+    $$ANGLE_DIR/src/common/platform.h \
     $$ANGLE_DIR/src/common/RefCountObject.h \
+    $$ANGLE_DIR/src/common/tls.h \
     $$ANGLE_DIR/src/common/version.h
 
 SOURCES +=  \
+    $$ANGLE_DIR/src/common/angleutils.cpp \
     $$ANGLE_DIR/src/common/debug.cpp \
-    $$ANGLE_DIR/src/common/event_tracer.cpp \
-    $$ANGLE_DIR/src/common/RefCountObject.cpp
+    $$ANGLE_DIR/src/common/RefCountObject.cpp \
+    $$ANGLE_DIR/src/common/tls.cpp
 

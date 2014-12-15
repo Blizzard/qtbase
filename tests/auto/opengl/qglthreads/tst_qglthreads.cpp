@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +39,10 @@
 #include <QtWidgets/QApplication>
 #include <QtOpenGL/QtOpenGL>
 #include "tst_qglthreads.h"
+
+#ifndef QT_OPENGL_ES_2
+#include <QtGui/QOpenGLFunctions_1_0>
+#endif
 
 #define RUNNING_TIME 5000
 
@@ -339,8 +335,9 @@ static inline float qrandom() { return (rand() % 100) / 100.f; }
 
 void renderAScene(int w, int h)
 {
+    QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
+
     if (QOpenGLContext::currentContext()->isOpenGLES()) {
-        QGLFunctions funcs(QGLContext::currentContext());
         Q_UNUSED(w);
         Q_UNUSED(h);
         QGLShaderProgram program;
@@ -349,7 +346,7 @@ void renderAScene(int w, int h)
         program.bindAttributeLocation("pos", 0);
         program.bind();
 
-        funcs.glEnableVertexAttribArray(0);
+        funcs->glEnableVertexAttribArray(0);
 
         for (int i=0; i<1000; ++i) {
             GLfloat pos[] = {
@@ -361,30 +358,33 @@ void renderAScene(int w, int h)
                 (rand() % 100) / 100.f
             };
 
-            funcs.glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, pos);
-            glDrawArrays(GL_TRIANGLE_STRIP, 0, 3);
+            funcs->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, pos);
+            funcs->glDrawArrays(GL_TRIANGLE_STRIP, 0, 3);
         }
     } else {
 #ifndef QT_OPENGL_ES_2
-        glViewport(0, 0, w, h);
+        QOpenGLFunctions_1_0 *gl1funcs = QOpenGLContext::currentContext()->versionFunctions<QOpenGLFunctions_1_0>();
+        gl1funcs->initializeOpenGLFunctions();
 
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glFrustum(0, w, h, 0, 1, 100);
-        glTranslated(0, 0, -1);
+        gl1funcs->glViewport(0, 0, w, h);
 
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
+        gl1funcs->glMatrixMode(GL_PROJECTION);
+        gl1funcs->glLoadIdentity();
+        gl1funcs->glFrustum(0, w, h, 0, 1, 100);
+        gl1funcs->glTranslated(0, 0, -1);
+
+        gl1funcs->glMatrixMode(GL_MODELVIEW);
+        gl1funcs->glLoadIdentity();
 
         for (int i=0;i<1000; ++i) {
-            glBegin(GL_TRIANGLES);
-            glColor3f(qrandom(), qrandom(), qrandom());
-            glVertex2f(qrandom() * w, qrandom() * h);
-            glColor3f(qrandom(), qrandom(), qrandom());
-            glVertex2f(qrandom() * w, qrandom() * h);
-            glColor3f(qrandom(), qrandom(), qrandom());
-            glVertex2f(qrandom() * w, qrandom() * h);
-            glEnd();
+            gl1funcs->glBegin(GL_TRIANGLES);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glColor3f(qrandom(), qrandom(), qrandom());
+            gl1funcs->glVertex2f(qrandom() * w, qrandom() * h);
+            gl1funcs->glEnd();
         }
 #endif
     }
@@ -434,8 +434,9 @@ public:
             QSize s = m_widget->newSize;
             m_widget->mutex.unlock();
 
+            QOpenGLFunctions *funcs = QOpenGLContext::currentContext()->functions();
             if (s != m_size) {
-                glViewport(0, 0, s.width(), s.height());
+                funcs->glViewport(0, 0, s.width(), s.height());
             }
 
             if (QGLContext::currentContext() != m_widget->context()) {
@@ -443,7 +444,7 @@ public:
                 break;
             }
 
-            glClear(GL_COLOR_BUFFER_BIT);
+            funcs->glClear(GL_COLOR_BUFFER_BIT);
 
             int w = m_widget->width();
             int h = m_widget->height();
@@ -451,7 +452,7 @@ public:
             renderAScene(w, h);
 
             int color;
-            glReadPixels(w / 2, h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &color);
+            funcs->glReadPixels(w / 2, h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &color);
 
             m_widget->swapBuffers();
         }

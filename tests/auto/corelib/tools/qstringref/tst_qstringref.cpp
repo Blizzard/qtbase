@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
 ** use the contact form at http://qt.digia.com/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -93,6 +85,8 @@ private slots:
     void left();
     void right();
     void mid();
+    void split_data();
+    void split();
 };
 
 static QStringRef emptyRef()
@@ -1876,9 +1870,9 @@ void tst_QStringRef::right()
     QStringRef ref = originalString.rightRef(originalString.size() - 1);
     QCOMPARE(ref.toString(), QLatin1String("OrginalString"));
 
-    QCOMPARE(ref.right(ref.size() - 6).toString(), QLatin1String("String"));
+    QCOMPARE(ref.right(6).toString(), QLatin1String("String"));
     QCOMPARE(ref.right(ref.size()).toString(), QLatin1String("OrginalString"));
-    QCOMPARE(ref.right(0).toString(), QLatin1String("OrginalString"));
+    QCOMPARE(ref.right(0).toString(), QLatin1String(""));
 
     QStringRef nullRef;
     QVERIFY(nullRef.isNull());
@@ -1982,6 +1976,79 @@ void tst_QStringRef::mid()
     QVERIFY(emptyRef.mid(0).isEmpty());
     QVERIFY(emptyRef.mid(0, 3).isEmpty());
     QVERIFY(emptyRef.mid(-10, 3).isEmpty());
+}
+
+static bool operator ==(const QStringList &left, const QVector<QStringRef> &right)
+{
+    if (left.size() != right.size())
+        return false;
+
+    QStringList::const_iterator iLeft = left.constBegin();
+    QVector<QStringRef>::const_iterator iRight = right.constBegin();
+    for (; iLeft != left.end(); ++iLeft, ++iRight) {
+        if (*iLeft != *iRight)
+            return false;
+    }
+    return true;
+}
+static inline bool operator ==(const QVector<QStringRef> &left, const QStringList &right) { return right == left; }
+
+void tst_QStringRef::split_data()
+{
+    QTest::addColumn<QString>("str");
+    QTest::addColumn<QString>("sep");
+    QTest::addColumn<QStringList>("result");
+
+    QTest::newRow("a,b,c") << "a,b,c" << "," << (QStringList() << "a" << "b" << "c");
+    QTest::newRow("a,b,c,a,b,c") << "a,b,c,a,b,c" << "," << (QStringList() << "a" << "b" << "c" << "a" << "b" << "c");
+    QTest::newRow("a,b,c,,a,b,c") << "a,b,c,,a,b,c" << "," << (QStringList() << "a" << "b" << "c" << "" << "a" << "b" << "c");
+    QTest::newRow("2") << QString("-rw-r--r--  1 0  0  519240 Jul  9  2002 bigfile")
+                       << " "
+                       << (QStringList() << "-rw-r--r--" << "" << "1" << "0" << "" << "0" << ""
+                           << "519240" << "Jul" << "" << "9" << "" << "2002" << "bigfile");
+    QTest::newRow("one-empty") << "" << " " << (QStringList() << "");
+    QTest::newRow("two-empty") << " " << " " << (QStringList() << "" << "");
+    QTest::newRow("three-empty") << "  " << " " << (QStringList() << "" << "" << "");
+
+    QTest::newRow("all-empty") << "" << "" << (QStringList() << "" << "");
+    QTest::newRow("all-null") << QString() << QString() << (QStringList() << QString() << QString());
+    QTest::newRow("sep-empty") << "abc" << "" << (QStringList() << "" << "a" << "b" << "c" << "");
+}
+
+void tst_QStringRef::split()
+{
+    QFETCH(QString, str);
+    QFETCH(QString, sep);
+    QFETCH(QStringList, result);
+
+    QVector<QStringRef> list;
+    // we construct a bigger valid string to check
+    // if ref.split is using the right size
+    QString source = str + str + str;
+    QStringRef ref = source.midRef(str.size(), str.size());
+    QCOMPARE(ref.size(), str.size());
+
+    list = ref.split(sep);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0));
+        QVERIFY(list == result);
+    }
+
+    list = ref.split(sep, QString::KeepEmptyParts);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0), QString::KeepEmptyParts);
+        QVERIFY(list == result);
+    }
+
+    result.removeAll("");
+    list = ref.split(sep, QString::SkipEmptyParts);
+    QVERIFY(list == result);
+    if (sep.size() == 1) {
+        list = ref.split(sep.at(0), QString::SkipEmptyParts);
+        QVERIFY(list == result);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_QStringRef)
