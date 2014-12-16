@@ -67,8 +67,6 @@ public:
     void invokeAction(QInputMethod::Action, int cursorPosition) Q_DECL_OVERRIDE;
     void setFocusObject(QObject *object) Q_DECL_OVERRIDE;
 
-    virtual void setFocusObject(QObject *object);
-
     static QWindowsInputContext *instance();
 
     bool startComposition(HWND hwnd);

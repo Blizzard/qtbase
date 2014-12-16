@@ -184,15 +184,6 @@ void QWindowsInputContext::reset()
     doneContext();
 }
 
-void QWindowsInputContext::setFocusObject(QObject *)
-{
-    // ### fixme: On Windows 8.1, it has been observed that the Input context
-    // remains active when this happens resulting in a lock-up. Consecutive
-    // key events still have VK_PROCESSKEY set and are thus ignored.
-    if (m_compositionContext.isComposing)
-        imeNotifyCancelComposition(m_compositionContext.hwnd);
-}
-
 /*!
     \brief Moves the candidate window along with microfocus of the focus object.
 */
@@ -265,6 +256,12 @@ static HIMC defaultContext = 0;
 
 void QWindowsInputContext::setFocusObject(QObject *object)
 {
+    // ### fixme: On Windows 8.1, it has been observed that the Input context
+    // remains active when this happens resulting in a lock-up. Consecutive
+    // key events still have VK_PROCESSKEY set and are thus ignored.
+    if (m_compositionContext.isComposing)
+        imeNotifyCancelComposition(m_compositionContext.hwnd);
+
     QWindow *window = qApp->focusWindow();
     if (object && window) {
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
