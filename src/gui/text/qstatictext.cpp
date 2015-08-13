@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -393,7 +393,7 @@ QSizeF QStaticText::size() const
 }
 
 QStaticTextPrivate::QStaticTextPrivate()
-        : textWidth(-1.0), items(0), itemCount(0), glyphPool(0), positionPool(0), charPool(0),
+        : textWidth(-1.0), items(0), itemCount(0), glyphPool(0), positionPool(0),
           needsRelayout(true), useBackendOptimizations(false), textFormat(Qt::AutoText),
           untransformedCoordinates(false)
 {
@@ -401,7 +401,7 @@ QStaticTextPrivate::QStaticTextPrivate()
 
 QStaticTextPrivate::QStaticTextPrivate(const QStaticTextPrivate &other)
     : text(other.text), font(other.font), textWidth(other.textWidth), matrix(other.matrix),
-      items(0), itemCount(0), glyphPool(0), positionPool(0), charPool(0), textOption(other.textOption),
+      items(0), itemCount(0), glyphPool(0), positionPool(0), textOption(other.textOption),
       needsRelayout(true), useBackendOptimizations(other.useBackendOptimizations),
       textFormat(other.textFormat), untransformedCoordinates(other.untransformedCoordinates)
 {
@@ -412,7 +412,6 @@ QStaticTextPrivate::~QStaticTextPrivate()
     delete[] items;
     delete[] glyphPool;
     delete[] positionPool;
-    delete[] charPool;
 }
 
 QStaticTextPrivate *QStaticTextPrivate::get(const QStaticText *q)
@@ -431,7 +430,7 @@ namespace {
         {
         }
 
-        virtual void updateState(const QPaintEngineState &newState)
+        virtual void updateState(const QPaintEngineState &newState) Q_DECL_OVERRIDE
         {
             if (newState.state() & QPaintEngine::DirtyPen
                 && newState.pen().color() != m_currentColor) {
@@ -440,15 +439,13 @@ namespace {
             }
         }
 
-        virtual void drawTextItem(const QPointF &position, const QTextItem &textItem)
+        virtual void drawTextItem(const QPointF &position, const QTextItem &textItem) Q_DECL_OVERRIDE
         {
             const QTextItemInt &ti = static_cast<const QTextItemInt &>(textItem);
 
             QStaticTextItem currentItem;
             currentItem.setFontEngine(ti.fontEngine);
             currentItem.font = ti.font();
-            currentItem.charOffset = m_chars.size();
-            currentItem.numChars = ti.num_chars;
             currentItem.glyphOffset = m_glyphs.size(); // Store offset into glyph pool
             currentItem.positionOffset = m_glyphs.size(); // Offset into position pool
             currentItem.useBackendOptimizations = m_useBackendOptimizations;
@@ -468,7 +465,6 @@ namespace {
 
             m_glyphs.resize(m_glyphs.size() + size);
             m_positions.resize(m_glyphs.size());
-            m_chars.resize(m_chars.size() + ti.num_chars);
 
             glyph_t *glyphsDestination = m_glyphs.data() + currentItem.glyphOffset;
             memcpy(glyphsDestination, glyphs.constData(), sizeof(glyph_t) * currentItem.numGlyphs);
@@ -476,21 +472,18 @@ namespace {
             QFixedPoint *positionsDestination = m_positions.data() + currentItem.positionOffset;
             memcpy(positionsDestination, positions.constData(), sizeof(QFixedPoint) * currentItem.numGlyphs);
 
-            QChar *charsDestination = m_chars.data() + currentItem.charOffset;
-            memcpy(charsDestination, ti.chars, sizeof(QChar) * currentItem.numChars);
-
             m_items.append(currentItem);
         }
 
-        virtual void drawPolygon(const QPointF *, int , PolygonDrawMode )
+        virtual void drawPolygon(const QPointF *, int , PolygonDrawMode ) Q_DECL_OVERRIDE
         {
             /* intentionally empty */
         }
 
-        virtual bool begin(QPaintDevice *)  { return true; }
-        virtual bool end() { return true; }
-        virtual void drawPixmap(const QRectF &, const QPixmap &, const QRectF &) {}
-        virtual Type type() const
+        virtual bool begin(QPaintDevice *) Q_DECL_OVERRIDE  { return true; }
+        virtual bool end() Q_DECL_OVERRIDE { return true; }
+        virtual void drawPixmap(const QRectF &, const QPixmap &, const QRectF &) Q_DECL_OVERRIDE {}
+        virtual Type type() const Q_DECL_OVERRIDE
         {
             return User;
         }
@@ -510,16 +503,10 @@ namespace {
             return m_glyphs;
         }
 
-        QVector<QChar> chars() const
-        {
-            return m_chars;
-        }
-
     private:
         QVector<QStaticTextItem> m_items;
         QVector<QFixedPoint> m_positions;
         QVector<glyph_t> m_glyphs;
-        QVector<QChar> m_chars;
 
         bool m_dirtyPen;
         bool m_useBackendOptimizations;
@@ -541,7 +528,7 @@ namespace {
             delete m_paintEngine;
         }
 
-        int metric(PaintDeviceMetric m) const
+        int metric(PaintDeviceMetric m) const Q_DECL_OVERRIDE
         {
             int val;
             switch (m) {
@@ -575,7 +562,7 @@ namespace {
             return val;
         }
 
-        virtual QPaintEngine *paintEngine() const
+        virtual QPaintEngine *paintEngine() const Q_DECL_OVERRIDE
         {
             return m_paintEngine;
         }
@@ -593,11 +580,6 @@ namespace {
         QVector<QStaticTextItem> items() const
         {
             return m_paintEngine->items();
-        }
-
-        QVector<QChar> chars() const
-        {
-            return m_paintEngine->chars();
         }
 
     private:
@@ -677,7 +659,6 @@ void QStaticTextPrivate::init()
     delete[] items;
     delete[] glyphPool;
     delete[] positionPool;
-    delete[] charPool;
 
     position = QPointF(0, 0);
 
@@ -693,7 +674,6 @@ void QStaticTextPrivate::init()
     QVector<QStaticTextItem> deviceItems = device.items();
     QVector<QFixedPoint> positions = device.positions();
     QVector<glyph_t> glyphs = device.glyphs();
-    QVector<QChar> chars = device.chars();
 
     itemCount = deviceItems.size();
     items = new QStaticTextItem[itemCount];
@@ -704,15 +684,11 @@ void QStaticTextPrivate::init()
     positionPool = new QFixedPoint[positions.size()];
     memcpy(positionPool, positions.constData(), positions.size() * sizeof(QFixedPoint));
 
-    charPool = new QChar[chars.size()];
-    memcpy(charPool, chars.constData(), chars.size() * sizeof(QChar));
-
     for (int i=0; i<itemCount; ++i) {
         items[i] = deviceItems.at(i);
 
         items[i].glyphs = glyphPool + items[i].glyphOffset;
         items[i].glyphPositions = positionPool + items[i].positionOffset;
-        items[i].chars = charPool + items[i].charOffset;
     }
 
     needsRelayout = false;
@@ -722,14 +698,19 @@ QStaticTextItem::~QStaticTextItem()
 {
     if (m_userData != 0 && !m_userData->ref.deref())
         delete m_userData;
-    m_fontEngine->ref.deref();
+    setFontEngine(0);
 }
 
 void QStaticTextItem::setFontEngine(QFontEngine *fe)
 {
-    if (m_fontEngine != 0)
-        m_fontEngine->ref.deref();
+    if (m_fontEngine == fe)
+        return;
+
+    if (m_fontEngine != 0 && !m_fontEngine->ref.deref())
+        delete m_fontEngine;
+
     m_fontEngine = fe;
+
     if (m_fontEngine != 0)
         m_fontEngine->ref.ref();
 }

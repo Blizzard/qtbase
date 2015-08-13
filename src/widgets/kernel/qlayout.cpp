@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -266,14 +266,6 @@ bool QLayout::setAlignment(QLayout *l, Qt::Alignment alignment)
     }
     return false;
 }
-
-/*!
-    \fn void QLayout::setAlignment(Qt::Alignment alignment)
-
-    Sets the alignment of this item to \a alignment.
-
-    \sa QLayoutItem::setAlignment()
-*/
 
 /*!
     \property QLayout::margin
@@ -576,11 +568,12 @@ void QLayoutPrivate::doResize(const QSize &r)
     int mbh = menuBarHeightForWidth(menubar, r.width());
     QWidget *mw = q->parentWidget();
     QRect rect = mw->testAttribute(Qt::WA_LayoutOnEntireRect) ? mw->rect() : mw->contentsRect();
+    const int mbTop = rect.top();
     rect.setTop(rect.top() + mbh);
     q->setGeometry(rect);
 #ifndef QT_NO_MENUBAR
     if (menubar)
-        menubar->setGeometry(0,0,r.width(), mbh);
+        menubar->setGeometry(rect.left(), mbTop, r.width(), mbh);
 #endif
 }
 
@@ -1477,86 +1470,5 @@ QSize QLayout::closestAcceptableSize(const QWidget *widget, const QSize &size)
     }
     return result;
 }
-
-void QSizePolicy::setControlType(ControlType type)
-{
-    /*
-        The control type is a flag type, with values 0x1, 0x2, 0x4, 0x8, 0x10,
-        etc. In memory, we pack it onto the available bits (CTSize) in
-        setControlType(), and unpack it here.
-
-        Example:
-
-            0x00000001 maps to 0
-            0x00000002 maps to 1
-            0x00000004 maps to 2
-            0x00000008 maps to 3
-            etc.
-    */
-
-    int i = 0;
-    while (true) {
-        if (type & (0x1 << i)) {
-            bits.ctype = i;
-            return;
-        }
-        ++i;
-    }
-}
-
-QSizePolicy::ControlType QSizePolicy::controlType() const
-{
-    return QSizePolicy::ControlType(1 << bits.ctype);
-}
-
-#ifndef QT_NO_DATASTREAM
-
-/*!
-    \relates QSizePolicy
-    \since 4.2
-
-    Writes the size \a policy to the data stream \a stream.
-
-    \sa{Serializing Qt Data Types}{Format of the QDataStream operators}
-*/
-QDataStream &operator<<(QDataStream &stream, const QSizePolicy &policy)
-{
-    // The order here is for historical reasons. (compatibility with Qt4)
-    quint32 data = (policy.bits.horPolicy |         // [0, 3]
-                    policy.bits.verPolicy << 4 |    // [4, 7]
-                    policy.bits.hfw << 8 |          // [8]
-                    policy.bits.ctype << 9 |        // [9, 13]
-                    policy.bits.wfh << 14 |         // [14]
-                    policy.bits.retainSizeWhenHidden << 15 |     // [15]
-                    policy.bits.verStretch << 16 |  // [16, 23]
-                    policy.bits.horStretch << 24);  // [24, 31]
-    return stream << data;
-}
-
-#define VALUE_OF_BITS(data, bitstart, bitcount) ((data >> bitstart) & ((1 << bitcount) -1))
-
-/*!
-    \relates QSizePolicy
-    \since 4.2
-
-    Reads the size \a policy from the data stream \a stream.
-
-    \sa{Serializing Qt Data Types}{Format of the QDataStream operators}
-*/
-QDataStream &operator>>(QDataStream &stream, QSizePolicy &policy)
-{
-    quint32 data;
-    stream >> data;
-    policy.bits.horPolicy =  VALUE_OF_BITS(data, 0, 4);
-    policy.bits.verPolicy =  VALUE_OF_BITS(data, 4, 4);
-    policy.bits.hfw =        VALUE_OF_BITS(data, 8, 1);
-    policy.bits.ctype =      VALUE_OF_BITS(data, 9, 5);
-    policy.bits.wfh =        VALUE_OF_BITS(data, 14, 1);
-    policy.bits.retainSizeWhenHidden =    VALUE_OF_BITS(data, 15, 1);
-    policy.bits.verStretch = VALUE_OF_BITS(data, 16, 8);
-    policy.bits.horStretch = VALUE_OF_BITS(data, 24, 8);
-    return stream;
-}
-#endif // QT_NO_DATASTREAM
 
 QT_END_NAMESPACE

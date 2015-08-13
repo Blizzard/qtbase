@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,12 +33,15 @@
 
 #import "qiosviewcontroller.h"
 
+#include <QtCore/qscopedvaluerollback.h>
+
 #include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
 #include <QtGui/QScreen>
 
 #include <QtGui/private/qwindow_p.h>
 
+#include "qiosintegration.h"
 #include "qiosscreen.h"
 #include "qiosglobal.h"
 #include "qioswindow.h"
@@ -54,10 +49,104 @@
 
 // -------------------------------------------------------------------------
 
+@interface QIOSViewController () {
+  @public
+    QPointer<QIOSScreen> m_screen;
+    BOOL m_updatingProperties;
+    QMetaObject::Connection m_focusWindowChangeConnection;
+}
+@property (nonatomic, assign) BOOL changingOrientation;
+@end
+
+// -------------------------------------------------------------------------
+
 @interface QIOSDesktopManagerView : UIView
 @end
 
 @implementation QIOSDesktopManagerView
+
+- (id)init
+{
+    if (!(self = [super init]))
+        return nil;
+
+    QIOSIntegration *iosIntegration = QIOSIntegration::instance();
+    if (iosIntegration && iosIntegration->debugWindowManagement()) {
+        static UIImage *gridPattern = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            CGFloat dimension = 100.f;
+
+            UIGraphicsBeginImageContextWithOptions(CGSizeMake(dimension, dimension), YES, 0.0f);
+            CGContextRef context = UIGraphicsGetCurrentContext();
+
+            CGContextTranslateCTM(context, -0.5, -0.5);
+
+            #define gridColorWithBrightness(br) \
+                [UIColor colorWithHue:0.6 saturation:0.0 brightness:br alpha:1.0].CGColor
+
+            CGContextSetFillColorWithColor(context, gridColorWithBrightness(0.05));
+            CGContextFillRect(context, CGRectMake(0, 0, dimension, dimension));
+
+            CGFloat gridLines[][2] = { { 10, 0.1 }, { 20, 0.2 }, { 100, 0.3 } };
+            for (size_t l = 0; l < sizeof(gridLines) / sizeof(gridLines[0]); ++l) {
+                CGFloat step = gridLines[l][0];
+                for (int c = step; c <= dimension; c += step) {
+                    CGContextMoveToPoint(context, c, 0);
+                    CGContextAddLineToPoint(context, c, dimension);
+                    CGContextMoveToPoint(context, 0, c);
+                    CGContextAddLineToPoint(context, dimension, c);
+                }
+
+                CGFloat brightness = gridLines[l][1];
+                CGContextSetStrokeColorWithColor(context, gridColorWithBrightness(brightness));
+                CGContextStrokePath(context);
+            }
+
+            gridPattern = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+
+            [gridPattern retain];
+        });
+
+        self.backgroundColor = [UIColor colorWithPatternImage:gridPattern];
+    }
+
+    return self;
+}
+
+- (void)didAddSubview:(UIView *)subview
+{
+    Q_UNUSED(subview);
+
+    QIOSScreen *screen = self.qtViewController->m_screen;
+
+    // The 'window' property of our view is not valid until the window
+    // has been shown, so we have to access it through the QIOSScreen.
+    UIWindow *uiWindow = screen->uiWindow();
+
+    if (uiWindow.hidden) {
+        // Associate UIWindow to screen and show it the first time a QWindow
+        // is mapped to the screen. For external screens this means disabling
+        // mirroring mode and presenting alternate content on the screen.
+        uiWindow.screen = screen->uiScreen();
+        uiWindow.hidden = NO;
+    }
+}
+
+- (void)willRemoveSubview:(UIView *)subview
+{
+    Q_UNUSED(subview);
+
+    Q_ASSERT(self.window);
+    UIWindow *uiWindow = self.window;
+
+    if (uiWindow.screen != [UIScreen mainScreen] && self.subviews.count == 1) {
+        // Removing the last view of an external screen, go back to mirror mode
+        uiWindow.screen = nil;
+        uiWindow.hidden = YES;
+    }
+}
 
 - (void)layoutSubviews
 {
@@ -73,7 +162,11 @@
 - (void)layoutView:(QUIView *)view
 {
     QWindow *window = view.qwindow;
-    Q_ASSERT(window->handle());
+
+    // Return early if the QIOSWindow is still constructing, as we'll
+    // take care of setting the correct window state in the constructor.
+    if (!window->handle())
+        return;
 
     // Re-apply window states to update geometry
     if (window->windowState() & (Qt::WindowFullScreen | Qt::WindowMaximized))
@@ -146,18 +239,26 @@
             [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleBlackTranslucent];
 #endif
 
+        self.lockedOrientation = UIInterfaceOrientationUnknown;
         self.changingOrientation = NO;
 
         // Status bar may be initially hidden at startup through Info.plist
         self.prefersStatusBarHidden = infoPlistValue(@"UIStatusBarHidden", false);
         self.preferredStatusBarUpdateAnimation = UIStatusBarAnimationNone;
+        self.preferredStatusBarStyle = UIStatusBarStyle(infoPlistValue(@"UIStatusBarStyle", UIStatusBarStyleDefault));
 
-        QObject::connect(qApp, &QGuiApplication::focusWindowChanged, [self]() {
+        m_focusWindowChangeConnection = QObject::connect(qApp, &QGuiApplication::focusWindowChanged, [self]() {
             [self updateProperties];
         });
     }
 
     return self;
+}
+
+- (void)dealloc
+{
+    QObject::disconnect(m_focusWindowChangeConnection);
+    [super dealloc];
 }
 
 - (void)loadView
@@ -173,6 +274,10 @@
     [center addObserver:self selector:@selector(willChangeStatusBarFrame:)
             name:UIApplicationWillChangeStatusBarFrameNotification
             object:[UIApplication sharedApplication]];
+
+    [center addObserver:self selector:@selector(didChangeStatusBarOrientation:)
+            name:UIApplicationDidChangeStatusBarOrientationNotification
+            object:[UIApplication sharedApplication]];
 }
 
 - (void)viewDidUnload
@@ -185,17 +290,19 @@
 
 -(BOOL)shouldAutorotate
 {
-    // Until a proper orientation and rotation API is in place, we always auto rotate.
-    // If auto rotation is not wanted, you would need to switch it off manually from Info.plist.
-    return YES;
+    return m_screen && m_screen->uiScreen() == [UIScreen mainScreen] && !self.lockedOrientation;
 }
 
 #if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_6_0)
 -(NSUInteger)supportedInterfaceOrientations
 {
-    // We need to tell iOS that we support all orientations in order to set
-    // status bar orientation when application content orientation changes.
-    return UIInterfaceOrientationMaskAll;
+    // As documented by Apple in the iOS 6.0 release notes, setStatusBarOrientation:animated:
+    // only works if the supportedInterfaceOrientations of the view controller is 0, making
+    // us responsible for ensuring that the status bar orientation is consistent. We enter
+    // this mode when auto-rotation is disabled due to an explicit content orientation being
+    // set on the focus window. Note that this is counter to what the documentation for
+    // supportedInterfaceOrientations says, which states that the method should not return 0.
+    return [self shouldAutorotate] ? UIInterfaceOrientationMaskAll : 0;
 }
 #endif
 
@@ -203,7 +310,7 @@
 -(BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
     Q_UNUSED(interfaceOrientation);
-    return YES;
+    return [self shouldAutorotate];
 }
 #endif
 
@@ -250,12 +357,29 @@
     }];
 }
 
+- (void)didChangeStatusBarOrientation:(NSNotification *)notification
+{
+    Q_UNUSED(notification);
+
+    if (self.view.window.screen != [UIScreen mainScreen])
+        return;
+
+    // If the statusbar changes orientation due to auto-rotation we don't care,
+    // there will be re-layout anyways. Only if the statusbar changes due to
+    // reportContentOrientation, we need to update the window layout.
+    if (self.changingOrientation)
+        return;
+
+    [self.view setNeedsLayout];
+}
+
 - (void)viewWillLayoutSubviews
 {
     if (!QCoreApplication::instance())
         return;
 
-    m_screen->updateProperties();
+    if (m_screen)
+        m_screen->updateProperties();
 }
 
 // -------------------------------------------------------------------------
@@ -264,6 +388,23 @@
 {
     if (!isQtApplication())
         return;
+
+    if (!m_screen || !m_screen->screen())
+        return;
+
+    // For now we only care about the main screen, as both the statusbar
+    // visibility and orientation is only appropriate for the main screen.
+    if (m_screen->uiScreen() != [UIScreen mainScreen])
+        return;
+
+    // Prevent recursion caused by updating the status bar appearance (position
+    // or visibility), which in turn may cause a layout of our subviews, and
+    // a reset of window-states, which themselves affect the view controller
+    // properties such as the statusbar visibilty.
+    if (m_updatingProperties)
+        return;
+
+    QScopedValueRollback<BOOL> updateRollback(m_updatingProperties, YES);
 
     QWindow *focusWindow = QGuiApplication::focusWindow();
 
@@ -281,14 +422,26 @@
     // All decisions are based on the the top level window
     focusWindow = qt_window_private(focusWindow)->topLevelWindow();
 
-    bool hasScrolledRootViewDueToVirtualKeyboard =
-        !CATransform3DIsIdentity(self.view.layer.sublayerTransform);
+    UIApplication *uiApplication = [UIApplication sharedApplication];
+
+    // -------------- Status bar style and visbility ---------------
+
+    UIStatusBarStyle oldStatusBarStyle = self.preferredStatusBarStyle;
+    if (focusWindow->flags() & Qt::MaximizeUsingFullscreenGeometryHint)
+        self.preferredStatusBarStyle = UIStatusBarStyleDefault;
+    else
+        self.preferredStatusBarStyle = QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_7_0 ?
+            UIStatusBarStyleLightContent : UIStatusBarStyleBlackTranslucent;
+
+    if (self.preferredStatusBarStyle != oldStatusBarStyle) {
+        if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_7_0)
+            [self setNeedsStatusBarAppearanceUpdate];
+        else
+            [uiApplication setStatusBarStyle:self.preferredStatusBarStyle];
+    }
 
     bool currentStatusBarVisibility = self.prefersStatusBarHidden;
-    self.prefersStatusBarHidden = focusWindow->windowState() == Qt::WindowFullScreen
-                                    || hasScrolledRootViewDueToVirtualKeyboard;
-    self.preferredStatusBarUpdateAnimation = hasScrolledRootViewDueToVirtualKeyboard ?
-        UIStatusBarAnimationFade : UIStatusBarAnimationNone;
+    self.prefersStatusBarHidden = focusWindow->windowState() == Qt::WindowFullScreen;
 
     if (self.prefersStatusBarHidden != currentStatusBarVisibility) {
 #if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_7_0)
@@ -297,27 +450,56 @@
         } else
 #endif
         {
-            [[UIApplication sharedApplication]
-                setStatusBarHidden:self.prefersStatusBarHidden
+            [uiApplication setStatusBarHidden:self.prefersStatusBarHidden
                 withAnimation:self.preferredStatusBarUpdateAnimation];
         }
 
         [self.view setNeedsLayout];
     }
-}
 
-#if QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(__IPHONE_7_0)
-- (UIStatusBarStyle)preferredStatusBarStyle
-{
-    // Since we don't place anything behind the status bare by default, we
-    // end up with a black area, so we have to enable the white text mode
-    // of the iOS7 statusbar.
-    return UIStatusBarStyleLightContent;
 
-    // FIXME: Try to detect the content underneath the statusbar and choose
-    // an appropriate style, and/or expose Qt APIs to control the style.
+    // -------------- Content orientation ---------------
+
+    static BOOL kAnimateContentOrientationChanges = YES;
+
+    Qt::ScreenOrientation contentOrientation = focusWindow->contentOrientation();
+    if (contentOrientation != Qt::PrimaryOrientation) {
+        // An explicit content orientation has been reported for the focus window,
+        // so we keep the status bar in sync with content orientation. This will ensure
+        // that the task bar (and associated gestures) are also rotated accordingly.
+
+        if (!self.lockedOrientation) {
+            // We are moving from Qt::PrimaryOrientation to an explicit orientation,
+            // so we need to store the current statusbar orientation, as we need it
+            // later when mapping screen coordinates for QScreen and for returning
+            // to Qt::PrimaryOrientation.
+            self.lockedOrientation = uiApplication.statusBarOrientation;
+        }
+
+        [uiApplication setStatusBarOrientation:
+            UIInterfaceOrientation(fromQtScreenOrientation(contentOrientation))
+            animated:kAnimateContentOrientationChanges];
+
+    } else {
+        // The content orientation is set to Qt::PrimaryOrientation, meaning
+        // that auto-rotation should be enabled. But we may be coming out of
+        // a state of locked orientation, which needs some cleanup before we
+        // can enable auto-rotation again.
+        if (self.lockedOrientation) {
+            // First we need to restore the statusbar to what it was at the
+            // time of locking the orientation, otherwise iOS will be very
+            // confused when it starts doing auto-rotation again.
+            [uiApplication setStatusBarOrientation:self.lockedOrientation
+                animated:kAnimateContentOrientationChanges];
+
+            // Then we can re-enable auto-rotation
+            self.lockedOrientation = UIInterfaceOrientationUnknown;
+
+            // And finally let iOS rotate the root view to match the device orientation
+            [UIViewController attemptRotationToDeviceOrientation];
+        }
+    }
 }
-#endif
 
 @end
 

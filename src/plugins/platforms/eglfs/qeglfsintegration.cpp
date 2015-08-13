@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,26 +23,16 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-#include "qeglfsintegration.h"
-
-#include "qeglfswindow.h"
-#include "qeglfshooks.h"
-#include "qeglfscontext.h"
-
+#include <QtCore/qtextstream.h>
 #include <QtGui/private/qguiapplication_p.h>
-
-#include <QtPlatformSupport/private/qeglconvenience_p.h>
-#include <QtPlatformSupport/private/qeglplatformcontext_p.h>
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
-#include <QtPlatformHeaders/QEGLNativeContext>
 
 #include <qpa/qplatformwindow.h>
 #include <QtGui/QSurfaceFormat>
@@ -51,54 +41,79 @@
 #include <QtGui/QOffscreenSurface>
 #include <qpa/qplatformcursor.h>
 
+#include "qeglfsintegration.h"
+#include "qeglfswindow.h"
+#include "qeglfshooks.h"
+#include "qeglfscontext.h"
+#include "qeglfsoffscreenwindow.h"
+
+#include <QtPlatformSupport/private/qeglconvenience_p.h>
+#include <QtPlatformSupport/private/qeglplatformcontext_p.h>
+#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtPlatformHeaders/QEGLNativeContext>
+
 #include <EGL/egl.h>
 
 static void initResources()
 {
+#ifndef QT_NO_CURSOR
     Q_INIT_RESOURCE(cursor);
+#endif
 }
 
 QT_BEGIN_NAMESPACE
 
 QEglFSIntegration::QEglFSIntegration()
 {
-    mDisableInputHandlers = qgetenv("QT_QPA_EGLFS_DISABLE_INPUT").toInt();
+    mDisableInputHandlers = qEnvironmentVariableIntValue("QT_QPA_EGLFS_DISABLE_INPUT");
 
     initResources();
-}
-
-QEglFSIntegration::~QEglFSIntegration()
-{
-    QEglFSHooks::hooks()->platformDestroy();
 }
 
 bool QEglFSIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 {
     // We assume that devices will have more and not less capabilities
-    if (QEglFSHooks::hooks() && QEglFSHooks::hooks()->hasCapability(cap))
+    if (qt_egl_device_integration()->hasCapability(cap))
         return true;
 
     return QEGLPlatformIntegration::hasCapability(cap);
 }
 
+void QEglFSIntegration::addScreen(QPlatformScreen *screen)
+{
+    screenAdded(screen);
+}
+
+void QEglFSIntegration::removeScreen(QPlatformScreen *screen)
+{
+    destroyScreen(screen);
+}
+
 void QEglFSIntegration::initialize()
 {
-    QEglFSHooks::hooks()->platformInit();
+    qt_egl_device_integration()->platformInit();
 
     QEGLPlatformIntegration::initialize();
 
     if (!mDisableInputHandlers)
         createInputHandlers();
+
+    if (qt_egl_device_integration()->usesDefaultScreen())
+        addScreen(new QEglFSScreen(display()));
+    else
+        qt_egl_device_integration()->screenInit();
+}
+
+void QEglFSIntegration::destroy()
+{
+    qt_egl_device_integration()->screenDestroy();
+    QEGLPlatformIntegration::destroy();
+    qt_egl_device_integration()->platformDestroy();
 }
 
 EGLNativeDisplayType QEglFSIntegration::nativeDisplay() const
 {
-    return QEglFSHooks::hooks()->platformDisplay();
-}
-
-QEGLPlatformScreen *QEglFSIntegration::createScreen() const
-{
-    return new QEglFSScreen(display());
+    return qt_egl_device_integration()->platformDisplay();
 }
 
 QEGLPlatformWindow *QEglFSIntegration::createWindow(QWindow *window) const
@@ -112,12 +127,12 @@ QEGLPlatformContext *QEglFSIntegration::createContext(const QSurfaceFormat &form
                                                       QVariant *nativeHandle) const
 {
     QEglFSContext *ctx;
-    QSurfaceFormat adjustedFormat = QEglFSHooks::hooks()->surfaceFormatFor(format);
+    QSurfaceFormat adjustedFormat = qt_egl_device_integration()->surfaceFormatFor(format);
     if (!nativeHandle || nativeHandle->isNull()) {
         EGLConfig config = QEglFSIntegration::chooseConfig(display, adjustedFormat);
-        ctx =  new QEglFSContext(adjustedFormat, shareContext, display, &config, QVariant());
+        ctx = new QEglFSContext(adjustedFormat, shareContext, display, &config, QVariant());
     } else {
-        ctx =  new QEglFSContext(adjustedFormat, shareContext, display, 0, *nativeHandle);
+        ctx = new QEglFSContext(adjustedFormat, shareContext, display, 0, *nativeHandle);
     }
     *nativeHandle = QVariant::fromValue<QEGLNativeContext>(QEGLNativeContext(ctx->eglContext(), display));
     return ctx;
@@ -127,41 +142,28 @@ QPlatformOffscreenSurface *QEglFSIntegration::createOffscreenSurface(EGLDisplay 
                                                                      const QSurfaceFormat &format,
                                                                      QOffscreenSurface *surface) const
 {
-    return new QEGLPbuffer(display, QEglFSHooks::hooks()->surfaceFormatFor(format), surface);
-}
+    QSurfaceFormat fmt = qt_egl_device_integration()->surfaceFormatFor(format);
+    if (qt_egl_device_integration()->supportsPBuffers())
+        return new QEGLPbuffer(display, fmt, surface);
+    else
+        return new QEglFSOffscreenWindow(display, fmt, surface);
 
-QVariant QEglFSIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
-{
-    switch (hint)
-    {
-    case QPlatformIntegration::ShowIsFullScreen:
-        return screen()->compositingWindow() == 0;
-    default:
-        return QPlatformIntegration::styleHint(hint);
-    }
+    // Never return null. Multiple QWindows are not supported by this plugin.
 }
 
 EGLConfig QEglFSIntegration::chooseConfig(EGLDisplay display, const QSurfaceFormat &format)
 {
     class Chooser : public QEglConfigChooser {
     public:
-        Chooser(EGLDisplay display, QEglFSHooks *hooks)
-            : QEglConfigChooser(display)
-            , m_hooks(hooks)
-        {
+        Chooser(EGLDisplay display)
+            : QEglConfigChooser(display) { }
+        bool filterConfig(EGLConfig config) const Q_DECL_OVERRIDE {
+            return qt_egl_device_integration()->filterConfig(display(), config)
+                    && QEglConfigChooser::filterConfig(config);
         }
-
-    protected:
-        bool filterConfig(EGLConfig config) const
-        {
-            return m_hooks->filterConfig(display(), config) && QEglConfigChooser::filterConfig(config);
-        }
-
-    private:
-        QEglFSHooks *m_hooks;
     };
 
-    Chooser chooser(display, QEglFSHooks::hooks());
+    Chooser chooser(display);
     chooser.setSurfaceFormat(format);
     return chooser.chooseConfig();
 }

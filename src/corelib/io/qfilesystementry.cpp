@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -255,15 +255,15 @@ QString QFileSystemEntry::completeSuffix() const
 bool QFileSystemEntry::isRelative() const
 {
     resolveFilePath();
-    return (m_filePath.isEmpty() || (!m_filePath.isEmpty() && (m_filePath[0].unicode() != '/')
-        && (!(m_filePath.length() >= 2 && m_filePath[1].unicode() == ':'))));
+    return (m_filePath.isEmpty() || (!m_filePath.isEmpty() && (m_filePath.at(0).unicode() != '/')
+        && (!(m_filePath.length() >= 2 && m_filePath.at(1).unicode() == ':'))));
 }
 
 bool QFileSystemEntry::isAbsolute() const
 {
     resolveFilePath();
     return (!m_filePath.isEmpty() && ((m_filePath.length() >= 3
-                                       && (m_filePath[0].isLetter() && m_filePath[1].unicode() == ':' && m_filePath[2].unicode() == '/'))
+                                       && (m_filePath.at(0).isLetter() && m_filePath.at(1).unicode() == ':' && m_filePath.at(2).unicode() == '/'))
                                       || (m_filePath.length() >= 2 && (m_filePath.at(0) == QLatin1Char('/') && m_filePath.at(1) == QLatin1Char('/')))
                                       ));
 }
@@ -276,7 +276,7 @@ bool QFileSystemEntry::isRelative() const
 bool QFileSystemEntry::isAbsolute() const
 {
     resolveFilePath();
-    return (!m_filePath.isEmpty() && (m_filePath[0].unicode() == '/'));
+    return (!m_filePath.isEmpty() && (m_filePath.at(0).unicode() == '/'));
 }
 #endif
 
@@ -315,13 +315,7 @@ void QFileSystemEntry::findLastSeparator() const
 {
     if (m_lastSeparator == -2) {
         resolveFilePath();
-        m_lastSeparator = -1;
-        for (int i = m_filePath.size() - 1; i >= 0; --i) {
-            if (m_filePath[i].unicode() == '/') {
-                m_lastSeparator = i;
-                break;
-            }
-        }
+        m_lastSeparator = m_filePath.lastIndexOf(QLatin1Char('/'));
     }
 }
 
@@ -343,10 +337,10 @@ void QFileSystemEntry::findFileNameSeparators() const
 
         int i = m_filePath.size() - 1;
         for (; i >= stop; --i) {
-            if (m_filePath[i].unicode() == '.') {
+            if (m_filePath.at(i).unicode() == '.') {
                 firstDotInFileName = lastDotInFileName = i;
                 break;
-            } else if (m_filePath[i].unicode() == '/') {
+            } else if (m_filePath.at(i).unicode() == '/') {
                 lastSeparator = i;
                 break;
             }
@@ -354,9 +348,9 @@ void QFileSystemEntry::findFileNameSeparators() const
 
         if (lastSeparator != i) {
             for (--i; i >= stop; --i) {
-                if (m_filePath[i].unicode() == '.')
+                if (m_filePath.at(i).unicode() == '.')
                     firstDotInFileName = i;
-                else if (m_filePath[i].unicode() == '/') {
+                else if (m_filePath.at(i).unicode() == '/') {
                     lastSeparator = i;
                     break;
                 }

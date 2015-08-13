@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -124,7 +124,7 @@ public:
     QRectF selectionRect(const QTextCursor &cursor) const;
     QRectF selectionRect() const;
 
-    QString anchorAt(const QPointF &pos) const;
+    virtual QString anchorAt(const QPointF &pos) const;
     QPointF anchorPosition(const QString &name) const;
 
     QString anchorAtCursor() const;
@@ -242,9 +242,9 @@ public:
     bool findNextPrevAnchor(const QTextCursor& from, bool next, QTextCursor& newAnchor);
 
 protected:
-    virtual void timerEvent(QTimerEvent *e);
+    virtual void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
 
-    virtual bool event(QEvent *e);
+    virtual bool event(QEvent *e) Q_DECL_OVERRIDE;
 
 private:
     Q_DISABLE_COPY(QWidgetTextControl)
@@ -280,9 +280,9 @@ class QTextEditMimeData : public QMimeData
 public:
     inline QTextEditMimeData(const QTextDocumentFragment &aFragment) : fragment(aFragment) {}
 
-    virtual QStringList formats() const;
+    virtual QStringList formats() const Q_DECL_OVERRIDE;
 protected:
-    virtual QVariant retrieveData(const QString &mimeType, QVariant::Type type) const;
+    virtual QVariant retrieveData(const QString &mimeType, QVariant::Type type) const Q_DECL_OVERRIDE;
 private:
     void setup() const;
 

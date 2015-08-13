@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -231,6 +231,8 @@ QPlatformServices *QPlatformIntegration::services() const
     implementation for QOpenGLContext::getProcAddress() and support returning a function
     pointer also for the standard, non-extension functions. This capability is a
     prerequisite for dynamic OpenGL loading.
+
+    \value ApplicationIcon The platform supports setting the application icon. (since 5.5)
  */
 
 /*!
@@ -324,6 +326,16 @@ void QPlatformIntegration::initialize()
 }
 
 /*!
+  Called before the platform integration is deleted. Useful when cleanup relies on virtual
+  functions.
+
+  \since 5.5
+*/
+void QPlatformIntegration::destroy()
+{
+}
+
+/*!
   Returns the platforms input context.
 
   The default implementation returns 0, implying no input method support.
@@ -376,12 +388,16 @@ QVariant QPlatformIntegration::styleHint(StyleHint hint) const
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::StartDragVelocity);
     case UseRtlExtensions:
         return QVariant(false);
-    case SynthesizeMouseFromTouchEvents:
-        return true;
     case SetFocusOnTouchRelease:
         return QVariant(false);
     case MousePressAndHoldInterval:
         return QPlatformTheme::defaultThemeHint(QPlatformTheme::MousePressAndHoldInterval);
+    case TabFocusBehavior:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::TabFocusBehavior);
+    case ReplayMousePressOutsidePopup:
+        return true;
+    case ItemViewActivateItemOnSingleClick:
+        return QPlatformTheme::defaultThemeHint(QPlatformTheme::ItemViewActivateItemOnSingleClick);
     }
 
     return 0;
@@ -429,14 +445,33 @@ QList<int> QPlatformIntegration::possibleKeys(const QKeyEvent *) const
   This adds the screen to QGuiApplication::screens(), and emits the
   QGuiApplication::screenAdded() signal.
 
-  The screen is automatically removed when the QPlatformScreen is destroyed.
+  The screen should be deleted by calling QPlatformIntegration::destroyScreen().
 */
-void QPlatformIntegration::screenAdded(QPlatformScreen *ps)
+void QPlatformIntegration::screenAdded(QPlatformScreen *ps, bool isPrimary)
 {
     QScreen *screen = new QScreen(ps);
     ps->d_func()->screen = screen;
-    QGuiApplicationPrivate::screen_list << screen;
+    if (isPrimary) {
+        QGuiApplicationPrivate::screen_list.prepend(screen);
+    } else {
+        QGuiApplicationPrivate::screen_list.append(screen);
+    }
     emit qGuiApp->screenAdded(screen);
+}
+
+/*!
+  Should be called by the implementation whenever a screen is removed.
+
+  This removes the screen from QGuiApplication::screens(), and deletes it.
+
+  Failing to call this and manually deleting the QPlatformScreen instead may
+  lead to a crash due to a pure virtual call.
+*/
+void QPlatformIntegration::destroyScreen(QPlatformScreen *screen)
+{
+    QGuiApplicationPrivate::screen_list.removeOne(screen->d_func()->screen);
+    delete screen->d_func()->screen;
+    delete screen;
 }
 
 QStringList QPlatformIntegration::themeNames() const
@@ -512,5 +547,17 @@ QOpenGLContext::OpenGLModuleType QPlatformIntegration::openGLModuleType()
     return QOpenGLContext::LibGL;
 }
 #endif
+
+/*!
+    \since 5.5
+
+    Platform integration function for setting the application icon.
+
+    \sa QGuiApplication::setWindowIcon()
+*/
+void QPlatformIntegration::setApplicationIcon(const QIcon &icon) const
+{
+    Q_UNUSED(icon);
+}
 
 QT_END_NAMESPACE

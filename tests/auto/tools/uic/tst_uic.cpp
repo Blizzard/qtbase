@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -39,6 +39,7 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QStandardPaths>
 
 class tst_uic : public QObject
 {
@@ -67,10 +68,12 @@ private:
     const QString m_command;
     QString m_baseline;
     QTemporaryDir m_generated;
+    QRegExp m_versionRegexp;
 };
 
 tst_uic::tst_uic()
     : m_command(QLibraryInfo::location(QLibraryInfo::BinariesPath) + QLatin1String("/uic"))
+    , m_versionRegexp(QLatin1String("Created by: Qt User Interface Compiler version [.\\d]{5,5}"))
 {
 }
 
@@ -83,6 +86,7 @@ static QByteArray msgProcessStartFailed(const QString &command, const QString &w
 
 void tst_uic::initTestCase()
 {
+    QVERIFY(m_versionRegexp.isValid());
     m_baseline = QFINDTESTDATA("baseline");
     QVERIFY2(!m_baseline.isEmpty(), "Could not find 'baseline'.");
     QProcess process;
@@ -95,8 +99,8 @@ void tst_uic::initTestCase()
     const QString out = QString::fromLocal8Bit(process.readAllStandardError()).remove(QLatin1Char('\r'));
     const QStringList outLines = out.split(QLatin1Char('\n'));
     // Print version
-    QString msg = QString::fromLatin1("uic test built %1 running in '%2' using: ").
-                  arg(QString::fromLatin1(__DATE__), QDir::currentPath());
+    QString msg = QString::fromLatin1("uic test running in '%1' using: ").
+                  arg(QDir::currentPath());
     if (!outLines.empty())
         msg += outLines.front();
     qDebug("%s", qPrintable(msg));
@@ -171,6 +175,37 @@ void tst_uic::run_data() const
     }
 }
 
+// Helpers to generate a diff using the standard diff tool if present for failures.
+static inline QString diffBinary()
+{
+    QString binary = QLatin1String("diff");
+#ifdef Q_OS_WIN
+    binary += QLatin1String(".exe");
+#endif
+    return QStandardPaths::findExecutable(binary);
+}
+
+static QString generateDiff(const QString &originalFile, const QString &generatedFile)
+{
+    static const QString diff = diffBinary();
+    if (diff.isEmpty())
+        return QString();
+    const QStringList args = QStringList() << QLatin1String("-u")
+        << QDir::toNativeSeparators(originalFile)
+        << QDir::toNativeSeparators(generatedFile);
+    QProcess diffProcess;
+    diffProcess.start(diff, args);
+    return diffProcess.waitForStarted() && diffProcess.waitForFinished()
+        ? QString::fromLocal8Bit(diffProcess.readAllStandardOutput()) : QString();
+}
+
+static QByteArray msgCannotReadFile(const QFile &file)
+{
+    const QString result = QLatin1String("Could not read file: ")
+        + QDir::toNativeSeparators(file.fileName())
+        + QLatin1String(": ") + file.errorString();
+    return result.toLocal8Bit();
+}
 
 void tst_uic::compare()
 {
@@ -180,23 +215,23 @@ void tst_uic::compare()
     QFile orgFile(originalFile);
     QFile genFile(generatedFile);
 
-    if (!orgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString err(QLatin1String("Could not read file: %1..."));
-        QFAIL(err.arg(orgFile.fileName()).toUtf8());
+    QVERIFY2(orgFile.open(QIODevice::ReadOnly | QIODevice::Text), msgCannotReadFile(orgFile));
+
+    QVERIFY2(genFile.open(QIODevice::ReadOnly | QIODevice::Text), msgCannotReadFile(genFile));
+
+    QString originalFileContents = orgFile.readAll();
+    originalFileContents.replace(m_versionRegexp, QString());
+
+    QString generatedFileContents = genFile.readAll();
+    generatedFileContents.replace(m_versionRegexp, QString());
+
+    if (generatedFileContents != originalFileContents) {
+        const QString diff = generateDiff(originalFile, generatedFile);
+        if (!diff.isEmpty())
+             qWarning().noquote().nospace() << "Difference:\n" << diff;
     }
 
-    if (!genFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString err(QLatin1String("Could not read file: %1..."));
-        QFAIL(err.arg(genFile.fileName()).toUtf8());
-    }
-
-    originalFile = orgFile.readAll();
-    originalFile.replace(QRegExp(QLatin1String("Created by: Qt User Interface Compiler version [.\\d]{5,5}")), "");
-
-    generatedFile = genFile.readAll();
-    generatedFile.replace(QRegExp(QLatin1String("Created by: Qt User Interface Compiler version [.\\d]{5,5}")), "");
-
-    QCOMPARE(generatedFile, originalFile);
+    QCOMPARE(generatedFileContents, originalFileContents);
 }
 
 void tst_uic::compare_data() const
@@ -240,28 +275,31 @@ void tst_uic::runTranslation()
 
 void tst_uic::runCompare()
 {
-    QFile orgFile(m_baseline + QLatin1String("/translation/Dialog_without_Buttons_tr.h"));
+    const QString dialogFile = QLatin1String("/translation/Dialog_without_Buttons_tr.h");
+    const QString originalFile = m_baseline + dialogFile;
+    QFile orgFile(originalFile);
 
     QDir generated(m_generated.path());
-    QFile genFile(generated.absolutePath() + QLatin1String("/translation/Dialog_without_Buttons_tr.h"));
+    const QString generatedFile = generated.absolutePath() + dialogFile;
+    QFile genFile(generatedFile);
 
-    if (!orgFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString err(QLatin1String("Could not read file: %1..."));
-        QFAIL(err.arg(orgFile.fileName()).toUtf8());
+    QVERIFY2(orgFile.open(QIODevice::ReadOnly | QIODevice::Text), msgCannotReadFile(orgFile));
+
+    QVERIFY2(genFile.open(QIODevice::ReadOnly | QIODevice::Text), msgCannotReadFile(genFile));
+
+    QString originalFileContents = orgFile.readAll();
+    originalFileContents.replace(m_versionRegexp, QString());
+
+    QString generatedFileContents = genFile.readAll();
+    generatedFileContents.replace(m_versionRegexp, QString());
+
+    if (generatedFileContents != originalFileContents) {
+        const QString diff = generateDiff(originalFile, generatedFile);
+        if (!diff.isEmpty())
+             qWarning().noquote().nospace() << "Difference:\n" << diff;
     }
 
-    if (!genFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString err(QLatin1String("Could not read file: %1..."));
-        QFAIL(err.arg(genFile.fileName()).toUtf8());
-    }
-
-    QString originalFile = orgFile.readAll();
-    originalFile.replace(QRegExp(QLatin1String("Created by: Qt User Interface Compiler version [.\\d]{5,5}")), "");
-
-    QString generatedFile = genFile.readAll();
-    generatedFile.replace(QRegExp(QLatin1String("Created by: Qt User Interface Compiler version [.\\d]{5,5}")), "");
-
-    QCOMPARE(generatedFile, originalFile);
+    QCOMPARE(generatedFileContents, originalFileContents);
 }
 
 QTEST_MAIN(tst_uic)

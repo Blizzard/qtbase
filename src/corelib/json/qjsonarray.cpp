@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -47,6 +47,7 @@ QT_BEGIN_NAMESPACE
     \class QJsonArray
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
@@ -531,8 +532,8 @@ bool QJsonArray::contains(const QJsonValue &value) const
     \a i must be a valid index position in the array (i.e., \c{0 <= i <
     size()}).
 
-    The return value is of type QJsonValueRef, a helper class for QJsonArray
-    and QJsonObject. When you get an object of type QJsonValueRef, you can
+    The return value is of type \keyword QJsonValueRef, a helper class for QJsonArray
+    and QJsonObject. When you get an object of type \keyword QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
     the assignment will apply to the character in the QJsonArray of QJsonObject
     from which you got the reference.
@@ -709,6 +710,11 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
     \internal
 */
 
+/*! \typedef QJsonArray::iterator::pointer
+
+    \internal
+*/
+
 /*! \fn QJsonArray::iterator::iterator()
 
     Constructs an uninitialized iterator.
@@ -726,13 +732,14 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
 
 /*! \fn QJsonValueRef QJsonArray::iterator::operator*() const
 
+
     Returns a modifiable reference to the current item.
 
     You can change the value of an item by using operator*() on the
     left side of an assignment.
 
-    The return value is of type QJsonValueRef, a helper class for QJsonArray
-    and QJsonObject. When you get an object of type QJsonValueRef, you can
+    The return value is of type \keyword QJsonValueRef, a helper class for QJsonArray
+    and QJsonObject. When you get an object of type \keyword QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
     the assignment will apply to the character in the QJsonArray of QJsonObject
     from which you got the reference.
@@ -751,8 +758,8 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
     This function is provided to make QJsonArray iterators behave like C++
     pointers.
 
-    The return value is of type QJsonValueRef, a helper class for QJsonArray
-    and QJsonObject. When you get an object of type QJsonValueRef, you can
+    The return value is of type \keyword QJsonValueRef, a helper class for QJsonArray
+    and QJsonObject. When you get an object of type \keyword QJsonValueRef, you can
     use it as if it were a reference to a QJsonValue. If you assign to it,
     the assignment will apply to the character in the QJsonArray of QJsonObject
     from which you got the reference.
@@ -953,6 +960,11 @@ bool QJsonArray::operator!=(const QJsonArray &other) const
     \internal
 */
 
+/*! \typedef QJsonArray::const_iterator::pointer
+
+    \internal
+*/
+
 /*! \fn QJsonArray::const_iterator::const_iterator(const const_iterator &other)
 
     Constructs a copy of \a other.
@@ -1144,6 +1156,7 @@ void QJsonArray::compact()
 #if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
 QDebug operator<<(QDebug dbg, const QJsonArray &a)
 {
+    QDebugStateSaver saver(dbg);
     if (!a.a) {
         dbg << "QJsonArray()";
         return dbg;
@@ -1153,7 +1166,7 @@ QDebug operator<<(QDebug dbg, const QJsonArray &a)
     dbg.nospace() << "QJsonArray("
                   << json.constData() // print as utf-8 string without extra quotation marks
                   << ")";
-    return dbg.space();
+    return dbg;
 }
 #endif
 

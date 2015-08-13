@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -38,7 +38,6 @@
 **
 ****************************************************************************/
 
-
 //! [1]
 #include "googlesuggest.h"
 
@@ -54,7 +53,7 @@ GSuggestCompletion::GSuggestCompletion(QLineEdit *parent): QObject(parent), edit
     popup->setFocusProxy(parent);
     popup->setMouseTracking(true);
 
-    popup->setColumnCount(2);
+    popup->setColumnCount(1);
     popup->setUniformRowHeights(true);
     popup->setRootIsDecorated(false);
     popup->setEditTriggers(QTreeWidget::NoEditTriggers);
@@ -137,10 +136,10 @@ bool GSuggestCompletion::eventFilter(QObject *obj, QEvent *ev)
 //! [4]
 
 //! [5]
-void GSuggestCompletion::showCompletion(const QStringList &choices, const QStringList &hits)
+void GSuggestCompletion::showCompletion(const QStringList &choices)
 {
 
-    if (choices.isEmpty() || choices.count() != hits.count())
+    if (choices.isEmpty())
         return;
 
     const QPalette &pal = editor->palette();
@@ -152,18 +151,11 @@ void GSuggestCompletion::showCompletion(const QStringList &choices, const QStrin
         QTreeWidgetItem * item;
         item = new QTreeWidgetItem(popup);
         item->setText(0, choices[i]);
-        item->setText(1, hits[i]);
-        item->setTextAlignment(1, Qt::AlignRight);
-        item->setTextColor(1, color);
+        item->setTextColor(0, color);
     }
     popup->setCurrentItem(popup->topLevelItem(0));
     popup->resizeColumnToContents(0);
-    popup->resizeColumnToContents(1);
-    popup->adjustSize();
     popup->setUpdatesEnabled(true);
-
-    int h = popup->sizeHintForRow(0) * qMin(7, choices.count()) + 3;
-    popup->resize(popup->width(), h);
 
     popup->move(editor->mapToGlobal(QPoint(0, editor->height())));
     popup->setFocus();
@@ -207,7 +199,6 @@ void GSuggestCompletion::handleNetworkData(QNetworkReply *networkReply)
     QUrl url = networkReply->url();
     if (!networkReply->error()) {
         QStringList choices;
-        QStringList hits;
 
         QByteArray response(networkReply->readAll());
         QXmlStreamReader xml(response);
@@ -218,17 +209,11 @@ void GSuggestCompletion::handleNetworkData(QNetworkReply *networkReply)
                     QStringRef str = xml.attributes().value("data");
                     choices << str.toString();
                 }
-            if (xml.tokenType() == QXmlStreamReader::StartElement)
-                if (xml.name() == "num_queries") {
-                    QStringRef str = xml.attributes().value("int");
-                    hits << str.toString();
-                }
         }
 
-        showCompletion(choices, hits);
+        showCompletion(choices);
     }
 
     networkReply->deleteLater();
 }
 //! [9]
-

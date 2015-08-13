@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -65,6 +65,7 @@ public:
     QProgressDialogPrivate() : label(0), cancel(0), bar(0),
         shown_once(false),
         cancellation_flag(false),
+        setValue_called(false),
         showTime(defaultShowTime),
 #ifndef QT_NO_SHORTCUT
         escapeShortcut(0),
@@ -87,6 +88,7 @@ public:
     QTimer *forceTimer;
     bool shown_once;
     bool cancellation_flag;
+    bool setValue_called;
     QElapsedTimer starttime;
 #ifndef QT_NO_CURSOR
     QCursor parentCursor;
@@ -108,10 +110,10 @@ void QProgressDialogPrivate::init(const QString &labelText, const QString &cance
 {
     Q_Q(QProgressDialog);
     label = new QLabel(labelText, q);
-    int align = q->style()->styleHint(QStyle::SH_ProgressDialog_TextLabelAlignment, 0, q);
-    label->setAlignment(Qt::Alignment(align));
     bar = new QProgressBar(q);
     bar->setRange(min, max);
+    int align = q->style()->styleHint(QStyle::SH_ProgressDialog_TextLabelAlignment, 0, q);
+    label->setAlignment(Qt::Alignment(align));
     autoClose = true;
     autoReset = true;
     forceHide = false;
@@ -123,6 +125,8 @@ void QProgressDialogPrivate::init(const QString &labelText, const QString &cance
     } else {
         q->setCancelButtonText(cancelText);
     }
+    starttime.start();
+    forceTimer->start(showTime);
 }
 
 void QProgressDialogPrivate::layout()
@@ -598,6 +602,7 @@ void QProgressDialog::reset()
     d->bar->reset();
     d->cancellation_flag = false;
     d->shown_once = false;
+    d->setValue_called = false;
     d->forceTimer->stop();
 
     /*
@@ -636,7 +641,7 @@ int QProgressDialog::value() const
   \brief the current amount of progress made.
 
   For the progress dialog to work as expected, you should initially set
-  this property to 0 and finally set it to
+  this property to QProgressDialog::minimum() and finally set it to
   QProgressDialog::maximum(); you can call setValue() any number of times
   in-between.
 
@@ -651,8 +656,7 @@ int QProgressDialog::value() const
 void QProgressDialog::setValue(int progress)
 {
     Q_D(QProgressDialog);
-    if (progress == d->bar->value()
-        || (d->bar->value() == -1 && progress == d->bar->maximum()))
+    if (d->setValue_called && progress == d->bar->value())
         return;
 
     d->bar->setValue(progress);
@@ -661,11 +665,13 @@ void QProgressDialog::setValue(int progress)
         if (isModal())
             QApplication::processEvents();
     } else {
-        if (progress == 0) {
+        if ((!d->setValue_called && progress == 0 /* for compat with Qt < 5.4 */) || progress == minimum()) {
             d->starttime.start();
             d->forceTimer->start(d->showTime);
+            d->setValue_called = true;
             return;
         } else {
+            d->setValue_called = true;
             bool need_show;
             int elapsed = d->starttime.elapsed();
             if (elapsed >= d->showTime) {
@@ -691,7 +697,7 @@ void QProgressDialog::setValue(int progress)
                 d->shown_once = true;
             }
         }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         QApplication::flush();
 #endif
     }
@@ -759,7 +765,7 @@ void QProgressDialog::setMinimumDuration(int ms)
 {
     Q_D(QProgressDialog);
     d->showTime = ms;
-    if (d->bar->value() == 0) {
+    if (d->bar->value() == d->bar->minimum()) {
         d->forceTimer->stop();
         d->forceTimer->start(ms);
     }

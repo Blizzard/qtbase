@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -219,7 +219,7 @@ bool QDirSortItemComparator::operator()(const QDirSortItem &n1, const QDirSortIt
     if ((qt_cmp_si_sort_flags & QDir::DirsLast) && (f1->item.isDir() != f2->item.isDir()))
         return !f1->item.isDir();
 
-    int r = 0;
+    qint64 r = 0;
     int sortBy = (qt_cmp_si_sort_flags & QDir::SortByMask)
                  | (qt_cmp_si_sort_flags & QDir::Type);
 
@@ -235,11 +235,11 @@ bool QDirSortItemComparator::operator()(const QDirSortItem &n1, const QDirSortIt
         firstModified.setTimeSpec(Qt::UTC);
         secondModified.setTimeSpec(Qt::UTC);
 
-        r = firstModified.secsTo(secondModified);
+        r = firstModified.msecsTo(secondModified);
         break;
       }
       case QDir::Size:
-          r = int(qBound<qint64>(-1, f2->item.size() - f1->item.size(), 1));
+          r = f2->item.size() - f1->item.size();
         break;
       case QDir::Type:
       {
@@ -1818,8 +1818,8 @@ QFileInfoList QDir::drives()
 }
 
 /*!
-    Returns the native directory separator: "/" under Unix (including
-    Mac OS X) and "\\" under Windows.
+    Returns the native directory separator: "/" under Unix
+    and "\\" under Windows.
 
     You do not need to use this function to build file paths. If you
     always use "/", Qt will translate your paths to conform to the
@@ -2271,6 +2271,8 @@ QStringList QDir::nameFiltersFromString(const QString &nameFilter)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, QDir::Filters filters)
 {
+    QDebugStateSaver save(debug);
+    debug.resetFormat();
     QStringList flags;
     if (filters == QDir::NoFilter) {
         flags << QLatin1String("NoFilter");
@@ -2291,12 +2293,14 @@ QDebug operator<<(QDebug debug, QDir::Filters filters)
         if (filters & QDir::System) flags << QLatin1String("System");
         if (filters & QDir::CaseSensitive) flags << QLatin1String("CaseSensitive");
     }
-    debug << "QDir::Filters(" << qPrintable(flags.join(QLatin1Char('|'))) << ')';
+    debug.noquote() << "QDir::Filters(" << flags.join(QLatin1Char('|')) << ')';
     return debug;
 }
 
 static QDebug operator<<(QDebug debug, QDir::SortFlags sorting)
 {
+    QDebugStateSaver save(debug);
+    debug.resetFormat();
     if (sorting == QDir::NoSort) {
         debug << "QDir::SortFlags(NoSort)";
     } else {
@@ -2312,24 +2316,23 @@ static QDebug operator<<(QDebug debug, QDir::SortFlags sorting)
         if (sorting & QDir::IgnoreCase) flags << QLatin1String("IgnoreCase");
         if (sorting & QDir::LocaleAware) flags << QLatin1String("LocaleAware");
         if (sorting & QDir::Type) flags << QLatin1String("Type");
-        debug << "QDir::SortFlags(" << qPrintable(type)
-              << '|'
-              << qPrintable(flags.join(QLatin1Char('|'))) << ')';
+        debug.noquote() << "QDir::SortFlags(" << type << '|' << flags.join(QLatin1Char('|')) << ')';
     }
     return debug;
 }
 
 QDebug operator<<(QDebug debug, const QDir &dir)
 {
-    debug.maybeSpace() << "QDir(" << dir.path()
-                       << ", nameFilters = {"
-                       << qPrintable(dir.nameFilters().join(QLatin1Char(',')))
-                       << "}, "
-                       << dir.sorting()
-                       << ','
-                       << dir.filter()
-                       << ')';
-    return debug.space();
+    QDebugStateSaver save(debug);
+    debug.resetFormat();
+    debug << "QDir(" << dir.path() << ", nameFilters = {"
+          << dir.nameFilters().join(QLatin1Char(','))
+          << "}, "
+          << dir.sorting()
+          << ','
+          << dir.filter()
+          << ')';
+    return debug;
 }
 #endif // QT_NO_DEBUG_STREAM
 

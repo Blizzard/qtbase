@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@deltech.ch>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1846,8 +1846,17 @@ void QCommonListViewBase::updateHorizontalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    if (bothScrollBarsAuto && contentsSize.width() - qq->verticalScrollBar()->width() <= viewport()->width()
-                           && contentsSize.height() - qq->horizontalScrollBar()->height() <= viewport()->height()) {
+    const QSize viewportSize(viewport()->width() + (qq->verticalScrollBar()->maximum() > 0 ? qq->verticalScrollBar()->width() : 0),
+                             viewport()->height() + (qq->horizontalScrollBar()->maximum() > 0 ? qq->horizontalScrollBar()->height() : 0));
+
+    bool verticalWantsToShow = contentsSize.height() > viewportSize.height();
+    bool horizontalWantsToShow;
+    if (verticalWantsToShow)
+        horizontalWantsToShow = contentsSize.width() > viewportSize.width() - qq->verticalScrollBar()->width();
+    else
+        horizontalWantsToShow = contentsSize.width() > viewportSize.width();
+
+    if (bothScrollBarsAuto && !horizontalWantsToShow) {
         // break the infinite loop described above by setting the range to 0, 0.
         // QAbstractScrollArea will then hide the scroll bar for us
         horizontalScrollBar()->setRange(0, 0);
@@ -1868,8 +1877,17 @@ void QCommonListViewBase::updateVerticalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    if (bothScrollBarsAuto && contentsSize.width() - qq->verticalScrollBar()->width() <= viewport()->width()
-                           && contentsSize.height() - qq->horizontalScrollBar()->height() <= viewport()->height()) {
+    const QSize viewportSize(viewport()->width() + (qq->verticalScrollBar()->maximum() > 0 ? qq->verticalScrollBar()->width() : 0),
+                             viewport()->height() + (qq->horizontalScrollBar()->maximum() > 0 ? qq->horizontalScrollBar()->height() : 0));
+
+    bool horizontalWantsToShow = contentsSize.width() > viewportSize.width();
+    bool verticalWantsToShow;
+    if (horizontalWantsToShow)
+        verticalWantsToShow = contentsSize.height() > viewportSize.height() - qq->horizontalScrollBar()->height();
+    else
+        verticalWantsToShow = contentsSize.height() > viewportSize.height();
+
+    if (bothScrollBarsAuto && !verticalWantsToShow) {
         // break the infinite loop described above by setting the range to 0, 0.
         // QAbstractScrollArea will then hide the scroll bar for us
         verticalScrollBar()->setRange(0, 0);
@@ -1977,7 +1995,7 @@ void QListModeViewBase::dragMoveEvent(QDragMoveEvent *event)
                         ? intersectVector.last() : QModelIndex();
     dd->hover = index;
     if (!dd->droppingOnItself(event, index)
-        && dd->canDecode(event)) {
+        && dd->canDrop(event)) {
 
         if (index.isValid() && dd->showDropIndicator) {
             QRect rect = qq->visualRect(index);
@@ -2023,7 +2041,7 @@ void QListModeViewBase::dragMoveEvent(QDragMoveEvent *event)
             }
         }
         dd->viewport->update();
-    } // can decode
+    } // can drop
 
     if (dd->shouldAutoScroll(event->pos()))
         qq->startAutoScroll();
@@ -2757,7 +2775,7 @@ bool QIconModeViewBase::filterDragLeaveEvent(QDragLeaveEvent *e)
 
 bool QIconModeViewBase::filterDragMoveEvent(QDragMoveEvent *e)
 {
-    if (e->source() != qq || !dd->canDecode(e))
+    if (e->source() != qq || !dd->canDrop(e))
         return false;
 
     // ignore by default
@@ -3198,7 +3216,7 @@ void QListView::selectionChanged(const QItemSelection &selected,
         QModelIndex sel = selected.indexes().value(0);
         if (sel.isValid()) {
             int entry = visualIndex(sel);
-            QAccessibleEvent event(this, QAccessible::Selection);
+            QAccessibleEvent event(this, QAccessible::SelectionAdd);
             event.setChild(entry);
             QAccessible::updateAccessibility(&event);
         }

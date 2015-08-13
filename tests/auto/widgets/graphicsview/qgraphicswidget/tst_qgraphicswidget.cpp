@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -171,6 +171,7 @@ private slots:
     void fontPropagatesResolveViaNonWidget();
     void fontPropagatesResolveFromScene();
     void tabFocus();
+    void windowFrameSectionAt();
 
     // Task fixes
     void task236127_bspTreeIndexFails();
@@ -178,6 +179,7 @@ private slots:
     void task250119_shortcutContext();
     void QT_BUG_6544_tabFocusFirstUnsetWhenRemovingItems();
     void QT_BUG_12056_tabFocusFirstUnsetWhenRemovingItems();
+    void QTBUG_45867_send_itemChildAddedChange_to_parent();
 };
 
 
@@ -242,6 +244,9 @@ public:
 
     void call_updateGeometry()
         { return QGraphicsWidget::updateGeometry(); }
+
+    Qt::WindowFrameSection call_windowFrameSectionAt(const QPointF &pos) const
+        { return QGraphicsWidget::windowFrameSectionAt(pos); }
 
     int eventCount;
     Qt::LayoutDirection m_painterLayoutDirection;
@@ -3411,6 +3416,31 @@ void tst_QGraphicsWidget::tabFocus()
     delete widget6;
 }
 
+void tst_QGraphicsWidget::windowFrameSectionAt()
+{
+    SubQGraphicsWidget widget;
+    widget.setWindowFrameMargins(5, 5, 5, 5);
+    widget.setGeometry(0, 0, 200, 200);
+
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(50, 50)), Qt::NoSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, -2)), Qt::TopLeftSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, 10)), Qt::TopLeftSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, 30)), Qt::LeftSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, 170)), Qt::LeftSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, 198)), Qt::BottomLeftSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(-2, 202)), Qt::BottomLeftSection);
+
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, -2)), Qt::TopRightSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, 10)), Qt::TopRightSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, 30)), Qt::RightSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, 170)), Qt::RightSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, 198)), Qt::BottomRightSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(202, 202)), Qt::BottomRightSection);
+
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(50, -2)), Qt::TopSection);
+    QCOMPARE(widget.call_windowFrameSectionAt(QPointF(50, 202)), Qt::BottomSection);
+}
+
 void tst_QGraphicsWidget::QT_BUG_6544_tabFocusFirstUnsetWhenRemovingItems()
 {
     QGraphicsScene scene;
@@ -3459,6 +3489,37 @@ void tst_QGraphicsWidget::QT_BUG_12056_tabFocusFirstUnsetWhenRemovingItems()
     scene.addItem(item3);
 
     //This should not crash
+}
+
+void tst_QGraphicsWidget::QTBUG_45867_send_itemChildAddedChange_to_parent()
+{
+    class GraphicsItem : public QGraphicsItem
+    {
+    public:
+        int m_itemChildAddedChangeNotificationsCount;
+
+        GraphicsItem()
+            : QGraphicsItem(),
+              m_itemChildAddedChangeNotificationsCount(0)
+        {
+        }
+
+        QRectF boundingRect() const Q_DECL_OVERRIDE { return QRectF(); }
+
+        void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *) Q_DECL_OVERRIDE {}
+
+    protected:
+        QVariant itemChange(QGraphicsItem::GraphicsItemChange change, const QVariant &value) Q_DECL_OVERRIDE
+        {
+            if (change == QGraphicsItem::ItemChildAddedChange)
+                ++m_itemChildAddedChangeNotificationsCount;
+            return QGraphicsItem::itemChange(change, value);
+        }
+    };
+
+    GraphicsItem item;
+    QGraphicsWidget widget(&item);
+    QCOMPARE(item.m_itemChildAddedChangeNotificationsCount, 1);
 }
 
 QTEST_MAIN(tst_QGraphicsWidget)

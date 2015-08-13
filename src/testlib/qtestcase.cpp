@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -47,6 +47,9 @@
 #include <QtCore/qprocess.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qlibraryinfo.h>
+#include <QtCore/private/qtools_p.h>
+#include <QtCore/qdiriterator.h>
+#include <QtCore/qtemporarydir.h>
 
 #include <QtTest/private/qtestlog_p.h>
 #include <QtTest/private/qtesttable_p.h>
@@ -56,6 +59,9 @@
 #include <QtTest/private/qbenchmark_p.h>
 #include <QtTest/private/cycle_p.h>
 #include <QtTest/private/qtestblacklist_p.h>
+#if defined(HAVE_XCTEST)
+#include <QtTest/private/qxctestlogger_p.h>
+#endif
 
 #include <numeric>
 #include <algorithm>
@@ -84,6 +90,9 @@
 
 QT_BEGIN_NAMESPACE
 
+using QtMiscUtils::toHexUpper;
+using QtMiscUtils::fromHex;
+
 /*!
    \namespace QTest
    \inmodule QtTest
@@ -92,6 +101,11 @@ QT_BEGIN_NAMESPACE
    declarations that are related to Qt Test.
 
    See the \l{Qt Test Overview} for information about how to write unit tests.
+*/
+
+/*!
+   \namespace QTest::Internal
+   \internal
 */
 
 /*! \macro QVERIFY(condition)
@@ -899,14 +913,21 @@ QT_BEGIN_NAMESPACE
     Returns a textual representation of \a value. This function is used by
     \l QCOMPARE() to output verbose information in case of a test failure.
 
-    You can add specializations of this function to your test to enable
+    You can add specializations or overloads of this function to your test to enable
     verbose output.
+
+    \b {Note:} Starting with Qt 5.5, you should prefer to provide a toString() function
+    in the type's namespace instead of specializing this template.
+    If your code needs to continue to work with the QTestLib from Qt 5.4 or
+    earlier, you need to continue to use specialization.
 
     \b {Note:} The caller of toString() must delete the returned data
     using \c{delete[]}.  Your implementation should return a string
-    created with \c{new[]} or qstrdup().
+    created with \c{new[]} or qstrdup(). The easiest way to do so is to
+    create a QByteArray or QString and calling QTest::toString() on it
+    (see second example below).
 
-    Example:
+    Example for specializing (Qt ≤ 5.4):
 
     \snippet code/src_qtestlib_qtestcase.cpp 16
 
@@ -914,6 +935,10 @@ QT_BEGIN_NAMESPACE
     called \c MyPoint. Whenever a comparison of two instances of \c
     MyPoint fails, \l QCOMPARE() will call this function to output the
     contents of \c MyPoint to the test log.
+
+    Same example, but with overloading (Qt ≥ 5.5):
+
+    \snippet code/src_qtestlib_qtestcase.cpp toString-overload
 
     \sa QCOMPARE()
 */
@@ -1025,6 +1050,38 @@ QT_BEGIN_NAMESPACE
     \overload
 
     Returns a textual representation of the given \a variant.
+*/
+
+/*!
+    \fn char *QTest::toString(QSizePolicy::ControlType ct)
+    \overload
+    \since 5.5
+
+    Returns a textual representation of control type \a ct.
+*/
+
+/*!
+    \fn char *QTest::toString(QSizePolicy::ControlTypes cts)
+    \overload
+    \since 5.5
+
+    Returns a textual representation of control types \a cts.
+*/
+
+/*!
+    \fn char *QTest::toString(QSizePolicy::Policy p)
+    \overload
+    \since 5.5
+
+    Returns a textual representation of policy \a p.
+*/
+
+/*!
+    \fn char *QTest::toString(QSizePolicy sp)
+    \overload
+    \since 5.5
+
+    Returns a textual representation of size policy \a sp.
 */
 
 /*! \fn void QTest::qWait(int ms)
@@ -1275,6 +1332,7 @@ static bool installCoverageTool(const char * appname, const char * testname)
 namespace QTest
 {
     static QObject *currentTestObject = 0;
+    static QString mainSourcePath;
 
     class TestFunction {
     public:
@@ -1476,6 +1534,11 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
     QTestLog::LogMode logFormat = QTestLog::Plain;
     const char *logFilename = 0;
 
+#if defined(Q_OS_MAC) && defined(HAVE_XCTEST)
+    if (QXcodeTestLogger::canLogTestProgress())
+        logFormat = QTestLog::XCTest;
+#endif
+
     const char *testOptions =
          " New-style logging options:\n"
          " -o filename,format  : Output results to file in the specified format\n"
@@ -1549,6 +1612,7 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
                 printf ("\n"
                         " QmlTest options:\n"
                         " -import dir         : Specify an import directory.\n"
+                        " -plugins dir        : Specify a directory where to search for plugins.\n"
                         " -input dir/file     : Specify the root directory for test cases or a single test case file.\n"
                         " -qtquick1           : Run with QtQuick 1 rather than QtQuick 2.\n"
                         " -translation file   : Specify the translation file.\n"
@@ -1727,8 +1791,13 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
 
         } else if (strcmp(argv[i], "-vb") == 0) {
             QBenchmarkGlobalData::current->verboseOutput = true;
-#ifdef Q_OS_WINRT
-        } else if (strncmp(argv[i], "-ServerName:", 12) == 0) {
+#if defined(Q_OS_WINRT)
+        } else if (strncmp(argv[i], "-ServerName:", 12) == 0 ||
+                   strncmp(argv[i], "-qdevel", 7) == 0) {
+            continue;
+#elif defined(Q_OS_MAC) && defined(HAVE_XCTEST)
+        } else if (int skip = QXcodeTestLogger::parseCommandLineArgument(argv[i])) {
+            i += (skip - 1); // Eating argv[i] with a continue counts towards skips
             continue;
 #endif
         } else if (argv[i][0] == '-') {
@@ -1736,6 +1805,7 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, char *argv[], bool qml)
             if (qml) {
                 fprintf(stderr, "\nqmltest related options:\n"
                                 " -import    : Specify an import directory.\n"
+                                " -plugins   : Specify a directory where to search for plugins.\n"
                                 " -input     : Specify the root directory for test cases.\n"
                                 " -qtquick1  : Run with QtQuick 1 rather than QtQuick 2.\n"
                        );
@@ -2000,10 +2070,11 @@ static bool qInvokeTestMethod(const char *slotName, const char *data=0)
             /* For each entry in the data table, do: */
             do {
                 QTestResult::setSkipCurrentTest(false);
+                QTestResult::setBlacklistCurrentTest(false);
                 if (!data || !qstrcmp(data, table.testData(curDataIndex)->dataTag())) {
                     foundFunction = true;
 
-                    QTestPrivate::checkBlackList(slot, dataCount ? table.testData(curDataIndex)->dataTag() : 0);
+                    QTestPrivate::checkBlackLists(slot, dataCount ? table.testData(curDataIndex)->dataTag() : 0);
 
                     QTestDataSetter s(curDataIndex >= dataCount ? static_cast<QTestData *>(0)
                                                       : table.testData(curDataIndex));
@@ -2031,6 +2102,7 @@ static bool qInvokeTestMethod(const char *slotName, const char *data=0)
 
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
+    QTestResult::setBlacklistCurrentTest(false);
     QTestResult::setCurrentTestData(0);
     delete[] slot;
 
@@ -2057,12 +2129,6 @@ void *fetchData(QTestData *data, const char *tagName, int typeId)
     }
 
     return data->data(idx);
-}
-
-static char toHex(ushort value)
-{
-    static const char hexdigits[] = "0123456789ABCDEF";
-    return hexdigits[value & 0xF];
 }
 
 /*!
@@ -2114,9 +2180,9 @@ char *toHexRepresentation(const char *ba, int length)
     while (true) {
         const char at = ba[i];
 
-        result[o] = toHex(at >> 4);
+        result[o] = toHexUpper(at >> 4);
         ++o;
-        result[o] = toHex(at);
+        result[o] = toHexUpper(at);
 
         ++i;
         ++o;
@@ -2133,8 +2199,94 @@ char *toHexRepresentation(const char *ba, int length)
 
 /*!
     \internal
+    Returns the same QByteArray but with only the ASCII characters still shown;
+    everything else is replaced with \c {\xHH}.
+*/
+char *toPrettyCString(const char *p, int length)
+{
+    bool trimmed = false;
+    QScopedArrayPointer<char> buffer(new char[256]);
+    const char *end = p + length;
+    char *dst = buffer.data();
+
+    bool lastWasHexEscape = false;
+    *dst++ = '"';
+    for ( ; p != end; ++p) {
+        // we can add:
+        //  1 byte: a single character
+        //  2 bytes: a simple escape sequence (\n)
+        //  3 bytes: "" and a character
+        //  4 bytes: an hex escape sequence (\xHH)
+        if (dst - buffer.data() > 246) {
+            // plus the the quote, the three dots and NUL, it's 255 in the worst case
+            trimmed = true;
+            break;
+        }
+
+        // check if we need to insert "" to break an hex escape sequence
+        if (Q_UNLIKELY(lastWasHexEscape)) {
+            if (fromHex(*p) != -1) {
+                // yes, insert it
+                *dst++ = '"';
+                *dst++ = '"';
+            }
+            lastWasHexEscape = false;
+        }
+
+        if (*p < 0x7f && *p >= 0x20 && *p != '\\' && *p != '"') {
+            *dst++ = *p;
+            continue;
+        }
+
+        // write as an escape sequence
+        // this means we may advance dst to buffer.data() + 247 or 250
+        *dst++ = '\\';
+        switch (*p) {
+        case 0x5c:
+        case 0x22:
+            *dst++ = uchar(*p);
+            break;
+        case 0x8:
+            *dst++ = 'b';
+            break;
+        case 0xc:
+            *dst++ = 'f';
+            break;
+        case 0xa:
+            *dst++ = 'n';
+            break;
+        case 0xd:
+            *dst++ = 'r';
+            break;
+        case 0x9:
+            *dst++ = 't';
+            break;
+        default:
+            // print as hex escape
+            *dst++ = 'x';
+            *dst++ = toHexUpper(uchar(*p) >> 4);
+            *dst++ = toHexUpper(uchar(*p));
+            lastWasHexEscape = true;
+            break;
+        }
+    }
+
+    *dst++ = '"';
+    if (trimmed) {
+        *dst++ = '.';
+        *dst++ = '.';
+        *dst++ = '.';
+    }
+    *dst++ = '\0';
+    return buffer.take();
+}
+
+/*!
+    \internal
     Returns the same QString but with only the ASCII characters still shown;
     everything else is replaced with \c {\uXXXX}.
+
+    Similar to QDebug::putString().
 */
 char *toPrettyUnicode(const ushort *p, int length)
 {
@@ -2152,7 +2304,7 @@ char *toPrettyUnicode(const ushort *p, int length)
             break;
         }
 
-        if (*p < 0x7f && *p >= 0x20 && *p != '\\') {
+        if (*p < 0x7f && *p >= 0x20 && *p != '\\' && *p != '"') {
             *dst++ = *p;
             continue;
         }
@@ -2182,10 +2334,10 @@ char *toPrettyUnicode(const ushort *p, int length)
             break;
         default:
             *dst++ = 'u';
-            *dst++ = toHex(*p >> 12);
-            *dst++ = toHex(*p >> 8);
-            *dst++ = toHex(*p >> 4);
-            *dst++ = toHex(*p);
+            *dst++ = toHexUpper(*p >> 12);
+            *dst++ = toHexUpper(*p >> 8);
+            *dst++ = toHexUpper(*p >> 4);
+            *dst++ = toHexUpper(*p);
         }
     }
 
@@ -2244,6 +2396,7 @@ static void qInvokeTestMethods(QObject *testObject)
         }
 
         QTestResult::setSkipCurrentTest(false);
+        QTestResult::setBlacklistCurrentTest(false);
         QTestResult::setCurrentTestFunction("cleanupTestCase");
         invokeMethod(testObject, "cleanupTestCase()");
         QTestResult::finishedCurrentTestData();
@@ -2430,6 +2583,7 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
 #endif
 
     QTestPrivate::parseBlackList();
+    QTestPrivate::parseGpuBlackList();
 
     QTestResult::reset();
 
@@ -2586,7 +2740,7 @@ void QTest::qWarn(const char *message, const char *file, int line)
 }
 
 /*!
-    Ignores messages created by qDebug() or qWarning(). If the \a message
+    Ignores messages created by qDebug(), qInfo() or qWarning(). If the \a message
     with the corresponding \a type is outputted, it will be removed from the
     test log. If the test finished and the \a message was not outputted,
     a test failure is appended to the test log.
@@ -2610,7 +2764,7 @@ void QTest::ignoreMessage(QtMsgType type, const char *message)
 /*!
     \overload
 
-    Ignores messages created by qDebug() or qWarning(). If the message
+    Ignores messages created by qDebug(), qInfo() or qWarning(). If the message
     matching \a messagePattern
     with the corresponding \a type is outputted, it will be removed from the
     test log. If the test finished and the message was not outputted,
@@ -2638,6 +2792,63 @@ static inline bool isWindowsBuildDirectory(const QString &dirName)
            || dirName.compare(QLatin1String("Release"), Qt::CaseInsensitive) == 0;
 }
 #endif
+
+/*!
+    Extracts a directory from resources to disk. The content is extracted
+    recursively to a temporary folder. The extracted content is removed
+    automatically once the last reference to the return value goes out of scope.
+
+    \a dirName is the name of the directory to extract from resources.
+
+    Returns the temporary directory where the data was extracted or null in case of
+    errors.
+ */
+QSharedPointer<QTemporaryDir> QTest::qExtractTestData(const QString &dirName)
+{
+      QSharedPointer<QTemporaryDir> result; // null until success, then == tempDir
+
+      QSharedPointer<QTemporaryDir> tempDir = QSharedPointer<QTemporaryDir>::create();
+
+      tempDir->setAutoRemove(true);
+
+      if (!tempDir->isValid())
+          return result;
+
+      const QString dataPath = tempDir->path();
+      const QString resourcePath = QLatin1Char(':') + dirName;
+      const QFileInfo fileInfo(resourcePath);
+
+      if (!fileInfo.isDir()) {
+          qWarning("Resource path '%s' is not a directory.", qPrintable(resourcePath));
+          return result;
+      }
+
+      QDirIterator it(resourcePath, QDirIterator::Subdirectories);
+      if (!it.hasNext()) {
+          qWarning("Resource directory '%s' is empty.", qPrintable(resourcePath));
+          return result;
+      }
+
+      while (it.hasNext()) {
+          it.next();
+
+          QFileInfo fileInfo = it.fileInfo();
+
+          if (!fileInfo.isDir()) {
+              const QString destination = dataPath + QLatin1Char('/') + fileInfo.filePath().midRef(resourcePath.length());
+              QFileInfo destinationFileInfo(destination);
+              QDir().mkpath(destinationFileInfo.path());
+              if (!QFile::copy(fileInfo.filePath(), destination)) {
+                  qWarning("Failed to copy '%s'.", qPrintable(fileInfo.filePath()));
+                  return result;
+              }
+          }
+      }
+
+      result = qMove(tempDir);
+
+      return result;
+}
 
 /*! \internal
  */
@@ -2717,6 +2928,20 @@ QString QTest::qFindTestData(const QString& base, const char *file, int line, co
     // 4. Try resources
     if (found.isEmpty()) {
         QString candidate = QString::fromLatin1(":/%1").arg(base);
+        if (QFileInfo(candidate).exists())
+            found = candidate;
+    }
+
+    // 5. Try current directory
+    if (found.isEmpty()) {
+        QString candidate = QString::fromLatin1("%1/%2").arg(QDir::currentPath()).arg(base);
+        if (QFileInfo(candidate).exists())
+            found = candidate;
+    }
+
+    // 6. Try main source directory
+    if (found.isEmpty()) {
+        QString candidate = QTest::mainSourcePath % QLatin1Char('/') % base;
         if (QFileInfo(candidate).exists())
             found = candidate;
     }
@@ -2905,6 +3130,19 @@ void QTest::qSleep(int ms)
 QObject *QTest::testObject()
 {
     return currentTestObject;
+}
+
+/*! \internal
+ */
+void QTest::setMainSourcePath(const char *file, const char *builddir)
+{
+    QString mainSourceFile = QFile::decodeName(file);
+    QFileInfo fi;
+    if (builddir)
+        fi.setFile(QDir(QFile::decodeName(builddir)), mainSourceFile);
+    else
+        fi.setFile(mainSourceFile);
+    QTest::mainSourcePath = fi.absolutePath();
 }
 
 /*! \internal

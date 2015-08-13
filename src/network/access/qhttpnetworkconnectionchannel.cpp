@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -106,15 +106,19 @@ void QHttpNetworkConnectionChannel::init()
     socket->setProxy(QNetworkProxy::NoProxy);
 #endif
 
+    // We want all signals (except the interactive ones) be connected as QueuedConnection
+    // because else we're falling into cases where we recurse back into the socket code
+    // and mess up the state. Always going to the event loop (and expecting that when reading/writing)
+    // is safer.
     QObject::connect(socket, SIGNAL(bytesWritten(qint64)),
                      this, SLOT(_q_bytesWritten(qint64)),
-                     Qt::DirectConnection);
+                     Qt::QueuedConnection);
     QObject::connect(socket, SIGNAL(connected()),
                      this, SLOT(_q_connected()),
-                     Qt::DirectConnection);
+                     Qt::QueuedConnection);
     QObject::connect(socket, SIGNAL(readyRead()),
                      this, SLOT(_q_readyRead()),
-                     Qt::DirectConnection);
+                     Qt::QueuedConnection);
 
     // The disconnected() and error() signals may already come
     // while calling connectToHost().
@@ -143,13 +147,16 @@ void QHttpNetworkConnectionChannel::init()
         // won't be a sslSocket if encrypt is false
         QObject::connect(sslSocket, SIGNAL(encrypted()),
                          this, SLOT(_q_encrypted()),
-                         Qt::DirectConnection);
+                         Qt::QueuedConnection);
         QObject::connect(sslSocket, SIGNAL(sslErrors(QList<QSslError>)),
                          this, SLOT(_q_sslErrors(QList<QSslError>)),
                          Qt::DirectConnection);
+        QObject::connect(sslSocket, SIGNAL(preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator*)),
+                         this, SLOT(_q_preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator*)),
+                         Qt::DirectConnection);
         QObject::connect(sslSocket, SIGNAL(encryptedBytesWritten(qint64)),
                          this, SLOT(_q_encryptedBytesWritten(qint64)),
-                         Qt::DirectConnection);
+                         Qt::QueuedConnection);
 
         if (ignoreAllSslErrors)
             sslSocket->ignoreSslErrors();
@@ -186,8 +193,11 @@ void QHttpNetworkConnectionChannel::close()
     // pendingEncrypt must only be true in between connected and encrypted states
     pendingEncrypt = false;
 
-    if (socket)
+    if (socket) {
+        // socket can be 0 since the host lookup is done from qhttpnetworkconnection.cpp while
+        // there is no socket yet.
         socket->close();
+    }
 }
 
 
@@ -353,6 +363,14 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
         }
         return false;
     }
+
+    // This code path for ConnectedState
+    if (pendingEncrypt) {
+        // Let's only be really connected when we have received the encrypted() signal. Else the state machine seems to mess up
+        // and corrupt the things sent to the server.
+        return false;
+    }
+
     return true;
 }
 
@@ -361,7 +379,7 @@ void QHttpNetworkConnectionChannel::allDone()
     Q_ASSERT(reply);
 
     if (!reply) {
-        qWarning() << "QHttpNetworkConnectionChannel::allDone() called without reply. Please report at http://bugreports.qt-project.org/";
+        qWarning() << "QHttpNetworkConnectionChannel::allDone() called without reply. Please report at http://bugreports.qt.io/";
         return;
     }
 
@@ -659,6 +677,12 @@ bool QHttpNetworkConnectionChannel::isSocketReading() const
 void QHttpNetworkConnectionChannel::_q_bytesWritten(qint64 bytes)
 {
     Q_UNUSED(bytes);
+    if (ssl) {
+        // In the SSL case we want to send data from encryptedBytesWritten signal since that one
+        // is the one going down to the actual network, not only into some SSL buffer.
+        return;
+    }
+
     // bytes have been written to the socket. write even more of them :)
     if (isSocketWriting())
         sendRequest();
@@ -734,7 +758,7 @@ void QHttpNetworkConnectionChannel::_q_connected()
 
     // ### FIXME: if the server closes the connection unexpectedly, we shouldn't send the same broken request again!
     //channels[i].reconnectAttempts = 2;
-    if (pendingEncrypt) {
+    if (ssl || pendingEncrypt) { // FIXME: Didn't work properly with pendingEncrypt only, we should refactor this into an EncrypingState
 #ifndef QT_NO_SSL
         if (connection->sslContext().isNull()) {
             // this socket is making the 1st handshake for this connection,
@@ -931,7 +955,8 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
 
     if (!protocolHandler) {
         switch (sslSocket->sslConfiguration().nextProtocolNegotiationStatus()) {
-        case QSslConfiguration::NextProtocolNegotiationNegotiated: {
+        case QSslConfiguration::NextProtocolNegotiationNegotiated: /* fall through */
+        case QSslConfiguration::NextProtocolNegotiationUnsupported: {
             QByteArray nextProtocol = sslSocket->sslConfiguration().nextNegotiatedProtocol();
             if (nextProtocol == QSslConfiguration::NextProtocolHttp1_1) {
                 // fall through to create a QHttpProtocolHandler
@@ -952,10 +977,6 @@ void QHttpNetworkConnectionChannel::_q_encrypted()
             connection->setConnectionType(QHttpNetworkConnection::ConnectionTypeHTTP);
             // re-queue requests from SPDY queue to HTTP queue, if any
             requeueSpdyRequests();
-            break;
-        case QSslConfiguration::NextProtocolNegotiationUnsupported:
-            emitFinishedWithError(QNetworkReply::SslHandshakeFailedError,
-                                  "chosen Next Protocol Negotiation value unsupported");
             break;
         default:
             emitFinishedWithError(QNetworkReply::SslHandshakeFailedError,
@@ -1032,6 +1053,29 @@ void QHttpNetworkConnectionChannel::_q_sslErrors(const QList<QSslError> &errors)
         }
     }
 #endif // QT_NO_SSL
+    connection->d_func()->resumeConnection();
+}
+
+void QHttpNetworkConnectionChannel::_q_preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator *authenticator)
+{
+    connection->d_func()->pauseConnection();
+
+    if (pendingEncrypt && !reply)
+        connection->d_func()->dequeueRequest(socket);
+
+    if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP) {
+        if (reply)
+            emit reply->preSharedKeyAuthenticationRequired(authenticator);
+    } else {
+        QList<HttpMessagePair> spdyPairs = spdyRequestsToSend.values();
+        for (int a = 0; a < spdyPairs.count(); ++a) {
+            // emit SSL errors for all replies
+            QHttpNetworkReply *currentReply = spdyPairs.at(a).second;
+            Q_ASSERT(currentReply);
+            emit currentReply->preSharedKeyAuthenticationRequired(authenticator);
+        }
+    }
+
     connection->d_func()->resumeConnection();
 }
 

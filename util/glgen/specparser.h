@@ -1,7 +1,7 @@
 /***************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB)
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the utilities of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,6 +38,7 @@
 #include <QVariant>
 
 class QTextStream;
+class QXmlStreamReader;
 
 struct Version {
     int major;
@@ -47,6 +48,11 @@ struct Version {
 inline bool operator == (const Version &lhs, const Version &rhs)
 {
     return (lhs.major == rhs.major && lhs.minor == rhs.minor);
+}
+
+inline bool operator != (const Version &lhs, const Version &rhs)
+{
+    return !(lhs == rhs);
 }
 
 inline bool operator < (const Version &lhs, const Version &rhs)
@@ -63,6 +69,17 @@ inline bool operator > (const Version &lhs, const Version &rhs)
         return (lhs.major > rhs.major);
     else
         return (lhs.minor > rhs.minor);
+}
+
+inline bool operator >= (const Version &lhs, const Version &rhs)
+{
+    return !(lhs < rhs);
+}
+
+
+inline bool operator <= (const Version &lhs, const Version &rhs)
+{
+    return !(lhs > rhs);
 }
 
 inline uint qHash(const Version &v)
@@ -92,6 +109,11 @@ inline bool operator == (const VersionProfile &lhs, const VersionProfile &rhs)
     if (lhs.profile != rhs.profile)
         return false;
     return lhs.version == rhs.version;
+}
+
+inline bool operator != (const VersionProfile &lhs, const VersionProfile &rhs)
+{
+    return !(lhs == rhs);
 }
 
 inline bool operator < (const VersionProfile &lhs, const VersionProfile &rhs)
@@ -132,13 +154,47 @@ struct Function
     QList<Argument> arguments;
 };
 
+inline bool operator== (const Argument &lhs, const Argument &rhs)
+{
+    if ((lhs.type != rhs.type) || (lhs.name != rhs.name) || (lhs.direction != rhs.direction)) {
+        return false;
+    }
+
+    return (lhs.mode != rhs.mode);
+}
+
+inline bool operator!= (const Argument &lhs, const Argument &rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline bool operator== (const Function &lhs, const Function &rhs)
+{
+    if ((lhs.returnType != rhs.returnType) || (lhs.name != rhs.name)) {
+        return false;
+    }
+
+    return (lhs.arguments == rhs.arguments);
+}
+
+inline bool operator!= (const Function &lhs, const Function &rhs)
+{
+    return !(lhs == rhs);
+}
+
 typedef QList<Function> FunctionList;
 typedef QMap<VersionProfile, FunctionList> FunctionCollection;
+
+struct FunctionProfile
+{
+    VersionProfile::OpenGLProfile profile;
+    Function function;
+};
 
 class SpecParser
 {
 public:
-    explicit SpecParser();
+    virtual ~SpecParser() {}
 
     QString specFileName() const
     {
@@ -150,22 +206,28 @@ public:
         return m_typeMapFileName;
     }
 
-    QList<Version> versions() const {return m_versions;}
-    QList<VersionProfile> versionProfiles() const {return m_functions.uniqueKeys();}
+    virtual QList<Version> versions() const = 0;
+
+    QList<VersionProfile> versionProfiles() const {return versionFunctions().uniqueKeys();}
 
     QList<Function> functionsForVersion(const VersionProfile &v) const
     {
-        return m_functions.values(v);
+        return versionFunctions().values(v);
     }
 
     QStringList extensions() const
     {
-        return QStringList(m_extensionFunctions.uniqueKeys());
+        return QStringList(extensionFunctions().uniqueKeys());
     }
 
     QList<Function> functionsForExtension(const QString &extension)
     {
-        return m_extensionFunctions.values(extension);
+        QList<Function> func;
+
+        Q_FOREACH (const FunctionProfile &f, extensionFunctions().values(extension))
+            func.append(f.function);
+
+        return func;
     }
 
     void setSpecFileName(QString arg)
@@ -178,25 +240,15 @@ public:
         m_typeMapFileName = arg;
     }
 
-    void parse();
+    virtual bool parse() = 0;
 
 protected:
-    bool parseTypeMap();
-    void parseEnums();
-    void parseFunctions(QTextStream &stream);
-    bool inDeprecationException(const QString &functionName) const;
+    virtual const QMultiHash<VersionProfile, Function> &versionFunctions() const = 0;
+    virtual const QMultiMap<QString, FunctionProfile> &extensionFunctions() const = 0;
 
 private:
     QString m_specFileName;
     QString m_typeMapFileName;
-
-    QMap<QString, QString> m_typeMap;
-    QMultiMap<VersionProfile, Function> m_functions;
-
-    QList<Version> m_versions;
-
-    // Extension support
-    QMultiMap<QString, Function> m_extensionFunctions;
 };
 
 #endif // SPECPARSER_H

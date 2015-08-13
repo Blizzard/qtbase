@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies)
+ * Copyright (C) 2015 The Qt Company Ltd
  *
  * This is part of HarfBuzz, an OpenType Layout engine library.
  *
@@ -68,7 +68,7 @@ static int init_libthai() {
         return 0;
 }
 
-static void to_tis620(const HB_UChar16 *string, hb_uint32 len, const char *cstr)
+static void to_tis620(const HB_UChar16 *string, hb_uint32 len, char *cstr)
 {
     hb_uint32 i;
     unsigned char *result = (unsigned char *)cstr;
@@ -183,7 +183,7 @@ static int thai_contain_glyphs (HB_ShaperItem *shaper_item, const int glyph_map[
 
     for (c = 0; c < 0x80; c++) {
         if ( glyph_map[c] ) {
-            if ( !shaper_item->font->klass->canRender (shaper_item->font, (HB_UChar16 *) &glyph_map[c], 1) )
+            if ( !shaper_item->font->klass->canRender (shaper_item->font, (const HB_UChar16 *) &glyph_map[c], 1) )
                 return 0;
         }
     }
@@ -241,7 +241,7 @@ static HB_Bool HB_ThaiConvertStringToGlyphIndices (HB_ShaperItem *item)
         int lgn = 0;
         HB_Bool haveSaraAm = false;
 
-        cell_length = th_next_cell ((const unsigned char *)cstr + i, len - i, &tis_cell, true); /* !item->fixedPitch); */
+        cell_length = (int)(th_next_cell ((const unsigned char *)cstr + i, len - i, &tis_cell, true)); /* !item->fixedPitch); */
         haveSaraAm  = (cstr[i + cell_length - 1] == (char)0xd3);
 
         /* set shaper item's log_clusters */
@@ -432,7 +432,7 @@ static void HB_ThaiAssignAttributes(const HB_UChar16 *string, hb_uint32 len, HB_
     /* manage grapheme boundaries */
     i = 0;
     while (i < len) {
-        cell_length = th_next_cell((const unsigned char *)cstr + i, len - i, &tis_cell, true);
+        cell_length = (hb_uint32)(th_next_cell((const unsigned char *)cstr + i, len - i, &tis_cell, true));
 
         attributes[i].graphemeBoundary = true;
         for (j = 1; j < cell_length; j++)

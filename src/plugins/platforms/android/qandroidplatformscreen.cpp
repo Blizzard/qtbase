@@ -1,8 +1,8 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -85,7 +85,7 @@ QAndroidPlatformScreen::QAndroidPlatformScreen():QObject(),QPlatformScreen()
     m_size = QSize(QAndroidPlatformIntegration::m_defaultScreenWidth, QAndroidPlatformIntegration::m_defaultScreenHeight);
     // Raster only apps should set QT_ANDROID_RASTER_IMAGE_DEPTH to 16
     // is way much faster than 32
-    if (qgetenv("QT_ANDROID_RASTER_IMAGE_DEPTH").toInt() == 16) {
+    if (qEnvironmentVariableIntValue("QT_ANDROID_RASTER_IMAGE_DEPTH") == 16) {
         m_format = QImage::Format_RGB16;
         m_depth = 16;
     } else {
@@ -131,6 +131,7 @@ void QAndroidPlatformScreen::addWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
+    Q_ASSERT(!m_windowStack.contains(window));
     m_windowStack.prepend(window);
     if (window->isRaster()) {
         m_rasterSurfaces.ref();
@@ -147,7 +148,10 @@ void QAndroidPlatformScreen::removeWindow(QAndroidPlatformWindow *window)
     if (window->parent() && window->isRaster())
         return;
 
+
+    Q_ASSERT(m_windowStack.contains(window));
     m_windowStack.removeOne(window);
+    Q_ASSERT(!m_windowStack.contains(window));
 
     if (window->isRaster()) {
         m_rasterSurfaces.deref();
@@ -252,7 +256,7 @@ void QAndroidPlatformScreen::applicationStateChanged(Qt::ApplicationState state)
     foreach (QAndroidPlatformWindow *w, m_windowStack)
         w->applicationStateChanged(state);
 
-    if (state <=  Qt::ApplicationHidden && QtAndroid::blockEventLoopsWhenSuspended()) {
+    if (state <=  Qt::ApplicationHidden) {
         lockSurface();
         QtAndroid::destroySurface(m_id);
         m_id = -1;
@@ -284,9 +288,9 @@ void QAndroidPlatformScreen::doRedraw()
     if (m_dirtyRect.isEmpty())
         return;
 
-    // Stop if there no visible raster windows. This is important because if we only have
-    // RasterGLSurface windows that have renderToTexture children (i.e. they need the
-    // OpenGL path) then we must bail out right now.
+    // Stop if there are no visible raster windows. If we only have RasterGLSurface
+    // windows that have renderToTexture children (i.e. they need the OpenGL path) then
+    // we do not need an overlay surface.
     bool hasVisibleRasterWindows = false;
     foreach (QAndroidPlatformWindow *window, m_windowStack) {
         if (window->window()->isVisible() && window->isRaster() && !qt_window_private(window->window())->compositing) {
@@ -294,9 +298,13 @@ void QAndroidPlatformScreen::doRedraw()
             break;
         }
     }
-    if (!hasVisibleRasterWindows)
+    if (!hasVisibleRasterWindows) {
+        if (m_id != -1) {
+            QtAndroid::destroySurface(m_id);
+            m_id = -1;
+        }
         return;
-
+    }
     QMutexLocker lock(&m_surfaceMutex);
     if (m_id == -1 && m_rasterSurfaces) {
         m_id = QtAndroid::createSurface(this, m_availableGeometry, true, m_depth);
@@ -339,6 +347,7 @@ void QAndroidPlatformScreen::doRedraw()
     QRegion visibleRegion(m_dirtyRect);
     foreach (QAndroidPlatformWindow *window, m_windowStack) {
         if (!window->window()->isVisible()
+                || qt_window_private(window->window())->compositing
                 || !window->isRaster())
             continue;
 
@@ -386,7 +395,7 @@ Qt::ScreenOrientation QAndroidPlatformScreen::nativeOrientation() const
 void QAndroidPlatformScreen::surfaceChanged(JNIEnv *env, jobject surface, int w, int h)
 {
     lockSurface();
-    if (surface && w && h) {
+    if (surface && w > 0  && h > 0) {
         releaseSurface();
         m_nativeSurface = ANativeWindow_fromSurface(env, surface);
         QMetaObject::invokeMethod(this, "setDirty", Qt::QueuedConnection, Q_ARG(QRect, QRect(0, 0, w, h)));

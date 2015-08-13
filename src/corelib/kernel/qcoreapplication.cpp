@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,7 +48,6 @@
 #include <qhash.h>
 #include <qmutex.h>
 #include <private/qloggingregistry_p.h>
-#include <private/qprocess_p.h>
 #include <qstandardpaths.h>
 #include <qtextcodec.h>
 #ifndef QT_NO_QOBJECT
@@ -81,6 +80,11 @@
 #ifdef Q_OS_WIN
 # ifdef Q_OS_WINRT
 #  include "qeventdispatcher_winrt_p.h"
+#  include "qfunctions_winrt.h"
+#  include <wrl.h>
+#  include <Windows.ApplicationModel.core.h>
+   using namespace ABI::Windows::ApplicationModel::Core;
+   using namespace Microsoft::WRL;
 # else
 #  include "qeventdispatcher_win_p.h"
 # endif
@@ -319,10 +323,11 @@ QCoreApplication *QCoreApplication::self = 0;
 uint QCoreApplicationPrivate::attribs = (1 << Qt::AA_SynthesizeMouseForUnhandledTouchEvents);
 
 struct QCoreApplicationData {
-    QCoreApplicationData() {
+    QCoreApplicationData() Q_DECL_NOTHROW {
 #ifndef QT_NO_LIBRARY
         app_libpaths = 0;
 #endif
+        applicationNameSet = false;
     }
     ~QCoreApplicationData() {
 #ifndef QT_NO_LIBRARY
@@ -365,8 +370,10 @@ struct QCoreApplicationData {
     }
 #endif
 
-    QString orgName, orgDomain, application;
+    QString orgName, orgDomain;
+    QString application; // application name, initially from argv[0], can then be modified.
     QString applicationVersion;
+    bool applicationNameSet; // true if setApplicationName was called
 
 #ifndef QT_NO_LIBRARY
     QStringList *app_libpaths;
@@ -380,6 +387,34 @@ Q_GLOBAL_STATIC(QCoreApplicationData, coreappdata)
 static bool quitLockRefEnabled = true;
 #endif
 
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+// Check whether the command line arguments match those passed to main()
+// by comparing to the global __argv/__argc (MS extension).
+// Deep comparison is required since argv/argc is rebuilt by WinMain for
+// GUI apps or when using MinGW due to its globbing.
+static inline bool isArgvModified(int argc, char **argv)
+{
+    if (__argc != argc)
+        return true;
+    if (__argv == argv)
+        return false;
+    for (int a = 0; a < argc; ++a) {
+        if (argv[a] != __argv[a] && strcmp(argv[a], __argv[a]))
+            return true;
+    }
+    return false;
+}
+
+static inline bool contains(int argc, char **argv, const char *needle)
+{
+    for (int a = 0; a < argc; ++a) {
+        if (!strcmp(argv[a], needle))
+            return true;
+    }
+    return false;
+}
+#endif // Q_OS_WIN && !Q_OS_WINRT
+
 QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint flags)
     :
 #ifndef QT_NO_QOBJECT
@@ -387,9 +422,9 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint 
 #endif
       argc(aargc)
     , argv(aargv)
-#ifdef Q_OS_WIN
-    , origArgc(aargc)
-    , origArgv(new char *[aargc])
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+    , origArgc(0)
+    , origArgv(Q_NULLPTR)
 #endif
     , application_type(QCoreApplicationPrivate::Tty)
 #ifndef QT_NO_QOBJECT
@@ -406,9 +441,13 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint 
         argc = 0;
         argv = (char **)&empty;
     }
-#ifdef Q_OS_WIN
-    std::copy(argv, argv + argc, origArgv);
-#endif
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+    if (!isArgvModified(argc, argv)) {
+        origArgc = argc;
+        origArgv = new char *[argc];
+        std::copy(argv, argv + argc, origArgv);
+    }
+#endif // Q_OS_WIN && !Q_OS_WINRT
 
 #ifndef QT_NO_QOBJECT
     QCoreApplicationPrivate::is_app_closing = false;
@@ -433,7 +472,7 @@ QCoreApplicationPrivate::~QCoreApplicationPrivate()
 #ifndef QT_NO_QOBJECT
     cleanupThreadData();
 #endif
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     delete [] origArgv;
 #endif
     QCoreApplicationPrivate::clearApplicationFilePath();
@@ -659,7 +698,7 @@ QCoreApplication::QCoreApplication(QCoreApplicationPrivate &p)
 
     If you are doing graphical changes inside a loop that does not
     return to the event loop on asynchronous window systems like X11
-    or double buffered window systems like Mac OS X, and you want to
+    or double buffered window systems like Quartz (OS X and iOS), and you want to
     visualize these changes immediately (e.g. Splash Screens), call
     this function.
 
@@ -715,9 +754,11 @@ void QCoreApplication::init()
     Q_ASSERT_X(!self, "QCoreApplication", "there should be only one application object");
     QCoreApplication::self = this;
 
-#ifndef QT_BOOTSTRAPPED
+    // Store app name (so it's still available after QCoreApplication is destroyed)
+    if (!coreappdata()->applicationNameSet)
+        coreappdata()->application = d_func()->appName();
+
     QLoggingRegistry::instance()->init();
-#endif
 
 #ifndef QT_NO_QOBJECT
     // use the event dispatcher created by the app programmer (if any)
@@ -740,14 +781,6 @@ void QCoreApplication::init()
 #ifndef QT_NO_LIBRARY
     if (coreappdata()->app_libpaths)
         d->appendApplicationPathToLibraryPaths();
-#endif
-
-#ifndef QT_NO_QOBJECT
-#if defined(Q_OS_UNIX) && !(defined(QT_NO_PROCESS))
-    // Make sure the process manager thread object is created in the main
-    // thread.
-    QProcessPrivate::initializeProcessManager();
-#endif
 #endif
 
 #ifdef QT_EVAL
@@ -972,6 +1005,17 @@ bool QCoreApplication::notifyInternal(QObject *receiver, QEvent *event)
   the events, including Tab and Shift+Tab key press events, as long as they
   do not change the focus widget.
   \endlist
+
+  \b{Future direction:} This function will not be called for objects that live
+  outside the main thread in Qt 6. Applications that need that functionality
+  should find other solutions for their event inspection needs in the meantime.
+  The change may be extended to the main thread, causing this function to be
+  deprecated.
+
+  \warning If you override this function, you must ensure all threads that
+  process events stop doing so before your application object begins
+  destruction. This includes threads started by other libraries that you may be
+  using, but does not apply to Qt's own threads.
 
   \sa QObject::event(), installNativeEventFilter()
 */
@@ -1224,6 +1268,19 @@ void QCoreApplication::exit(int returnCode)
         QEventLoop *eventLoop = data->eventLoops.at(i);
         eventLoop->exit(returnCode);
     }
+#ifdef Q_OS_WINRT
+    qWarning("QCoreApplication::exit: It is not recommended to explicitly exit an application on Windows Store Apps");
+    ComPtr<ICoreApplication> app;
+    HRESULT hr = RoGetActivationFactory(Wrappers::HString::MakeReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication).Get(),
+                                IID_PPV_ARGS(&app));
+    RETURN_VOID_IF_FAILED("Could not acquire ICoreApplication object");
+    ComPtr<ICoreApplicationExit> appExit;
+
+    hr = app.As(&appExit);
+    RETURN_VOID_IF_FAILED("Could not acquire ICoreApplicationExit object");
+    hr = appExit->Exit();
+    RETURN_VOID_IF_FAILED("Could not exit application");
+#endif // Q_OS_WINRT
 }
 
 /*****************************************************************************
@@ -1960,7 +2017,7 @@ void QCoreApplicationPrivate::setApplicationFilePath(const QString &path)
     directory, and you run the \c{regexp} example, this function will
     return "C:/Qt/examples/tools/regexp".
 
-    On Mac OS X this will point to the directory actually containing the
+    On OS X and iOS this will point to the directory actually containing the
     executable, which may be inside of an application bundle (if the
     application is bundled).
 
@@ -2143,10 +2200,11 @@ qint64 QCoreApplication::applicationPid()
     Latin1 locale. Most modern Unix systems do not have this limitation, as they are
     Unicode-based.
 
-    On NT-based Windows, this limitation does not apply either.
-    On Windows, the arguments() are not built from the contents of argv/argc, as
-    the content does not support Unicode. Instead, the arguments() are constructed
-    from the return value of
+    On Windows, the list is built from the argc and argv parameters only if
+    modified argv/argc parameters are passed to the constructor. In that case,
+    encoding problems might occur.
+
+    Otherwise, the arguments() are constructed from the return value of
     \l{http://msdn2.microsoft.com/en-us/library/ms683156(VS.85).aspx}{GetCommandLine()}.
     As a result of this, the string given by arguments().at(0) might not be
     the program name on Windows, depending on how the application was started.
@@ -2189,21 +2247,21 @@ QStringList QCoreApplication::arguments()
     }
 #endif // Q_OS_WINCE
 
-    char ** const origArgv = self->d_func()->origArgv;
-    const int origArgc = self->d_func()->origArgc;
-    char ** const avEnd = av + ac;
+    const QCoreApplicationPrivate *d = self->d_func();
+    if (d->origArgv) {
+        const QStringList allArguments = qWinCmdArgs(cmdline);
+        Q_ASSERT(allArguments.size() == d->origArgc);
+        for (int i = 0; i < d->origArgc; ++i) {
+            if (contains(ac, av, d->origArgv[i]))
+                list.append(allArguments.at(i));
+        }
+        return list;
+    } // Fall back to rebuilding from argv/argc when a modified argv was passed.
+#endif // defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 
-    const QStringList allArguments = qWinCmdArgs(cmdline);
-    Q_ASSERT(allArguments.size() == origArgc);
-    for (int i = 0; i < origArgc; ++i)
-        if (std::find(av, avEnd, origArgv[i]) != avEnd)
-            list.push_back(allArguments.at(i));
-
-#else
     for (int a = 0; a < ac; ++a) {
         list << QString::fromLocal8Bit(av[a]);
     }
-#endif
 
     return list;
 }
@@ -2319,9 +2377,13 @@ QString QCoreApplication::organizationDomain()
 */
 void QCoreApplication::setApplicationName(const QString &application)
 {
-    if (coreappdata()->application == application)
+    coreappdata()->applicationNameSet = !application.isEmpty();
+    QString newAppName = application;
+    if (newAppName.isEmpty() && QCoreApplication::self)
+        newAppName = QCoreApplication::self->d_func()->appName();
+    if (coreappdata()->application == newAppName)
         return;
-    coreappdata()->application = application;
+    coreappdata()->application = newAppName;
 #ifndef QT_NO_QOBJECT
     if (QCoreApplication::self)
         emit QCoreApplication::self->applicationNameChanged();
@@ -2333,16 +2395,13 @@ QString QCoreApplication::applicationName()
 #ifdef Q_OS_BLACKBERRY
     coreappdata()->loadManifest();
 #endif
-    QString appname = coreappdata() ? coreappdata()->application : QString();
-    if (appname.isEmpty() && QCoreApplication::self)
-        appname = QCoreApplication::self->d_func()->appName();
-    return appname;
+    return coreappdata() ? coreappdata()->application : QString();
 }
 
 // Exported for QDesktopServices (Qt4 behavior compatibility)
 Q_CORE_EXPORT QString qt_applicationName_noFallback()
 {
-    return coreappdata()->application;
+    return coreappdata()->applicationNameSet ? coreappdata()->application : QString();
 }
 
 /*!
@@ -2388,16 +2447,27 @@ Q_GLOBAL_STATIC_WITH_ARGS(QMutex, libraryPathMutex, (QMutex::Recursive))
     Returns a list of paths that the application will search when
     dynamically loading libraries.
 
+    The return value of this function may change when a QCoreApplication
+    is created. It is not recommended to call it before creating a
+    QCoreApplication. The directory of the application executable (\b not
+    the working directory) is part of the list if it is known. In order
+    to make it known a QCoreApplication has to be constructed as it will
+    use \c {argv[0]} to find it.
+
     Qt provides default library paths, but they can also be set using
     a \l{Using qt.conf}{qt.conf} file. Paths specified in this file
-    will override default values.
+    will override default values. Note that if the qt.conf file is in
+    the directory of the application executable, it may not be found
+    until a QCoreApplication is created. If it is not found when calling
+    this function, the default library paths will be used.
 
-    This list will include the installation directory for plugins if
+    The list will include the installation directory for plugins if
     it exists (the default installation directory for plugins is \c
     INSTALL/plugins, where \c INSTALL is the directory where Qt was
-    installed).  The directory of the application executable (NOT the
-    working directory) is always added, as well as the colon separated
-    entries of the QT_PLUGIN_PATH environment variable.
+    installed). The colon separated entries of the \c QT_PLUGIN_PATH
+    environment variable are always added. The plugin installation
+    directory (and its existence) may change when the directory of
+    the application executable becomes known.
 
     If you want to iterate over the list, you can use the \l foreach
     pseudo-keyword:
@@ -2542,7 +2612,7 @@ void QCoreApplication::removeLibraryPath(const QString &path)
     \note Native event filters will be disabled when the application the
     Qt::AA_MacPluginApplication attribute is set.
 
-    For maximum portability, you should always try to use QEvents
+    For maximum portability, you should always try to use QEvent
     and QObject::installEventFilter() whenever possible.
 
     \sa QObject::installEventFilter()
@@ -2596,6 +2666,7 @@ void QCoreApplication::removeNativeEventFilter(QAbstractNativeEventFilter *filte
 
     \sa QAbstractEventDispatcher::hasPendingEvents()
 */
+#if QT_DEPRECATED_SINCE(5, 3)
 bool QCoreApplication::hasPendingEvents()
 {
     QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance();
@@ -2603,6 +2674,7 @@ bool QCoreApplication::hasPendingEvents()
         return eventDispatcher->hasPendingEvents();
     return false;
 }
+#endif
 
 /*!
     Returns a pointer to the event dispatcher object for the main thread. If no

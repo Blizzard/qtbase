@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -156,6 +156,7 @@ class Q_CORE_EXPORT QVariant
         EasingCurve = QMetaType::QEasingCurve,
         Uuid = QMetaType::QUuid,
         ModelIndex = QMetaType::QModelIndex,
+        PersistentModelIndex = QMetaType::QPersistentModelIndex,
         LastCoreType = QMetaType::LastCoreType,
 
         Font = QMetaType::QFont,
@@ -189,7 +190,7 @@ class Q_CORE_EXPORT QVariant
         LastType = 0xffffffff // need this so that gcc >= 3.4 allocates 32 bits for Type
     };
 
-    inline QVariant();
+    QVariant() Q_DECL_NOTHROW : d() {}
     ~QVariant();
     QVariant(Type type);
     QVariant(int typeId, const void *copy);
@@ -245,6 +246,7 @@ class Q_CORE_EXPORT QVariant
     QVariant(const QEasingCurve &easing);
     QVariant(const QUuid &uuid);
     QVariant(const QModelIndex &modelIndex);
+    QVariant(const QPersistentModelIndex &modelIndex);
     QVariant(const QJsonValue &jsonValue);
     QVariant(const QJsonObject &jsonObject);
     QVariant(const QJsonArray &jsonArray);
@@ -253,13 +255,13 @@ class Q_CORE_EXPORT QVariant
 
     QVariant& operator=(const QVariant &other);
 #ifdef Q_COMPILER_RVALUE_REFS
-    inline QVariant(QVariant &&other) : d(other.d)
+    inline QVariant(QVariant &&other) Q_DECL_NOTHROW : d(other.d)
     { other.d = Private(); }
-    inline QVariant &operator=(QVariant &&other)
+    inline QVariant &operator=(QVariant &&other) Q_DECL_NOTHROW
     { qSwap(d, other.d); return *this; }
 #endif
 
-    inline void swap(QVariant &other) { qSwap(d, other.d); }
+    inline void swap(QVariant &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
 
     Type type() const;
     int userType() const;
@@ -318,6 +320,7 @@ class Q_CORE_EXPORT QVariant
     QEasingCurve toEasingCurve() const;
     QUuid toUuid() const;
     QModelIndex toModelIndex() const;
+    QPersistentModelIndex toPersistentModelIndex() const;
     QJsonValue toJsonValue() const;
     QJsonObject toJsonObject() const;
     QJsonArray toJsonArray() const;
@@ -360,15 +363,15 @@ class Q_CORE_EXPORT QVariant
     };
     struct Private
     {
-        inline Private(): type(Invalid), is_shared(false), is_null(true)
+        inline Private() Q_DECL_NOTHROW : type(Invalid), is_shared(false), is_null(true)
         { data.ptr = 0; }
 
         // Internal constructor for initialized variants.
-        explicit inline Private(uint variantType)
+        explicit inline Private(uint variantType) Q_DECL_NOTHROW
             : type(variantType), is_shared(false), is_null(false)
         {}
 
-        inline Private(const Private &other)
+        inline Private(const Private &other) Q_DECL_NOTHROW
             : data(other.data), type(other.type),
               is_shared(other.is_shared), is_null(other.is_null)
         {}
@@ -520,8 +523,6 @@ inline void qVariantSetValue<QVariant>(QVariant &v, const QVariant &t)
     v = t;
 }
 
-
-inline QVariant::QVariant() {}
 inline bool QVariant::isValid() const { return d.type != Invalid; }
 
 template<typename T>
@@ -633,6 +634,7 @@ public:
 
         void begin();
         void end();
+        void find(const QVariant &key);
     public:
         ~const_iterator();
         const_iterator(const const_iterator &other);
@@ -662,6 +664,7 @@ public:
 
     const_iterator begin() const;
     const_iterator end() const;
+    const_iterator find(const QVariant &key) const;
 
     QVariant value(const QVariant &key) const;
 

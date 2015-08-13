@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -112,11 +112,14 @@ extern bool qHasPixmapTexture(const QBrush &);
 
 static inline bool is_brush_transparent(const QBrush &brush) {
     Qt::BrushStyle s = brush.style();
-    bool brushBitmap = qHasPixmapTexture(brush)
-                       ? brush.texture().isQBitmap()
-                       : (brush.textureImage().depth() == 1);
-    return ((s >= Qt::Dense1Pattern && s <= Qt::DiagCrossPattern)
-            || (s == Qt::TexturePattern && brushBitmap));
+    if (s != Qt::TexturePattern)
+        return s >= Qt::Dense1Pattern && s <= Qt::DiagCrossPattern;
+    if (qHasPixmapTexture(brush))
+        return brush.texture().isQBitmap() || brush.texture().hasAlphaChannel();
+    else {
+        const QImage texture = brush.textureImage();
+        return texture.hasAlphaChannel() || (texture.depth() == 1 && texture.colorCount() == 0);
+    }
 }
 
 static inline bool is_pen_transparent(const QPen &pen) {
@@ -200,11 +203,8 @@ void QPainterPrivate::checkEmulation()
 QPainterPrivate::~QPainterPrivate()
 {
     delete emulationEngine;
-    for (int i=0; i<states.size(); ++i)
-        delete states.at(i);
-
-    if (dummyState)
-        delete dummyState;
+    qDeleteAll(states);
+    delete dummyState;
 }
 
 
@@ -456,7 +456,7 @@ void QPainterPrivate::draw_helper(const QPainterPath &originalPath, DrawOperatio
     p.drawPath(originalPath);
 
 #ifndef QT_NO_DEBUG
-    static bool do_fallback_overlay = qgetenv("QT_PAINT_FALLBACK_OVERLAY").size() > 0;
+    static bool do_fallback_overlay = !qEnvironmentVariableIsEmpty("QT_PAINT_FALLBACK_OVERLAY");
     if (do_fallback_overlay) {
         QImage block(8, 8, QImage::Format_ARGB32_Premultiplied);
         QPainter pt(&block);
@@ -2720,13 +2720,14 @@ void QPainter::setClipRect(const QRectF &rect, Qt::ClipOperation op)
     Q_D(QPainter);
 
     if (d->extended) {
-        if ((!d->state->clipEnabled && op != Qt::NoClip))
-            op = Qt::ReplaceClip;
-
         if (!d->engine) {
             qWarning("QPainter::setClipRect: Painter not active");
             return;
         }
+        bool simplifyClipOp = (paintEngine()->type() != QPaintEngine::Picture);
+        if (simplifyClipOp && (!d->state->clipEnabled && op != Qt::NoClip))
+            op = Qt::ReplaceClip;
+
         qreal right = rect.x() + rect.width();
         qreal bottom = rect.y() + rect.height();
         qreal pts[] = { rect.x(), rect.y(),
@@ -2777,8 +2778,9 @@ void QPainter::setClipRect(const QRect &rect, Qt::ClipOperation op)
         qWarning("QPainter::setClipRect: Painter not active");
         return;
     }
+    bool simplifyClipOp = (paintEngine()->type() != QPaintEngine::Picture);
 
-    if ((!d->state->clipEnabled && op != Qt::NoClip))
+    if (simplifyClipOp && (!d->state->clipEnabled && op != Qt::NoClip))
         op = Qt::ReplaceClip;
 
     if (d->extended) {
@@ -2791,7 +2793,7 @@ void QPainter::setClipRect(const QRect &rect, Qt::ClipOperation op)
         return;
     }
 
-    if (d->state->clipOperation == Qt::NoClip && op == Qt::IntersectClip)
+    if (simplifyClipOp && d->state->clipOperation == Qt::NoClip && op == Qt::IntersectClip)
         op = Qt::ReplaceClip;
 
     d->state->clipRegion = rect;
@@ -2835,8 +2837,9 @@ void QPainter::setClipRegion(const QRegion &r, Qt::ClipOperation op)
         qWarning("QPainter::setClipRegion: Painter not active");
         return;
     }
+    bool simplifyClipOp = (paintEngine()->type() != QPaintEngine::Picture);
 
-    if ((!d->state->clipEnabled && op != Qt::NoClip))
+    if (simplifyClipOp && (!d->state->clipEnabled && op != Qt::NoClip))
         op = Qt::ReplaceClip;
 
     if (d->extended) {
@@ -2849,7 +2852,7 @@ void QPainter::setClipRegion(const QRegion &r, Qt::ClipOperation op)
         return;
     }
 
-    if (d->state->clipOperation == Qt::NoClip && op == Qt::IntersectClip)
+    if (simplifyClipOp && d->state->clipOperation == Qt::NoClip && op == Qt::IntersectClip)
         op = Qt::ReplaceClip;
 
     d->state->clipRegion = r;
@@ -3432,8 +3435,7 @@ void QPainter::drawPath(const QPainterPath &path)
     \fn void QPainter::drawLine(int x1, int y1, int x2, int y2)
     \overload
 
-    Draws a line from (\a x1, \a y1) to (\a x2, \a y2) and sets the
-    current pen position to (\a x2, \a y2).
+    Draws a line from (\a x1, \a y1) to (\a x2, \a y2).
 */
 
 /*!
@@ -4624,7 +4626,7 @@ void QPainter::drawLines(const QPointF *pointPairs, int lineCount)
 {
     Q_ASSERT(sizeof(QLineF) == 2*sizeof(QPointF));
 
-    drawLines((QLineF*)pointPairs, lineCount);
+    drawLines((const QLineF*)pointPairs, lineCount);
 }
 
 /*!
@@ -4637,7 +4639,7 @@ void QPainter::drawLines(const QPoint *pointPairs, int lineCount)
 {
     Q_ASSERT(sizeof(QLine) == 2*sizeof(QPoint));
 
-    drawLines((QLine*)pointPairs, lineCount);
+    drawLines((const QLine*)pointPairs, lineCount);
 }
 
 
@@ -5534,6 +5536,11 @@ void QPainter::drawGlyphRun(const QPointF &position, const QGlyphRun &glyphRun)
 {
     Q_D(QPainter);
 
+    if (!d->engine) {
+        qWarning("QPainter::drawGlyphRun: Painter not active");
+        return;
+    }
+
     QRawFont font = glyphRun.rawFont();
     if (!font.isValid())
         return;
@@ -5558,21 +5565,18 @@ void QPainter::drawGlyphRun(const QPointF &position, const QGlyphRun &glyphRun)
         fixedPointPositions[i] = QFixedPoint::fromPointF(processedPosition);
     }
 
-    d->drawGlyphs(glyphIndexes, fixedPointPositions.data(), count, font, glyphRun.overline(),
-                  glyphRun.underline(), glyphRun.strikeOut());
+    d->drawGlyphs(glyphIndexes, fixedPointPositions.data(), count, fontD->fontEngine,
+                  glyphRun.overline(), glyphRun.underline(), glyphRun.strikeOut());
 }
 
 void QPainterPrivate::drawGlyphs(const quint32 *glyphArray, QFixedPoint *positions,
                                  int glyphCount,
-                                 const QRawFont &font, bool overline, bool underline,
+                                 QFontEngine *fontEngine, bool overline, bool underline,
                                  bool strikeOut)
 {
     Q_Q(QPainter);
 
     updateState(state);
-
-    QRawFontPrivate *fontD = QRawFontPrivate::get(font);
-    QFontEngine *fontEngine = fontD->fontEngine;
 
     QFixed leftMost;
     QFixed rightMost;
@@ -6208,7 +6212,7 @@ static void drawTextItemDecoration(QPainter *painter, const QPointF &pos, const 
     pen.setWidthF(fe->lineThickness().toReal());
     pen.setCapStyle(Qt::FlatCap);
 
-    QLineF line(pos.x(), pos.y(), pos.x() + qFloor(width), pos.y());
+    QLineF line(qFloor(pos.x()), pos.y(), qFloor(pos.x() + width), pos.y());
 
     bool wasCompatiblePainting = painter->renderHints()
             & QPainter::Qt4CompatiblePainting;
@@ -6362,7 +6366,7 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
         return;
 
     const QPainter::RenderHints oldRenderHints = state->renderHints;
-    if (!state->renderHints & QPainter::Antialiasing && state->matrix.type() >= QTransform::TxScale) {
+    if (!(state->renderHints & QPainter::Antialiasing) && state->matrix.type() >= QTransform::TxScale) {
         // draw antialias decoration (underline/overline/strikeout) with
         // transformed text
 
@@ -6432,7 +6436,10 @@ void QPainterPrivate::drawTextItem(const QPointF &p, const QTextItem &_ti, QText
             if (rtl)
                 x -= ti2.width.toReal();
 
-            engine->drawTextItem(QPointF(x, y), ti2);
+            if (extended)
+                extended->drawTextItem(QPointF(x, y), ti2);
+            else
+                engine->drawTextItem(QPointF(x, y), ti2);
 
             if (!rtl)
                 x += ti2.width.toReal();
@@ -7024,7 +7031,7 @@ void QPainter::setRenderHint(RenderHint hint, bool on)
 #endif
 
 #ifndef QT_NO_DEBUG
-    static const bool antialiasingDisabled = qgetenv("QT_NO_ANTIALIASING").toInt();
+    static const bool antialiasingDisabled = qEnvironmentVariableIntValue("QT_NO_ANTIALIASING");
     if (hint == QPainter::Antialiasing && antialiasingDisabled)
         return;
 #endif
@@ -7455,6 +7462,7 @@ start_lengthVariant:
                     range.format.setFontUnderline(true);
                     underlineFormats.append(range);
                 }
+#ifdef Q_OS_MAC
             } else if (hidemnmemonic && *cin == QLatin1Char('(') && l >= 4 &&
                        cin[1] == QLatin1Char('&') && cin[2] != QLatin1Char('&') &&
                        cin[3] == QLatin1Char(')')) {
@@ -7466,6 +7474,7 @@ start_lengthVariant:
                 length -= n + 4;
                 l -= 4;
                 continue;
+#endif //Q_OS_MAC
             }
             *cout = *cin;
             ++cout;

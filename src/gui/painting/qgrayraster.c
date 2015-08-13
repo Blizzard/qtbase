@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -480,10 +480,10 @@
 
       ras.area  = 0;
       ras.cover = 0;
+      ras.ex    = ex;
+      ras.ey    = ey;
     }
 
-    ras.ex      = ex;
-    ras.ey      = ey;
     ras.invalid = ( (unsigned)ey >= (unsigned)ras.count_ey ||
                               ex >= ras.count_ex           );
   }
@@ -670,38 +670,64 @@
     }
 
     /* vertical line - avoid calling gray_render_scanline */
-    incr = 1;
-
     if ( dx == 0 )
     {
       TCoord  ex     = TRUNC( ras.x );
       TCoord  two_fx = (TCoord)( ( ras.x - SUBPIXELS( ex ) ) << 1 );
-      TPos    area;
+      TPos    area, max_ey1;
 
 
       first = ONE_PIXEL;
       if ( dy < 0 )
-      {
         first = 0;
-        incr  = -1;
-      }
 
       delta      = (int)( first - fy1 );
       ras.area  += (TArea)two_fx * delta;
       ras.cover += delta;
-      ey1       += incr;
-
-      gray_set_cell( &ras, ex, ey1 );
 
       delta = (int)( first + first - ONE_PIXEL );
       area  = (TArea)two_fx * delta;
-      while ( ey1 != ey2 )
-      {
-        ras.area  += area;
-        ras.cover += delta;
-        ey1       += incr;
+      max_ey1 = ras.count_ey + ras.min_ey;
+      if (dy < 0) {
+        if (ey1 > max_ey1) {
+          ey1 = (max_ey1 > ey2) ? max_ey1 : ey2;
+          gray_set_cell( &ras, ex, ey1 );
+        } else {
+          ey1--;
+          gray_set_cell( &ras, ex, ey1 );
+        }
+        while ( ey1 > ey2 && ey1 >= ras.min_ey)
+        {
+          ras.area  += area;
+          ras.cover += delta;
+          ey1--;
 
-        gray_set_cell( &ras, ex, ey1 );
+          gray_set_cell( &ras, ex, ey1 );
+        }
+        if (ey1 != ey2) {
+          ey1 = ey2;
+          gray_set_cell( &ras, ex, ey1 );
+        }
+      } else {
+        if (ey1 < ras.min_ey) {
+          ey1 = (ras.min_ey < ey2) ? ras.min_ey : ey2;
+          gray_set_cell( &ras, ex, ey1 );
+        } else {
+          ey1++;
+          gray_set_cell( &ras, ex, ey1 );
+        }
+        while ( ey1 < ey2 && ey1 < max_ey1)
+        {
+          ras.area  += area;
+          ras.cover += delta;
+          ey1++;
+
+          gray_set_cell( &ras, ex, ey1 );
+        }
+        if (ey1 != ey2) {
+          ey1 = ey2;
+          gray_set_cell( &ras, ex, ey1 );
+        }
       }
 
       delta      = (int)( fy2 - ONE_PIXEL + first );

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1515,6 +1515,11 @@ void QHeaderView::setCascadingSectionResizes(bool enable)
     This property only affects sections that have \l Interactive or \l Fixed
     as their resize mode.
 
+    By default, the value of this property is style dependent.
+    Thus, when the style changes, this property updates from it.
+    Calling setDefaultSectionSize() stops the updates, calling
+    resetDefaultSectionSize() will restore default behavior.
+
     \sa setSectionResizeMode(), minimumSectionSize
 */
 int QHeaderView::defaultSectionSize() const
@@ -1529,6 +1534,15 @@ void QHeaderView::setDefaultSectionSize(int size)
     if (size < 0 || size > maxSizeSection)
         return;
     d->setDefaultSectionSize(size);
+}
+
+void QHeaderView::resetDefaultSectionSize()
+{
+    Q_D(QHeaderView);
+    if (d->customDefaultSectionSize) {
+        d->updateDefaultSectionSizeFromStyle();
+        d->customDefaultSectionSize = false;
+    }
 }
 
 /*!
@@ -1550,7 +1564,7 @@ int QHeaderView::minimumSectionSize() const
     Q_D(const QHeaderView);
     if (d->minimumSectionSize == -1) {
         QSize strut = QApplication::globalStrut();
-        int margin = style()->pixelMetric(QStyle::PM_HeaderMargin, 0, this);
+        int margin = 2 * style()->pixelMetric(QStyle::PM_HeaderMargin, 0, this);
         if (d->orientation == Qt::Horizontal)
             return qMax(strut.width(), (fontMetrics().maxWidth() + margin));
         return qMax(strut.height(), (fontMetrics().height() + margin));
@@ -1865,13 +1879,13 @@ void QHeaderView::sectionsInserted(const QModelIndex &parent,
 
     // insert sections into hiddenSectionSize
     QHash<int, int> newHiddenSectionSize; // from logical index to section size
-    for (int i = 0; i < logicalFirst; ++i)
-        if (isSectionHidden(i))
-            newHiddenSectionSize[i] = d->hiddenSectionSize[i];
-    for (int j = logicalLast + 1; j < d->sectionCount(); ++j)
-        if (isSectionHidden(j))
-            newHiddenSectionSize[j] = d->hiddenSectionSize[j - insertCount];
-    d->hiddenSectionSize = newHiddenSectionSize;
+    for (QHash<int, int>::const_iterator it = d->hiddenSectionSize.cbegin(),
+         end = d->hiddenSectionSize.cend(); it != end; ++it) {
+        const int oldIndex = it.key();
+        const int newIndex = (oldIndex < logicalFirst) ? oldIndex : oldIndex + insertCount;
+        newHiddenSectionSize[newIndex] = it.value();
+    }
+    d->hiddenSectionSize.swap(newHiddenSectionSize);
 
     d->doDelayedResizeSections();
     emit sectionCountChanged(oldCount, count());
@@ -2209,6 +2223,10 @@ bool QHeaderView::event(QEvent *e)
             resizeSections();
         }
         break; }
+    case QEvent::StyleChange:
+        if (!d->customDefaultSectionSize)
+            d->updateDefaultSectionSizeFromStyle();
+        break;
     default:
         break;
     }
@@ -2371,10 +2389,10 @@ void QHeaderView::mouseMoveEvent(QMouseEvent *e)
 {
     Q_D(QHeaderView);
     int pos = d->orientation == Qt::Horizontal ? e->x() : e->y();
-    if (pos < 0)
+    if (pos < 0 && d->state != QHeaderViewPrivate::SelectSections)
         return;
     if (e->buttons() == Qt::NoButton) {
-#if !defined(Q_WS_MAC)
+#if !defined(Q_DEAD_CODE_FROM_QT4_MAC)
         // Under Cocoa, when the mouse button is released, may include an extra
         // simulated mouse moved event. The state of the buttons when this event
         // is generated is already "no button" and the code below gets executed
@@ -2430,7 +2448,9 @@ void QHeaderView::mouseMoveEvent(QMouseEvent *e)
             return;
         }
         case QHeaderViewPrivate::SelectSections: {
-            int logical = logicalIndexAt(pos);
+            int logical = logicalIndexAt(qMax(-d->offset, pos));
+            if (logical == -1 && pos > 0)
+                logical = d->lastVisibleVisualIndex();
             if (logical == d->pressed)
                 return; // nothing to do
             else if (d->pressed != -1)
@@ -2663,7 +2683,14 @@ void QHeaderView::paintSection(QPainter *painter, const QRect &rect, int logical
     opt.iconAlignment = Qt::AlignVCenter;
     opt.text = d->model->headerData(logicalIndex, d->orientation,
                                     Qt::DisplayRole).toString();
-    const int margin = 2 * style()->pixelMetric(QStyle::PM_HeaderMargin, 0, this);
+
+    int margin = 2 * style()->pixelMetric(QStyle::PM_HeaderMargin, 0, this);
+
+    const Qt::Alignment headerArrowAlignment = static_cast<Qt::Alignment>(style()->styleHint(QStyle::SH_Header_ArrowAlignment, 0, this));
+    const bool isHeaderArrowOnTheSide = headerArrowAlignment & Qt::AlignVCenter;
+    if (isSortIndicatorShown() && sortIndicatorSection() == logicalIndex && isHeaderArrowOnTheSide)
+        margin += style()->pixelMetric(QStyle::PM_HeaderMarkSize, 0, this);
+
     if (d->textElideMode != Qt::ElideNone)
         opt.text = opt.fontMetrics.elidedText(opt.text, d->textElideMode , rect.width() - margin);
 
@@ -3456,6 +3483,7 @@ void QHeaderViewPrivate::setDefaultSectionSize(int size)
     executePostedLayout();
     invalidateCachedSizeHint();
     defaultSectionSize = size;
+    customDefaultSectionSize = true;
     if (state == QHeaderViewPrivate::ResizeSection)
         preventCursorChangeInSetOffset = true;
     for (int i = 0; i < sectionItems.count(); ++i) {
@@ -3474,6 +3502,17 @@ void QHeaderViewPrivate::setDefaultSectionSize(int size)
     if (hasAutoResizeSections())
         doDelayedResizeSections();
     viewport->update();
+}
+
+void QHeaderViewPrivate::updateDefaultSectionSizeFromStyle()
+{
+    Q_Q(QHeaderView);
+    if (orientation == Qt::Horizontal) {
+        defaultSectionSize = q->style()->pixelMetric(QStyle::PM_HeaderDefaultSectionSizeHorizontal, 0, q);
+    } else {
+        defaultSectionSize = qMax(q->minimumSectionSize(),
+                                  q->style()->pixelMetric(QStyle::PM_HeaderDefaultSectionSizeVertical, 0, q));
+    }
 }
 
 void QHeaderViewPrivate::recalcSectionStartPos() const // linear (but fast)
@@ -3623,6 +3662,7 @@ void QHeaderViewPrivate::write(QDataStream &out) const
 
     out << sectionItems;
     out << resizeContentsPrecision;
+    out << customDefaultSectionSize;
 }
 
 bool QHeaderViewPrivate::read(QDataStream &in)
@@ -3634,6 +3674,17 @@ bool QHeaderViewPrivate::read(QDataStream &in)
     QVector<int> visualIndicesIn;
     QVector<int> logicalIndicesIn;
     QHash<int, int> hiddenSectionSizeIn;
+    bool movableSectionsIn;
+    bool clickableSectionsIn;
+    bool highlightSelectedIn;
+    bool stretchLastSectionIn;
+    bool cascadingResizingIn;
+    int stretchSectionsIn;
+    int contentsSectionsIn;
+    int defaultSectionSizeIn;
+    int minimumSectionSizeIn;
+    QVector<SectionItem> sectionItemsIn;
+
 
     in >> orient;
     in >> order;
@@ -3655,6 +3706,39 @@ bool QHeaderViewPrivate::read(QDataStream &in)
     if (in.status() != QDataStream::Ok || lengthIn < 0)
         return false;
 
+    in >> movableSectionsIn;
+    in >> clickableSectionsIn;
+    in >> highlightSelectedIn;
+    in >> stretchLastSectionIn;
+    in >> cascadingResizingIn;
+    in >> stretchSectionsIn;
+    in >> contentsSectionsIn;
+    in >> defaultSectionSizeIn;
+    in >> minimumSectionSizeIn;
+
+    in >> align;
+
+    in >> global;
+
+    in >> sectionItemsIn;
+    // In Qt4 we had a vector of spans where one span could hold information on more sections.
+    // Now we have an itemvector where one items contains information about one section
+    // For backward compatibility with Qt4 we do the following
+    QVector<SectionItem> newSectionItems;
+    for (int u = 0; u < sectionItemsIn.count(); ++u) {
+        int count = sectionItemsIn.at(u).tmpDataStreamSectionCount;
+        if (count > 0)
+            sectionItemsIn[u].size /= count;
+        for (int n = 0; n < count; ++n)
+            newSectionItems.append(sectionItemsIn[u]);
+    }
+
+    int sectionItemsLengthTotal = 0;
+    foreach (const SectionItem &section, newSectionItems)
+        sectionItemsLengthTotal += section.size;
+    if (sectionItemsLengthTotal != lengthIn)
+        return false;
+
     orientation = static_cast<Qt::Orientation>(orient);
     sortIndicatorOrder = static_cast<Qt::SortOrder>(order);
     sortIndicatorSection = sortIndicatorSectionIn;
@@ -3664,32 +3748,19 @@ bool QHeaderViewPrivate::read(QDataStream &in)
     hiddenSectionSize = hiddenSectionSizeIn;
     length = lengthIn;
 
-    in >> movableSections;
-    in >> clickableSections;
-    in >> highlightSelected;
-    in >> stretchLastSection;
-    in >> cascadingResizing;
-    in >> stretchSections;
-    in >> contentsSections;
-    in >> defaultSectionSize;
-    in >> minimumSectionSize;
+    movableSections = movableSectionsIn;
+    clickableSections = clickableSectionsIn;
+    highlightSelected = highlightSelectedIn;
+    stretchLastSection = stretchLastSectionIn;
+    cascadingResizing = cascadingResizingIn;
+    stretchSections = stretchSectionsIn;
+    contentsSections = contentsSectionsIn;
+    defaultSectionSize = defaultSectionSizeIn;
+    minimumSectionSize = minimumSectionSizeIn;
 
-    in >> align;
     defaultAlignment = Qt::Alignment(align);
+    globalResizeMode = static_cast<QHeaderView::ResizeMode>(global);
 
-    in >> global;
-    globalResizeMode = (QHeaderView::ResizeMode)global;
-
-    in >> sectionItems;
-    // In Qt4 we had a vector of spans where one span could hold information on more sections.
-    // Now we have an itemvector where one items contains information about one section
-    // For backward compatibility with Qt4 we do the following
-    QVector<SectionItem> newSectionItems;
-    for (int u = 0; u < sectionItems.count(); ++u) {
-        int count = sectionItems.at(u).tmpDataStreamSectionCount;
-        for (int n = 0; n < count; ++n)
-            newSectionItems.append(sectionItems[u]);
-    }
     sectionItems = newSectionItems;
     setHiddenSectionsFromBitVector(sectionHidden);
     recalcSectionStartPos();
@@ -3698,6 +3769,14 @@ bool QHeaderViewPrivate::read(QDataStream &in)
     in >> tmpint;
     if (in.status() == QDataStream::Ok)  // we haven't read past end
         resizeContentsPrecision = tmpint;
+
+    bool tmpbool;
+    in >> tmpbool;
+    if (in.status() == QDataStream::Ok) {  // we haven't read past end
+        customDefaultSectionSize = tmpbool;
+        if (!customDefaultSectionSize)
+            updateDefaultSectionSizeFromStyle();
+    }
 
     return true;
 }

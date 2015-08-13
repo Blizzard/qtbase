@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -559,10 +559,12 @@ void tst_QIcon::task184901_badCache()
 
 void tst_QIcon::fromTheme()
 {
-    QString searchPath = QLatin1String(":/icons");
-    QIcon::setThemeSearchPaths(QStringList() << searchPath);
-    QVERIFY(QIcon::themeSearchPaths().size() == 1);
-    QCOMPARE(searchPath, QIcon::themeSearchPaths()[0]);
+    QString firstSearchPath = QLatin1String(":/icons");
+    QString secondSearchPath = QLatin1String(":/second_icons");
+    QIcon::setThemeSearchPaths(QStringList() << firstSearchPath << secondSearchPath);
+    QVERIFY(QIcon::themeSearchPaths().size() == 2);
+    QCOMPARE(firstSearchPath, QIcon::themeSearchPaths()[0]);
+    QCOMPARE(secondSearchPath, QIcon::themeSearchPaths()[1]);
 
     QString themeName("testtheme");
     QIcon::setThemeName(themeName);
@@ -575,6 +577,14 @@ void tst_QIcon::fromTheme()
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(16, 16)));
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(32, 32)));
     QVERIFY(appointmentIcon.availableSizes().contains(QSize(22, 22)));
+
+    // Test fallback to less specific icon
+    QIcon specificAppointmentIcon = QIcon::fromTheme("appointment-new-specific");
+    QVERIFY(!QIcon::hasThemeIcon("appointment-new-specific"));
+    QVERIFY(QIcon::hasThemeIcon("appointment-new"));
+    QCOMPARE(specificAppointmentIcon.name(), QString::fromLatin1("appointment-new"));
+    QCOMPARE(specificAppointmentIcon.availableSizes(), appointmentIcon.availableSizes());
+    QCOMPARE(specificAppointmentIcon.pixmap(32).cacheKey(), appointmentIcon.pixmap(32).cacheKey());
 
     // Test icon from parent theme
     QIcon abIcon = QIcon::fromTheme("address-book-new");

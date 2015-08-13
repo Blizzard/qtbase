@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -73,7 +73,7 @@ public:
         setMinimumWidth(previewWidget->minimumWidth());
     }
 
-    void resizeEvent(QResizeEvent * event){
+    void resizeEvent(QResizeEvent * event) Q_DECL_OVERRIDE{
         if (!previewWidget)
             return;
         previewWidget->resize(
@@ -89,36 +89,46 @@ public:
         QAbstractScrollArea::resizeEvent(event);
     }
 
-    QRect visualRect(const QModelIndex &) const
+    void scrollContentsBy(int dx, int dy) Q_DECL_OVERRIDE
+    {
+        if (!previewWidget)
+            return;
+        scrollDirtyRegion(dx, dy);
+        viewport()->scroll(dx, dy);
+
+        QAbstractItemView::scrollContentsBy(dx, dy);
+    }
+
+    QRect visualRect(const QModelIndex &) const Q_DECL_OVERRIDE
     {
         return QRect();
     }
-    void scrollTo(const QModelIndex &, ScrollHint)
+    void scrollTo(const QModelIndex &, ScrollHint) Q_DECL_OVERRIDE
     {
     }
-    QModelIndex indexAt(const QPoint &) const
-    {
-        return QModelIndex();
-    }
-    QModelIndex moveCursor(CursorAction, Qt::KeyboardModifiers)
+    QModelIndex indexAt(const QPoint &) const Q_DECL_OVERRIDE
     {
         return QModelIndex();
     }
-    int horizontalOffset () const {
+    QModelIndex moveCursor(CursorAction, Qt::KeyboardModifiers) Q_DECL_OVERRIDE
+    {
+        return QModelIndex();
+    }
+    int horizontalOffset () const Q_DECL_OVERRIDE {
         return 0;
     }
-    int verticalOffset () const {
+    int verticalOffset () const Q_DECL_OVERRIDE {
         return 0;
     }
-    QRegion visualRegionForSelection(const QItemSelection &) const
+    QRegion visualRegionForSelection(const QItemSelection &) const Q_DECL_OVERRIDE
     {
         return QRegion();
     }
-    bool isIndexHidden(const QModelIndex &) const
+    bool isIndexHidden(const QModelIndex &) const Q_DECL_OVERRIDE
     {
         return false;
     }
-    void setSelection(const QRect &, QItemSelectionModel::SelectionFlags)
+    void setSelection(const QRect &, QItemSelectionModel::SelectionFlags) Q_DECL_OVERRIDE
     {
     }
 private:
@@ -146,7 +156,7 @@ public:
     void _q_gripMoved(int offset);
     void _q_changeCurrentColumn();
     void _q_clicked(const QModelIndex &index);
-    void _q_columnsInserted(const QModelIndex &parent, int start, int end);
+    void _q_columnsInserted(const QModelIndex &parent, int start, int end) Q_DECL_OVERRIDE;
 
     QList<QAbstractItemView*> columns;
     QVector<int> columnSizes; // used during init and corner moving
@@ -171,7 +181,7 @@ public:
 
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const;
+               const QModelIndex &index) const Q_DECL_OVERRIDE;
 };
 #endif // QT_NO_QCOLUMNVIEW
 

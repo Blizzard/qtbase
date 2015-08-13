@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Christoph Schleifenbaum <christoph.schleifenbaum@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -102,7 +94,6 @@ QT_USE_NAMESPACE
     QCocoaSystemTrayIcon *systray;
     NSStatusItem *item;
     QCocoaMenu *menu;
-    bool menuVisible;
     QIcon icon;
     QT_MANGLE_NAMESPACE(QNSImageView) *imageCell;
 }
@@ -188,7 +179,7 @@ void QCocoaSystemTrayIcon::cleanup()
 }
 
 static bool heightCompareFunction (QSize a, QSize b) { return (a.height() < b.height()); }
-static QList<QSize> sortByHeight(const QList<QSize> sizes)
+static QList<QSize> sortByHeight(const QList<QSize> &sizes)
 {
     QList<QSize> sorted = sizes;
     std::sort(sorted.begin(), sorted.end(), heightCompareFunction);
@@ -201,8 +192,6 @@ void QCocoaSystemTrayIcon::updateIcon(const QIcon &icon)
         return;
 
     m_sys->item->icon = icon;
-
-    const bool menuVisible = m_sys->item->menu && m_sys->item->menuVisible;
 
     // The reccomended maximum title bar icon height is 18 points
     // (device independent pixels). The menu height on past and
@@ -218,9 +207,8 @@ void QCocoaSystemTrayIcon::updateIcon(const QIcon &icon)
     // devicePixelRatio for the "best" screen on the system.
     qreal devicePixelRatio = qApp->devicePixelRatio();
     const int maxPixmapHeight = maxImageHeight * devicePixelRatio;
-    const QIcon::Mode mode = menuVisible ? QIcon::Selected : QIcon::Normal;
     QSize selectedSize;
-    Q_FOREACH (const QSize& size, sortByHeight(icon.availableSizes(mode))) {
+    Q_FOREACH (const QSize& size, sortByHeight(icon.availableSizes())) {
         // Select a pixmap based on the height. We want the largest pixmap
         // with a height smaller or equal to maxPixmapHeight. The pixmap
         // may rectangular; assume it has a reasonable size. If there is
@@ -234,7 +222,11 @@ void QCocoaSystemTrayIcon::updateIcon(const QIcon &icon)
         }
     }
 
-    QPixmap pixmap = icon.pixmap(selectedSize, mode);
+    // Handle SVG icons, which do not return anything for availableSizes().
+    if (!selectedSize.isValid())
+        selectedSize = icon.actualSize(QSize(maxPixmapHeight, maxPixmapHeight));
+
+    QPixmap pixmap = icon.pixmap(selectedSize);
 
     // Draw a low-resolution icon if there is not enough pixels for a retina
     // icon. This prevents showing a small icon on retina displays.
@@ -381,9 +373,6 @@ QT_END_NAMESPACE
     Q_UNUSED(notification);
     down = NO;
 
-    parent->systray->updateIcon(parent->icon);
-    parent->menuVisible = false;
-
     [self setNeedsDisplay:YES];
 }
 
@@ -392,8 +381,6 @@ QT_END_NAMESPACE
     down = YES;
     int clickCount = [mouseEvent clickCount];
     [self setNeedsDisplay:YES];
-
-    parent->systray->updateIcon(parent->icon);
 
     if (clickCount == 2) {
         [self menuTrackingDone:nil];
@@ -450,7 +437,6 @@ QT_END_NAMESPACE
     if (self) {
         item = [[[NSStatusBar systemStatusBar] statusItemWithLength:NSSquareStatusItemLength] retain];
         menu = 0;
-        menuVisible = false;
         systray = sys;
         imageCell = [[QNSImageView alloc] initWithParent:self];
         [item setView: imageCell];
@@ -460,6 +446,7 @@ QT_END_NAMESPACE
 
 -(void)dealloc {
     [[NSStatusBar systemStatusBar] removeStatusItem:item];
+    [[NSNotificationCenter defaultCenter] removeObserver:imageCell];
     [imageCell release];
     [item release];
     [super dealloc];
@@ -494,7 +481,6 @@ QT_END_NAMESPACE
          selector:@selector(menuTrackingDone:)
              name:NSMenuDidEndTrackingNotification
                  object:m];
-        menuVisible = true;
         [item popUpStatusItemMenu: m];
     }
 }

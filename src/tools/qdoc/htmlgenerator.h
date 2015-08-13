@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -77,32 +77,35 @@ public:
     HtmlGenerator();
     ~HtmlGenerator();
 
-    virtual void initializeGenerator(const Config& config);
-    virtual void terminateGenerator();
-    virtual QString format();
-    virtual void generateDocs();
+    virtual void initializeGenerator(const Config& config) Q_DECL_OVERRIDE;
+    virtual void terminateGenerator() Q_DECL_OVERRIDE;
+    virtual QString format() Q_DECL_OVERRIDE;
+    virtual void generateDocs() Q_DECL_OVERRIDE;
     void generateManifestFiles();
 
     QString protectEnc(const QString &string);
     static QString protect(const QString &string, const QString &encoding = "ISO-8859-1");
-    static QString cleanRef(const QString& ref);
     static QString sinceTitle(int i) { return sinceTitles[i]; }
 
 protected:
+    virtual void generateQAPage() Q_DECL_OVERRIDE;
+    QString generateLinksToLinksPage(const QString& module, CodeMarker* marker);
+    QString generateLinksToBrokenLinksPage(CodeMarker* marker, int& count);
     virtual int generateAtom(const Atom *atom,
                              const Node *relative,
-                             CodeMarker *marker);
-    virtual void generateClassLikeNode(InnerNode* inner, CodeMarker* marker);
-    virtual void generateQmlTypePage(QmlClassNode* qcn, CodeMarker* marker);
-    virtual void generateQmlBasicTypePage(QmlBasicTypeNode* qbtn, CodeMarker* marker);
-    virtual void generateDocNode(DocNode* dn, CodeMarker* marker);
-    virtual void generateCollectionNode(CollectionNode* cn, CodeMarker* marker);
-    virtual QString fileExtension() const;
+                             CodeMarker *marker) Q_DECL_OVERRIDE;
+    virtual void generateClassLikeNode(InnerNode* inner, CodeMarker* marker) Q_DECL_OVERRIDE;
+    virtual void generateQmlTypePage(QmlTypeNode* qcn, CodeMarker* marker) Q_DECL_OVERRIDE;
+    virtual void generateQmlBasicTypePage(QmlBasicTypeNode* qbtn, CodeMarker* marker) Q_DECL_OVERRIDE;
+    virtual void generateDocumentNode(DocumentNode* dn, CodeMarker* marker) Q_DECL_OVERRIDE;
+    virtual void generateCollectionNode(CollectionNode* cn, CodeMarker* marker) Q_DECL_OVERRIDE;
+    virtual QString fileExtension() const Q_DECL_OVERRIDE;
     virtual QString refForNode(const Node *node);
     virtual QString linkForNode(const Node *node, const Node *relative);
 
-    void generateManifestFile(QString manifest, QString element);
+    void generateManifestFile(const QString &manifest, const QString &element);
     void readManifestMetaContent(const Config &config);
+    void generateKeywordAnchors(const Node* node);
 
 private:
     enum SubTitleSize { SmallSubTitle, LargeSubTitle };
@@ -135,7 +138,7 @@ private:
     void generateFooter(const Node *node = 0);
     void generateRequisites(InnerNode *inner,
                             CodeMarker *marker);
-    void generateQmlRequisites(QmlClassNode *qcn,
+    void generateQmlRequisites(QmlTypeNode *qcn,
                             CodeMarker *marker);
     void generateBrief(const Node *node,
                        CodeMarker *marker,
@@ -147,19 +150,19 @@ private:
     void generateSidebar();
     QString generateListOfAllMemberFile(const InnerNode *inner,
                                         CodeMarker *marker);
-    QString generateAllQmlMembersFile(QmlClassNode* qml_cn, CodeMarker* marker);
+    QString generateAllQmlMembersFile(QmlTypeNode* qml_cn, CodeMarker* marker);
     QString generateLowStatusMemberFile(InnerNode *inner,
                                         CodeMarker *marker,
                                         CodeMarker::Status status);
-    QString generateQmlMemberFile(QmlClassNode* qcn,
+    QString generateQmlMemberFile(QmlTypeNode* qcn,
                                   CodeMarker *marker,
                                   CodeMarker::Status status);
     void generateClassHierarchy(const Node *relative, NodeMap &classMap);
-    void generateAnnotatedList(const Node* relative, CodeMarker* marker, const NodeMap& nodeMap);
+    void generateAnnotatedList(const Node* relative, CodeMarker* marker, const NodeMultiMap& nodeMap);
     void generateAnnotatedList(const Node* relative, CodeMarker* marker, const NodeList& nodes);
     void generateCompactList(ListType listType,
                              const Node *relative,
-                             const NodeMap &classMap,
+                             const NodeMultiMap &classMap,
                              bool includeAlphabet,
                              QString commonPrefix);
     void generateFunctionIndex(const Node *relative);
@@ -179,8 +182,8 @@ private:
     void generateDetailedQmlMember(Node *node,
                                    const InnerNode *relative,
                                    CodeMarker *marker);
-    void generateQmlInherits(QmlClassNode* qcn, CodeMarker* marker);
-    void generateQmlInstantiates(QmlClassNode* qcn, CodeMarker* marker);
+    void generateQmlInherits(QmlTypeNode* qcn, CodeMarker* marker) Q_DECL_OVERRIDE;
+    void generateQmlInstantiates(QmlTypeNode* qcn, CodeMarker* marker);
     void generateInstantiatedBy(ClassNode* cn, CodeMarker* marker);
 
     void generateRequisitesTable(const QStringList& requisitesOrder, QMap<QString, Text>& requisites);
@@ -210,7 +213,7 @@ private:
     QString getAutoLink(const Atom *atom, const Node *relative, const Node** node);
 
     QString registerRef(const QString& ref);
-    virtual QString fileBase(const Node *node) const;
+    virtual QString fileBase(const Node *node) const Q_DECL_OVERRIDE;
     QString fileName(const Node *node);
     static int hOffset(const Node *node);
     static bool isThreeColumnEnumValueTable(const Atom *atom);

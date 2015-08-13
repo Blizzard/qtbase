@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,7 +41,6 @@
 #include <qvalidator.h>
 #include <qdebug.h>
 
-#include <math.h>
 #include <float.h>
 
 QT_BEGIN_NAMESPACE
@@ -58,10 +57,10 @@ class QSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QSpinBox)
 public:
     QSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &);
+    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
 
-    virtual QVariant valueFromText(const QString &n) const;
-    virtual QString textFromValue(const QVariant &n) const;
+    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
+    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
 
@@ -79,10 +78,10 @@ class QDoubleSpinBoxPrivate : public QAbstractSpinBoxPrivate
     Q_DECLARE_PUBLIC(QDoubleSpinBox)
 public:
     QDoubleSpinBoxPrivate();
-    void emitSignals(EmitPolicy ep, const QVariant &);
+    void emitSignals(EmitPolicy ep, const QVariant &) Q_DECL_OVERRIDE;
 
-    virtual QVariant valueFromText(const QString &n) const;
-    virtual QString textFromValue(const QVariant &n) const;
+    virtual QVariant valueFromText(const QString &n) const Q_DECL_OVERRIDE;
+    virtual QString textFromValue(const QVariant &n) const Q_DECL_OVERRIDE;
     QVariant validateAndInterpret(QString &input, int &pos,
                                   QValidator::State &state) const;
     double round(double input) const;
@@ -588,6 +587,9 @@ void QSpinBox::fixup(QString &input) const
     choice in addition to the range of numeric values. See
     setSpecialValueText() for how to do this with QDoubleSpinBox.
 
+    \note The displayed value of the QDoubleSpinBox is limited to 18 characters
+    in addition to eventual prefix and suffix content. This limitation is used
+    to keep the double spin box usable even with extremely large values.
     \sa QSpinBox, QDateTimeEdit, QSlider, {Spin Boxes Example}
 */
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -97,6 +97,8 @@ private slots:
     void textureblitterFullTargetRectTransform();
     void textureblitterPartTargetRectTransform();
     void defaultSurfaceFormat();
+
+    void imageFormatPainting();
 
 #ifdef USE_GLX
     void glxContextWrap();
@@ -716,6 +718,68 @@ void tst_QOpenGL::fboHandleNulledAfterContextDestroyed()
     }
 
     QCOMPARE(fbo->handle(), 0U);
+}
+
+void tst_QOpenGL::imageFormatPainting()
+{
+    QScopedPointer<QSurface> surface(createSurface(QSurface::Window));
+
+    QOpenGLContext ctx;
+    QVERIFY(ctx.create());
+
+    QVERIFY(ctx.makeCurrent(surface.data()));
+
+    if (!QOpenGLFramebufferObject::hasOpenGLFramebufferObjects())
+        QSKIP("QOpenGLFramebufferObject not supported on this platform");
+
+    QOpenGLFramebufferObjectFormat fboFormat;
+    fboFormat.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+
+    const QSize size(128, 128);
+    QOpenGLFramebufferObject fbo(size, fboFormat);
+
+    if (fbo.attachment() != QOpenGLFramebufferObject::CombinedDepthStencil)
+        QSKIP("FBOs missing combined depth~stencil support");
+
+    QVERIFY(fbo.bind());
+
+    QImage alpha(128, 128, QImage::Format_Alpha8);
+    alpha.fill(127);
+
+    QPainter fboPainter;
+    QOpenGLPaintDevice device(fbo.width(), fbo.height());
+
+    QVERIFY(fboPainter.begin(&device));
+    fboPainter.fillRect(0, 0, 128, 128, qRgb(255, 0, 255));
+    fboPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+    fboPainter.drawImage(0, 0, alpha);
+    fboPainter.end();
+
+    QImage fb = fbo.toImage();
+    QCOMPARE(fb.pixel(0, 0), qRgba(127, 0, 127, 127));
+
+    QImage grayscale(128, 128, QImage::Format_Grayscale8);
+    grayscale.fill(128);
+
+    QVERIFY(fboPainter.begin(&device));
+    fboPainter.setCompositionMode(QPainter::CompositionMode_Plus);
+    fboPainter.drawImage(0, 0, grayscale);
+    fboPainter.end();
+
+    fb = fbo.toImage();
+    QCOMPARE(fb.pixel(0, 0), qRgb(255, 128, 255));
+
+    QImage argb(128, 128, QImage::Format_ARGB32);
+    argb.fill(qRgba(255, 255, 255, 128));
+
+    QVERIFY(fboPainter.begin(&device));
+    fboPainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    fboPainter.drawImage(0, 0, argb);
+    fboPainter.end();
+
+    fb = fbo.toImage();
+    QCOMPARE(fb.pixel(0, 0), qRgb(255, 192, 255));
+
 }
 
 void tst_QOpenGL::openGLPaintDevice_data()

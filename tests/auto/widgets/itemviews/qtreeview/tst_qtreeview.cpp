@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -255,6 +255,7 @@ private slots:
     void taskQTBUG_8176_emitOnExpandAll();
     void taskQTBUG_34717_collapseAtBottom();
     void taskQTBUG_37813_crash();
+    void taskQTBUG_45697_crash();
     void testInitialFocus();
 };
 
@@ -861,9 +862,6 @@ void tst_QTreeView::editTriggers()
     }
 
     // Check if we got an editor
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("EditKeyPressed 4", "QTBUG-23696", Continue);
-#endif
     QTRY_COMPARE(view.findChild<QLineEdit *>(QString()) != 0, editorOpened);
 }
 
@@ -4386,6 +4384,83 @@ void tst_QTreeView::taskQTBUG_37813_crash()
     const QPixmap pixmap = av->renderToPixmap(sel.indexes(), &rect);
     QVERIFY(pixmap.size().isValid());
 #endif // QT_BUILD_INTERNAL
+}
+
+// QTBUG-45697: Using a QTreeView with a multi-column model filtered by QSortFilterProxyModel,
+// when sorting the source model while the widget is not yet visible and showing the widget
+// later on, corruption occurs in QTreeView.
+class Qtbug45697TestWidget : public QWidget
+{
+   Q_OBJECT
+public:
+    static const int columnCount = 3;
+
+    explicit Qtbug45697TestWidget();
+    int timerTick() const { return m_timerTick; }
+
+public slots:
+    void slotTimer();
+
+private:
+   QTreeView *m_treeView;
+   QStandardItemModel *m_model;
+   QSortFilterProxyModel *m_sortFilterProxyModel;
+   int m_timerTick;
+};
+
+Qtbug45697TestWidget::Qtbug45697TestWidget()
+    : m_treeView(new QTreeView(this))
+    , m_model(new QStandardItemModel(0, Qtbug45697TestWidget::columnCount, this))
+    , m_sortFilterProxyModel(new QSortFilterProxyModel(this))
+    , m_timerTick(0)
+ {
+   QVBoxLayout *vBoxLayout = new QVBoxLayout(this);
+   vBoxLayout->addWidget(m_treeView);
+
+   for (char sortChar = 'z'; sortChar >= 'a' ; --sortChar) {
+       QList<QStandardItem *>  items;
+       for (int column = 0; column < Qtbug45697TestWidget::columnCount; ++column) {
+           const QString text = QLatin1Char(sortChar) + QLatin1String(" ") + QString::number(column);
+           items.append(new QStandardItem(text));
+       }
+       m_model->appendRow(items);
+   }
+
+   m_sortFilterProxyModel->setSourceModel(m_model);
+   m_treeView->setModel(m_sortFilterProxyModel);
+
+   QHeaderView *headerView = m_treeView->header();
+   for (int s = 1, lastSection = headerView->count() - 1; s < lastSection; ++s )
+       headerView->setSectionResizeMode(s, QHeaderView::ResizeToContents);
+
+   QTimer *timer = new QTimer(this);
+   timer->setInterval(50);
+   connect(timer, &QTimer::timeout, this, &Qtbug45697TestWidget::slotTimer);
+   timer->start();
+}
+
+void Qtbug45697TestWidget::slotTimer()
+{
+    switch (m_timerTick++) {
+    case 0:
+        m_model->sort(0);
+        break;
+    case 1:
+        show();
+        break;
+    default:
+        close();
+        break;
+    }
+}
+
+void tst_QTreeView::taskQTBUG_45697_crash()
+{
+    Qtbug45697TestWidget testWidget;
+    testWidget.setWindowTitle(QTest::currentTestFunction());
+    testWidget.resize(400, 400);
+    testWidget.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(100, 100));
+    QTRY_VERIFY(testWidget.timerTick() >= 2);
 }
 
 QTEST_MAIN(tst_QTreeView)

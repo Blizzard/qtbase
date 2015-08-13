@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -50,6 +50,7 @@ QT_BEGIN_NAMESPACE
 #define COMMAND_INGROUP                 Doc::alias(QLatin1String("ingroup"))
 #define COMMAND_INMODULE                Doc::alias(QLatin1String("inmodule"))  // ### don't document
 #define COMMAND_INQMLMODULE             Doc::alias(QLatin1String("inqmlmodule"))
+#define COMMAND_INJSMODULE              Doc::alias(QLatin1String("injsmodule"))
 #define COMMAND_INTERNAL                Doc::alias(QLatin1String("internal"))
 #define COMMAND_MAINCLASS               Doc::alias(QLatin1String("mainclass"))
 #define COMMAND_NONREENTRANT            Doc::alias(QLatin1String("nonreentrant"))
@@ -65,9 +66,9 @@ QT_BEGIN_NAMESPACE
 #define COMMAND_TITLE                   Doc::alias(QLatin1String("title"))
 #define COMMAND_WRAPPER                 Doc::alias(QLatin1String("wrapper"))
 
-QString CodeParser::currentSubDir_;
 QList<CodeParser *> CodeParser::parsers;
-bool CodeParser::showInternal = false;
+bool CodeParser::showInternal_ = false;
+bool CodeParser::singleExec_ = false;
 
 /*!
   The constructor adds this code parser to the static
@@ -93,7 +94,8 @@ CodeParser::~CodeParser()
  */
 void CodeParser::initializeParser(const Config& config)
 {
-    showInternal = config.getBool(CONFIG_SHOWINTERNAL);
+    showInternal_ = config.getBool(CONFIG_SHOWINTERNAL);
+    singleExec_ = config.getBool(CONFIG_SINGLEEXEC);
 }
 
 /*!
@@ -216,7 +218,8 @@ const QSet<QString>& CodeParser::commonMetaCommands()
                             << COMMAND_SUBTITLE
                             << COMMAND_THREADSAFE
                             << COMMAND_TITLE
-                            << COMMAND_WRAPPER;
+                            << COMMAND_WRAPPER
+                            << COMMAND_INJSMODULE;
     }
     return commonMetaCommands_;
 }
@@ -249,8 +252,11 @@ void CodeParser::processCommonMetaCommand(const Location& location,
     else if (command == COMMAND_INQMLMODULE) {
         qdb_->addToQmlModule(arg.first,node);
     }
+    else if (command == COMMAND_INJSMODULE) {
+        qdb_->addToJsModule(arg.first, node);
+    }
     else if (command == COMMAND_MAINCLASS) {
-        node->setStatus(Node::Main);
+        node->doc().location().warning(tr("'\\mainclass' is deprecated. Consider '\\ingroup mainclasses'"));
     }
     else if (command == COMMAND_OBSOLETE) {
         node->setStatus(Node::Obsolete);
@@ -262,7 +268,7 @@ void CodeParser::processCommonMetaCommand(const Location& location,
         node->setStatus(Node::Preliminary);
     }
     else if (command == COMMAND_INTERNAL) {
-        if (!showInternal) {
+        if (!showInternal_) {
             node->setAccess(Node::Private);
             node->setStatus(Node::Internal);
             if (node->type() == Node::QmlPropertyGroup) {
@@ -295,14 +301,14 @@ void CodeParser::processCommonMetaCommand(const Location& location,
     }
     else if (command == COMMAND_TITLE) {
         node->setTitle(arg.first);
-        if (!node->isDocNode() && !node->isCollectionNode())
+        if (!node->isDocumentNode() && !node->isCollectionNode())
             location.warning(tr("Ignored '\\%1'").arg(COMMAND_SUBTITLE));
         else if (node->isExample())
             qdb_->addExampleNode(static_cast<ExampleNode*>(node));
     }
     else if (command == COMMAND_SUBTITLE) {
         node->setSubTitle(arg.first);
-        if (!node->isDocNode() && !node->isCollectionNode())
+        if (!node->isDocumentNode() && !node->isCollectionNode())
             location.warning(tr("Ignored '\\%1'").arg(COMMAND_SUBTITLE));
     }
     else if (command == COMMAND_QTVARIABLE) {
@@ -400,8 +406,8 @@ bool CodeParser::isParsingQdoc() const
  */
 void CodeParser::checkModuleInclusion(Node* n)
 {
-    if (n->moduleName().isEmpty()) {
-        n->setModuleName(Generator::defaultModuleName());
+    if (n->physicalModuleName().isEmpty()) {
+        n->setPhysicalModuleName(Generator::defaultModuleName());
         switch (n->type()) {
         case Node::Class:
             if (n->access() != Node::Private && !n->doc().isEmpty()) {

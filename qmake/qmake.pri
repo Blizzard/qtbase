@@ -12,7 +12,6 @@ SOURCES += project.cpp property.cpp main.cpp \
            generators/win32/msvc_vcproj.cpp \
            generators/win32/msvc_vcxproj.cpp \
            generators/win32/msvc_objectmodel.cpp generators/win32/msbuild_objectmodel.cpp \
-           generators/integrity/gbuild.cpp \
            generators/win32/cesdkhandler.cpp
 
 HEADERS += project.h property.h \
@@ -26,7 +25,6 @@ HEADERS += project.h property.h \
            generators/win32/msvc_vcproj.h \
            generators/win32/msvc_vcxproj.h \
            generators/win32/msvc_objectmodel.h generators/win32/msbuild_objectmodel.h \
-           generators/integrity/gbuild.h \
            generators/win32/cesdkhandler.h
 
 bootstrap { #Qt code
@@ -138,8 +136,8 @@ bootstrap { #Qt code
         SOURCES += qfilesystemengine_unix.cpp qfilesystemiterator_unix.cpp qfsfileengine_unix.cpp
         mac {
           SOURCES += qcore_mac.cpp qsettings_mac.cpp
-          OBJECTIVE_SOURCES += qlocale_mac.mm
-          LIBS += -framework ApplicationServices
+          OBJECTIVE_SOURCES += qcore_mac_objc.mm qlocale_mac.mm
+          LIBS += -framework ApplicationServices -framework CoreServices -framework Foundation
         } else {
           SOURCES += qlocale_unix.cpp
         }

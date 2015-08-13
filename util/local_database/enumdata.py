@@ -1,40 +1,32 @@
 #!/usr/bin/env python
 #############################################################################
 ##
-## Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-## Contact: http://www.qt-project.org/legal
+## Copyright (C) 2015 The Qt Company Ltd.
+## Contact: http://www.qt.io/licensing/
 ##
 ## This file is part of the test suite of the Qt Toolkit.
 ##
-## $QT_BEGIN_LICENSE:LGPL$
+## $QT_BEGIN_LICENSE:LGPL21$
 ## Commercial License Usage
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and Digia.  For licensing terms and
-## conditions see http://qt.digia.com/licensing.  For further information
-## use the contact form at http://qt.digia.com/contact-us.
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see http://www.qt.io/terms-conditions. For further
+## information use the contact form at http://www.qt.io/contact-us.
 ##
 ## GNU Lesser General Public License Usage
 ## Alternatively, this file may be used under the terms of the GNU Lesser
-## General Public License version 2.1 as published by the Free Software
-## Foundation and appearing in the file LICENSE.LGPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU Lesser General Public License version 2.1 requirements
-## will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+## General Public License version 2.1 or version 3 as published by the Free
+## Software Foundation and appearing in the file LICENSE.LGPLv21 and
+## LICENSE.LGPLv3 included in the packaging of this file. Please review the
+## following information to ensure the GNU Lesser General Public License
+## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 ##
-## In addition, as a special exception, Digia gives you certain additional
-## rights.  These rights are described in the Digia Qt LGPL Exception
+## As a special exception, The Qt Company gives you certain additional
+## rights. These rights are described in The Qt Company LGPL Exception
 ## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3.0 as published by the Free Software
-## Foundation and appearing in the file LICENSE.GPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU General Public License version 3.0 requirements will be
-## met: http://www.gnu.org/copyleft/gpl.html.
-##
 ##
 ## $QT_END_LICENSE$
 ##
@@ -359,7 +351,32 @@ language_list = {
     311 : [ "Ugaritic",           "uga" ],
     312 : [ "Akoose",             "bss" ],
     313 : [ "Lakota",             "lkt" ],
-    314 : [ "Standard Moroccan Tamazight", "zgh" ]
+    314 : [ "Standard Moroccan Tamazight", "zgh" ],
+    315 : [ "Mapuche",            "arn" ],
+    316 : [ "Central Kurdish",    "ckb" ],
+    317 : [ "LowerSorbian",       "dsb" ],
+    318 : [ "UpperSorbian",       "hsb" ],
+    319 : [ "Kenyang",            "ken" ],
+    320 : [ "Mohawk",             "moh" ],
+    321 : [ "Nko",                "nqo" ],
+    322 : [ "Prussian",           "prg" ],
+    323 : [ "Kiche",              "quc" ],
+    324 : [ "Southern Sami",      "sma" ],
+    325 : [ "Lule Sami",          "smj" ],
+    326 : [ "Inari Sami",         "smn" ],
+    327 : [ "Skolt Sami",         "sms" ],
+    328 : [ "Warlpiri",           "wbp" ],
+    329 : [ "Manichaean Middle Persian", "xmn" ],
+    330 : [ "Mende",              "men" ],
+    331 : [ "Ancient North Arabian", "xna" ],
+    332 : [ "Linear A",           "lab" ],
+    333 : [ "Hmong Njua",         "hnj" ],
+    334 : [ "Ho",                 "hoc" ],
+    335 : [ "Lezghian",           "lez" ],
+    336 : [ "Bassa",              "bsq" ],
+    337 : [ "Mono",               "mru" ],
+    338 : [ "Tedim Chin",         "ctd" ],
+    339 : [ "Maithili",           "mai" ]
 }
 
 country_list = {
@@ -728,13 +745,33 @@ script_list = {
     101 : [ "Takri",                  "Takr" ],
     102 : [ "Ugaritic",               "Ugar" ],
     103 : [ "Braille",                "Brai" ],
-    104 : [ "Hiragana",               "Hira" ]
+    104 : [ "Hiragana",               "Hira" ],
+    105 : [ "Caucasian Albanian",     "Aghb" ],
+    106 : [ "Bassa Vah",              "Bass" ],
+    107 : [ "Duployan",               "Dupl" ],
+    108 : [ "Elbasan",                "Elba" ],
+    109 : [ "Grantha",                "Gran" ],
+    110 : [ "Pahawh Hmong",           "Hmng" ],
+    111 : [ "Khojki",                 "Khoj" ],
+    112 : [ "Linear A",               "Lina" ],
+    113 : [ "Mahajani",               "Mahj" ],
+    114 : [ "Manichaean",             "Mani" ],
+    115 : [ "Mende Kikakui",          "Mend" ],
+    116 : [ "Modi",                   "Modi" ],
+    117 : [ "Mro",                    "Mroo" ],
+    118 : [ "Old North Arabian",      "Narb" ],
+    119 : [ "Nabataean",              "Nbat" ],
+    120 : [ "Palmyrene",              "Palm" ],
+    121 : [ "Pau Cin Hau",            "Pauc" ],
+    122 : [ "Old Permic",             "Perm" ],
+    123 : [ "Psalter Pahlavi",        "Phlp" ],
+    124 : [ "Siddham",                "Sidd" ],
+    125 : [ "Khudawadi",              "Sind" ],
+    126 : [ "Tirhuta",                "Tirh" ],
+    127 : [ "Varang Kshiti",          "Wara" ]
 
 #    ### : [ "Blissymbols",            "Blis" ],
-#    ### : [ "Linear A",               "Lina" ],
 #    ### : [ "Naxi Geba",              "Nkgb" ],
-#    ### : [ "Pahawh Hmong",           "Hmng" ],
-#    ### : [ "Varang Kshiti",          "Wara" ],
 }
 
 def countryCodeToId(code):

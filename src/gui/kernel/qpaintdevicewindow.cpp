@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -60,6 +60,9 @@ QT_BEGIN_NAMESPACE
 
     \note Subsequent calls to this function before the next paint
     event will get ignored.
+
+    \note For non-exposed windows the update is deferred until the
+    window becomes exposed again.
 */
 void QPaintDeviceWindow::update()
 {
@@ -70,26 +73,34 @@ void QPaintDeviceWindow::update()
     Marks the \a rect of the window as dirty and schedules a repaint.
 
     \note Subsequent calls to this function before the next paint
-    event will get ignored.
+    event will get ignored, but \a rect is added to the region to update.
+
+    \note For non-exposed windows the update is deferred until the
+    window becomes exposed again.
 */
 void QPaintDeviceWindow::update(const QRect &rect)
 {
     Q_D(QPaintDeviceWindow);
     d->dirtyRegion += rect;
-    d->triggerUpdate();
+    if (isExposed())
+        requestUpdate();
 }
 
 /*!
     Marks the \a region of the window as dirty and schedules a repaint.
 
     \note Subsequent calls to this function before the next paint
-    event will get ignored.
+    event will get ignored, but \a region is added to the region to update.
+
+    \note For non-exposed windows the update is deferred until the
+    window becomes exposed again.
 */
 void QPaintDeviceWindow::update(const QRegion &region)
 {
     Q_D(QPaintDeviceWindow);
     d->dirtyRegion += region;
-    d->triggerUpdate();
+    if (isExposed())
+        requestUpdate();
 }
 
 /*!
@@ -168,6 +179,9 @@ void QPaintDeviceWindow::exposeEvent(QExposeEvent *exposeEvent)
         // sometimes relative to the parent, depending on the platform plugin.
         // We require local coords here.
         d->doFlush(QRect(QPoint(0, 0), size()));
+    } else if (!d->dirtyRegion.isEmpty()) {
+        // Updates while non-exposed were ignored. Schedule an update now.
+        requestUpdate();
     }
 }
 
@@ -179,7 +193,6 @@ bool QPaintDeviceWindow::event(QEvent *event)
     Q_D(QPaintDeviceWindow);
 
     if (event->type() == QEvent::UpdateRequest) {
-        d->paintEventSent = false;
         if (handle()) // platform window may be gone when the window is closed during app exit
             d->handleUpdateEvent();
         return true;

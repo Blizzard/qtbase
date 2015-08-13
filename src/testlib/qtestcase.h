@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,6 +40,8 @@
 #include <QtCore/qnamespace.h>
 #include <QtCore/qmetatype.h>
 #include <QtCore/qtypetraits.h>
+#include <QtCore/qsharedpointer.h>
+#include <QtCore/qtemporarydir.h>
 
 #include <string.h>
 
@@ -209,6 +211,9 @@ do {\
     QTest::qFindTestData(basepath, __FILE__, __LINE__)
 #endif
 
+# define QEXTRACTTESTDATA(resourcePath) \
+    QTest::qExtractTestData(resourcePath)
+
 class QObject;
 class QTestData;
 
@@ -225,12 +230,15 @@ namespace QTest
 
 
     Q_TESTLIB_EXPORT char *toHexRepresentation(const char *ba, int length);
+    Q_TESTLIB_EXPORT char *toPrettyCString(const char *unicode, int length);
     Q_TESTLIB_EXPORT char *toPrettyUnicode(const ushort *unicode, int length);
     Q_TESTLIB_EXPORT char *toString(const char *);
     Q_TESTLIB_EXPORT char *toString(const void *);
 
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, int argc = 0, char **argv = 0);
     Q_TESTLIB_EXPORT int qExec(QObject *testObject, const QStringList &arguments);
+
+    Q_TESTLIB_EXPORT void setMainSourcePath(const char *file, const char *builddir = 0);
 
     Q_TESTLIB_EXPORT bool qVerify(bool statement, const char *statementStr, const char *description,
                                  const char *file, int line);
@@ -244,6 +252,7 @@ namespace QTest
     Q_TESTLIB_EXPORT void ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern);
 #endif
 
+    Q_TESTLIB_EXPORT QSharedPointer<QTemporaryDir> qExtractTestData(const QString &dirName);
     Q_TESTLIB_EXPORT QString qFindTestData(const char* basepath, const char* file = 0, int line = 0, const char* builddir = 0);
     Q_TESTLIB_EXPORT QString qFindTestData(const QString& basepath, const char* file = 0, int line = 0, const char* builddir = 0);
 
@@ -282,7 +291,7 @@ namespace QTest
                         const char *file, int line)
     {
         return compare_helper(t1 == t2, "Compared values are not the same",
-                              toString<T>(t1), toString<T>(t2), actual, expected, file, line);
+                              toString(t1), toString(t2), actual, expected, file, line);
     }
 
     Q_TESTLIB_EXPORT bool qCompare(float const &t1, float const &t2,

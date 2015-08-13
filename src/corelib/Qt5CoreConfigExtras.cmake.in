@@ -66,14 +66,18 @@ list(APPEND Qt5Core_INCLUDE_DIRS ${_qt5_corelib_extra_includes})
 set_property(TARGET Qt5::Core APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${_qt5_corelib_extra_includes})
 set(_qt5_corelib_extra_includes)
 
-!!IF !isEmpty(CMAKE_ADD_FPIE_FLAGS)
 # Targets using Qt need to use the POSITION_INDEPENDENT_CODE property. The
 # Qt5_POSITION_INDEPENDENT_CODE variable is used in the # qt5_use_module
 # macro to add it.
 set(Qt5_POSITION_INDEPENDENT_CODE True)
-set_property(TARGET Qt5::Core PROPERTY INTERFACE_POSITION_INDEPENDENT_CODE \"ON\")
-set(Qt5Core_EXECUTABLE_COMPILE_FLAGS \"-fPIE\")
-!!ENDIF
+set(Qt5Core_EXECUTABLE_COMPILE_FLAGS \"-fPIC\")
+if (CMAKE_VERSION VERSION_LESS 2.8.12
+        AND (NOT CMAKE_CXX_COMPILER_ID STREQUAL \"GNU\"
+        OR CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0))
+    set_property(TARGET Qt5::Core APPEND PROPERTY INTERFACE_POSITION_INDEPENDENT_CODE \"ON\")
+else()
+    set_property(TARGET Qt5::Core APPEND PROPERTY INTERFACE_COMPILE_OPTIONS $$QMAKE_CXXFLAGS_APP)
+endif()
 
 !!IF !isEmpty(QT_NAMESPACE)
 list(APPEND Qt5Core_DEFINITIONS -DQT_NAMESPACE=$$QT_NAMESPACE)
@@ -136,12 +140,12 @@ if (NOT TARGET Qt5::WinMain)
         set(_isNotExcluded $<NOT:$<BOOL:$<TARGET_PROPERTY:Qt5_NO_LINK_QTMAIN>>>)
         set(_isPolicyNEW $<TARGET_POLICY:CMP0020>)
         get_target_property(_configs Qt5::Core IMPORTED_CONFIGURATIONS)
+        set_property(TARGET Qt5::Core APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES
+                $<$<AND:${_isExe},${_isWin32},${_isNotExcluded},${_isPolicyNEW}>:Qt5::WinMain>
+        )
+        # For backward compatibility with CMake < 2.8.12
         foreach(_config ${_configs})
-            set_property(TARGET Qt5::Core APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES
-                    $<$<AND:${_isExe},${_isWin32},${_isNotExcluded},${_isPolicyNEW}>:Qt5::WinMain>
-            )
-            # For backward compatibility with CMake < 2.8.12
             set_property(TARGET Qt5::Core APPEND PROPERTY
                 IMPORTED_LINK_INTERFACE_LIBRARIES_${_config}
                     $<$<AND:${_isExe},${_isWin32},${_isNotExcluded},${_isPolicyNEW}>:Qt5::WinMain>

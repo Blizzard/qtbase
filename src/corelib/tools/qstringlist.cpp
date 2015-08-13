@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -516,28 +516,6 @@ QString QtPrivate::QStringList_join(const QStringList *that, const QChar *sep, i
     the latter string list.
 */
 
-#ifndef QT_NO_DATASTREAM
-/*!
-    \fn QDataStream &operator>>(QDataStream &in, QStringList &list)
-    \relates QStringList
-
-    Reads a string list from the given \a in stream into the specified
-    \a list.
-
-    \sa {Serializing Qt Data Types}
-*/
-
-/*!
-    \fn QDataStream &operator<<(QDataStream &out, const QStringList &list)
-    \relates QStringList
-
-    Writes the given string \a list to the specified \a out stream.
-
-    \sa {Serializing Qt Data Types}
-*/
-#endif // QT_NO_DATASTREAM
-
-
 #ifndef QT_NO_REGEXP
 static int indexOfMutating(const QStringList *that, QRegExp &rx, int from)
 {
@@ -702,29 +680,6 @@ int QtPrivate::QStringList_lastIndexOf(const QStringList *that, const QRegularEx
 }
 #endif // QT_NO_REGULAREXPRESSION
 #endif // QT_BOOTSTRAPPED
-
-/*!
-    \fn int QStringList::indexOf(const QString &value, int from = 0) const
-
-    Returns the index position of the first occurrence of \a value in
-    the list, searching forward from index position \a from. Returns
-    -1 if no item matched.
-
-    \sa lastIndexOf(), contains(), QList::indexOf()
-*/
-
-/*!
-    \fn int QStringList::lastIndexOf(const QString &value, int from = -1) const
-
-    Returns the index position of the last occurrence of \a value in
-    the list, searching backward from index position \a from. If \a
-    from is -1 (the default), the search starts at the last item.
-    Returns -1 if no item matched.
-
-    By default, this function is case sensitive.
-
-    \sa indexOf(), QList::lastIndexOf()
-*/
 
 /*!
     \fn int QStringList::removeDuplicates()

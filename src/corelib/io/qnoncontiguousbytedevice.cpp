@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -94,17 +94,7 @@ QT_BEGIN_NAMESPACE
     Moves the internal read pointer back to the beginning.
     Returns \c false if this was not possible.
 
-    \sa atEnd(), disableReset()
-
-    \internal
-*/
-/*!
-    \fn void QNonContiguousByteDevice::disableReset()
-
-    Disable the reset() call, e.g. it will always
-    do nothing and return false.
-
-    \sa reset()
+    \sa atEnd()
 
     \internal
 */
@@ -131,17 +121,12 @@ QT_BEGIN_NAMESPACE
     \internal
 */
 
-QNonContiguousByteDevice::QNonContiguousByteDevice() : QObject((QObject*)0), resetDisabled(false)
+QNonContiguousByteDevice::QNonContiguousByteDevice() : QObject((QObject*)0)
 {
 }
 
 QNonContiguousByteDevice::~QNonContiguousByteDevice()
 {
-}
-
-void QNonContiguousByteDevice::disableReset()
-{
-    resetDisabled = true;
 }
 
 // FIXME we should scrap this whole implementation and instead change the ByteArrayImpl to be able to cope with sub-arrays?
@@ -176,8 +161,6 @@ bool QNonContiguousByteDeviceBufferImpl::atEnd()
 
 bool QNonContiguousByteDeviceBufferImpl::reset()
 {
-    if (resetDisabled)
-        return false;
     return arrayImpl->reset();
 }
 
@@ -224,9 +207,6 @@ bool QNonContiguousByteDeviceByteArrayImpl::atEnd()
 
 bool QNonContiguousByteDeviceByteArrayImpl::reset()
 {
-    if (resetDisabled)
-        return false;
-
     currentPosition = 0;
     return true;
 }
@@ -234,6 +214,11 @@ bool QNonContiguousByteDeviceByteArrayImpl::reset()
 qint64 QNonContiguousByteDeviceByteArrayImpl::size()
 {
     return byteArray->size();
+}
+
+qint64 QNonContiguousByteDeviceByteArrayImpl::pos()
+{
+    return currentPosition;
 }
 
 QNonContiguousByteDeviceRingBufferImpl::QNonContiguousByteDeviceRingBufferImpl(QSharedPointer<QRingBuffer> rb)
@@ -273,11 +258,13 @@ bool QNonContiguousByteDeviceRingBufferImpl::atEnd()
     return currentPosition >= size();
 }
 
+qint64 QNonContiguousByteDeviceRingBufferImpl::pos()
+{
+    return currentPosition;
+}
+
 bool QNonContiguousByteDeviceRingBufferImpl::reset()
 {
-    if (resetDisabled)
-        return false;
-
     currentPosition = 0;
     return true;
 }
@@ -378,8 +365,6 @@ bool QNonContiguousByteDeviceIoDeviceImpl::atEnd()
 
 bool QNonContiguousByteDeviceIoDeviceImpl::reset()
 {
-    if (resetDisabled)
-        return false;
     bool reset = (initialPosition == 0) ? device->reset() : device->seek(initialPosition);
     if (reset) {
         eof = false; // assume eof is false, it will be true after a read has been attempted
@@ -404,6 +389,14 @@ qint64 QNonContiguousByteDeviceIoDeviceImpl::size()
         return -1;
 
     return device->size() - initialPosition;
+}
+
+qint64 QNonContiguousByteDeviceIoDeviceImpl::pos()
+{
+    if (device->isSequential())
+        return -1;
+
+    return device->pos();
 }
 
 QByteDeviceWrappingIoDevice::QByteDeviceWrappingIoDevice(QNonContiguousByteDevice *bd) : QIODevice((QObject*)0)

@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Intel Corporation
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,6 +36,9 @@
 
 #include <qdebug.h>
 #include <qdir.h>
+#if defined(Q_OS_WIN)
+#include <qtimer.h>
+#endif
 #if defined QPROCESS_DEBUG
 #include <qstring.h>
 #include <ctype.h>
@@ -89,6 +92,8 @@ QT_END_NAMESPACE
 
 #ifdef Q_OS_WIN
 #include <qwineventnotifier.h>
+#else
+#include <private/qcore_unix_p.h>
 #endif
 
 #ifndef QT_NO_PROCESS
@@ -810,20 +815,16 @@ QProcessPrivate::QProcessPrivate()
     deathNotifier = 0;
     childStartedPipe[0] = INVALID_Q_PIPE;
     childStartedPipe[1] = INVALID_Q_PIPE;
-    deathPipe[0] = INVALID_Q_PIPE;
-    deathPipe[1] = INVALID_Q_PIPE;
+    forkfd = -1;
     exitCode = 0;
     crashed = false;
     dying = false;
     emittedReadyRead = false;
     emittedBytesWritten = false;
 #ifdef Q_OS_WIN
-    notifier = 0;
+    stdinWriteTrigger = 0;
     processFinishedNotifier = 0;
 #endif // Q_OS_WIN
-#ifdef Q_OS_UNIX
-    serial = 0;
-#endif
 }
 
 /*!
@@ -849,6 +850,10 @@ void QProcessPrivate::cleanup()
         CloseHandle(pid->hProcess);
         delete pid;
         pid = 0;
+    }
+    if (stdinWriteTrigger) {
+        delete stdinWriteTrigger;
+        stdinWriteTrigger = 0;
     }
     if (processFinishedNotifier) {
         delete processFinishedNotifier;
@@ -880,19 +885,14 @@ void QProcessPrivate::cleanup()
         delete deathNotifier;
         deathNotifier = 0;
     }
-#ifdef Q_OS_WIN
-    if (notifier) {
-        delete notifier;
-        notifier = 0;
-    }
-#endif
     closeChannel(&stdoutChannel);
     closeChannel(&stderrChannel);
     closeChannel(&stdinChannel);
     destroyPipe(childStartedPipe);
-    destroyPipe(deathPipe);
 #ifdef Q_OS_UNIX
-    serial = 0;
+    if (forkfd != -1)
+        qt_safe_close(forkfd);
+    forkfd = -1;
 #endif
 }
 
@@ -1044,9 +1044,9 @@ bool QProcessPrivate::_q_processDied()
         return false;
 #endif
 #ifdef Q_OS_WIN
-    drainOutputPipes();
     if (processFinishedNotifier)
         processFinishedNotifier->setEnabled(false);
+    drainOutputPipes();
 #endif
 
     // the process may have died before it got a chance to report that it was
@@ -1079,6 +1079,17 @@ bool QProcessPrivate::_q_processDied()
         processError = QProcess::Crashed;
         q->setErrorString(QProcess::tr("Process crashed"));
         emit q->error(processError);
+    } else {
+#ifdef QPROCESS_USE_SPAWN
+        // if we're using posix_spawn, waitForStarted always succeeds.
+        // POSIX documents that the sub-process launched by posix_spawn will exit with code
+        // 127 if anything prevents the target program from starting.
+        // http://pubs.opengroup.org/onlinepubs/009695399/functions/posix_spawn.html
+        if (exitStatus == QProcess::NormalExit && exitCode == 127) {
+            processError = QProcess::FailedToStart;
+            q->setErrorString(QProcess::tr("Process failed to start (spawned process exited with code 127)"));
+        }
+#endif
     }
 
     bool wasRunning = (processState == QProcess::Running);
@@ -1446,7 +1457,7 @@ void QProcess::setStandardErrorFile(const QString &fileName, OpenMode mode)
     The following shell command:
     \snippet code/src_corelib_io_qprocess.cpp 2
 
-    Can be accomplished with QProcesses with the following code:
+    Can be accomplished with QProcess with the following code:
     \snippet code/src_corelib_io_qprocess.cpp 3
 */
 void QProcess::setStandardOutputProcess(QProcess *destination)
@@ -1754,6 +1765,9 @@ QProcessEnvironment QProcess::processEnvironment() const
 
     If msecs is -1, this function will not time out.
 
+    \note On some UNIX operating systems, this function may return true but
+    the process may later report a QProcess::FailedToStart error.
+
     \sa started(), waitForReadyRead(), waitForBytesWritten(), waitForFinished()
 */
 bool QProcess::waitForStarted(int msecs)
@@ -1793,8 +1807,7 @@ bool QProcess::waitForBytesWritten(int msecs)
         bool started = waitForStarted(msecs);
         if (!started)
             return false;
-        if (msecs != -1)
-            msecs -= stopWatch.elapsed();
+        msecs = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
     }
 
     return d->waitForBytesWritten(msecs);
@@ -1830,8 +1843,7 @@ bool QProcess::waitForFinished(int msecs)
         bool started = waitForStarted(msecs);
         if (!started)
             return false;
-        if (msecs != -1)
-            msecs -= stopWatch.elapsed();
+        msecs = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
     }
 
     return d->waitForFinished(msecs);
@@ -1942,10 +1954,24 @@ qint64 QProcess::writeData(const char *data, qint64 len)
         return 0;
     }
 
+#if defined(Q_OS_WIN)
+    if (!d->stdinWriteTrigger) {
+        d->stdinWriteTrigger = new QTimer;
+        d->stdinWriteTrigger->setSingleShot(true);
+        QObjectPrivate::connect(d->stdinWriteTrigger, &QTimer::timeout,
+                                d, &QProcessPrivate::_q_canWrite);
+    }
+#endif
+
     if (len == 1) {
         d->stdinChannel.buffer.putChar(*data);
+#ifdef Q_OS_WIN
+        if (!d->stdinWriteTrigger->isActive())
+            d->stdinWriteTrigger->start();
+#else
         if (d->stdinChannel.notifier)
             d->stdinChannel.notifier->setEnabled(true);
+#endif
 #if defined QPROCESS_DEBUG
     qDebug("QProcess::writeData(%p \"%s\", %lld) == 1 (written to buffer)",
            data, qt_prettyDebug(data, len, 16).constData(), len);
@@ -1955,8 +1981,13 @@ qint64 QProcess::writeData(const char *data, qint64 len)
 
     char *dest = d->stdinChannel.buffer.reserve(len);
     memcpy(dest, data, len);
+#ifdef Q_OS_WIN
+    if (!d->stdinWriteTrigger->isActive())
+        d->stdinWriteTrigger->start();
+#else
     if (d->stdinChannel.notifier)
         d->stdinChannel.notifier->setEnabled(true);
+#endif
 #if defined QPROCESS_DEBUG
     qDebug("QProcess::writeData(%p \"%s\", %lld) == %lld (written to buffer)",
            data, qt_prettyDebug(data, len, 16).constData(), len, len);
@@ -2022,7 +2053,7 @@ QByteArray QProcess::readAllStandardError()
     printed at the console, and the existing process will continue running
     unaffected.
 
-    \sa pid(), started(), waitForStarted(), setNativeArguments()
+    \sa processId(), started(), waitForStarted(), setNativeArguments()
 */
 void QProcess::start(const QString &program, const QStringList &arguments, OpenMode mode)
 {
@@ -2348,7 +2379,7 @@ int QProcess::execute(const QString &program, const QStringList &arguments)
     QProcess process;
     process.setReadChannelMode(ForwardedChannels);
     process.start(program, arguments);
-    if (!process.waitForFinished(-1))
+    if (!process.waitForFinished(-1) || process.error() == FailedToStart)
         return -2;
     return process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1;
 }
@@ -2371,7 +2402,7 @@ int QProcess::execute(const QString &command)
     QProcess process;
     process.setReadChannelMode(ForwardedChannels);
     process.start(command);
-    if (!process.waitForFinished(-1))
+    if (!process.waitForFinished(-1) || process.error() == FailedToStart)
         return -2;
     return process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1;
 }

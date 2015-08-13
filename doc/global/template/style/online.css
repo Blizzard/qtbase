@@ -25,7 +25,9 @@
   min-width:95px;
   position:relative;
   text-align:center;
-  margin:10px 0 0 0
+  border-left:1px solid #eee;
+  border-right:1px solid #eee;
+  padding:10px 0 10px 0
 }
 #navbar .navbar-toggle:hover figure {
   background:#5caa15
@@ -153,7 +155,8 @@
 }
 #mainmenu {
   float:left;
-  list-style:none
+  list-style:none;
+  margin-left:16px
 }
 #mainmenu li {
   float:left;
@@ -211,6 +214,9 @@
   overflow:hidden;
   min-width:85px;
   font-weight:100
+}
+#menuextras li:last-child a {
+  border-right:1px solid #eee;
 }
 #menuextras li a:before {
   display:inline-block;
@@ -372,11 +378,36 @@
   #menuextras li.navbar-search {
     padding:5px 0
   }
-  .container {
-    padding:0 2%
+  #footerbar .container {
+    padding:0
   }
   body .main {
     margin-top:0px
+  }
+  #footerbar .footer-main .footer-nav {
+    padding:3.9% 0 3.9% 3%;
+    border-bottom:1px solid #413d3b;
+    float:none;
+    display:block;
+    width:auto
+  }
+  #footerbar .footer-main .theqtcompany {
+    clear:both;
+    float:left;
+    margin:30px 0 28px 3%
+  }
+  #footerbar .footer-main .footer-social {
+    float:left;
+    padding:30px 0px 0px 3%
+  }
+  #footerbar #menu-footer-submenu {
+    clear:both;
+    float:none;
+    display:block;
+    padding:0px 0px 3.9% 3%
+  }
+  ul#menu-footer-submenu {
+    margin-left: 0
   }
 }
 .in-page-nav {
@@ -449,8 +480,9 @@ body.qt-account #navbar .navbar-oneQt h2 {
   margin-bottom:40px
 }
 .cookies_yum {
-  background-color:#006325;
+  background-color:#d6d6d6;
   display:none;
+  line-height:1.625em;
   width:100%
 }
 .cookies_yum img {
@@ -462,18 +494,18 @@ body.qt-account #navbar .navbar-oneQt h2 {
 }
 .cookies_yum div {
   margin:0 auto;
-  max-width:1180px;
+  max-width:1280px;
   min-height:30px;
   padding:6px 0px 6px 0px;
   position:relative
 }
 .cookies_yum p {
-  color:white;
+  color:#585a5c;
   margin:0px;
   font-size:0.79em;
   display:inline-block;
   line-height:1.2;
-  padding:0 30px 0 40px
+  padding:0 30px 0 50px
 }
 .cookies_yum p a {
   white-space:nowrap
@@ -484,13 +516,14 @@ body.qt-account #navbar .navbar-oneQt h2 {
 .cookies_yum .close {
   width:15px;
   height:15px;
-  background-image:url("../images/cookiebar-x.png");
+  background-image:url("cookiebar-x.png");
   background-size:15px 30px;
   background-position:top left;
   cursor:pointer;
-  top:6px;
-  right:6px;
-  position:absolute
+  top:13px;
+  right:13px;
+  position:absolute;
+  transition:none;
 }
 .cookies_yum .close:hover {
   background-position:bottom left
@@ -691,7 +724,7 @@ body.qt-account #navbar .navbar-oneQt h2 {
   left:0;
   width:100%
 }
-#footerbar .footer-main .footer-nav {
+#footerbar .footer-nav {
   display:inline;
   float:left
 }
@@ -734,29 +767,20 @@ body.qt-account #navbar .navbar-oneQt h2 {
 #footerbar .footer-main .footer-nav .sub-menu li a:hover,#footerbar .footer-main .footer-nav .sub-menu li.current-menu-item a {
   color:#eee
 }
-#footerbar .footer-main .footer-logo {
+#footerbar .theqtcompany {
+  background:url("theqtcompany.png") no-repeat;
+  background-size:100%;
+  width:150px;
+  height:68px;
   display:inline;
   float:right;
-  padding:29px 0 28px 10px;
-  margin-left:30px;
-  width:56px
+  margin:29px 0 28px 30px
 }
-#footerbar .footer-main .footer-logo:before {
-  content:attr(data-icon);
-  font-family:'Qt Icons';
-  width:100%;
-  line-height:1.2;
-  display:inline-block;
-  font-size:1.875em;
-  color:#706e6d
-}
-#footerbar .footer-main .footer-logo:hover {
-  padding:31px 0 26px 10px
-}
-#footerbar .footer-main .footer-social {
+#footerbar .footer-social {
   display:inline;
   float:right;
-  padding-top:31px
+  padding-top:31px;
+  width:164px
 }
 #footerbar .footer-main .footer-social>div {
   margin-left:0.1em;
@@ -848,19 +872,22 @@ body.qt-account #navbar .navbar-oneQt h2 {
 .clearfix {
   *zoom:1
 }
-html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td,article,aside,canvas,details,embed,figure,figcaption,footer,header,hgroup,menu,nav,output,ruby,section,summary,time,mark,audio,video {
+.clearfix .right {
+  float:right
+}
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,img,ins,kbd,q,s,samp,small,strike,strong,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td,article,aside,canvas,details,embed,figure,figcaption,footer,header,hgroup,menu,nav,output,ruby,section,summary,time,mark,audio,video {
   margin:0;
   padding:0;
   border:0;
   font-size:100%
 }
-html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,caption,article,aside,canvas,details,embed,figure,figcaption,footer,header,hgroup,menu,nav,output,ruby,section,summary,time,mark,audio,video {
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,img,ins,kbd,q,s,samp,small,strike,strong,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,caption,article,aside,canvas,details,embed,figure,figcaption,footer,header,hgroup,menu,nav,output,ruby,section,summary,time,mark,audio,video {
   vertical-align:baseline
 }
 body {
   font-family:“Open Sans”, Arial, Helvetica, sans-serif;
   line-height:1.5;
-  font-weight:300
+  font-weight:400
 }
 h1,h2,h3,h4,h5,h6 {
   font-weight:300
@@ -959,7 +986,7 @@ a:hover {
   color:#46a2da
 }
 .main,.navbar-header,#footerbar>div {
-  max-width:1500px;
+  max-width:1280px;
   width:95%;
   margin:0 auto
 }
@@ -1083,8 +1110,14 @@ dd {
   margin-bottom:1.56em
 }
 .mainContent li {
-  margin-bottom:0.8em;
+  margin-top:0.8em;
   line-height:1.25em
+}
+.mainContent li.level2 {
+  margin-left:10px;
+  margin-top:0.4em;
+  font-size:0.9375em;
+  line-height:1.15em;
 }
 .mainContent p {
   line-height:1.56em;
@@ -1093,7 +1126,7 @@ dd {
   max-width:85%
 }
 .mainContent b {
-  font-weight:400
+  font-weight:600
 }
 .context ul {
   margin-bottom:1.5em
@@ -1163,7 +1196,7 @@ li a.active {
   position:absolute
 }
 .flowList.odd {
-  background-color:#eee
+  background-color:#f9f9f9
 }
 .context ul>li,.doc-column ul>li {
   list-style-image:url("list_arrow.png");
@@ -1180,8 +1213,14 @@ li a.active {
   padding:0px;
   min-height:2em
 }
-.context h4,.context h3,.context h2 {
+.context h2 {
   font-size:2.1875em
+}
+.context h3 {
+  font-size:1.75em
+}
+.context h4 {
+  font-size:1.375em
 }
 .context p img {
   margin-top:0.75em;
@@ -1191,7 +1230,7 @@ li a.active {
   vertical-align:initial
 }
 table .odd {
-  background-color:#eee
+  background-color:#f9f9f9
 }
 table thead {
   text-align:left;
@@ -1207,7 +1246,7 @@ table td,table th {
 table.alignedsummary,table.propsummary {
   width:initial
 }
-div.main_index .row:first-child {
+div.main_index .row {
   border-bottom:1px solid #eee
 }
 div.main_index .row {
@@ -1556,6 +1595,11 @@ input.gsc-search-button:hover {
   cursor: pointer;
 }
 
+input.gsc-search-button:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .gsc-search-box-tools .gsc-clear-button {
   display: none !important;
   visibility: none !important;
@@ -1570,6 +1614,7 @@ input.gsc-input {
   border: 1px solid #d6d6d6 !important;
   border-radius: 5px !important;
   box-sizing: border-box !important;
+  -moz-box-sizing: border-box !important;
   color: #868482 !important;
   outline: 0 none !important;
   padding: 9px 10px 10px !important;
@@ -1588,3 +1633,9 @@ input:focus {
   box-shadow: 0 0 5px #46a2da;
   color: #000;
 }
+
+a.qa-mark:target:before {
+  content: "***";
+  color: #ff0000;
+}
+

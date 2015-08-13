@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -145,6 +145,7 @@ static inline void imeNotifyCancelComposition(HWND hwnd)
 */
 
 
+HIMC QWindowsInputContext::m_defaultContext = 0;
 
 QWindowsInputContext::CompositionContext::CompositionContext() :
     hwnd(0), haveCaret(false), position(0), isComposing(false)
@@ -155,12 +156,27 @@ QWindowsInputContext::QWindowsInputContext() :
     m_WM_MSIME_MOUSE(RegisterWindowMessage(L"MSIMEMouseOperation")),
     m_endCompositionRecursionGuard(false)
 {
-    connect(QGuiApplication::inputMethod(), SIGNAL(cursorRectangleChanged()),
-            this, SLOT(cursorRectChanged()));
+    connect(QGuiApplication::inputMethod(), &QInputMethod::cursorRectangleChanged,
+            this, &QWindowsInputContext::cursorRectChanged);
 }
 
 QWindowsInputContext::~QWindowsInputContext()
 {
+}
+
+bool QWindowsInputContext::hasCapability(Capability capability) const
+{
+    switch (capability) {
+    case QPlatformInputContext::HiddenTextCapability:
+#ifndef Q_OS_WINCE
+        return false; // QTBUG-40691, do not show IME on desktop for password entry fields.
+#else
+        break; // Windows CE: Show software keyboard.
+#endif
+    default:
+        break;
+    }
+    return true;
 }
 
 /*!
@@ -173,7 +189,7 @@ void QWindowsInputContext::reset()
     if (!m_compositionContext.hwnd)
         return;
     qCDebug(lcQpaInputMethods) << __FUNCTION__;
-    if (m_compositionContext.isComposing && m_compositionContext.focusObject.isNull()) {
+    if (m_compositionContext.isComposing && !m_compositionContext.focusObject.isNull()) {
         QInputMethodEvent event;
         if (!m_compositionContext.composition.isEmpty())
             event.setCommitString(m_compositionContext.composition);
@@ -182,6 +198,35 @@ void QWindowsInputContext::reset()
     }
     imeNotifyCancelComposition(m_compositionContext.hwnd);
     doneContext();
+}
+
+void QWindowsInputContext::setFocusObject(QObject *object)
+{
+    // ### fixme: On Windows 8.1, it has been observed that the Input context
+    // remains active when this happens resulting in a lock-up. Consecutive
+    // key events still have VK_PROCESSKEY set and are thus ignored.
+    if (m_compositionContext.isComposing)
+        imeNotifyCancelComposition(m_compositionContext.hwnd);
+
+    const QWindow *window = QGuiApplication::focusWindow();
+    if (object && window && window->handle()) {
+        QWindowsWindow *platformWindow = QWindowsWindow::baseWindowOf(window);
+        if (inputMethodAccepted()) {
+            // Re-enable IME by associating default context saved on first disabling.
+            if (platformWindow->testFlag(QWindowsWindow::InputMethodDisabled)) {
+                ImmAssociateContext(platformWindow->handle(), QWindowsInputContext::m_defaultContext);
+                platformWindow->clearFlag(QWindowsWindow::InputMethodDisabled);
+            }
+        } else {
+            // Disable IME by associating 0 context. Store context first time.
+            if (!platformWindow->testFlag(QWindowsWindow::InputMethodDisabled)) {
+                const HIMC oldImC = ImmAssociateContext(platformWindow->handle(), 0);
+                platformWindow->setFlag(QWindowsWindow::InputMethodDisabled);
+                if (!QWindowsInputContext::m_defaultContext && oldImC)
+                    QWindowsInputContext::m_defaultContext = oldImC;
+            }
+        }
+    }
 }
 
 /*!
@@ -252,33 +297,6 @@ void QWindowsInputContext::invokeAction(QInputMethod::Action action, int cursorP
     ImmReleaseContext(m_compositionContext.hwnd, himc);
 }
 
-static HIMC defaultContext = 0;
-
-void QWindowsInputContext::setFocusObject(QObject *object)
-{
-    // ### fixme: On Windows 8.1, it has been observed that the Input context
-    // remains active when this happens resulting in a lock-up. Consecutive
-    // key events still have VK_PROCESSKEY set and are thus ignored.
-    if (m_compositionContext.isComposing)
-        imeNotifyCancelComposition(m_compositionContext.hwnd);
-
-    QWindow *window = qApp->focusWindow();
-    if (object && window) {
-        HWND hwnd = reinterpret_cast<HWND>(window->winId());
-        if (inputMethodAccepted()) {
-            // enable ime
-            if (defaultContext)
-                ImmAssociateContext(hwnd, defaultContext);
-        }
-        else {
-            // disable ime
-            HIMC oldimc = ImmAssociateContext(hwnd, 0);
-            if (!defaultContext)
-                defaultContext = oldimc;
-        }
-    }
-}
-
 QWindowsInputContext *QWindowsInputContext::instance()
 {
     return static_cast<QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());
@@ -343,7 +361,7 @@ bool QWindowsInputContext::startComposition(HWND hwnd)
     if (!fo)
         return false;
     // This should always match the object.
-    QWindow *window = qApp->focusWindow();
+    QWindow *window = QGuiApplication::focusWindow();
     if (!window)
         return false;
     qCDebug(lcQpaInputMethods) << __FUNCTION__ << fo << window;
@@ -543,7 +561,7 @@ bool QWindowsInputContext::handleIME_Request(WPARAM wParam,
 
 int QWindowsInputContext::reconvertString(RECONVERTSTRING *reconv)
 {
-    QObject *fo = qApp->focusObject();
+    QObject *fo = QGuiApplication::focusObject();
     if (!fo)
         return false;
 

@@ -18,12 +18,18 @@ defineReplace(qtLibraryTarget) {
    mac:CONFIG(shared, static|shared):contains(QT_CONFIG, qt_framework) {
       QMAKE_FRAMEWORK_BUNDLE_NAME = $$LIBRARY_NAME
       export(QMAKE_FRAMEWORK_BUNDLE_NAME)
-   } else {
-       # insert the major version of Qt in the library name
-       # unless it's a framework build
-       LIBRARY_NAME ~= s,^Qt,Qt$$QT_MAJOR_VERSION,
    }
    return($$LIBRARY_NAME$$qtPlatformTargetSuffix())
+}
+
+defineReplace(qt5LibraryTarget) {
+   LIBRARY_NAME = $$qtLibraryTarget($$1)
+   isEmpty(QMAKE_FRAMEWORK_BUNDLE_NAME) {
+       # Insert the major version of Qt in the library name
+       # unless it's a framework build.
+       LIBRARY_NAME ~= s,^Qt,Qt$$QT_MAJOR_VERSION,
+   }
+   return($$LIBRARY_NAME)
 }
 
 defineTest(qtAddLibrary) {
@@ -68,6 +74,7 @@ defineTest(qtAddModule) {
         using_privates = true
         export(using_privates)
     }
+    contains(MODULE_CONFIG, ltcg): CONFIG += link_ltcg
 
     qtProcessModuleFlags(CONFIG, QT.$${1}.CONFIG)
     qtProcessModuleFlags(DEFINES, QT.$${1}.DEFINES)
@@ -79,7 +86,7 @@ defineTest(qtAddModule) {
     unset(LINKAGE)
     mac:contains(MODULE_CONFIG, lib_bundle) {
           FRAMEWORK_INCLUDE = $${MODULE_LIBS}/$${MODULE_NAME}.framework/Headers
-          !qt_no_framework_direct_includes:exists($$FRAMEWORK_INCLUDE) {
+          !qt_no_framework_direct_includes {
                INCLUDEPATH *= $$FRAMEWORK_INCLUDE
           }
           contains(MODULE_CONFIG, internal_module): \
@@ -99,7 +106,7 @@ defineTest(qtAddModule) {
     # to give access to sources or include files, and not for linking.
     !isEmpty(MODULE_LIBS):!contains(MODULE_CONFIG, no_link) {
 
-        # Re-insert the major version in the library name (cf qtLibraryTarget above)
+        # Re-insert the major version in the library name (cf qt5LibraryTarget above)
         # unless it's a framework build
         !mac|!contains(MODULE_CONFIG, lib_bundle): \
             MODULE_NAME ~= s,^Qt,Qt$$QT_MAJOR_VERSION,
@@ -178,7 +185,7 @@ defineTest(qtAddRpathLink) {
     # paths OTOH need to be put there.
     pubqt = $$replace(1, -private$, _private)
     pubdep = $$resolve_depends(pubqt, "QT.")
-    privdep = $$resolve_depends(pubqt, "QT.", ".depends" ".private_depends" ".run_depends")
+    privdep = $$resolve_depends(pubqt, "QT.", ".depends" ".run_depends")
     privdep -= $$pubdep
     rpaths =
     for(dep, privdep): \
@@ -231,11 +238,12 @@ defineTest(qtAddToolEnv) {
             equals(ds, /) {
                 contains($${env}.CONFIG, prepend): infix = \${$$name:+:\$$$name}
                 else: infix =
-                val = "$$name=$$join(value, :)$$infix"
+                val = "$$name=$$shell_quote($$join(value, :))$$infix"
             } else {
                 # Escape closing parens when expanding the variable, otherwise cmd confuses itself.
                 contains($${env}.CONFIG, prepend): infix = ;%$$name:)=^)%
                 else: infix =
+                value ~= s,\\),^),g
                 val = "(set $$name=$$join(value, ;)$$infix) &"
             }
             isEmpty(3): !contains(TEMPLATE, vc.*) {
@@ -251,7 +259,7 @@ defineTest(qtAddToolEnv) {
 # target variable, dependency var name, [non-empty: prepare for system(), not make]
 defineTest(qtAddTargetEnv) {
     deps = $$replace($$2, -private$, _private)
-    deps = $$resolve_depends(deps, "QT.", ".depends" ".private_depends" ".run_depends")
+    deps = $$resolve_depends(deps, "QT.", ".depends" ".run_depends")
     !isEmpty(deps) {
         ptypes =
         for(dep, deps) {
@@ -265,6 +273,8 @@ defineTest(qtAddTargetEnv) {
             deppath.name = PATH
         } else:contains(QMAKE_HOST.os, Linux|FreeBSD|OpenBSD|NetBSD|DragonFly|SunOS|HP-UX|QNX|GNU) {
             deppath.name = LD_LIBRARY_PATH
+        } else:contains(QMAKE_HOST.os, Haiku) {
+            deppath.name = LIBRARY_PATH
         } else:equals(QMAKE_HOST.os, Darwin) {
             contains(QT_CONFIG, qt_framework): \
                 deppath.name = DYLD_FRAMEWORK_PATH
@@ -301,15 +311,11 @@ defineReplace(pkgConfigExecutable) {
     isEmpty(PKG_CONFIG) {
         PKG_CONFIG = pkg-config
 
-        !isEmpty(PKG_CONFIG_SYSROOT_DIR) {
-            win32:isEmpty(MINGW_IN_SHELL):PKG_CONFIG = set PKG_CONFIG_SYSROOT_DIR=$$PKG_CONFIG_SYSROOT_DIR& $$PKG_CONFIG
-            else:PKG_CONFIG = PKG_CONFIG_SYSROOT_DIR=\"$$PKG_CONFIG_SYSROOT_DIR\" $$PKG_CONFIG
-        }
-
-        !isEmpty(PKG_CONFIG_LIBDIR) {
-            win32:isEmpty(MINGW_IN_SHELL):PKG_CONFIG = set PKG_CONFIG_LIBDIR=$$PKG_CONFIG_LIBDIR& $$PKG_CONFIG
-            else:PKG_CONFIG = PKG_CONFIG_LIBDIR=\"$$PKG_CONFIG_LIBDIR\" $$PKG_CONFIG
-        }
+        sysroot.name = PKG_CONFIG_SYSROOT_DIR
+        sysroot.value = $$PKG_CONFIG_SYSROOT_DIR
+        libdir.name = PKG_CONFIG_LIBDIR
+        libdir.value = $$PKG_CONFIG_LIBDIR
+        qtAddToolEnv(PKG_CONFIG, sysroot libdir, SYS)
     }
 
     equals(QMAKE_HOST.os, Windows): \

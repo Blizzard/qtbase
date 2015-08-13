@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -122,9 +122,11 @@ private slots:
     void flaggedItems_data();
     void flaggedItems();
     void pixmapIcon();
+#ifndef QT_NO_WHEELEVENT
     void mouseWheel_data();
     void mouseWheel();
-    void wheelClosingPopup();
+    void popupWheelHandling();
+#endif // !QT_NO_WHEELEVENT
     void layoutDirection();
     void itemListPosition();
     void separatorItem_data();
@@ -158,6 +160,7 @@ private slots:
     void highlightedSignal();
     void itemData();
     void task_QTBUG_31146_popupCompletion();
+    void task_QTBUG_41288_completerChangesCurrentIndex();
     void keyboardSelection();
     void setCustomModelAndView();
     void updateDelegateOnEditableChange();
@@ -527,6 +530,23 @@ void tst_QComboBox::sizeAdjustPolicy()
         testWidget->removeItem(0);
     QCOMPARE(testWidget->sizeHint(), content);
     testWidget->setMinimumContentsLength(0);
+    QVERIFY(testWidget->sizeHint().width() < content.width());
+
+    // check AdjustToContents changes when model changes
+    content = testWidget->sizeHint();
+    QStandardItemModel *model = new QStandardItemModel(2, 1, testWidget);
+    testWidget->setModel(model);
+    QVERIFY(testWidget->sizeHint().width() < content.width());
+
+    // check AdjustToContents changes when a row is inserted into the model
+    content = testWidget->sizeHint();
+    QStandardItem *item = new QStandardItem(QStringLiteral("This is an item"));
+    model->appendRow(item);
+    QVERIFY(testWidget->sizeHint().width() > content.width());
+
+    // check AdjustToContents changes when model is reset
+    content = testWidget->sizeHint();
+    model->clear();
     QVERIFY(testWidget->sizeHint().width() < content.width());
 }
 
@@ -1576,6 +1596,35 @@ void tst_QComboBox::setModel()
     box.setModel(new QStandardItemModel(2,1, &box));
     QCOMPARE(box.currentIndex(), 0);
     QVERIFY(box.model() != oldModel);
+
+    // set a new root index
+    QModelIndex rootModelIndex;
+    rootModelIndex = box.model()->index(0, 0);
+    QVERIFY(rootModelIndex.isValid());
+    box.setRootModelIndex(rootModelIndex);
+    QCOMPARE(box.rootModelIndex(), rootModelIndex);
+
+    // change the model, ensure that the root index gets reset
+    oldModel = box.model();
+    box.setModel(new QStandardItemModel(2, 1, &box));
+    QCOMPARE(box.currentIndex(), 0);
+    QVERIFY(box.model() != oldModel);
+    QVERIFY(box.rootModelIndex() != rootModelIndex);
+    QVERIFY(box.rootModelIndex() == QModelIndex());
+
+    // check that setting the very same model doesn't move the current item
+    box.setCurrentIndex(1);
+    QCOMPARE(box.currentIndex(), 1);
+    box.setModel(box.model());
+    QCOMPARE(box.currentIndex(), 1);
+
+    // check that setting the very same model doesn't move the root index
+    rootModelIndex = box.model()->index(0, 0);
+    QVERIFY(rootModelIndex.isValid());
+    box.setRootModelIndex(rootModelIndex);
+    QCOMPARE(box.rootModelIndex(), rootModelIndex);
+    box.setModel(box.model());
+    QCOMPARE(box.rootModelIndex(), rootModelIndex);
 }
 
 void tst_QComboBox::setCustomModelAndView()
@@ -1975,6 +2024,7 @@ void tst_QComboBox::pixmapIcon()
     QCOMPARE( box.itemIcon(1).isNull(), false );
 }
 
+#ifndef QT_NO_WHEELEVENT
 // defined to be 120 by the wheel mouse vendors according to the docs
 #define WHEEL_DELTA 120
 
@@ -2037,9 +2087,9 @@ void tst_QComboBox::mouseWheel()
     }
 }
 
-void tst_QComboBox::wheelClosingPopup()
+void tst_QComboBox::popupWheelHandling()
 {
-    // QTBUG-40656, combo and other popups should close when the main window gets a wheel event.
+    // QTBUG-40656, QTBUG-42731 combo and other popups should not be affected by wheel events.
     QScrollArea scrollArea;
     scrollArea.move(300, 300);
     QWidget *widget = new QWidget;
@@ -2058,10 +2108,14 @@ void tst_QComboBox::wheelClosingPopup()
     QVERIFY(QTest::qWaitForWindowExposed(&scrollArea));
     comboBox->showPopup();
     QTRY_VERIFY(comboBox->view() && comboBox->view()->isVisible());
+    const QPoint popupPos = comboBox->view()->pos();
     QWheelEvent event(QPointF(10, 10), WHEEL_DELTA, Qt::NoButton, Qt::NoModifier);
     QVERIFY(QCoreApplication::sendEvent(scrollArea.windowHandle(), &event));
-    QTRY_VERIFY(!comboBox->view()->isVisible());
+    QCoreApplication::processEvents();
+    QVERIFY(comboBox->view()->isVisible());
+    QCOMPARE(comboBox->view()->pos(), popupPos);
 }
+#endif // !QT_NO_WHEELEVENT
 
 void tst_QComboBox::layoutDirection()
 {
@@ -3021,6 +3075,44 @@ void tst_QComboBox::task_QTBUG_31146_popupCompletion()
     QTest::keyClick(comboBox.completer()->popup(), Qt::Key_Up);
     QTest::keyClick(comboBox.completer()->popup(), Qt::Key_Enter);
     QCOMPARE(comboBox.currentIndex(), 0);
+}
+
+void tst_QComboBox::task_QTBUG_41288_completerChangesCurrentIndex()
+{
+    QComboBox comboBox;
+    comboBox.setEditable(true);
+
+    comboBox.addItems(QStringList() << QStringLiteral("111") << QStringLiteral("222"));
+
+    comboBox.show();
+    comboBox.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&comboBox));
+
+    {
+        // change currentIndex() by keyboard
+        comboBox.lineEdit()->selectAll();
+        QTest::keyClicks(comboBox.lineEdit(), "222");
+        QTest::keyClick(comboBox.lineEdit(), Qt::Key_Enter);
+        QCOMPARE(comboBox.currentIndex(), 1);
+
+        QTest::keyClick(&comboBox, Qt::Key_Up);
+        comboBox.lineEdit()->selectAll();
+        QTest::keyClick(comboBox.lineEdit(), Qt::Key_Enter);
+        QCOMPARE(comboBox.currentIndex(), 0);
+    }
+
+    {
+        // change currentIndex() programmatically
+        comboBox.lineEdit()->selectAll();
+        QTest::keyClicks(comboBox.lineEdit(), "222");
+        QTest::keyClick(comboBox.lineEdit(), Qt::Key_Enter);
+        QCOMPARE(comboBox.currentIndex(), 1);
+
+        comboBox.setCurrentIndex(0);
+        comboBox.lineEdit()->selectAll();
+        QTest::keyClick(comboBox.lineEdit(), Qt::Key_Enter);
+        QCOMPARE(comboBox.currentIndex(), 0);
+    }
 }
 
 void tst_QComboBox::keyboardSelection()

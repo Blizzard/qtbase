@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -53,6 +53,8 @@
 #include <qscreen.h>
 #include <qscopedpointer.h>
 #include <qstyleditemdelegate.h>
+#include <qstringlistmodel.h>
+#include <qsortfilterproxymodel.h>
 
 static inline void setFrameless(QWidget *w)
 {
@@ -180,6 +182,16 @@ public:
         { doAutoScroll(); }
 };
 
+class GeometriesTestView : public QTableView
+{
+    Q_OBJECT
+public:
+    GeometriesTestView() : QTableView(), updateGeometriesCalled(false) {}
+    bool updateGeometriesCalled;
+protected slots:
+    void updateGeometries() Q_DECL_OVERRIDE { updateGeometriesCalled = true; QTableView::updateGeometries(); }
+};
+
 class tst_QAbstractItemView : public QObject
 {
     Q_OBJECT
@@ -241,6 +253,8 @@ private slots:
     void testFocusPolicy();
     void QTBUG31411_noSelection();
     void QTBUG39324_settingSameInstanceOfIndexWidget();
+    void sizeHintChangeTriggersLayout();
+    void shiftSelectionAfterChangingModelContents();
 };
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -248,7 +262,7 @@ class MyAbstractItemDelegate : public QAbstractItemDelegate
 public:
     MyAbstractItemDelegate() : QAbstractItemDelegate() { calledVirtualDtor = false; }
     void paint(QPainter *, const QStyleOptionViewItem &, const QModelIndex &) const {}
-    QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const { return QSize(); }
+    QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const { return size; }
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &, const QModelIndex &) const
     {
         openedEditor = new QWidget(parent);
@@ -259,9 +273,10 @@ public:
         calledVirtualDtor = true;
         editor->deleteLater();
     }
-
+    void changeSize() { size = QSize(50, 50); emit sizeHintChanged(QModelIndex()); }
     mutable bool calledVirtualDtor;
     mutable QWidget *openedEditor;
+    QSize size;
 };
 
 // Testing get/set functions
@@ -518,11 +533,16 @@ void tst_QAbstractItemView::basic_tests(TestView *view)
     // setIconSize
     view->setIconSize(QSize(16, 16));
     QCOMPARE(view->iconSize(), QSize(16, 16));
+    QSignalSpy spy(view, &QAbstractItemView::iconSizeChanged);
+    QVERIFY(spy.isValid());
     view->setIconSize(QSize(32, 32));
     QCOMPARE(view->iconSize(), QSize(32, 32));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).value<QSize>(), QSize(32, 32));
     // Should this happen?
     view->setIconSize(QSize(-1, -1));
     QCOMPARE(view->iconSize(), QSize(-1, -1));
+    QCOMPARE(spy.count(), 2);
 
     QCOMPARE(view->currentIndex(), QModelIndex());
     QCOMPARE(view->rootIndex(), QModelIndex());
@@ -723,6 +743,34 @@ void tst_QAbstractItemView::columnDelegate()
     QWidget *w = view.indexWidget(index);
     QVERIFY(w);
     QCOMPARE(w->metaObject()->className(), "QWidget");
+}
+
+void tst_QAbstractItemView::sizeHintChangeTriggersLayout()
+{
+    QStandardItemModel model(4, 4);
+    MyAbstractItemDelegate delegate;
+    MyAbstractItemDelegate rowDelegate;
+    MyAbstractItemDelegate columnDelegate;
+
+    GeometriesTestView view;
+    view.setModel(&model);
+    view.setItemDelegate(&delegate);
+    view.setItemDelegateForRow(1, &rowDelegate);
+    view.setItemDelegateForColumn(2, &columnDelegate);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.updateGeometriesCalled = false;
+    delegate.changeSize();
+    QCoreApplication::sendPostedEvents();
+    QVERIFY(view.updateGeometriesCalled);
+    view.updateGeometriesCalled = false;
+    rowDelegate.changeSize();
+    QCoreApplication::sendPostedEvents();
+    QVERIFY(view.updateGeometriesCalled);
+    view.updateGeometriesCalled = false;
+    columnDelegate.changeSize();
+    QCoreApplication::sendPostedEvents();
+    QVERIFY(view.updateGeometriesCalled);
 }
 
 void tst_QAbstractItemView::selectAll()
@@ -1072,7 +1120,7 @@ void tst_QAbstractItemView::setItemDelegate()
     centerOnScreen(&v);
     moveCursorAway(&v);
     v.show();
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     QCursor::setPos(v.geometry().center());
 #endif
     QApplication::setActiveWindow(&v);
@@ -1782,7 +1830,6 @@ void tst_QAbstractItemView::testFocusPolicy()
     QVERIFY(!qApp->focusWidget());
 }
 
-Q_DECLARE_METATYPE(QItemSelection)
 void tst_QAbstractItemView::QTBUG31411_noSelection()
 {
     QWidget window;
@@ -1838,6 +1885,122 @@ void tst_QAbstractItemView::QTBUG39324_settingSameInstanceOfIndexWidget()
     table->setIndexWidget(index, lineEdit);
     QCoreApplication::sendPostedEvents(0, QEvent::DeferredDelete);
     table->show();
+}
+
+void tst_QAbstractItemView::shiftSelectionAfterChangingModelContents()
+{
+    QStringList list;
+    list << "A" << "B" << "C" << "D" << "E" << "F";
+    QStringListModel model(list);
+    QSortFilterProxyModel proxyModel;
+    proxyModel.setSourceModel(&model);
+    proxyModel.sort(0, Qt::AscendingOrder);
+    proxyModel.setDynamicSortFilter(true);
+
+    QPersistentModelIndex indexA(proxyModel.index(0, 0));
+    QPersistentModelIndex indexB(proxyModel.index(1, 0));
+    QPersistentModelIndex indexC(proxyModel.index(2, 0));
+    QPersistentModelIndex indexD(proxyModel.index(3, 0));
+    QPersistentModelIndex indexE(proxyModel.index(4, 0));
+    QPersistentModelIndex indexF(proxyModel.index(5, 0));
+
+    QListView view;
+    view.setModel(&proxyModel);
+    view.setSelectionMode(QAbstractItemView::ExtendedSelection);
+    view.show();
+    QTest::qWaitForWindowExposed(&view);
+
+    // Click "C"
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, view.visualRect(indexC).center());
+    QModelIndexList selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 1);
+    QVERIFY(selected.contains(indexC));
+
+    // Insert new item "B1"
+    model.insertRow(0);
+    model.setData(model.index(0, 0), "B1");
+
+    // Shift-click "D" -> we expect that "C" and "D" are selected
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::ShiftModifier, view.visualRect(indexD).center());
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 2);
+    QVERIFY(selected.contains(indexC));
+    QVERIFY(selected.contains(indexD));
+
+    // Click "D"
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, view.visualRect(indexD).center());
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 1);
+    QVERIFY(selected.contains(indexD));
+
+    // Remove items "B" and "C"
+    model.removeRows(proxyModel.mapToSource(indexB).row(), 1);
+    model.removeRows(proxyModel.mapToSource(indexC).row(), 1);
+    QVERIFY(!indexB.isValid());
+    QVERIFY(!indexC.isValid());
+
+    // Shift-click "F" -> we expect that "D", "E", and "F" are selected
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::ShiftModifier, view.visualRect(indexF).center());
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 3);
+    QVERIFY(selected.contains(indexD));
+    QVERIFY(selected.contains(indexE));
+    QVERIFY(selected.contains(indexF));
+
+    // Move to "A" by pressing "Up" repeatedly
+    while (view.currentIndex() != indexA) {
+        QTest::keyClick(&view, Qt::Key_Up);
+    }
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 1);
+    QVERIFY(selected.contains(indexA));
+
+    // Change the sort order
+    proxyModel.sort(0, Qt::DescendingOrder);
+
+    // Shift-click "F" -> All items should be selected
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::ShiftModifier, view.visualRect(indexF).center());
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), model.rowCount());
+
+    // Restore the old sort order
+    proxyModel.sort(0, Qt::AscendingOrder);
+
+    // Click "D"
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, view.visualRect(indexD).center());
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 1);
+    QVERIFY(selected.contains(indexD));
+
+    // Insert new item "B2"
+    model.insertRow(0);
+    model.setData(model.index(0, 0), "B2");
+
+    // Press Shift+Down -> "D" and "E" should be selected.
+    QTest::keyClick(&view, Qt::Key_Down, Qt::ShiftModifier);
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 2);
+    QVERIFY(selected.contains(indexD));
+    QVERIFY(selected.contains(indexE));
+
+    // Click "A" to reset the current selection starting point;
+    //then select "D" via QAbstractItemView::setCurrentIndex(const QModelIndex&).
+    QTest::mouseClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, view.visualRect(indexA).center());
+    view.setCurrentIndex(indexD);
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 1);
+    QVERIFY(selected.contains(indexD));
+
+    // Insert new item "B3"
+    model.insertRow(0);
+    model.setData(model.index(0, 0), "B3");
+
+    // Press Shift+Down -> "D" and "E" should be selected.
+    QTest::keyClick(&view, Qt::Key_Down, Qt::ShiftModifier);
+    selected = view.selectionModel()->selectedIndexes();
+    QCOMPARE(selected.count(), 2);
+    QVERIFY(selected.contains(indexD));
+    QVERIFY(selected.contains(indexE));
 }
 
 QTEST_MAIN(tst_QAbstractItemView)

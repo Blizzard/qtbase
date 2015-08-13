@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -411,7 +411,7 @@ QPushButton *QDialogButtonBoxPrivate::createButton(QDialogButtonBox::StandardBut
         qWarning("QDialogButtonBox::createButton: Invalid ButtonRole, button not added");
     }
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // Since mnemonics is off by default on Mac, we add a Cmd-D
     // shortcut here to e.g. make the "Don't Save" button work nativly:
     if (sbutton == QDialogButtonBox::Discard)
@@ -852,9 +852,19 @@ void QDialogButtonBoxPrivate::_q_handleButtonClicked()
 {
     Q_Q(QDialogButtonBox);
     if (QAbstractButton *button = qobject_cast<QAbstractButton *>(q->sender())) {
+        // Can't fetch this *after* emitting clicked, as clicked may destroy the button
+        // or change its role. Now changing the role is not possible yet, but arguably
+        // both clicked and accepted/rejected/etc. should be emitted "atomically"
+        // depending on whatever role the button had at the time of the click.
+        const QDialogButtonBox::ButtonRole buttonRole = q->buttonRole(button);
+        QPointer<QDialogButtonBox> guard(q);
+
         emit q->clicked(button);
 
-        switch (q->buttonRole(button)) {
+        if (!guard)
+            return;
+
+        switch (buttonRole) {
         case QPlatformDialogHelper::AcceptRole:
         case QPlatformDialogHelper::YesRole:
             emit q->accepted();

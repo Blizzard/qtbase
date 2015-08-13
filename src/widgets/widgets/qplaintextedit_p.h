@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -72,18 +72,19 @@ public:
     QPlainTextEditControl(QPlainTextEdit *parent);
 
 
-    QMimeData *createMimeDataFromSelection() const;
-    bool canInsertFromMimeData(const QMimeData *source) const;
-    void insertFromMimeData(const QMimeData *source);
-    int hitTest(const QPointF &point, Qt::HitTestAccuracy = Qt::FuzzyHit) const;
-    QRectF blockBoundingRect(const QTextBlock &block) const;
+    QMimeData *createMimeDataFromSelection() const Q_DECL_OVERRIDE;
+    bool canInsertFromMimeData(const QMimeData *source) const Q_DECL_OVERRIDE;
+    void insertFromMimeData(const QMimeData *source) Q_DECL_OVERRIDE;
+    int hitTest(const QPointF &point, Qt::HitTestAccuracy = Qt::FuzzyHit) const Q_DECL_OVERRIDE;
+    QRectF blockBoundingRect(const QTextBlock &block) const Q_DECL_OVERRIDE;
+    QString anchorAt(const QPointF &pos) const Q_DECL_OVERRIDE;
     inline QRectF cursorRect(const QTextCursor &cursor) const {
         QRectF r = QWidgetTextControl::cursorRect(cursor);
         r.setLeft(qMax(r.left(), (qreal) 0.));
         return r;
     }
     inline QRectF cursorRect() { return cursorRect(textCursor()); }
-    void ensureCursorVisible() {
+    void ensureCursorVisible() Q_DECL_OVERRIDE {
         textEdit->ensureCursorVisible();
         emit microFocusChanged();
     }
@@ -93,7 +94,7 @@ public:
     int topBlock;
     QTextBlock firstVisibleBlock() const;
 
-    QVariant loadResource(int type, const QUrl &name) {
+    QVariant loadResource(int type, const QUrl &name) Q_DECL_OVERRIDE {
         return textEdit->loadResource(type, name);
     }
 

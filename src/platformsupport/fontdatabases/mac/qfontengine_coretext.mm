@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,14 +33,17 @@
 
 #include "qfontengine_coretext_p.h"
 
+#include <qpa/qplatformfontdatabase.h>
 #include <QtCore/qendian.h>
 #include <QtCore/qsettings.h>
 
 #include <private/qimage_p.h>
 
+#include <cmath>
+
 QT_BEGIN_NAMESPACE
 
-static float SYNTHETIC_ITALIC_SKEW = tanf(14 * acosf(0) / 90);
+static float SYNTHETIC_ITALIC_SKEW = std::tan(14.f * std::acos(0.f) / 90.f);
 
 bool QCoreTextFontEngine::ct_getSfntTable(void *user_data, uint tag, uchar *buffer, uint *length)
 {
@@ -64,6 +59,29 @@ bool QCoreTextFontEngine::ct_getSfntTable(void *user_data, uint tag, uchar *buff
     *length = tableLength;
     Q_ASSERT(int(*length) > 0);
     return true;
+}
+
+QFont::Weight QCoreTextFontEngine::qtWeightFromCFWeight(float value)
+{
+    if (value >= 0.62)
+        return QFont::Black;
+    if (value >= 0.5)
+        return QFont::ExtraBold;
+    if (value >= 0.4)
+        return QFont::Bold;
+    if (value >= 0.3)
+        return QFont::DemiBold;
+    if (value >= 0.2)
+        return QFont::Medium;
+    if (value == 0.0)
+        return QFont::Normal;
+    if (value <= -0.4)
+        return QFont::Light;
+    if (value <= -0.6)
+        return QFont::ExtraLight;
+    if (value <= -0.8)
+        return QFont::Thin;
+    return QFont::Normal;
 }
 
 static void loadAdvancesForGlyphs(CTFontRef ctfont,
@@ -88,6 +106,16 @@ static void loadAdvancesForGlyphs(CTFontRef ctfont,
     }
 }
 
+static float getTraitValue(CFDictionaryRef allTraits, CFStringRef trait)
+{
+    if (CFDictionaryContainsKey(allTraits, trait)) {
+        CFNumberRef traitNum = (CFNumberRef) CFDictionaryGetValue(allTraits, trait);
+        float v = 0;
+        CFNumberGetValue(traitNum, kCFNumberFloatType, &v);
+        return v;
+    }
+    return 0;
+}
 
 int QCoreTextFontEngine::antialiasingThreshold = 0;
 QFontEngine::GlyphFormat QCoreTextFontEngine::defaultGlyphFormat = QFontEngine::Format_A32;
@@ -129,38 +157,14 @@ QCoreTextFontEngine::~QCoreTextFontEngine()
     CFRelease(ctfont);
 }
 
-static QFont::Weight weightFromInteger(int weight)
-{
-    if (weight < 400)
-        return QFont::Light;
-    else if (weight < 600)
-        return QFont::Normal;
-    else if (weight < 700)
-        return QFont::DemiBold;
-    else if (weight < 800)
-        return QFont::Bold;
-    else
-        return QFont::Black;
-}
-
-int getTraitValue(CFDictionaryRef allTraits, CFStringRef trait)
-{
-    if (CFDictionaryContainsKey(allTraits, trait)) {
-        CFNumberRef traitNum = (CFNumberRef) CFDictionaryGetValue(allTraits, trait);
-        float v = 0;
-        CFNumberGetValue(traitNum, kCFNumberFloatType, &v);
-        // the value we get from CFNumberRef is from -1.0 to 1.0
-        int value = v * 500 + 500;
-        return value;
-    }
-
-    return 0;
-}
-
 void QCoreTextFontEngine::init()
 {
     Q_ASSERT(ctfont != NULL);
     Q_ASSERT(cgFont != NULL);
+
+    face_id.index = 0;
+    QCFString name = CTFontCopyName(ctfont, kCTFontUniqueNameKey);
+    face_id.filename = QCFString::toQString(name).toUtf8();
 
     QCFString family = CTFontCopyFamilyName(ctfont);
     fontDef.family = family;
@@ -182,8 +186,8 @@ void QCoreTextFontEngine::init()
         fontDef.style = QFont::StyleItalic;
 
     CFDictionaryRef allTraits = CTFontCopyTraits(ctfont);
-    fontDef.weight = weightFromInteger(getTraitValue(allTraits, kCTFontWeightTrait));
-    int slant = getTraitValue(allTraits, kCTFontSlantTrait);
+    fontDef.weight = QCoreTextFontEngine::qtWeightFromCFWeight(getTraitValue(allTraits, kCTFontWeightTrait));
+    int slant = static_cast<int>(getTraitValue(allTraits, kCTFontSlantTrait) * 500 + 500);
     if (slant > 500 && !(traits & kCTFontItalicTrait))
         fontDef.style = QFont::StyleOblique;
     CFRelease(allTraits);
@@ -246,11 +250,9 @@ bool QCoreTextFontEngine::stringToCMap(const QChar *str, int len, QGlyphLayout *
 
     int glyph_pos = 0;
     for (int i = 0; i < len; ++i) {
-        if (cgGlyphs[i]) {
-            glyphs->glyphs[glyph_pos] = cgGlyphs[i];
-            if (glyph_pos < i)
-                cgGlyphs[glyph_pos] = cgGlyphs[i];
-        }
+        glyphs->glyphs[glyph_pos] = cgGlyphs[i];
+        if (glyph_pos < i)
+            cgGlyphs[glyph_pos] = cgGlyphs[i];
         glyph_pos++;
 
         // If it's a non-BMP char, skip the lower part of surrogate pair and go
@@ -353,7 +355,10 @@ QFixed QCoreTextFontEngine::averageCharWidth() const
 
 qreal QCoreTextFontEngine::maxCharWidth() const
 {
-    return 0;
+    // ### FIXME: 'W' might not be the widest character, but this is better than nothing
+    const glyph_t glyph = glyphIndex('W');
+    glyph_metrics_t bb = const_cast<QCoreTextFontEngine *>(this)->boundingBox(glyph);
+    return bb.xoff.toReal();
 }
 
 qreal QCoreTextFontEngine::minLeftBearing() const
@@ -643,15 +648,11 @@ QImage QCoreTextFontEngine::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosit
 
     QImage im = imageForGlyph(glyph, subPixelPosition, false, x);
 
-    QImage indexed(im.width(), im.height(), QImage::Format_Indexed8);
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-    indexed.setColorTable(colors);
+    QImage alphaMap(im.width(), im.height(), QImage::Format_Alpha8);
 
     for (int y=0; y<im.height(); ++y) {
         uint *src = (uint*) im.scanLine(y);
-        uchar *dst = indexed.scanLine(y);
+        uchar *dst = alphaMap.scanLine(y);
         for (int x=0; x<im.width(); ++x) {
             *dst = qGray(*src);
             ++dst;
@@ -659,7 +660,7 @@ QImage QCoreTextFontEngine::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosit
         }
     }
 
-    return indexed;
+    return alphaMap;
 }
 
 QImage QCoreTextFontEngine::alphaRGBMapForGlyph(glyph_t glyph, QFixed subPixelPosition, const QTransform &x)
@@ -697,7 +698,7 @@ void QCoreTextFontEngine::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::Shap
 
 QFontEngine::FaceId QCoreTextFontEngine::faceId() const
 {
-    return QFontEngine::FaceId();
+    return face_id;
 }
 
 bool QCoreTextFontEngine::canRender(const QChar *string, int len) const
@@ -711,9 +712,26 @@ bool QCoreTextFontEngine::getSfntTableData(uint tag, uchar *buffer, uint *length
     return ct_getSfntTable((void *)&ctfont, tag, buffer, length);
 }
 
-void QCoreTextFontEngine::getUnscaledGlyph(glyph_t, QPainterPath *, glyph_metrics_t *)
+void QCoreTextFontEngine::getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_metrics_t *metric)
 {
-    // ###
+    CGAffineTransform cgMatrix = CGAffineTransformIdentity;
+
+    qreal emSquare = CTFontGetUnitsPerEm(ctfont);
+    qreal scale = emSquare / CTFontGetSize(ctfont);
+    cgMatrix = CGAffineTransformScale(cgMatrix, scale, -scale);
+
+    QCFType<CGPathRef> cgpath = CTFontCreatePathForGlyph(ctfont, (CGGlyph) glyph, &cgMatrix);
+    ConvertPathInfo info(path, QPointF(0,0));
+    CGPathApply(cgpath, &info, convertCGPathToQPainterPath);
+
+    *metric = boundingBox(glyph);
+    // scale the metrics too
+    metric->width  = QFixed::fromReal(metric->width.toReal() * scale);
+    metric->height = QFixed::fromReal(metric->height.toReal() * scale);
+    metric->x      = QFixed::fromReal(metric->x.toReal() * scale);
+    metric->y      = QFixed::fromReal(metric->y.toReal() * scale);
+    metric->xoff   = QFixed::fromReal(metric->xoff.toReal() * scale);
+    metric->yoff   = QFixed::fromReal(metric->yoff.toReal() * scale);
 }
 
 QFixed QCoreTextFontEngine::emSquareSize() const
@@ -739,6 +757,45 @@ bool QCoreTextFontEngine::supportsTransformation(const QTransform &transform) co
         return true;
     else
         return false;
+}
+
+QFontEngine::Properties QCoreTextFontEngine::properties() const
+{
+    Properties result;
+
+    QCFString psName, copyright;
+    psName = CTFontCopyPostScriptName(ctfont);
+    copyright = CTFontCopyName(ctfont, kCTFontCopyrightNameKey);
+    result.postscriptName = QCFString::toQString(psName).toUtf8();
+    result.copyright = QCFString::toQString(copyright).toUtf8();
+
+    qreal emSquare = CTFontGetUnitsPerEm(ctfont);
+    qreal scale = emSquare / CTFontGetSize(ctfont);
+
+    CGRect cgRect = CTFontGetBoundingBox(ctfont);
+    result.boundingBox = QRectF(cgRect.origin.x * scale,
+                                -CTFontGetAscent(ctfont) * scale,
+                                cgRect.size.width * scale,
+                                cgRect.size.height * scale);
+
+    result.emSquare = emSquareSize();
+    result.ascent = QFixed::fromReal(CTFontGetAscent(ctfont) * scale);
+    result.descent = QFixed::fromReal(CTFontGetDescent(ctfont) * scale);
+    result.leading = QFixed::fromReal(CTFontGetLeading(ctfont) * scale);
+    result.italicAngle = QFixed::fromReal(CTFontGetSlantAngle(ctfont));
+    result.capHeight = QFixed::fromReal(CTFontGetCapHeight(ctfont) * scale);
+    result.lineWidth = QFixed::fromReal(CTFontGetUnderlineThickness(ctfont) * scale);
+
+    if (fontDef.styleStrategy & QFont::ForceIntegerMetrics) {
+        result.ascent = result.ascent.round();
+        result.descent = result.descent.round();
+        result.leading = result.leading.round();
+        result.italicAngle = result.italicAngle.round();
+        result.capHeight = result.capHeight.round();
+        result.lineWidth = result.lineWidth.round();
+    }
+
+    return result;
 }
 
 QT_END_NAMESPACE

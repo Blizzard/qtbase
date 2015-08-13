@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -2298,6 +2299,112 @@ bool QMetaMethod::invoke(QObject *object,
 */
 
 /*!
+    \since 5.5
+
+    Invokes this method on a Q_GADGET. Returns \c true if the member could be invoked.
+    Returns \c false if there is no such member or the parameters did not match.
+
+    The pointer \a gadget must point to an instance of the gadget class.
+
+    The invocation is always synchronous.
+
+    The return value of this method call is placed in \a
+    returnValue. You can pass up to ten arguments (\a val0, \a val1,
+    \a val2, \a val3, \a val4, \a val5, \a val6, \a val7, \a val8,
+    and \a val9) to this method call.
+
+    \warning this method will not test the validity of the arguments: \a gadget
+    must be an instance of the class of the QMetaObject of which this QMetaMethod
+    has been constructed with.  The arguments must have the same type as the ones
+    expected by the method, else, the behavior is undefined.
+
+    \sa Q_ARG(), Q_RETURN_ARG(), qRegisterMetaType(), QMetaObject::invokeMethod()
+*/
+bool QMetaMethod::invokeOnGadget(void* gadget, QGenericReturnArgument returnValue, QGenericArgument val0, QGenericArgument val1, QGenericArgument val2, QGenericArgument val3, QGenericArgument val4, QGenericArgument val5, QGenericArgument val6, QGenericArgument val7, QGenericArgument val8, QGenericArgument val9) const
+{
+   if (!gadget || !mobj)
+        return false;
+
+    // check return type
+    if (returnValue.data()) {
+        const char *retType = typeName();
+        if (qstrcmp(returnValue.name(), retType) != 0) {
+            // normalize the return value as well
+            QByteArray normalized = QMetaObject::normalizedType(returnValue.name());
+            if (qstrcmp(normalized.constData(), retType) != 0) {
+                // String comparison failed, try compare the metatype.
+                int t = returnType();
+                if (t == QMetaType::UnknownType || t != QMetaType::type(normalized))
+                    return false;
+            }
+        }
+    }
+
+    // check argument count (we don't allow invoking a method if given too few arguments)
+    const char *typeNames[] = {
+        returnValue.name(),
+        val0.name(),
+        val1.name(),
+        val2.name(),
+        val3.name(),
+        val4.name(),
+        val5.name(),
+        val6.name(),
+        val7.name(),
+        val8.name(),
+        val9.name()
+    };
+    int paramCount;
+    for (paramCount = 1; paramCount < MaximumParamCount; ++paramCount) {
+        if (qstrlen(typeNames[paramCount]) <= 0)
+            break;
+    }
+    if (paramCount <= QMetaMethodPrivate::get(this)->parameterCount())
+        return false;
+
+    // invoke!
+    void *param[] = {
+        returnValue.data(),
+        val0.data(),
+        val1.data(),
+        val2.data(),
+        val3.data(),
+        val4.data(),
+        val5.data(),
+        val6.data(),
+        val7.data(),
+        val8.data(),
+        val9.data()
+    };
+    int idx_relative = QMetaMethodPrivate::get(this)->ownMethodIndex();
+    Q_ASSERT(QMetaObjectPrivate::get(mobj)->revision >= 6);
+    QObjectPrivate::StaticMetaCallFunction callFunction = mobj->d.static_metacall;
+    if (!callFunction)
+        return false;
+    callFunction(reinterpret_cast<QObject*>(gadget), QMetaObject::InvokeMetaMethod, idx_relative, param);
+    return true;
+}
+
+/*!
+    \fn bool QMetaMethod::invokeOnGadget(void *gadget,
+            QGenericArgument val0 = QGenericArgument(0),
+            QGenericArgument val1 = QGenericArgument(),
+            QGenericArgument val2 = QGenericArgument(),
+            QGenericArgument val3 = QGenericArgument(),
+            QGenericArgument val4 = QGenericArgument(),
+            QGenericArgument val5 = QGenericArgument(),
+            QGenericArgument val6 = QGenericArgument(),
+            QGenericArgument val7 = QGenericArgument(),
+            QGenericArgument val8 = QGenericArgument(),
+            QGenericArgument val9 = QGenericArgument()) const
+
+    \overload
+    \since 5.5
+
+    This overload invokes this method for a \a gadget and ignores return values.
+*/
+
+/*!
     \class QMetaEnum
     \inmodule QtCore
     \brief The QMetaEnum class provides meta-data about an enumerator.
@@ -2558,17 +2665,26 @@ QByteArray QMetaEnum::valueToKeys(int value) const
     int count = mobj->d.data[handle + 2];
     int data = mobj->d.data[handle + 3];
     int v = value;
-    for(int i = 0; i < count; i++) {
+    // reverse iterate to ensure values like Qt::Dialog=0x2|Qt::Window are processed first.
+    for (int i = count - 1; i >= 0; --i) {
         int k = mobj->d.data[data + 2*i + 1];
         if ((k != 0 && (v & k) == k ) ||  (k == value))  {
             v = v & ~k;
             if (!keys.isEmpty())
-                keys += '|';
-            keys += stringData(mobj, mobj->d.data[data + 2*i]);
+                keys.prepend('|');
+            keys.prepend(stringData(mobj, mobj->d.data[data + 2*i]));
         }
     }
     return keys;
 }
+
+/*!
+    \fn QMetaEnum QMetaEnum::fromType()
+    \since 5.5
+
+    Returns the QMetaEnum corresponding to the type in the template parameter.
+    The enum needs to be declared with Q_ENUM.
+*/
 
 static QByteArray qualifiedName(const QMetaEnum &e)
 {
@@ -2713,9 +2829,8 @@ int QMetaProperty::userType() const
     if (isEnumType()) {
         type = QMetaType::type(qualifiedName(menum));
         if (type == QMetaType::UnknownType) {
-            void *argv[] = { &type };
-            mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, idx, argv);
-            if (type == -1 || type == QMetaType::UnknownType)
+            type = registerPropertyType();
+            if (type == QMetaType::UnknownType)
                 return QVariant::Int; // Match behavior of QMetaType::type()
         }
         return type;
@@ -2723,11 +2838,7 @@ int QMetaProperty::userType() const
     type = QMetaType::type(typeName());
     if (type != QMetaType::UnknownType)
         return type;
-    void *argv[] = { &type };
-    mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, idx, argv);
-    if (type != -1)
-        return type;
-    return QMetaType::UnknownType;
+    return registerPropertyType();
 }
 
 /*!
@@ -2791,6 +2902,20 @@ bool QMetaProperty::hasStdCppSet() const
 }
 
 /*!
+    \internal
+    Executes metacall with QMetaObject::RegisterPropertyMetaType flag.
+    Returns id of registered type or QMetaType::UnknownType if a type
+    could not be registered for any reason.
+*/
+int QMetaProperty::registerPropertyType() const
+{
+    int registerResult = -1;
+    void *argv[] = { &registerResult };
+    mobj->static_metacall(QMetaObject::RegisterPropertyMetaType, idx, argv);
+    return registerResult == -1 ? QMetaType::UnknownType : registerResult;
+}
+
+/*!
     Returns the enumerator if this property's type is an enumerator
     type; otherwise the returned value is undefined.
 
@@ -2835,15 +2960,11 @@ QVariant QMetaProperty::read(const QObject *object) const
         }
         if (t == QMetaType::UnknownType) {
             // Try to register the type and try again before reporting an error.
-            int registerResult = -1;
-            void *argv[] = { &registerResult };
-            QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::RegisterPropertyMetaType,
-                                  idx + mobj->propertyOffset(), argv);
-            if (registerResult == -1) {
+            t = registerPropertyType();
+            if (t == QMetaType::UnknownType) {
                 qWarning("QMetaProperty::read: Unable to handle unregistered datatype '%s' for property '%s::%s'", typeName, mobj->className(), name());
                 return QVariant();
             }
-            t = registerResult;
         }
     }
 
@@ -2861,8 +2982,12 @@ QVariant QMetaProperty::read(const QObject *object) const
         value = QVariant(t, (void*)0);
         argv[0] = value.data();
     }
-    QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty,
-                          idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall) {
+        mobj->d.static_metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty, idx, argv);
+    } else {
+        QMetaObject::metacall(const_cast<QObject*>(object), QMetaObject::ReadProperty,
+                              idx + mobj->propertyOffset(), argv);
+    }
 
     if (status != -1)
         return value;
@@ -2911,9 +3036,11 @@ bool QMetaProperty::write(QObject *object, const QVariant &value) const
         else {
             typeName = rawStringData(mobj, typeInfo & TypeNameIndexMask);
             t = QMetaType::type(typeName);
+            if (t == QMetaType::UnknownType)
+                t = registerPropertyType();
+            if (t == QMetaType::UnknownType)
+                return false;
         }
-        if (t == QMetaType::UnknownType)
-            return false;
         if (t != QMetaType::QVariant && t != (uint)value.userType() && (t < QMetaType::User && !v.convert((QVariant::Type)t)))
             return false;
     }
@@ -2932,7 +3059,11 @@ bool QMetaProperty::write(QObject *object, const QVariant &value) const
         argv[0] = &v;
     else
         argv[0] = v.data();
-    QMetaObject::metacall(object, QMetaObject::WriteProperty, idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall)
+        mobj->d.static_metacall(object, QMetaObject::WriteProperty, idx, argv);
+    else
+        QMetaObject::metacall(object, QMetaObject::WriteProperty, idx + mobj->propertyOffset(), argv);
+
     return status;
 }
 
@@ -2949,8 +3080,54 @@ bool QMetaProperty::reset(QObject *object) const
     if (!object || !mobj || !isResettable())
         return false;
     void *argv[] = { 0 };
-    QMetaObject::metacall(object, QMetaObject::ResetProperty, idx + mobj->propertyOffset(), argv);
+    if (priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall)
+        mobj->d.static_metacall(object, QMetaObject::ResetProperty, idx, argv);
+    else
+        QMetaObject::metacall(object, QMetaObject::ResetProperty, idx + mobj->propertyOffset(), argv);
     return true;
+}
+/*!
+    \since 5.5
+
+    Reads the property's value from the given \a gadget. Returns the value
+    if it was able to read it; otherwise returns an invalid variant.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+QVariant QMetaProperty::readOnGadget(const void *gadget) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return read(reinterpret_cast<const QObject*>(gadget));
+}
+
+/*!
+    \since 5.5
+
+    Writes \a value as the property's value to the given \a gadget. Returns
+    true if the write succeeded; otherwise returns \c false.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+bool QMetaProperty::writeOnGadget(void *gadget, const QVariant &value) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return write(reinterpret_cast<QObject*>(gadget), value);
+}
+
+/*!
+    \since 5.5
+
+    Resets the property for the given \a gadget with a reset method.
+    Returns \c true if the reset worked; otherwise returns \c false.
+
+    Reset methods are optional; only a few properties support them.
+
+    This function should only be used if this is a property of a Q_GADGET
+*/
+bool QMetaProperty::resetOnGadget(void *gadget) const
+{
+    Q_ASSERT(priv(mobj->d.data)->flags & PropertyAccessInStaticMetaCall && mobj->d.static_metacall);
+    return reset(reinterpret_cast<QObject*>(gadget));
 }
 
 /*!

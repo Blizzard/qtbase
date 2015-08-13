@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -100,11 +100,18 @@ QString IoUtils::resolvePath(const QString &baseDir, const QString &fileName)
 }
 
 inline static
+bool isSpecialChar(ushort c, const uchar (&iqm)[16])
+{
+    if ((c < sizeof(iqm) * 8) && (iqm[c / 8] & (1 << (c & 7))))
+        return true;
+    return false;
+}
+
+inline static
 bool hasSpecialChars(const QString &arg, const uchar (&iqm)[16])
 {
     for (int x = arg.length() - 1; x >= 0; --x) {
-        ushort c = arg.unicode()[x].unicode();
-        if ((c < sizeof(iqm) * 8) && (iqm[c / 8] & (1 << (c & 7))))
+        if (isSpecialChar(arg.unicode()[x].unicode(), iqm))
             return true;
     }
     return false;
@@ -119,7 +126,7 @@ QString IoUtils::shellQuoteUnix(const QString &arg)
     }; // 0-32 \'"$`<>|;&(){}*?#!~[]
 
     if (!arg.length())
-        return QString::fromLatin1("\"\"");
+        return QString::fromLatin1("''");
 
     QString ret(arg);
     if (hasSpecialChars(ret, iqm)) {
@@ -140,23 +147,38 @@ QString IoUtils::shellQuoteWin(const QString &arg)
         0xff, 0xff, 0xff, 0xff, 0x45, 0x13, 0x00, 0x78,
         0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x10
     };
+    // Shell meta chars that need escaping.
+    static const uchar ism[] = {
+        0x00, 0x00, 0x00, 0x00, 0x40, 0x03, 0x00, 0x50,
+        0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x10
+    }; // &()<>^|
 
     if (!arg.length())
         return QString::fromLatin1("\"\"");
 
     QString ret(arg);
     if (hasSpecialChars(ret, iqm)) {
-        // Quotes are escaped and their preceding backslashes are doubled.
-        // It's impossible to escape anything inside a quoted string on cmd
-        // level, so the outer quoting must be "suspended".
-        ret.replace(QRegExp(QLatin1String("(\\\\*)\"")), QLatin1String("\"\\1\\1\\^\"\""));
-        // The argument must not end with a \ since this would be interpreted
-        // as escaping the quote -- rather put the \ behind the quote: e.g.
-        // rather use "foo"\ than "foo\"
-        int i = ret.length();
-        while (i > 0 && ret.at(i - 1) == QLatin1Char('\\'))
-            --i;
-        ret.insert(i, QLatin1Char('"'));
+        // The process-level standard quoting allows escaping quotes with backslashes (note
+        // that backslashes don't escape themselves, unless they are followed by a quote).
+        // Consequently, quotes are escaped and their preceding backslashes are doubled.
+        ret.replace(QRegExp(QLatin1String("(\\\\*)\"")), QLatin1String("\\1\\1\\\""));
+        // Trailing backslashes must be doubled as well, as they are followed by a quote.
+        ret.replace(QRegExp(QLatin1String("(\\\\+)$")), QLatin1String("\\1\\1"));
+        // However, the shell also interprets the command, and no backslash-escaping exists
+        // there - a quote always toggles the quoting state, but is nonetheless passed down
+        // to the called process verbatim. In the unquoted state, the circumflex escapes
+        // meta chars (including itself and quotes), and is removed from the command.
+        bool quoted = true;
+        for (int i = 0; i < ret.length(); i++) {
+            QChar c = ret.unicode()[i];
+            if (c.unicode() == '"')
+                quoted = !quoted;
+            else if (!quoted && isSpecialChar(c.unicode(), ism))
+                ret.insert(i++, QLatin1Char('^'));
+        }
+        if (!quoted)
+            ret.append(QLatin1Char('^'));
+        ret.append(QLatin1Char('"'));
         ret.prepend(QLatin1Char('"'));
     }
     return ret;

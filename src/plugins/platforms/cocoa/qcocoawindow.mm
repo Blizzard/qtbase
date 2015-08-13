@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -79,31 +71,6 @@ static bool isMouseEvent(NSEvent *ev)
         return true;
     default:
         return false;
-    }
-}
-
-static void selectNextKeyWindow(NSWindow *currentKeyWindow)
-{
-    if (!currentKeyWindow)
-        return;
-
-    const QCocoaAutoReleasePool pool;
-
-    if ([[NSApplication sharedApplication] keyWindow] != currentKeyWindow)
-        return;//currentKeyWindow is not a key window actually.
-
-    NSArray *const windows = [[NSApplication sharedApplication] windows];
-    bool startLookup = false;
-    for (NSWindow *candidate in [windows reverseObjectEnumerator]) {
-        if (!startLookup) {
-            if (candidate == currentKeyWindow)
-                startLookup = true;
-        } else {
-            if ([candidate isVisible] && [candidate canBecomeKeyWindow]) {
-                [candidate makeKeyWindow];
-                break;
-            }
-        }
     }
 }
 
@@ -379,6 +346,7 @@ QCocoaWindow::QCocoaWindow(QWindow *tlw)
     , m_synchedWindowState(Qt::WindowActive)
     , m_windowModality(Qt::NonModal)
     , m_windowUnderMouse(false)
+    , m_ignoreWindowShouldClose(false)
     , m_inConstructor(true)
     , m_inSetVisible(false)
     , m_inSetGeometry(false)
@@ -447,19 +415,34 @@ QCocoaWindow::~QCocoaWindow()
     if (m_isNSWindowChild) {
         if (m_parentCocoaWindow)
             m_parentCocoaWindow->removeChildWindow(this);
-    } else if (parent()) {
+    } else if ([m_contentView superview]) {
         [m_contentView removeFromSuperview];
-    } else if (m_qtView) {
-        [[NSNotificationCenter defaultCenter] removeObserver:m_qtView
-                                              name:nil object:m_nsWindow];
+    }
+
+    // Make sure to disconnect observer in all case if view is valid
+    // to avoid notifications received when deleting when using Qt::AA_NativeWindows attribute
+    if (m_qtView) {
+        [[NSNotificationCenter defaultCenter] removeObserver:m_qtView];
+    }
+
+    // The QNSView object may outlive the corresponding QCocoaWindow object,
+    // for example during app shutdown when the QNSView is embedded in a
+    // foregin NSView hiearchy. Clear the pointers to the QWindow/QCocoaWindow
+    // here to make sure QNSView does not dereference stale pointers.
+    if (m_qtView) {
+        [m_qtView clearQWindowPointers];
+    }
+
+    // While it is unlikely that this window will be in the popup stack
+    // during deletetion we clear any pointers here to make sure.
+    if (QCocoaIntegration::instance()) {
+        QCocoaIntegration::instance()->popupWindowStack()->removeAll(this);
     }
 
     foreach (QCocoaWindow *child, m_childWindows) {
        [m_nsWindow removeChildWindow:child->m_nsWindow];
         child->m_parentCocoaWindow = 0;
     }
-
-    closeActivePopupWindow();
 
     [m_contentView release];
     [m_nsWindow release];
@@ -468,7 +451,13 @@ QCocoaWindow::~QCocoaWindow()
 
 QSurfaceFormat QCocoaWindow::format() const
 {
-    return window()->requestedFormat();
+    QSurfaceFormat format = window()->requestedFormat();
+
+    // Upgrade the default surface format to include an alpha channel. The default RGB format
+    // causes Cocoa to spend an unreasonable amount of time converting it to RGBA internally.
+    if (format == QSurfaceFormat())
+        format.setAlphaBufferSize(8);
+    return format;
 }
 
 void QCocoaWindow::setGeometry(const QRect &rectIn)
@@ -601,9 +590,6 @@ void QCocoaWindow::hide(bool becauseOfAncestor)
     foreach (QCocoaWindow *childWindow, m_childWindows)
         childWindow->hide(true);
 
-    if (window()->transientParent() && m_nsWindow == [[NSApplication sharedApplication] keyWindow])
-        selectNextKeyWindow(m_nsWindow); // Otherwise, Cocoa can do it wrong.
-
     [m_nsWindow orderOut:nil];
 }
 
@@ -648,19 +634,16 @@ void QCocoaWindow::setVisible(bool visible)
         // We need to recreate if the modality has changed as the style mask will need updating
         if (m_windowModality != window()->modality())
             recreateWindow(parent());
+
+        // Register popup windows. The Cocoa platform plugin will forward mouse events
+        // to them and close them when needed.
+        if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip)
+            QCocoaIntegration::instance()->pushPopupWindow(this);
+
         if (parentCocoaWindow) {
             // The parent window might have moved while this window was hidden,
             // update the window geometry if there is a parent.
             setGeometry(window()->geometry());
-
-            // Register popup windows so that the parent window can close them when needed.
-            if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip) {
-                // qDebug() << "transientParent and popup" << window()->type() << Qt::Popup << (window()->type() & Qt::Popup);
-                if (parentCocoaWindow->m_activePopupWindow) {
-                    parentCocoaWindow->closeActivePopupWindow();
-                }
-                parentCocoaWindow->m_activePopupWindow = window();
-            }
 
             if (window()->type() == Qt::Popup) {
                 // QTBUG-30266: a window should not be resizable while a transient popup is open
@@ -713,8 +696,10 @@ void QCocoaWindow::setVisible(bool visible)
                     && [m_nsWindow isKindOfClass:[NSPanel class]]) {
                     [(NSPanel *)m_nsWindow setWorksWhenModal:YES];
                     if (!(parentCocoaWindow && window()->transientParent()->isActive()) && window()->type() == Qt::Popup) {
-                        monitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSLeftMouseDownMask|NSRightMouseDownMask|NSOtherMouseDown handler:^(NSEvent *) {
-                            QWindowSystemInterface::handleMouseEvent(window(), QPointF(-1, -1), QPointF(window()->framePosition() - QPointF(1, 1)), Qt::LeftButton);
+                        monitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSLeftMouseDownMask|NSRightMouseDownMask|NSOtherMouseDownMask|NSMouseMovedMask handler:^(NSEvent *e) {
+                            QPointF localPoint = qt_mac_flipPoint([NSEvent mouseLocation]);
+                            QWindowSystemInterface::handleMouseEvent(window(), window()->mapFromGlobal(localPoint.toPoint()), localPoint,
+                                                                     cocoaButton2QtButton([e buttonNumber]));
                         }];
                     }
                 }
@@ -763,10 +748,11 @@ void QCocoaWindow::setVisible(bool visible)
             [NSEvent removeMonitor:monitor];
             monitor = nil;
         }
+
+        if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip)
+            QCocoaIntegration::instance()->popupWindowStack()->removeAll(this);
+
         if (parentCocoaWindow && window()->type() == Qt::Popup) {
-            if (parentCocoaWindow->m_activePopupWindow) {
-                parentCocoaWindow->closeActivePopupWindow();
-            }
             if (m_resizableTransientParent
                 && !([parentCocoaWindow->m_nsWindow styleMask] & NSFullScreenWindowMask))
                 // QTBUG-30266: a window should not be resizable while a transient popup is open
@@ -813,9 +799,22 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
     if (flags & Qt::FramelessWindowHint)
         return styleMask;
     if ((type & Qt::Popup) == Qt::Popup) {
-        if (!windowIsPopupType(type))
-            styleMask = (NSUtilityWindowMask | NSResizableWindowMask | NSClosableWindowMask |
-                         NSMiniaturizableWindowMask | NSTitledWindowMask);
+        if (!windowIsPopupType(type)) {
+            styleMask = NSUtilityWindowMask;
+            if (!(flags & Qt::CustomizeWindowHint)) {
+                styleMask |= NSResizableWindowMask | NSClosableWindowMask |
+                             NSMiniaturizableWindowMask | NSTitledWindowMask;
+            } else {
+                if (flags & Qt::WindowMaximizeButtonHint)
+                    styleMask |= NSResizableWindowMask;
+                if (flags & Qt::WindowTitleHint)
+                    styleMask |= NSTitledWindowMask;
+                if (flags & Qt::WindowCloseButtonHint)
+                    styleMask |= NSClosableWindowMask;
+                if (flags & Qt::WindowMinimizeButtonHint)
+                    styleMask |= NSMiniaturizableWindowMask;
+            }
+        }
     } else {
         if (type == Qt::Window && !(flags & Qt::CustomizeWindowHint)) {
             styleMask = (NSResizableWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSTitledWindowMask);
@@ -1179,7 +1178,10 @@ void QCocoaWindow::setEmbeddedInForeignView(bool embedded)
 void QCocoaWindow::windowWillMove()
 {
     // Close any open popups on window move
-    closeActivePopupWindow();
+    while (QCocoaWindow *popup = QCocoaIntegration::instance()->popPopupWindow()) {
+        QWindowSystemInterface::handleCloseEvent(popup->window());
+        QWindowSystemInterface::flushWindowSystemEvents();
+    }
 }
 
 void QCocoaWindow::windowDidMove()
@@ -1212,6 +1214,9 @@ void QCocoaWindow::windowDidEndLiveResize()
 
 bool QCocoaWindow::windowShouldClose()
 {
+    // might have been set from qnsview.mm
+    if (m_ignoreWindowShouldClose)
+       return false;
     bool accepted = false;
     QWindowSystemInterface::handleCloseEvent(window(), &accepted);
     QWindowSystemInterface::flushWindowSystemEvents();
@@ -1506,19 +1511,33 @@ void QCocoaWindow::syncWindowState(Qt::WindowState newState)
     }
 
     Qt::WindowState predictedState = newState;
+    if ((m_synchedWindowState & Qt::WindowMaximized) != (newState & Qt::WindowMaximized)) {
+        const int styleMask = [m_nsWindow styleMask];
+        const bool usePerform = styleMask & NSResizableWindowMask;
+        [m_nsWindow setStyleMask:styleMask | NSResizableWindowMask];
+        if (usePerform)
+            [m_nsWindow performZoom : m_nsWindow]; // toggles
+        else
+            [m_nsWindow zoom : m_nsWindow]; // toggles
+        [m_nsWindow setStyleMask:styleMask];
+    }
 
     if ((m_synchedWindowState & Qt::WindowMinimized) != (newState & Qt::WindowMinimized)) {
         if (newState & Qt::WindowMinimized) {
-            [m_nsWindow performMiniaturize : m_nsWindow];
+            if ([m_nsWindow styleMask] & NSMiniaturizableWindowMask)
+                [m_nsWindow performMiniaturize : m_nsWindow];
+            else
+                [m_nsWindow miniaturize : m_nsWindow];
         } else {
             [m_nsWindow deminiaturize : m_nsWindow];
         }
     }
 
+    const bool effMax = m_effectivelyMaximized;
     if ((m_synchedWindowState & Qt::WindowMaximized) != (newState & Qt::WindowMaximized) || (m_effectivelyMaximized && newState == Qt::WindowNoState)) {
         if ((m_synchedWindowState & Qt::WindowFullScreen) == (newState & Qt::WindowFullScreen)) {
             [m_nsWindow zoom : m_nsWindow]; // toggles
-            m_effectivelyMaximized = !m_effectivelyMaximized;
+            m_effectivelyMaximized = !effMax;
         } else if (!(newState & Qt::WindowMaximized)) {
             // it would be nice to change the target geometry that toggleFullScreen will animate toward
             // but there is no known way, so the maximized state is not possible at this time
@@ -1820,15 +1839,6 @@ QMargins QCocoaWindow::frameMargins() const
 void QCocoaWindow::setFrameStrutEventsEnabled(bool enabled)
 {
     m_frameStrutEventsEnabled = enabled;
-}
-
-void QCocoaWindow::closeActivePopupWindow()
-{
-    if (m_activePopupWindow) {
-        QWindowSystemInterface::handleCloseEvent(m_activePopupWindow);
-        QWindowSystemInterface::flushWindowSystemEvents();
-        m_activePopupWindow = 0;
-    }
 }
 
 // QCocoaWindowBuilder

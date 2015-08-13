@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -97,7 +97,10 @@
     of the property changes.
     \c NOTIFY signals for \c MEMBER variables must take zero or one parameter,
     which must be of the same type as the property. The parameter will take the
-    new value of the property.
+    new value of the property. The \c NOTIFY signal should only be emitted when
+    the property has really been changed, to avoid bindings being unnecessarily
+    re-evaluated in QML, for example. Qt emits automatically that signal when
+    needed for MEMBER properties that do not have an explicit setter.
 
     \li A \c REVISION number is optional. If included, it defines
     the property and its notifier signal to be used in a particular
@@ -204,7 +207,7 @@
     section of the class. The required \c READ function is named \c
     priority, and we include a \c WRITE function named \c setPriority.
     The enumeration type must be registered with the \l {Meta-Object
-    System} using the Q_ENUMS() macro. Registering an enumeration type
+    System} using the Q_ENUM() macro. Registering an enumeration type
     makes the enumerator names available for use in calls to
     QObject::setProperty(). We must also provide our own declarations
     for the \c READ and \c WRITE functions. The declaration of MyClass
@@ -225,18 +228,18 @@
 
     In the example, the enumeration type that is the property type is
     declared in MyClass and registered with the \l{Meta-Object System}
-    using the Q_ENUMS() macro. This makes the enumeration values
+    using the Q_ENUM() macro. This makes the enumeration values
     available as strings for use as in the call to \l{QObject::}{setProperty()}. Had
     the enumeration type been declared in another class, its fully
     qualified name (i.e., OtherClass::Priority) would be required, and
     that other class would also have to inherit QObject and register
-    the enumeration type there using the Q_ENUMS() macro.
+    the enumeration type there using the Q_ENUM() macro.
 
-    A similar macro, Q_FLAGS(), is also available. Like Q_ENUMS(), it
+    A similar macro, Q_FLAG(), is also available. Like Q_ENUM(), it
     registers an enumeration type, but it marks the type as being a
     set of \e flags, i.e. values that can be OR'd together. An I/O
     class might have enumeration values \c Read and \c Write and then
-    QObject::setProperty() could accept \c{Read | Write}. Q_FLAGS()
+    QObject::setProperty() could accept \c{Read | Write}. Q_FLAG()
     should be used to register this enumeration type.
 
     \section1 Dynamic Properties

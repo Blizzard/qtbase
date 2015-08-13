@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -155,7 +155,7 @@ namespace QtAndroidInput
     static void longPress(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
     {
         //### TODO: add proper API for Qt 5.2
-        static bool rightMouseFromLongPress = qgetenv("QT_NECESSITAS_COMPATIBILITY_LONG_PRESS").toInt();
+        static bool rightMouseFromLongPress = qEnvironmentVariableIntValue("QT_NECESSITAS_COMPATIBILITY_LONG_PRESS");
         if (!rightMouseFromLongPress)
             return;
         m_ignoreMouseEvents = true;
@@ -638,50 +638,49 @@ namespace QtAndroidInput
         }
     }
 
+    static Qt::KeyboardModifiers mapAndroidModifiers(jint modifiers)
+    {
+        Qt::KeyboardModifiers qmodifiers;
+
+        if (modifiers & 0x00000001) // META_SHIFT_ON
+            qmodifiers |= Qt::ShiftModifier;
+
+        if (modifiers & 0x00000002) // META_ALT_ON
+            qmodifiers |= Qt::AltModifier;
+
+        if (modifiers & 0x00000004) // META_SYM_ON
+            qmodifiers |= Qt::MetaModifier;
+
+        if (modifiers & 0x00001000) // META_CTRL_ON
+            qmodifiers |= Qt::ControlModifier;
+
+        return qmodifiers;
+    }
+
     // maps 0 to the empty string, and anything else to a single-character string
     static inline QString toString(jint unicode)
     {
         return unicode ? QString(QChar(unicode)) : QString();
     }
 
-    static void keyDown(JNIEnv */*env*/, jobject /*thiz*/, jint key, jint unicode, jint modifier)
+    static void keyDown(JNIEnv */*env*/, jobject /*thiz*/, jint key, jint unicode, jint modifier, jboolean autoRepeat)
     {
-        Qt::KeyboardModifiers modifiers;
-        if (modifier & 1)
-            modifiers |= Qt::ShiftModifier;
-
-        if (modifier & 2)
-            modifiers |= Qt::AltModifier;
-
-        if (modifier & 4)
-            modifiers |= Qt::MetaModifier;
-
         QWindowSystemInterface::handleKeyEvent(0,
                                                QEvent::KeyPress,
                                                mapAndroidKey(key),
-                                               modifiers,
+                                               mapAndroidModifiers(modifier),
                                                toString(unicode),
-                                               false);
+                                               autoRepeat);
     }
 
-    static void keyUp(JNIEnv */*env*/, jobject /*thiz*/, jint key, jint unicode, jint modifier)
+    static void keyUp(JNIEnv */*env*/, jobject /*thiz*/, jint key, jint unicode, jint modifier, jboolean autoRepeat)
     {
-        Qt::KeyboardModifiers modifiers;
-        if (modifier & 1)
-            modifiers |= Qt::ShiftModifier;
-
-        if (modifier & 2)
-            modifiers |= Qt::AltModifier;
-
-        if (modifier & 4)
-            modifiers |= Qt::MetaModifier;
-
         QWindowSystemInterface::handleKeyEvent(0,
                                                QEvent::KeyRelease,
                                                mapAndroidKey(key),
-                                               modifiers,
+                                               mapAndroidModifiers(modifier),
                                                toString(unicode),
-                                               false);
+                                               autoRepeat);
     }
 
     static void keyboardVisibilityChanged(JNIEnv */*env*/, jobject /*thiz*/, jboolean visibility)
@@ -703,8 +702,8 @@ namespace QtAndroidInput
         {"mouseUp", "(III)V", (void *)mouseUp},
         {"mouseMove", "(III)V", (void *)mouseMove},
         {"longPress", "(III)V", (void *)longPress},
-        {"keyDown", "(III)V", (void *)keyDown},
-        {"keyUp", "(III)V", (void *)keyUp},
+        {"keyDown", "(IIIZ)V", (void *)keyDown},
+        {"keyUp", "(IIIZ)V", (void *)keyUp},
         {"keyboardVisibilityChanged", "(Z)V", (void *)keyboardVisibilityChanged}
     };
 

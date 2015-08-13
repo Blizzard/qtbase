@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,50 +48,32 @@
 #include <qpa/qplatformcursor.h>
 #include <qpa/qplatformscreen.h>
 #include <QtGui/QOpenGLFunctions>
+#include <QtGui/private/qinputdevicemanager_p.h>
 
 QT_BEGIN_NAMESPACE
 
 class QOpenGLShaderProgram;
-class QDeviceDiscovery;
 class QEGLPlatformCursor;
+class QEGLPlatformScreen;
 
 class QEGLPlatformCursorDeviceListener : public QObject
 {
     Q_OBJECT
 
 public:
-    QEGLPlatformCursorDeviceListener(QDeviceDiscovery *dd, QEGLPlatformCursor *cursor);
+    QEGLPlatformCursorDeviceListener(QEGLPlatformCursor *cursor) : m_cursor(cursor) { }
     bool hasMouse() const;
 
-private slots:
-    void onDeviceAdded();
-    void onDeviceRemoved();
+public slots:
+    void onDeviceListChanged(QInputDeviceManager::DeviceType type);
 
 private:
     QEGLPlatformCursor *m_cursor;
-    int m_mouseCount;
-};
-
-class QEGLPlatformCursorUpdater : public QObject
-{
-    Q_OBJECT
-
-public:
-    QEGLPlatformCursorUpdater(QPlatformScreen *screen)
-        : m_screen(screen), m_active(false) { }
-
-    void scheduleUpdate(const QPoint &pos, const QRegion &rgn);
-
-private slots:
-    void update(const QPoint &pos, const QRegion &rgn);
-
-private:
-    QPlatformScreen *m_screen;
-    bool m_active;
 };
 
 class QEGLPlatformCursor : public QPlatformCursor, protected QOpenGLFunctions
 {
+    Q_OBJECT
 public:
     QEGLPlatformCursor(QPlatformScreen *screen);
     ~QEGLPlatformCursor();
@@ -107,10 +89,10 @@ public:
     void paintOnScreen();
     void resetResources();
 
-    void setMouseDeviceDiscovery(QDeviceDiscovery *dd);
     void updateMouseStatus();
 
 private:
+    bool event(QEvent *e) Q_DECL_OVERRIDE;
 #ifndef QT_NO_CURSOR
     bool setCurrentCursor(QCursor *cursor);
 #endif
@@ -146,13 +128,13 @@ private:
     } m_cursorAtlas;
 
     bool m_visible;
-    QPlatformScreen *m_screen;
+    QEGLPlatformScreen *m_screen;
     QOpenGLShaderProgram *m_program;
     int m_vertexCoordEntry;
     int m_textureCoordEntry;
     int m_textureEntry;
     QEGLPlatformCursorDeviceListener *m_deviceListener;
-    QEGLPlatformCursorUpdater m_updater;
+    bool m_updateRequested;
 };
 
 QT_END_NAMESPACE

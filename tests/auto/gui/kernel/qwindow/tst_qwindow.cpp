@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -63,10 +63,12 @@ private slots:
     void positioning_data();
     void positioning();
     void positioningDuringMinimized();
+    void platformSurface();
     void isExposed();
     void isActive();
     void testInputEvents();
     void touchToMouseTranslation();
+    void touchToMouseTranslationForDevices();
     void mouseToTouchTranslation();
     void mouseToTouchLoop();
     void touchCancel();
@@ -90,6 +92,7 @@ private slots:
     void modalWindowModallity();
     void modalWindowPosition();
     void windowsTransientChildren();
+    void requestUpdate();
     void initTestCase();
     void cleanup();
 
@@ -154,14 +157,28 @@ public:
     void reset()
     {
         m_received.clear();
+        m_framePositionsOnMove.clear();
     }
 
     bool event(QEvent *event)
     {
         m_received[event->type()]++;
         m_order << event->type();
-        if (event->type() == QEvent::Expose)
+        switch (event->type()) {
+        case QEvent::Expose:
             m_exposeRegion = static_cast<QExposeEvent *>(event)->region();
+            break;
+
+        case QEvent::PlatformSurface:
+            m_surfaceventType = static_cast<QPlatformSurfaceEvent *>(event)->surfaceEventType();
+            break;
+
+        case QEvent::Move:
+            m_framePositionsOnMove << framePosition();
+            break;
+        default:
+            break;
+        }
 
         return QWindow::event(event);
     }
@@ -181,10 +198,17 @@ public:
         return m_exposeRegion;
     }
 
+    QPlatformSurfaceEvent::SurfaceEventType surfaceEventType() const
+    {
+        return m_surfaceventType;
+    }
+
+    QVector<QPoint> m_framePositionsOnMove;
 private:
     QHash<QEvent::Type, int> m_received;
     QVector<QEvent::Type> m_order;
     QRegion m_exposeRegion;
+    QPlatformSurfaceEvent::SurfaceEventType m_surfaceventType;
 };
 
 void tst_QWindow::eventOrderOnShow()
@@ -294,6 +318,8 @@ void tst_QWindow::positioning()
     QTRY_VERIFY(window.received(QEvent::Resize) > 0);
 #endif
 
+    QTest::qWait(2000);
+
     QTRY_COMPARE(originalPos, window.position());
     QTRY_COMPARE(originalFramePos, window.framePosition());
     QTRY_COMPARE(originalMargins, window.frameMargins());
@@ -301,12 +327,20 @@ void tst_QWindow::positioning()
     // if our positioning is actually fully respected by the window manager
     // test whether it correctly handles frame positioning as well
     if (originalPos == geometry.topLeft() && (originalMargins.top() != 0 || originalMargins.left() != 0)) {
-        QPoint framePos = QPlatformScreen::platformScreenForWindow(&window)->availableGeometry().topLeft() + QPoint(40, 40);
+        QPoint framePos = QPlatformScreen::platformScreenForWindow(&window)->availableGeometry().center();
 
         window.reset();
+        const QPoint oldFramePos = window.framePosition();
         window.setFramePosition(framePos);
 
         QTRY_VERIFY(window.received(QEvent::Move));
+        if (window.framePosition() != framePos) {
+            qDebug() << "About to fail auto-test. Here is some additional information:";
+            qDebug() << "window.framePosition() == " << window.framePosition();
+            qDebug() << "old frame position == " << oldFramePos;
+            qDebug() << "We received " << window.received(QEvent::Move) << " move events";
+            qDebug() << "frame positions after each move event:" << window.m_framePositionsOnMove;
+        }
         QTRY_COMPARE(framePos, window.framePosition());
         QTRY_COMPARE(originalMargins, window.frameMargins());
         QCOMPARE(window.position(), window.framePosition() + QPoint(originalMargins.left(), originalMargins.top()));
@@ -339,6 +373,63 @@ void tst_QWindow::positioningDuringMinimized()
     QTRY_COMPARE(window.geometry(), newGeometry);
     window.setWindowState(Qt::WindowNoState);
     QTRY_COMPARE(window.geometry(), newGeometry);
+}
+
+class PlatformWindowFilter : public QObject
+{
+    Q_OBJECT
+public:
+    PlatformWindowFilter(QObject *parent = 0)
+        : QObject(parent)
+        , m_window(Q_NULLPTR)
+        , m_alwaysExisted(true)
+    {}
+
+    void setWindow(Window *window) { m_window = window; }
+
+    bool eventFilter(QObject *o, QEvent *e)
+    {
+        // Check that the platform surface events are delivered synchronously.
+        // If they are, the native platform surface should always exist when we
+        // receive a QPlatformSurfaceEvent
+        if (e->type() == QEvent::PlatformSurface && o == m_window) {
+            m_alwaysExisted &= (m_window->handle() != Q_NULLPTR);
+        }
+        return false;
+    }
+
+    bool surfaceExisted() const { return m_alwaysExisted; }
+
+private:
+    Window *m_window;
+    bool m_alwaysExisted;
+};
+
+void tst_QWindow::platformSurface()
+{
+    QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
+
+    Window window;
+    PlatformWindowFilter filter;
+    filter.setWindow(&window);
+    window.installEventFilter(&filter);
+
+    window.setGeometry(geometry);
+    QCOMPARE(window.geometry(), geometry);
+    window.create();
+
+    QTRY_VERIFY(window.received(QEvent::PlatformSurface) == 1);
+    QTRY_VERIFY(window.surfaceEventType() == QPlatformSurfaceEvent::SurfaceCreated);
+    QTRY_VERIFY(window.handle() != Q_NULLPTR);
+
+    window.destroy();
+    QTRY_VERIFY(window.received(QEvent::PlatformSurface) == 2);
+    QTRY_VERIFY(window.surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed);
+    QTRY_VERIFY(window.handle() == Q_NULLPTR);
+
+    // Check for synchronous delivery of platform surface events and that the platform
+    // surface always existed upon event delivery
+    QTRY_VERIFY(filter.surfaceExisted());
 }
 
 void tst_QWindow::isExposed()
@@ -615,8 +706,6 @@ void tst_QWindow::testInputEvents()
 
 void tst_QWindow::touchToMouseTranslation()
 {
-    if (!QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::SynthesizeMouseFromTouchEvents).toBool())
-        QSKIP("Mouse events are synthesized by the system on this platform.");
     InputTestWindow window;
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
@@ -687,6 +776,35 @@ void tst_QWindow::touchToMouseTranslation()
     // mouse event synthesizing disabled
     QTRY_COMPARE(window.mousePressButton, 0);
     QTRY_COMPARE(window.mouseReleaseButton, 0);
+}
+
+void tst_QWindow::touchToMouseTranslationForDevices()
+{
+    InputTestWindow window;
+    window.ignoreTouch = true;
+    window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QPoint touchPoint(10, 10);
+
+    QTest::touchEvent(&window, touchDevice).press(0, touchPoint, &window);
+    QTest::touchEvent(&window, touchDevice).release(0, touchPoint, &window);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(window.mousePressedCount, 1);
+    QCOMPARE(window.mouseReleasedCount, 1);
+
+    window.resetCounters();
+
+    touchDevice->setCapabilities(touchDevice->capabilities() | QTouchDevice::MouseEmulation);
+    QTest::touchEvent(&window, touchDevice).press(0, touchPoint, &window);
+    QTest::touchEvent(&window, touchDevice).release(0, touchPoint, &window);
+    QCoreApplication::processEvents();
+    touchDevice->setCapabilities(touchDevice->capabilities() & ~QTouchDevice::MouseEmulation);
+
+    QCOMPARE(window.mousePressedCount, 0);
+    QCOMPARE(window.mouseReleasedCount, 0);
 }
 
 void tst_QWindow::mouseToTouchTranslation()
@@ -817,8 +935,6 @@ void tst_QWindow::touchCancel()
 
 void tst_QWindow::touchCancelWithTouchToMouse()
 {
-    if (!QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::SynthesizeMouseFromTouchEvents).toBool())
-        QSKIP("Mouse events are synthesized by the system on this platform.");
     InputTestWindow window;
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
@@ -1348,7 +1464,7 @@ void tst_QWindow::initialSize()
     QSize defaultSize(0,0);
     {
     Window w;
-    w.show();
+    w.showNormal();
     QTRY_VERIFY(w.width() > 0);
     QTRY_VERIFY(w.height() > 0);
     defaultSize = QSize(w.width(), w.height());
@@ -1356,7 +1472,7 @@ void tst_QWindow::initialSize()
     {
     Window w;
     w.setWidth(m_testWindowSize.width());
-    w.show();
+    w.showNormal();
 #if defined(Q_OS_BLACKBERRY) // "window" is the "root" window and will always be shown fullscreen
                               // so we only expect one resize event
     QTRY_COMPARE(w.width(), qGuiApp->primaryScreen()->availableGeometry().width());
@@ -1369,7 +1485,7 @@ void tst_QWindow::initialSize()
     Window w;
     const QSize testSize(m_testWindowSize.width(), 42);
     w.resize(testSize);
-    w.show();
+    w.showNormal();
 
 #if defined(Q_OS_BLACKBERRY) // "window" is the "root" window and will always be shown fullscreen
                               // so we only expect one resize event
@@ -1575,6 +1691,25 @@ void tst_QWindow::windowsTransientChildren()
     // QTBUG-40696, transient children hidden by Qt should not be re-shown by Windows.
     QVERIFY(!isNativeWindowVisible(&dialog));
     QVERIFY(isNativeWindowVisible(&child)); // Real children should be visible.
+}
+
+void tst_QWindow::requestUpdate()
+{
+    QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
+
+    Window window;
+    window.setGeometry(geometry);
+    window.show();
+    QCoreApplication::processEvents();
+    QTRY_VERIFY(window.isExposed());
+
+    QVERIFY(window.received(QEvent::UpdateRequest) == 0);
+
+    window.requestUpdate();
+    QTRY_VERIFY(window.received(QEvent::UpdateRequest) == 1);
+
+    window.requestUpdate();
+    QTRY_VERIFY(window.received(QEvent::UpdateRequest) == 2);
 }
 
 #include <tst_qwindow.moc>

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -45,6 +45,7 @@
 #include <private/qwidgettextcontrol_p.h>
 #include <qscrollbar.h>
 #include <qtextobject.h>
+#include <qmenu.h>
 
 #include <qabstracttextdocumentlayout.h>
 #include <qtextdocumentfragment.h>
@@ -99,7 +100,8 @@ private slots:
 #ifndef QT_NO_CLIPBOARD
     void copyAndSelectAllInReadonly();
 #endif
-    void ctrlAltInput();
+    void charWithAltOrCtrlModifier_data();
+    void charWithAltOrCtrlModifier();
     void noPropertiesOnDefaultTextEditCharFormat();
     void setPlainTextShouldEmitTextChangedOnce();
     void overwriteMode();
@@ -148,6 +150,10 @@ private slots:
 #endif
     void layoutAfterMultiLineRemove();
     void undoCommandRemovesAndReinsertsBlock();
+    void taskQTBUG_43562_lineCountCrash();
+#ifndef QT_NO_CONTEXTMENU
+    void contextMenu();
+#endif
 
 private:
     void createSelection();
@@ -690,10 +696,34 @@ void tst_QPlainTextEdit::copyAndSelectAllInReadonly()
 }
 #endif
 
-void tst_QPlainTextEdit::ctrlAltInput()
+Q_DECLARE_METATYPE(Qt::KeyboardModifiers)
+
+// Test how QWidgetTextControlPrivate (used in QPlainTextEdit, QTextEdit)
+// handles input with modifiers.
+void tst_QPlainTextEdit::charWithAltOrCtrlModifier_data()
 {
-    QTest::keyClick(ed, Qt::Key_At, Qt::ControlModifier | Qt::AltModifier);
-    QCOMPARE(ed->toPlainText(), QString("@"));
+    QTest::addColumn<Qt::KeyboardModifiers>("modifiers");
+    QTest::addColumn<bool>("textExpected");
+
+    QTest::newRow("no-modifiers") << Qt::KeyboardModifiers() << true;
+    // Ctrl, Ctrl+Shift: No text (QTBUG-35734)
+    QTest::newRow("ctrl") << Qt::KeyboardModifiers(Qt::ControlModifier)
+        << false;
+    QTest::newRow("ctrl-shift") << Qt::KeyboardModifiers(Qt::ShiftModifier | Qt::ControlModifier)
+        << false;
+    QTest::newRow("alt") << Qt::KeyboardModifiers(Qt::AltModifier) << true;
+    // Alt-Ctrl (Alt-Gr on German keyboards, Task 129098): Expect text
+    QTest::newRow("alt-ctrl") << (Qt::AltModifier | Qt::ControlModifier) << true;
+}
+
+void tst_QPlainTextEdit::charWithAltOrCtrlModifier()
+{
+    QFETCH(Qt::KeyboardModifiers, modifiers);
+    QFETCH(bool, textExpected);
+
+    QTest::keyClick(ed, Qt::Key_At, modifiers);
+    const QString expectedText = textExpected ?  QLatin1String("@") : QString();
+    QCOMPARE(ed->toPlainText(), expectedText);
 }
 
 void tst_QPlainTextEdit::noPropertiesOnDefaultTextEditCharFormat()
@@ -1628,6 +1658,74 @@ void tst_QPlainTextEdit::undoCommandRemovesAndReinsertsBlock()
     }
 
 }
+
+class ContentsChangedFunctor {
+public:
+    ContentsChangedFunctor(QPlainTextEdit *t) : textEdit(t) {}
+    void operator()(int, int, int)
+    {
+        QTextCursor c(textEdit->textCursor());
+        c.beginEditBlock();
+        c.movePosition(QTextCursor::Start);
+        c.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+        c.setCharFormat(QTextCharFormat());
+        c.endEditBlock();
+    }
+
+private:
+    QPlainTextEdit *textEdit;
+};
+
+void tst_QPlainTextEdit::taskQTBUG_43562_lineCountCrash()
+{
+    connect(ed->document(), &QTextDocument::contentsChange, ContentsChangedFunctor(ed));
+    // Don't crash
+    QTest::keyClicks(ed, "Some text");
+    QTest::keyClick(ed, Qt::Key_Left);
+    QTest::keyClick(ed, Qt::Key_Right);
+    QTest::keyClick(ed, Qt::Key_A);
+    QTest::keyClick(ed, Qt::Key_Left);
+    QTest::keyClick(ed, Qt::Key_Right);
+    QTest::keyClick(ed, Qt::Key_Space);
+    QTest::keyClicks(ed, "nd some more");
+    disconnect(ed->document(), SIGNAL(contentsChange(int, int, int)), 0, 0);
+}
+
+#ifndef QT_NO_CONTEXTMENU
+void tst_QPlainTextEdit::contextMenu()
+{
+    ed->appendHtml(QStringLiteral("Hello <a href='http://www.qt.io'>Qt</a>"));
+
+    QMenu *menu = ed->createStandardContextMenu();
+    QVERIFY(menu);
+    QAction *action = ed->findChild<QAction *>(QStringLiteral("link-copy"));
+    QVERIFY(!action);
+    delete menu;
+    QVERIFY(!ed->findChild<QAction *>(QStringLiteral("link-copy")));
+
+    ed->setTextInteractionFlags(Qt::TextBrowserInteraction);
+
+    menu = ed->createStandardContextMenu();
+    QVERIFY(menu);
+    action = ed->findChild<QAction *>(QStringLiteral("link-copy"));
+    QVERIFY(action);
+    QVERIFY(!action->isEnabled());
+    delete menu;
+    QVERIFY(!ed->findChild<QAction *>(QStringLiteral("link-copy")));
+
+    QTextCursor cursor = ed->textCursor();
+    cursor.setPosition(ed->toPlainText().length() - 2);
+    ed->setTextCursor(cursor);
+
+    menu = ed->createStandardContextMenu(ed->cursorRect().center());
+    QVERIFY(menu);
+    action = ed->findChild<QAction *>(QStringLiteral("link-copy"));
+    QVERIFY(action);
+    QVERIFY(action->isEnabled());
+    delete menu;
+    QVERIFY(!ed->findChild<QAction *>(QStringLiteral("link-copy")));
+}
+#endif // QT_NO_CONTEXTMENU
 
 QTEST_MAIN(tst_QPlainTextEdit)
 #include "tst_qplaintextedit.moc"

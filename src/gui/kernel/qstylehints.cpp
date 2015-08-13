@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -35,6 +35,7 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformtheme.h>
 #include <private/qguiapplication_p.h>
+#include <qdebug.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -46,6 +47,10 @@ static inline QVariant hint(QPlatformIntegration::StyleHint h)
 static inline QVariant themeableHint(QPlatformTheme::ThemeHint th,
                                      QPlatformIntegration::StyleHint ih)
 {
+    if (!QCoreApplication::instance()) {
+        qWarning() << "Must construct a QGuiApplication before accessing a platform theme hint.";
+        return QVariant();
+    }
     if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
         const QVariant themeHint = theme->themeHint(th);
         if (themeHint.isValid())
@@ -88,7 +93,7 @@ public:
     Access to these parameters are useful when implementing custom user interface components, in that
     they allow the components to exhibit the same behaviour and feel as other components.
 
-    \sa QGuiApplication::styleHints(), QPlatformTheme
+    \sa QGuiApplication::styleHints()
  */
 QStyleHints::QStyleHints()
     : QObject(*new QStyleHintsPrivate(), 0)
@@ -104,11 +109,15 @@ QStyleHints::QStyleHints()
 void  QStyleHints::setMouseDoubleClickInterval(int mouseDoubleClickInterval)
 {
     Q_D(QStyleHints);
+    if (d->m_mouseDoubleClickInterval == mouseDoubleClickInterval)
+        return;
     d->m_mouseDoubleClickInterval = mouseDoubleClickInterval;
+    emit mouseDoubleClickIntervalChanged(mouseDoubleClickInterval);
 }
 
 /*!
-    Returns the time limit in milliseconds that distinguishes a double click
+    \property QStyleHints::mouseDoubleClickInterval
+    \brief the time limit in milliseconds that distinguishes a double click
     from two consecutive mouse clicks.
 */
 int QStyleHints::mouseDoubleClickInterval() const
@@ -120,7 +129,8 @@ int QStyleHints::mouseDoubleClickInterval() const
 }
 
 /*!
-    Returns the time limit in milliseconds that activates
+    \property QStyleHints::mousePressAndHoldInterval
+    \brief the time limit in milliseconds that activates
     a press and hold.
 
     \since 5.3
@@ -139,11 +149,15 @@ int QStyleHints::mousePressAndHoldInterval() const
 void QStyleHints::setStartDragDistance(int startDragDistance)
 {
     Q_D(QStyleHints);
+    if (d->m_startDragDistance == startDragDistance)
+        return;
     d->m_startDragDistance = startDragDistance;
+    emit startDragDistanceChanged(startDragDistance);
 }
 
 /*!
-    Returns the distance, in pixels, that the mouse must be moved with a button
+    \property QStyleHints::startDragDistance
+    \brief the distance, in pixels, that the mouse must be moved with a button
     held down before a drag and drop operation will begin.
 
     If you support drag and drop in your application, and want to start a drag
@@ -157,7 +171,7 @@ void QStyleHints::setStartDragDistance(int startDragDistance)
 
     \snippet code/src_gui_kernel_qapplication.cpp 6
 
-    \sa startDragTime(), QPoint::manhattanLength(), {Drag and Drop}
+    \sa startDragTime, QPoint::manhattanLength(), {Drag and Drop}
 */
 int QStyleHints::startDragDistance() const
 {
@@ -176,18 +190,22 @@ int QStyleHints::startDragDistance() const
 void QStyleHints::setStartDragTime(int startDragTime)
 {
     Q_D(QStyleHints);
+    if (d->m_startDragTime == startDragTime)
+        return;
     d->m_startDragTime = startDragTime;
+    emit startDragTimeChanged(startDragTime);
 }
 
 /*!
-    Returns the time, in milliseconds, that a mouse button must be held down
+    \property QStyleHints::startDragTime
+    \brief the time, in milliseconds, that a mouse button must be held down
     before a drag and drop operation will begin.
 
     If you support drag and drop in your application, and want to start a drag
     and drop operation after the user has held down a mouse button for a
     certain amount of time, you should use this property's value as the delay.
 
-    \sa startDragDistance(), {Drag and Drop}
+    \sa startDragDistance, {Drag and Drop}
 */
 int QStyleHints::startDragTime() const
 {
@@ -198,11 +216,12 @@ int QStyleHints::startDragTime() const
 }
 
 /*!
-    Returns the limit for the velocity, in pixels per second, that the mouse may
+    \property QStyleHints::startDragVelocity
+    \brief the limit for the velocity, in pixels per second, that the mouse may
     be moved, with a button held down, for a drag and drop operation to begin.
     A value of 0 means there is no such limit.
 
-    \sa startDragDistance(), {Drag and Drop}
+    \sa startDragDistance, {Drag and Drop}
 */
 int QStyleHints::startDragVelocity() const
 {
@@ -218,11 +237,15 @@ int QStyleHints::startDragVelocity() const
 void QStyleHints::setKeyboardInputInterval(int keyboardInputInterval)
 {
     Q_D(QStyleHints);
+    if (d->m_keyboardInputInterval == keyboardInputInterval)
+        return;
     d->m_keyboardInputInterval = keyboardInputInterval;
+    emit keyboardInputIntervalChanged(keyboardInputInterval);
 }
 
 /*!
-    Returns the time limit, in milliseconds, that distinguishes a key press
+    \property QStyleHints::keyboardInputInterval
+    \brief the time limit, in milliseconds, that distinguishes a key press
     from two consecutive key presses.
 */
 int QStyleHints::keyboardInputInterval() const
@@ -234,7 +257,8 @@ int QStyleHints::keyboardInputInterval() const
 }
 
 /*!
-    Returns the rate, in events per second,  in which additional repeated key
+    \property QStyleHints::keyboardAutoRepeatRate
+    \brief the rate, in events per second,  in which additional repeated key
     presses will automatically be generated if a key is being held down.
 */
 int QStyleHints::keyboardAutoRepeatRate() const
@@ -251,11 +275,15 @@ int QStyleHints::keyboardAutoRepeatRate() const
 void QStyleHints::setCursorFlashTime(int cursorFlashTime)
 {
     Q_D(QStyleHints);
+    if (d->m_cursorFlashTime == cursorFlashTime)
+        return;
     d->m_cursorFlashTime = cursorFlashTime;
+    emit cursorFlashTimeChanged(cursorFlashTime);
 }
 
 /*!
-    Returns the text cursor's flash (blink) time in milliseconds.
+    \property QStyleHints::cursorFlashTime
+    \brief the text cursor's flash (blink) time in milliseconds.
 
     The flash time is the time used to display, invert and restore the
     caret display. Usually the text cursor is displayed for half the cursor
@@ -270,11 +298,12 @@ int QStyleHints::cursorFlashTime() const
 }
 
 /*!
-    Returns \c true if the platform defaults to windows being fullscreen,
+    \property QStyleHints::showIsFullScreen
+    \brief \c true if the platform defaults to windows being fullscreen,
     otherwise \c false.
 
     \note The platform may still choose to show certain windows non-fullscreen,
-    such as popups or dialogs. This method only returns the default behavior.
+    such as popups or dialogs. This property only reports the default behavior.
 
     \sa QWindow::show()
 */
@@ -284,7 +313,8 @@ bool QStyleHints::showIsFullScreen() const
 }
 
 /*!
-    Returns the time, in milliseconds, a typed letter is displayed unshrouded
+    \property QStyleHints::passwordMaskDelay
+    \brief the time, in milliseconds, a typed letter is displayed unshrouded
     in a text input field in password mode.
 */
 int QStyleHints::passwordMaskDelay() const
@@ -293,7 +323,8 @@ int QStyleHints::passwordMaskDelay() const
 }
 
 /*!
-    Returns the character used to mask the characters typed into text input
+    \property QStyleHints::passwordMaskCharacter
+    \brief the character used to mask the characters typed into text input
     fields in password mode.
 */
 QChar QStyleHints::passwordMaskCharacter() const
@@ -302,7 +333,8 @@ QChar QStyleHints::passwordMaskCharacter() const
 }
 
 /*!
-    Returns the gamma value used in font smoothing.
+    \property QStyleHints::fontSmoothingGamma
+    \brief the gamma value used in font smoothing.
 */
 qreal QStyleHints::fontSmoothingGamma() const
 {
@@ -310,7 +342,8 @@ qreal QStyleHints::fontSmoothingGamma() const
 }
 
 /*!
-    Returns \c true if right-to-left writing direction is enabled,
+    \property QStyleHints::useRtlExtensions
+    \brief \c true if right-to-left writing direction is enabled,
     otherwise \c false.
 */
 bool QStyleHints::useRtlExtensions() const
@@ -319,7 +352,8 @@ bool QStyleHints::useRtlExtensions() const
 }
 
 /*!
-    Returns \c true if focus objects (line edits etc) should receive
+    \property QStyleHints::setFocusOnTouchRelease
+    \brief \c true if focus objects (line edits etc) should receive
     input focus after a touch/mouse release. This is normal behavior on
     touch platforms. On desktop platforms, the standard is to set
     focus already on touch/mouse press.
@@ -327,6 +361,32 @@ bool QStyleHints::useRtlExtensions() const
 bool QStyleHints::setFocusOnTouchRelease() const
 {
     return hint(QPlatformIntegration::SetFocusOnTouchRelease).toBool();
+}
+
+/*!
+    \property QStyleHints::tabFocusBehavior
+    \since 5.5
+    \brief The focus behavior on press of the tab key.
+
+    \note Do not bind this value in QML because the change notifier
+    signal is not implemented yet.
+*/
+
+Qt::TabFocusBehavior QStyleHints::tabFocusBehavior() const
+{
+    return Qt::TabFocusBehavior(themeableHint(QPlatformTheme::TabFocusBehavior, QPlatformIntegration::TabFocusBehavior).toInt());
+}
+
+/*!
+    \property QStyleHints::singleClickActivation
+    \brief \c true if items should be activated by single click, \b false
+    if they should be activated by double click instead.
+
+    \since 5.5
+*/
+bool QStyleHints::singleClickActivation() const
+{
+    return themeableHint(QPlatformTheme::ItemViewActivateItemOnSingleClick, QPlatformIntegration::ItemViewActivateItemOnSingleClick).toBool();
 }
 
 QT_END_NAMESPACE

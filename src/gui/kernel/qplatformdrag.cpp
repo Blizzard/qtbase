@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,57 +42,7 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_DRAGANDDROP
 #ifdef QDND_DEBUG
-QString dragActionsToString(Qt::DropActions actions)
-{
-    QString str;
-    if (actions == Qt::IgnoreAction) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("IgnoreAction");
-    }
-    if (actions & Qt::LinkAction) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("LinkAction");
-    }
-    if (actions & Qt::CopyAction) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("CopyAction");
-    }
-    if (actions & Qt::MoveAction) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("MoveAction");
-    }
-    if ((actions & Qt::TargetMoveAction) == Qt::TargetMoveAction ) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("TargetMoveAction");
-    }
-    return str;
-}
-
-QString KeyboardModifiersToString(Qt::KeyboardModifiers modifiers)
-{
-    QString str;
-    if (modifiers & Qt::ControlModifier) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("ControlModifier");
-    }
-    if (modifiers & Qt::AltModifier) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("AltModifier");
-    }
-    if (modifiers & Qt::ShiftModifier) {
-        if (!str.isEmpty())
-            str += QLatin1String(" | ");
-        str += QLatin1String("ShiftModifier");
-    }
-    return str;
-}
+#  include <QtCore/QDebug>
 #endif
 
 QPlatformDropQtResponse::QPlatformDropQtResponse(bool accepted, Qt::DropAction acceptedAction)
@@ -156,8 +106,7 @@ Qt::DropAction QPlatformDrag::defaultAction(Qt::DropActions possibleActions,
                                            Qt::KeyboardModifiers modifiers) const
 {
 #ifdef QDND_DEBUG
-    qDebug("QDragManager::defaultAction(Qt::DropActions possibleActions)");
-    qDebug("keyboard modifiers : %s", qPrintable(KeyboardModifiersToString(modifiers)));
+    qDebug() << "QDragManager::defaultAction(Qt::DropActions possibleActions)\nkeyboard modifiers : " << modifiers;
 #endif
 
     Qt::DropAction default_action = Qt::IgnoreAction;
@@ -183,7 +132,7 @@ Qt::DropAction QPlatformDrag::defaultAction(Qt::DropActions possibleActions,
         default_action = Qt::LinkAction;
 
 #ifdef QDND_DEBUG
-    qDebug("possible actions : %s", qPrintable(dragActionsToString(possibleActions)));
+    qDebug() << "possible actions : " << possibleActions;
 #endif
 
     // Check if the action determined is allowed
@@ -199,7 +148,7 @@ Qt::DropAction QPlatformDrag::defaultAction(Qt::DropActions possibleActions,
     }
 
 #ifdef QDND_DEBUG
-    qDebug("default action : %s", qPrintable(dragActionsToString(default_action)));
+    qDebug() << "default action : " << default_action;
 #endif
 
     return default_action;
@@ -239,6 +188,18 @@ Q_GLOBAL_STATIC_WITH_ARGS(QPixmap,qt_drag_default_pixmap,(default_pm))
 QPixmap QPlatformDrag::defaultPixmap()
 {
     return *qt_drag_default_pixmap();
+}
+
+/*!
+    \since 5.4
+    \brief Returns bool indicating whether QPlatformDrag takes ownership
+    and therefore responsibility of deleting the QDrag object passed in
+    from QPlatformDrag::drag. This can be useful on platforms where QDrag
+    object has to be kept around.
+ */
+bool QPlatformDrag::ownsDragObject() const
+{
+    return false;
 }
 
 #endif // QT_NO_DRAGANDDROP

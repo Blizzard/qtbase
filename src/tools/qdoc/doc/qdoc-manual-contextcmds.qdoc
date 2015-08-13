@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -53,7 +53,6 @@
       \li \l {inherits-command}{\\inherits},
       \li \l {inmodule-command}{\\inmodule},
       \li \l {internal-command}{\\internal},
-      \li \l {mainclass-command}{\\mainclass},
       \li \l {nextpage-command}{\\nextpage},
       \li \l {nonreentrant-command}{\\nonreentrant},
       \li \l {obsolete-command}{\\obsolete},
@@ -428,7 +427,7 @@
     \quotation
         \raw HTML
         <h3>
-        <a href="http://qt-project.org/doc/qt-5.0/qtcore/qchar.html#Joining-enum">Joining</a>
+        <a href="http://doc.qt.io/qt-5/qchar.html#JoiningType-enum">Joining</a>
         QChar::joining () const</h3>
         \endraw
 
@@ -542,7 +541,6 @@
         \reentrant
         \ingroup i18n
         \ingroup text
-        \mainclass
 
         QLocale is initialized with a language/country pair in its
         constructor and offers number-to-string and string-to-number
@@ -787,7 +785,7 @@
 
     \quotation
         \raw HTML
-        <h3><a href="http://qt-project.org/doc/qt-5.0/qtwidgets/qaction.html">QAction</a>
+        <h3><a href="http://doc.qt.io/qt-5/qaction.html">QAction</a>
         * QMenu::addAction ( const QIcon & <i>icon</i>,
         const QString & <i>text</i> )
         </h3>
@@ -805,7 +803,7 @@
         {QWidget::addAction}().
     \endquotation
 
-    If you don't include the function name with the \b{\\overlaod}
+    If you don't include the function name with the \b{\\overload}
     command, then instead of the "This function overloads..." line
     with the link to the documentation for the primary version, you
     get the old standard line:
@@ -886,38 +884,6 @@
     Qt's structure.
 
     \section1 Commands
-
-    \target mainclass-command
-    \section2 \\mainclass
-
-    The \\mainclass command relates the documented class to
-    a group called mainclasses.
-
-    The command must stand on its own line.
-
-    \code
-    / *!
-        \class QWidget qwidget.h
-        \brief The QWidget class is the base class of
-        all user interface objects.
-
-        \mainclass
-
-        ...
-    * /
-    \endcode
-
-    This will include the QWidget class in the \e mainclasses
-    group, which means, for example, that the class will appear on the
-    list created by calling the \l {generatelist-command}
-    {\\generatelist} command with the \c mainclasses argument:
-
-    \l http://doc.qt.digia.com/4.0/mainclasses.html
-
-    \note The Qt documentation no longer includes the \e mainclasses
-    page.
-
-    See also \l {generatelist-command} {\\generatelist}.
 
     \target ingroup-command
     \section2 \\ingroup

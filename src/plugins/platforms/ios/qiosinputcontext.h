@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,6 +48,22 @@ QT_BEGIN_NAMESPACE
 
 @class QIOSKeyboardListener;
 @class QIOSTextInputResponder;
+@protocol KeyboardState;
+
+struct KeyboardState
+{
+    KeyboardState() :
+        keyboardVisible(false), keyboardAnimating(false),
+        animationDuration(0), animationCurve(UIViewAnimationCurve(-1))
+        {}
+
+    bool keyboardVisible;
+    bool keyboardAnimating;
+    QRectF keyboardRect;
+    CGRect keyboardEndRect;
+    NSTimeInterval animationDuration;
+    UIViewAnimationCurve animationCurve;
+};
 
 struct ImeState
 {
@@ -63,33 +79,42 @@ public:
     QIOSInputContext();
     ~QIOSInputContext();
 
-    QRectF keyboardRect() const;
+    bool isValid() const Q_DECL_OVERRIDE { return true; }
 
-    void showInputPanel();
-    void hideInputPanel();
+    void showInputPanel() Q_DECL_OVERRIDE;
+    void hideInputPanel() Q_DECL_OVERRIDE;
+
+    bool isInputPanelVisible() const Q_DECL_OVERRIDE;
+    bool isAnimating() const Q_DECL_OVERRIDE;
+    QRectF keyboardRect() const Q_DECL_OVERRIDE;
+
+    void update(Qt::InputMethodQueries) Q_DECL_OVERRIDE;
+    void reset() Q_DECL_OVERRIDE;
+    void commit() Q_DECL_OVERRIDE;
 
     void clearCurrentFocusObject();
 
-    bool isInputPanelVisible() const;
-    void setFocusObject(QObject *object);
-
+    void setFocusObject(QObject *object) Q_DECL_OVERRIDE;
     void focusWindowChanged(QWindow *focusWindow);
-    void cursorRectangleChanged();
+
     void scrollToCursor();
     void scroll(int y);
 
-    void update(Qt::InputMethodQueries);
-    void reset();
-    void commit();
+    void updateKeyboardState(NSNotification *notification = 0);
 
     const ImeState &imeState() { return m_imeState; };
+    const KeyboardState &keyboardState() { return m_keyboardState; };
+
     bool inputMethodAccepted() const;
 
     static QIOSInputContext *instance();
 
 private:
-    QIOSKeyboardListener *m_keyboardListener;
+    UIView* scrollableRootView();
+
+    QIOSKeyboardListener *m_keyboardHideGesture;
     QIOSTextInputResponder *m_textResponder;
+    KeyboardState m_keyboardState;
     ImeState m_imeState;
 };
 

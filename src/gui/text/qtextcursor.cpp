@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -424,9 +424,9 @@ bool QTextCursorPrivate::movePosition(QTextCursor::MoveOperation op, QTextCursor
 
         // skip if already at word start
         QTextEngine *engine = layout->engine();
-        engine->attributes();
+        const QCharAttributes *attributes = engine->attributes();
         if ((relativePos == blockIt.length() - 1)
-            && (engine->atSpace(relativePos - 1) || engine->atWordSeparator(relativePos - 1)))
+            && (attributes[relativePos - 1].whiteSpace || engine->atWordSeparator(relativePos - 1)))
             return false;
 
         if (relativePos < blockIt.length()-1)
@@ -499,7 +499,7 @@ bool QTextCursorPrivate::movePosition(QTextCursor::MoveOperation op, QTextCursor
     }
     case QTextCursor::EndOfWord: {
         QTextEngine *engine = layout->engine();
-        engine->attributes();
+        const QCharAttributes *attributes = engine->attributes();
         const int len = blockIt.length() - 1;
         if (relativePos >= len)
             return false;
@@ -508,7 +508,7 @@ bool QTextCursorPrivate::movePosition(QTextCursor::MoveOperation op, QTextCursor
             while (relativePos < len && engine->atWordSeparator(relativePos))
                 ++relativePos;
         } else {
-            while (relativePos < len && !engine->atSpace(relativePos) && !engine->atWordSeparator(relativePos))
+            while (relativePos < len && !attributes[relativePos].whiteSpace && !engine->atWordSeparator(relativePos))
                 ++relativePos;
         }
         newPosition = blockIt.position() + relativePos;
@@ -910,8 +910,8 @@ QTextLayout *QTextCursorPrivate::blockLayout(QTextBlock &block) const{
     select text. For selections see selectionStart(), selectionEnd(),
     hasSelection(), clearSelection(), and removeSelectedText().
 
-    If the position() is at the start of a block atBlockStart()
-    returns \c true; and if it is at the end of a block atBlockEnd() returns
+    If the position() is at the start of a block, atBlockStart()
+    returns \c true; and if it is at the end of a block, atBlockEnd() returns
     true. The format of the current character is returned by
     charFormat(), and the format of the current block is returned by
     blockFormat().
@@ -921,9 +921,9 @@ QTextLayout *QTextCursorPrivate::blockLayout(QTextBlock &block) const{
     mergeBlockFormat() functions. The 'set' functions will replace the
     cursor's current character or block format, while the 'merge'
     functions add the given format properties to the cursor's current
-    format. If the cursor has a selection the given format is applied
-    to the current selection. Note that when only parts of a block is
-    selected the block format is applied to the entire block. The text
+    format. If the cursor has a selection, the given format is applied
+    to the current selection. Note that when only a part of a block is
+    selected, the block format is applied to the entire block. The text
     at the current character position can be turned into a list using
     createList().
 

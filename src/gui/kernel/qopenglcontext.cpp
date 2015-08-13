@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -370,13 +370,10 @@ int QOpenGLContextPrivate::maxTextureSize()
         QOpenGLFunctions_1_0 *gl1funcs = 0;
         QOpenGLFunctions_3_2_Core *gl3funcs = 0;
 
-        if (q->format().profile() == QSurfaceFormat::CoreProfile) {
+        if (q->format().profile() == QSurfaceFormat::CoreProfile)
             gl3funcs = q->versionFunctions<QOpenGLFunctions_3_2_Core>();
-            gl3funcs->initializeOpenGLFunctions();
-        } else {
+        else
             gl1funcs = q->versionFunctions<QOpenGLFunctions_1_0>();
-            gl1funcs->initializeOpenGLFunctions();
-        }
 
         Q_ASSERT(gl1funcs || gl3funcs);
 
@@ -518,8 +515,9 @@ void QOpenGLContext::setScreen(QScreen *screen)
     in addition. Therefore \a handle is variant containing a platform-specific
     value type. These classes can be found in the QtPlatformHeaders module.
 
-    When create() is called with native handles set, the handles' ownership are
-    not taken, meaning that destroy() will not destroy the native context.
+    When create() is called with native handles set, QOpenGLContext does not
+    take ownership of the handles, so destroying the QOpenGLContext does not
+    destroy the native context.
 
     \note Some frameworks track the current context and surfaces internally.
     Making the adopted QOpenGLContext current via Qt will have no effect on such
@@ -582,20 +580,21 @@ QVariant QOpenGLContext::nativeHandle() const
     Returns \c true if the native context was successfully created and is ready to
     be used with makeCurrent(), swapBuffers(), etc.
 
-    \note If the context is already created, this function will first call
-    destroy(), and then create a new OpenGL context.
+    \note If the context already exists, this function destroys the existing
+    context first, and then creates a new one.
 
-    \sa makeCurrent(), destroy(), format()
+    \sa makeCurrent(), format()
 */
 bool QOpenGLContext::create()
 {
-    if (isValid())
+    Q_D(QOpenGLContext);
+    if (d->platformGLContext)
         destroy();
 
-    Q_D(QOpenGLContext);
     d->platformGLContext = QGuiApplicationPrivate::platformIntegration()->createPlatformOpenGLContext(this);
     if (!d->platformGLContext)
         return false;
+    d->platformGLContext->initialize();
     d->platformGLContext->setContext(this);
     if (!d->platformGLContext->isSharing())
         d->shareContext = 0;
@@ -605,6 +604,8 @@ bool QOpenGLContext::create()
 }
 
 /*!
+    \internal
+
     Destroy the underlying platform context associated with this context.
 
     If any other context is directly or indirectly sharing resources with this
@@ -613,7 +614,7 @@ bool QOpenGLContext::create()
     destroying the underlying platform context frees any state associated with
     the context.
 
-    After destroy() has been called, you must call create() if you wish to
+    After \c destroy() has been called, you must call create() if you wish to
     use the context again.
 
     \note This implicitly calls doneCurrent() if the context is current.
@@ -635,12 +636,21 @@ void QOpenGLContext::destroy()
     d->platformGLContext = 0;
     delete d->functions;
     d->functions = 0;
+
+    foreach (QAbstractOpenGLFunctions *func, d->externalVersionFunctions) {
+        QAbstractOpenGLFunctionsPrivate *func_d = QAbstractOpenGLFunctionsPrivate::get(func);
+        func_d->owningContext = 0;
+        func_d->initialized = false;
+    }
+    d->externalVersionFunctions.clear();
     qDeleteAll(d->versionFunctions);
     d->versionFunctions.clear();
     qDeleteAll(d->versionFunctionsBackend);
     d->versionFunctionsBackend.clear();
+
     delete d->textureFunctions;
     d->textureFunctions = 0;
+
     d->nativeHandle = QVariant();
 }
 
@@ -658,10 +668,7 @@ void QOpenGLContext::destroy()
 /*!
     Destroys the QOpenGLContext object.
 
-    This implicitly calls destroy(), so if this is the current context for the
-    thread, doneCurrent() is also called.
-
-    \sa destroy()
+    If this is the current context for the thread, doneCurrent() is also called.
 */
 QOpenGLContext::~QOpenGLContext()
 {
@@ -674,6 +681,15 @@ QOpenGLContext::~QOpenGLContext()
 
 /*!
     Returns if this context is valid, i.e. has been successfully created.
+
+    On some platforms the return value of \c false for a context that was
+    successfully created previously indicates that the OpenGL context was lost.
+
+    The typical way to handle context loss scenarios in applications is to
+    check via this function whenever makeCurrent() fails and returns \c false.
+    If this function then returns \c false, recreate the underlying native
+    OpenGL context by calling create(), call makeCurrent() again and then
+    reinitialize all OpenGL resources.
 
     \sa create()
 */
@@ -708,9 +724,12 @@ QOpenGLFunctions *QOpenGLContext::functions() const
     \overload versionFunctions()
 
     Returns a pointer to an object that provides access to all functions for
-    the version and profile of this context. Before using any of the functions
-    they must be initialized by calling QAbstractOpenGLFunctions::initializeOpenGLFunctions()
-    with this context being the current context.
+    the version and profile of this context. There is no need to call
+    QAbstractOpenGLFunctions::initializeOpenGLFunctions() as long as this context
+    is current. It is also possible to call this function when the context is not
+    current, but in that case it is the caller's responsibility to ensure proper
+    initialization by calling QAbstractOpenGLFunctions::initializeOpenGLFunctions()
+    afterwards.
 
     Usually one would use the template version of this function to automatically
     have the result cast to the correct type.
@@ -722,7 +741,6 @@ QOpenGLFunctions *QOpenGLContext::functions() const
             qWarning() << "Could not obtain required OpenGL context version";
             exit(1);
         }
-        funcs->initializeOpenGLFunctions();
     \endcode
 
     It is possible to request a functions object for a different version and profile
@@ -752,9 +770,12 @@ QOpenGLFunctions *QOpenGLContext::functions() const
 
 /*!
     Returns a pointer to an object that provides access to all functions for the
-    \a versionProfile of this context. Before using any of the functions they must
-    be initialized by calling QAbstractOpenGLFunctions::initializeOpenGLFunctions()
-    with this context being the current context.
+    \a versionProfile of this context. There is no need to call
+    QAbstractOpenGLFunctions::initializeOpenGLFunctions() as long as this context
+    is current. It is also possible to call this function when the context is not
+    current, but in that case it is the caller's responsibility to ensure proper
+    initialization by calling QAbstractOpenGLFunctions::initializeOpenGLFunctions()
+    afterwards.
 
     Usually one would use the template version of this function to automatically
     have the result cast to the correct type.
@@ -799,6 +820,9 @@ QAbstractOpenGLFunctions *QOpenGLContext::versionFunctions(const QOpenGLVersionP
         funcs = d->versionFunctions.value(vp);
     }
 
+    if (funcs && QOpenGLContext::currentContext() == this)
+        funcs->initializeOpenGLFunctions();
+
     return funcs;
 }
 
@@ -836,15 +860,26 @@ bool QOpenGLContext::hasExtension(const QByteArray &extension) const
 /*!
     Call this to get the default framebuffer object for the current surface.
 
-    On some platforms the default framebuffer object depends on the surface
-    being rendered to, and might be different from 0. Thus, instead of calling
-    glBindFramebuffer(0), you should call
+    On some platforms (for instance, iOS) the default framebuffer object depends
+    on the surface being rendered to, and might be different from 0. Thus,
+    instead of calling glBindFramebuffer(0), you should call
     glBindFramebuffer(ctx->defaultFramebufferObject()) if you want your
     application to work across different Qt platforms.
 
     If you use the glBindFramebuffer() in QOpenGLFunctions you do not have to
     worry about this, as it automatically binds the current context's
     defaultFramebufferObject() when 0 is passed.
+
+    \note Widgets that render via framebuffer objects, like QOpenGLWidget and
+    QQuickWidget, will override the value returned from this function when
+    painting is active, because at that time the correct "default" framebuffer
+    is the widget's associated backing framebuffer, not the platform-specific
+    one belonging to the top-level window's surface. This ensures the expected
+    behavior for this function and other classes relying on it (for example,
+    QOpenGLFramebufferObject::bindDefault() or
+    QOpenGLFramebufferObject::release()).
+
+    \sa QOpenGLFramebufferObject
 */
 GLuint QOpenGLContext::defaultFramebufferObject() const
 {
@@ -854,6 +889,9 @@ GLuint QOpenGLContext::defaultFramebufferObject() const
     Q_D(const QOpenGLContext);
     if (!d->surface || !d->surface->surfaceHandle())
         return 0;
+
+    if (d->defaultFboRedirect)
+        return d->defaultFboRedirect;
 
     return d->platformGLContext->defaultFramebufferObject(d->surface->surfaceHandle());
 }
@@ -1113,9 +1151,9 @@ void QOpenGLContext::deleteQGLContext()
 void *QOpenGLContext::openGLModuleHandle()
 {
 #ifdef QT_OPENGL_DYNAMIC
-    QGuiApplication *app = qGuiApp;
-    Q_ASSERT(app);
-    return app->platformNativeInterface()->nativeResourceForIntegration(QByteArrayLiteral("glhandle"));
+    QPlatformNativeInterface *ni = QGuiApplication::platformNativeInterface();
+    Q_ASSERT(ni);
+    return ni->nativeResourceForIntegration(QByteArrayLiteral("glhandle"));
 #else
     return 0;
 #endif
@@ -1175,6 +1213,46 @@ bool QOpenGLContext::isOpenGLES() const
 }
 
 /*!
+  Returns \c true if the platform supports OpenGL rendering outside the main (gui)
+  thread.
+
+  The value is controlled by the platform plugin in use and may also depend on the
+  graphics drivers.
+
+  \since 5.5
+ */
+bool QOpenGLContext::supportsThreadedOpenGL()
+{
+    Q_ASSERT(qGuiApp);
+    return QGuiApplicationPrivate::instance()->platformIntegration()->hasCapability(QPlatformIntegration::ThreadedOpenGL);
+}
+
+/*!
+    \since 5.5
+
+    Returns the application-wide shared OpenGL context, if present.
+    Otherwise, returns a null pointer.
+
+    This is useful if you need to upload OpenGL objects (buffers, textures,
+    etc.) before creating or showing a QOpenGLWidget or QQuickWidget.
+
+    \note You must set the Qt::AA_ShareOpenGLContexts flag on QGuiApplication
+    before creating the QGuiApplication object, otherwise Qt may not create a
+    global shared context.
+
+    \warning Do not attempt to make the context returned by this function
+    current on any surface. Instead, you can create a new context which shares
+    with the global one, and then make the new context current.
+
+    \sa Qt::AA_ShareOpenGLContexts, setShareContext(), makeCurrent()
+*/
+QOpenGLContext *QOpenGLContext::globalShareContext()
+{
+    Q_ASSERT(qGuiApp);
+    return qt_gl_global_share_context();
+}
+
+/*!
     \internal
 */
 QOpenGLVersionFunctionsBackend *QOpenGLContext::functionsBackend(const QOpenGLVersionStatus &v) const
@@ -1200,6 +1278,24 @@ void QOpenGLContext::removeFunctionsBackend(const QOpenGLVersionStatus &v)
 {
     Q_D(QOpenGLContext);
     d->versionFunctionsBackend.remove(v);
+}
+
+/*!
+    \internal
+ */
+void QOpenGLContext::insertExternalFunctions(QAbstractOpenGLFunctions *f)
+{
+    Q_D(QOpenGLContext);
+    d->externalVersionFunctions.insert(f);
+}
+
+/*!
+    \internal
+ */
+void QOpenGLContext::removeExternalFunctions(QAbstractOpenGLFunctions *f)
+{
+    Q_D(QOpenGLContext);
+    d->externalVersionFunctions.remove(f);
 }
 
 /*!

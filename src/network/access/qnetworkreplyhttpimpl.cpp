@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -424,6 +424,7 @@ QNetworkReplyHttpImplPrivate::QNetworkReplyHttpImplPrivate()
     , synchronous(false)
     , state(Idle)
     , statusCode(0)
+    , uploadByteDevicePosition(false)
     , uploadDeviceChoking(false)
     , outgoingData(0)
     , bytesUploaded(-1)
@@ -754,6 +755,9 @@ void QNetworkReplyHttpImplPrivate::postRequest()
                              QNetworkRequest::Automatic).toInt()) == QNetworkRequest::Manual)
         httpRequest.setWithCredentials(false);
 
+    if (request.attribute(QNetworkRequest::EmitAllUploadProgressSignalsAttribute).toBool() == true)
+        emitAllUploadProgressSignals = true;
+
 
     // Create the HTTP thread delegate
     QHttpThreadDelegate *delegate = new QHttpThreadDelegate;
@@ -841,6 +845,9 @@ void QNetworkReplyHttpImplPrivate::postRequest()
         QObject::connect(delegate, SIGNAL(sslErrors(QList<QSslError>,bool*,QList<QSslError>*)),
                 q, SLOT(replySslErrors(QList<QSslError>,bool*,QList<QSslError>*)),
                 Qt::BlockingQueuedConnection);
+        QObject::connect(delegate, SIGNAL(preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator*)),
+                         q, SLOT(replyPreSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator*)),
+                         Qt::BlockingQueuedConnection);
 #endif
         // This signal we will use to start the request.
         QObject::connect(q, SIGNAL(startHttpRequest()), delegate, SLOT(startRequest()));
@@ -853,8 +860,6 @@ void QNetworkReplyHttpImplPrivate::postRequest()
         if (uploadByteDevice) {
             QNonContiguousByteDeviceThreadForwardImpl *forwardUploadDevice =
                     new QNonContiguousByteDeviceThreadForwardImpl(uploadByteDevice->atEnd(), uploadByteDevice->size());
-            if (uploadByteDevice->isResetDisabled())
-                forwardUploadDevice->disableReset();
             forwardUploadDevice->setParent(delegate); // needed to make sure it is moved on moveToThread()
             delegate->httpRequest.setUploadByteDevice(forwardUploadDevice);
 
@@ -863,9 +868,9 @@ void QNetworkReplyHttpImplPrivate::postRequest()
                              q, SLOT(uploadByteDeviceReadyReadSlot()),
                              Qt::QueuedConnection);
 
-            // From main thread to user thread:
-            QObject::connect(q, SIGNAL(haveUploadData(QByteArray,bool,qint64)),
-                             forwardUploadDevice, SLOT(haveDataSlot(QByteArray,bool,qint64)), Qt::QueuedConnection);
+            // From user thread to http thread:
+            QObject::connect(q, SIGNAL(haveUploadData(qint64,QByteArray,bool,qint64)),
+                             forwardUploadDevice, SLOT(haveDataSlot(qint64,QByteArray,bool,qint64)), Qt::QueuedConnection);
             QObject::connect(uploadByteDevice.data(), SIGNAL(readyRead()),
                              forwardUploadDevice, SIGNAL(readyRead()),
                              Qt::QueuedConnection);
@@ -873,8 +878,8 @@ void QNetworkReplyHttpImplPrivate::postRequest()
             // From http thread to user thread:
             QObject::connect(forwardUploadDevice, SIGNAL(wantData(qint64)),
                              q, SLOT(wantUploadDataSlot(qint64)));
-            QObject::connect(forwardUploadDevice, SIGNAL(processedData(qint64)),
-                             q, SLOT(sentUploadDataSlot(qint64)));
+            QObject::connect(forwardUploadDevice,SIGNAL(processedData(qint64, qint64)),
+                             q, SLOT(sentUploadDataSlot(qint64,qint64)));
             QObject::connect(forwardUploadDevice, SIGNAL(resetData(bool*)),
                     q, SLOT(resetUploadDataSlot(bool*)),
                     Qt::BlockingQueuedConnection); // this is the only one with BlockingQueued!
@@ -1262,18 +1267,34 @@ void QNetworkReplyHttpImplPrivate::replySslConfigurationChanged(const QSslConfig
     // Receiving the used SSL configuration from the HTTP thread
     this->sslConfiguration = sslConfiguration;
 }
+
+void QNetworkReplyHttpImplPrivate::replyPreSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator *authenticator)
+{
+    Q_Q(QNetworkReplyHttpImpl);
+    emit q->preSharedKeyAuthenticationRequired(authenticator);
+}
 #endif
 
 // Coming from QNonContiguousByteDeviceThreadForwardImpl in HTTP thread
 void QNetworkReplyHttpImplPrivate::resetUploadDataSlot(bool *r)
 {
     *r = uploadByteDevice->reset();
+    if (*r) {
+        // reset our own position which is used for the inter-thread communication
+        uploadByteDevicePosition = 0;
+    }
 }
 
 // Coming from QNonContiguousByteDeviceThreadForwardImpl in HTTP thread
-void QNetworkReplyHttpImplPrivate::sentUploadDataSlot(qint64 amount)
+void QNetworkReplyHttpImplPrivate::sentUploadDataSlot(qint64 pos, qint64 amount)
 {
+    if (uploadByteDevicePosition + amount != pos) {
+        // Sanity check, should not happen.
+        error(QNetworkReply::UnknownNetworkError, QString());
+        return;
+    }
     uploadByteDevice->advanceReadPointer(amount);
+    uploadByteDevicePosition += amount;
 }
 
 // Coming from QNonContiguousByteDeviceThreadForwardImpl in HTTP thread
@@ -1298,7 +1319,7 @@ void QNetworkReplyHttpImplPrivate::wantUploadDataSlot(qint64 maxSize)
     QByteArray dataArray(data, currentUploadDataLength);
 
     // Communicate back to HTTP thread
-    emit q->haveUploadData(dataArray, uploadByteDevice->atEnd(), uploadByteDevice->size());
+    emit q->haveUploadData(uploadByteDevicePosition, dataArray, uploadByteDevice->atEnd(), uploadByteDevice->size());
 }
 
 void QNetworkReplyHttpImplPrivate::uploadByteDeviceReadyReadSlot()
@@ -1397,6 +1418,9 @@ QNetworkCacheMetaData QNetworkReplyHttpImplPrivate::fetchCacheMetaData(const QNe
              || header == "transfer-encoding"
              || header ==  "upgrade");
         if (hop_by_hop)
+            continue;
+
+        if (header == "set-cookie")
             continue;
 
         // for 4.6.0, we were planning to not store the date header in the
@@ -1863,14 +1887,16 @@ void QNetworkReplyHttpImplPrivate::emitReplyUploadProgress(qint64 bytesSent, qin
     if (isFinished)
         return;
 
-    //choke signal emissions, except the first and last signals which are unconditional
-    if (uploadProgressSignalChoke.isValid()) {
-        if (bytesSent != bytesTotal && uploadProgressSignalChoke.elapsed() < progressSignalInterval) {
-            return;
+    if (!emitAllUploadProgressSignals) {
+        //choke signal emissions, except the first and last signals which are unconditional
+        if (uploadProgressSignalChoke.isValid()) {
+            if (bytesSent != bytesTotal && uploadProgressSignalChoke.elapsed() < progressSignalInterval) {
+                return;
+            }
+            uploadProgressSignalChoke.restart();
+        } else {
+            uploadProgressSignalChoke.start();
         }
-        uploadProgressSignalChoke.restart();
-    } else {
-        uploadProgressSignalChoke.start();
     }
 
     emit q->uploadProgress(bytesSent, bytesTotal);
@@ -1887,12 +1913,6 @@ QNonContiguousByteDevice* QNetworkReplyHttpImplPrivate::createUploadByteDevice()
     } else {
         return 0;
     }
-
-    bool bufferDisallowed =
-            request.attribute(QNetworkRequest::DoNotBufferUploadDataAttribute,
-                          QVariant(false)) == QVariant(true);
-    if (bufferDisallowed)
-        uploadByteDevice->disableReset();
 
     // We want signal emissions only for normal asynchronous uploads
     if (!synchronous)

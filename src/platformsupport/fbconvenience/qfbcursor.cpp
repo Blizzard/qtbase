@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,40 +34,88 @@
 #include "qfbcursor_p.h"
 #include "qfbscreen_p.h"
 #include <QtGui/QPainter>
+#include <QtGui/private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
 
-QFbCursor::QFbCursor(QFbScreen *screen)
-        : mScreen(screen), mDirty(false), mOnScreen(false)
+bool QFbCursorDeviceListener::hasMouse() const
 {
+    return QGuiApplicationPrivate::inputDeviceManager()->deviceCount(QInputDeviceManager::DeviceTypePointer) > 0;
+}
+
+void QFbCursorDeviceListener::onDeviceListChanged(QInputDeviceManager::DeviceType type)
+{
+    if (type == QInputDeviceManager::DeviceTypePointer)
+        m_cursor->updateMouseStatus();
+}
+
+QFbCursor::QFbCursor(QFbScreen *screen)
+    : mVisible(true),
+      mScreen(screen),
+      mDirty(false),
+      mOnScreen(false),
+      mGraphic(0),
+      mDeviceListener(0)
+{
+    QByteArray hideCursorVal = qgetenv("QT_QPA_FB_HIDECURSOR");
+    if (!hideCursorVal.isEmpty())
+        mVisible = hideCursorVal.toInt() == 0;
+    if (!mVisible)
+        return;
+
     mGraphic = new QPlatformCursorImage(0, 0, 0, 0, 0, 0);
     setCursor(Qt::ArrowCursor);
+
+    mDeviceListener = new QFbCursorDeviceListener(this);
+    connect(QGuiApplicationPrivate::inputDeviceManager(), &QInputDeviceManager::deviceListChanged,
+            mDeviceListener, &QFbCursorDeviceListener::onDeviceListChanged);
+    updateMouseStatus();
+}
+
+QFbCursor::~QFbCursor()
+{
+    delete mDeviceListener;
 }
 
 QRect QFbCursor::getCurrentRect()
 {
     QRect rect = mGraphic->image()->rect().translated(-mGraphic->hotspot().x(),
                                                      -mGraphic->hotspot().y());
-    rect.translate(QCursor::pos());
+    rect.translate(m_pos);
     QPoint mScreenOffset = mScreen->geometry().topLeft();
     rect.translate(-mScreenOffset);  // global to local translation
     return rect;
 }
 
-
-void QFbCursor::pointerEvent(const QMouseEvent & e)
+QPoint QFbCursor::pos() const
 {
-    Q_UNUSED(e);
-    QPoint mScreenOffset = mScreen->geometry().topLeft();
+    return m_pos;
+}
+
+void QFbCursor::setPos(const QPoint &pos)
+{
+    QGuiApplicationPrivate::inputDeviceManager()->setCursorPos(pos);
+    m_pos = pos;
     mCurrentRect = getCurrentRect();
-    // global to local translation
-    if (mOnScreen || mScreen->geometry().intersects(mCurrentRect.translated(mScreenOffset))) {
+    if (mOnScreen || mScreen->geometry().intersects(mCurrentRect.translated(mScreen->geometry().topLeft())))
         setDirty();
-    }
+}
+
+void QFbCursor::pointerEvent(const QMouseEvent &e)
+{
+    if (e.type() != QEvent::MouseMove)
+        return;
+    m_pos = e.screenPos().toPoint();
+    mCurrentRect = getCurrentRect();
+    if (mOnScreen || mScreen->geometry().intersects(mCurrentRect.translated(mScreen->geometry().topLeft())))
+        setDirty();
 }
 
 QRect QFbCursor::drawCursor(QPainter & painter)
 {
+    if (!mVisible)
+        return QRect();
+
     mDirty = false;
     if (mCurrentRect.isNull())
         return QRect();
@@ -131,10 +179,19 @@ void QFbCursor::changeCursor(QCursor * widgetCursor, QWindow *window)
 
 void QFbCursor::setDirty()
 {
+    if (!mVisible)
+        return;
+
     if (!mDirty) {
         mDirty = true;
         mScreen->scheduleUpdate();
     }
+}
+
+void QFbCursor::updateMouseStatus()
+{
+    mVisible = mDeviceListener->hasMouse();
+    mScreen->setDirty(mVisible ? getCurrentRect() : lastPainted());
 }
 
 QT_END_NAMESPACE

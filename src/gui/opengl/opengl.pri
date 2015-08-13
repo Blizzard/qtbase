@@ -32,7 +32,11 @@ contains(QT_CONFIG, opengl)|contains(QT_CONFIG, opengles2) {
                opengl/qopenglversionfunctionsfactory_p.h \
                opengl/qopenglvertexarrayobject.h \
                opengl/qopengldebug.h \
-               opengl/qopengltextureblitter_p.h
+               opengl/qopengltextureblitter_p.h \
+               opengl/qopengltexture.h \
+               opengl/qopengltexture_p.h \
+               opengl/qopengltexturehelper_p.h \
+               opengl/qopenglpixeltransferoptions.h
 
     SOURCES += opengl/qopengl.cpp \
                opengl/qopenglfunctions.cpp \
@@ -53,18 +57,10 @@ contains(QT_CONFIG, opengl)|contains(QT_CONFIG, opengles2) {
                opengl/qopenglversionfunctionsfactory.cpp \
                opengl/qopenglvertexarrayobject.cpp \
                opengl/qopengldebug.cpp \
-               opengl/qopengltextureblitter.cpp
-
-    !wince* {
-        HEADERS += opengl/qopengltexture.h \
-                   opengl/qopengltexture_p.h \
-                   opengl/qopengltexturehelper_p.h \
-                   opengl/qopenglpixeltransferoptions.h
-
-        SOURCES += opengl/qopengltexture.cpp \
-                   opengl/qopengltexturehelper.cpp \
-                   opengl/qopenglpixeltransferoptions.cpp
-    }
+               opengl/qopengltextureblitter.cpp \
+               opengl/qopengltexture.cpp \
+               opengl/qopengltexturehelper.cpp \
+               opengl/qopenglpixeltransferoptions.cpp
 
     !contains(QT_CONFIG, opengles2) {
         HEADERS += opengl/qopenglfunctions_1_0.h \
@@ -83,12 +79,16 @@ contains(QT_CONFIG, opengl)|contains(QT_CONFIG, opengles2) {
                    opengl/qopenglfunctions_4_1_core.h \
                    opengl/qopenglfunctions_4_2_core.h \
                    opengl/qopenglfunctions_4_3_core.h \
+                   opengl/qopenglfunctions_4_4_core.h \
+                   opengl/qopenglfunctions_4_5_core.h \
                    opengl/qopenglfunctions_3_2_compatibility.h \
                    opengl/qopenglfunctions_3_3_compatibility.h \
                    opengl/qopenglfunctions_4_0_compatibility.h \
                    opengl/qopenglfunctions_4_1_compatibility.h \
                    opengl/qopenglfunctions_4_2_compatibility.h \
                    opengl/qopenglfunctions_4_3_compatibility.h \
+                   opengl/qopenglfunctions_4_4_compatibility.h \
+                   opengl/qopenglfunctions_4_5_compatibility.h \
                    opengl/qopenglqueryhelper_p.h \
                    opengl/qopengltimerquery.h
 
@@ -108,12 +108,16 @@ contains(QT_CONFIG, opengl)|contains(QT_CONFIG, opengles2) {
                    opengl/qopenglfunctions_4_1_core.cpp \
                    opengl/qopenglfunctions_4_2_core.cpp \
                    opengl/qopenglfunctions_4_3_core.cpp \
+                   opengl/qopenglfunctions_4_4_core.cpp \
+                   opengl/qopenglfunctions_4_5_core.cpp \
                    opengl/qopenglfunctions_3_2_compatibility.cpp \
                    opengl/qopenglfunctions_3_3_compatibility.cpp \
                    opengl/qopenglfunctions_4_0_compatibility.cpp \
                    opengl/qopenglfunctions_4_1_compatibility.cpp \
                    opengl/qopenglfunctions_4_2_compatibility.cpp \
                    opengl/qopenglfunctions_4_3_compatibility.cpp \
+                   opengl/qopenglfunctions_4_4_compatibility.cpp \
+                   opengl/qopenglfunctions_4_5_compatibility.cpp \
                    opengl/qopengltimerquery.cpp
     }
 

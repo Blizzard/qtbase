@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -87,11 +87,7 @@ void tst_QPixmapCache::insert()
     if (cacheType) {
         QBENCHMARK {
             for (int i = 0 ; i <= 10000 ; i++)
-            {
-                QString tmp;
-                tmp.sprintf("my-key-%d", i);
-                QPixmapCache::insert(tmp, p);
-            }
+                QPixmapCache::insert(QString::asprintf("my-key-%d", i), p);
         }
     } else {
         QBENCHMARK {
@@ -114,12 +110,8 @@ void tst_QPixmapCache::find()
     QPixmap p;
     if (cacheType) {
         QBENCHMARK {
-            QString tmp;
             for (int i = 0 ; i <= 10000 ; i++)
-            {
-                tmp.sprintf("my-key-%d", i);
-                QPixmapCache::find(tmp, p);
-            }
+                QPixmapCache::find(QString::asprintf("my-key-%d", i), p);
         }
     } else {
         QBENCHMARK {
@@ -165,18 +157,10 @@ void tst_QPixmapCache::styleUseCaseComplexKey()
     if (cacheType) {
         QBENCHMARK {
             for (int i = 0 ; i <= 10000 ; i++)
-            {
-                QString tmp;
-                tmp.sprintf("%s-%d-%d-%d-%d-%d-%d", QString("my-progressbar-%1").arg(i).toLatin1().constData(), 5, 3, 0, 358, 100, 200);
-                QPixmapCache::insert(tmp, p);
-            }
+                QPixmapCache::insert(QString::asprintf("%s-%d-%d-%d-%d-%d-%d", QString("my-progressbar-%1").arg(i).toLatin1().constData(), 5, 3, 0, 358, 100, 200), p);
 
             for (int i = 0 ; i <= 10000 ; i++)
-            {
-                QString tmp;
-                tmp.sprintf("%s-%d-%d-%d-%d-%d-%d", QString("my-progressbar-%1").arg(i).toLatin1().constData(), 5, 3, 0, 358, 100, 200);
-                QPixmapCache::find(tmp, p);
-            }
+                QPixmapCache::find(QString::asprintf("%s-%d-%d-%d-%d-%d-%d", QString("my-progressbar-%1").arg(i).toLatin1().constData(), 5, 3, 0, 358, 100, 200), p);
         }
     } else {
         QHash<styleStruct, QPixmapCache::Key> hash;

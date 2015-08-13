@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -98,6 +98,7 @@ QString ConfigStrings::QUOTINGINFORMATION = QStringLiteral("quotinginformation")
 QString ConfigStrings::SCRIPTDIRS = QStringLiteral("scriptdirs");
 QString ConfigStrings::SCRIPTS = QStringLiteral("scripts");
 QString ConfigStrings::SHOWINTERNAL = QStringLiteral("showinternal");
+QString ConfigStrings::SINGLEEXEC = QStringLiteral("singleexec");
 QString ConfigStrings::SOURCEDIRS = QStringLiteral("sourcedirs");
 QString ConfigStrings::SOURCEENCODING = QStringLiteral("sourceencoding");
 QString ConfigStrings::SOURCES = QStringLiteral("sources");
@@ -118,6 +119,7 @@ QString ConfigStrings::FILEEXTENSIONS = QStringLiteral("fileextensions");
 QString ConfigStrings::IMAGEEXTENSIONS = QStringLiteral("imageextensions");
 QString ConfigStrings::QMLONLY = QStringLiteral("qmlonly");
 QString ConfigStrings::QMLTYPESPAGE = QStringLiteral("qmltypespage");
+QString ConfigStrings::WRITEQAPAGES = QStringLiteral("writeqapages");
 
 /*!
   An entry in a stack, where each entry is a list
@@ -350,6 +352,10 @@ QString Config::getOutputDir() const
         t = getString(CONFIG_OUTPUTDIR);
     else
         t = overrideOutputDir;
+    if (Generator::singleExec()) {
+        QString project = getString(CONFIG_PROJECT);
+        t += QLatin1Char('/') + project.toLower();
+    }
     if (!Generator::useOutputSubdirs()) {
         t = t.left(t.lastIndexOf('/'));
         QString singleOutputSubdir = getString("HTML.outputsubdir");
@@ -390,7 +396,7 @@ QString Config::getString(const QString& var) const
         while (i >= 0) {
             const ConfigVar& cv = configVars[i];
             if (!cv.location_.isEmpty())
-                (Location&) lastLocation_ = cv.location_;
+                const_cast<Config *>(this)->lastLocation_ = cv.location_;
             if (!cv.values_.isEmpty()) {
                 if (!cv.plus_)
                     value.clear();
@@ -437,7 +443,7 @@ QStringList Config::getStringList(const QString& var) const
         int i = configVars.size() - 1;
         while (i >= 0) {
             if (!configVars[i].location_.isEmpty())
-                (Location&) lastLocation_ = configVars[i].location_;
+                const_cast<Config *>(this)->lastLocation_ = configVars[i].location_;
             if (configVars[i].plus_)
                 values.append(configVars[i].values_);
             else
@@ -472,7 +478,7 @@ QStringList Config::getCanonicalPathList(const QString& var, bool validate) cons
         while (i >= 0) {
             const ConfigVar& cv = configVars[i];
             if (!cv.location_.isEmpty())
-                (Location&) lastLocation_ = cv.location_;
+                const_cast<Config *>(this)->lastLocation_ = cv.location_;
             if (!cv.plus_)
                 t.clear();
             const QString d = cv.currentPath_;
@@ -869,6 +875,36 @@ bool Config::isMetaKeyChar(QChar ch)
 }
 
 /*!
+  \a fileName is a master qdocconf file. It contains a list of
+  qdocconf files and nothing else. Read the list and return it.
+ */
+QStringList Config::loadMaster(const QString& fileName)
+{
+    Location location = Location::null;
+    QFile fin(fileName);
+    if (!fin.open(QFile::ReadOnly | QFile::Text)) {
+        if (!Config::installDir.isEmpty()) {
+            int prefix = location.filePath().length() - location.fileName().length();
+            fin.setFileName(Config::installDir + "/" + fileName.right(fileName.length() - prefix));
+        }
+        if (!fin.open(QFile::ReadOnly | QFile::Text))
+            location.fatal(tr("Cannot open master qdocconf file '%1': %2").arg(fileName).arg(fin.errorString()));
+    }
+    QTextStream stream(&fin);
+#ifndef QT_NO_TEXTCODEC
+    stream.setCodec("UTF-8");
+#endif
+    QStringList qdocFiles;
+    QString line = stream.readLine();
+    while (!line.isNull()) {
+        qdocFiles.append(line);
+        line = stream.readLine();
+    }
+    fin.close();
+    return qdocFiles;
+}
+
+/*!
   Load, parse, and process a qdoc configuration file. This
   function is only called by the other load() function, but
   this one is recursive, i.e., it calls itself when it sees
@@ -970,8 +1006,8 @@ void Config::load(Location location, const QString& fileName)
                             SKIP_CHAR();
                         }
                         if (!var.isEmpty()) {
-                            char *val = getenv(var.toLatin1().data());
-                            if (val == 0) {
+                            const QByteArray val = qgetenv(var.toLatin1().data());
+                            if (val.isNull()) {
                                 location.fatal(tr("Environment variable '%1' undefined").arg(var));
                             }
                             else {
@@ -1078,8 +1114,8 @@ void Config::load(Location location, const QString& fileName)
                             SKIP_CHAR();
                         }
                         if (!var.isEmpty()) {
-                            char *val = getenv(var.toLatin1().data());
-                            if (val == 0) {
+                            const QByteArray val = qgetenv(var.toLatin1().constData());
+                            if (val.isNull()) {
                                 location.fatal(tr("Environment variable '%1' undefined").arg(var));
                             }
                             else {

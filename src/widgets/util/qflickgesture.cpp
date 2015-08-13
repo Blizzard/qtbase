@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,6 +40,7 @@
 #include "qgraphicssceneevent.h"
 #include "qgraphicsview.h"
 #include "qscroller.h"
+#include "private/qapplication_p.h"
 #include "private/qevent_p.h"
 #include "private/qflickgesture_p.h"
 #include "qdebug.h"
@@ -65,7 +66,9 @@ static QMouseEvent *copyMouseEvent(QEvent *e)
     case QEvent::MouseButtonRelease:
     case QEvent::MouseMove: {
         QMouseEvent *me = static_cast<QMouseEvent *>(e);
-        return new QMouseEvent(me->type(), QPoint(0, 0), me->windowPos(), me->screenPos(), me->button(), me->buttons(), me->modifiers());
+        QMouseEvent *cme = new QMouseEvent(me->type(), QPoint(0, 0), me->windowPos(), me->screenPos(), me->button(), me->buttons(), me->modifiers());
+        QGuiApplicationPrivate::setMouseEventSource(cme, me->source());
+        return cme;
     }
 #ifndef QT_NO_GRAPHICSVIEW
     case QEvent::GraphicsSceneMousePress:
@@ -75,7 +78,9 @@ static QMouseEvent *copyMouseEvent(QEvent *e)
 #if 1
         QEvent::Type met = me->type() == QEvent::GraphicsSceneMousePress ? QEvent::MouseButtonPress :
                            (me->type() == QEvent::GraphicsSceneMouseRelease ? QEvent::MouseButtonRelease : QEvent::MouseMove);
-        return new QMouseEvent(met, QPoint(0, 0), QPoint(0, 0), me->screenPos(), me->button(), me->buttons(), me->modifiers());
+        QMouseEvent *cme = new QMouseEvent(met, QPoint(0, 0), QPoint(0, 0), me->screenPos(), me->button(), me->buttons(), me->modifiers());
+        QGuiApplicationPrivate::setMouseEventSource(cme, me->source());
+        return cme;
 #else
         QGraphicsSceneMouseEvent *copy = new QGraphicsSceneMouseEvent(me->type());
         copy->setPos(me->pos());
@@ -113,6 +118,7 @@ private:
         , sendingEvent(false)
         , mouseButton(Qt::NoButton)
         , mouseTarget(0)
+        , mouseEventSource(Qt::MouseEventNotSynthesized)
     { }
 
     static PressDelayHandler *inst;
@@ -148,6 +154,7 @@ public:
             pressDelayTimer = startTimer(delay);
             mouseTarget = QApplication::widgetAt(pressDelayEvent->globalPos());
             mouseButton = pressDelayEvent->button();
+            mouseEventSource = pressDelayEvent->source();
             qFGDebug() << "QFG: consuming/delaying mouse press";
         } else {
             qFGDebug() << "QFG: NOT consuming/delaying mouse press";
@@ -234,13 +241,14 @@ public:
             QMouseEvent re(QEvent::MouseButtonRelease, QPoint(), farFarAway, farFarAway,
                            mouseButton, QApplication::mouseButtons() & ~mouseButton,
                            QApplication::keyboardModifiers());
+            QGuiApplicationPrivate::setMouseEventSource(&re, mouseEventSource);
             sendMouseEvent(&re, RegrabMouseAfterwards);
             // don't clear the mouseTarget just yet, since we need to explicitly ungrab the mouse on release!
         }
     }
 
 protected:
-    void timerEvent(QTimerEvent *e)
+    void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE
     {
         if (e->timerId() == pressDelayTimer) {
             if (pressDelayEvent && mouseTarget) {
@@ -284,6 +292,7 @@ protected:
                 QMouseEvent copy(me->type(), mouseTarget->mapFromGlobal(me->globalPos()),
                                  mouseTarget->topLevelWidget()->mapFromGlobal(me->globalPos()), me->screenPos(),
                                  me->button(), me->buttons(), me->modifiers());
+                QGuiApplicationPrivate::setMouseEventSource(&copy, me->source());
                 qt_sendSpontaneousEvent(mouseTarget, &copy);
             }
 
@@ -309,6 +318,7 @@ private:
     bool sendingEvent;
     Qt::MouseButton mouseButton;
     QPointer<QWidget> mouseTarget;
+    Qt::MouseEventSource mouseEventSource;
 };
 
 
@@ -445,7 +455,7 @@ QGestureRecognizer::Result QFlickGestureRecognizer::recognize(QGesture *state,
         }
         break;
 
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
     // the only way to distinguish between real mouse wheels and wheel
     // events generated by the native 2 finger swipe gesture is to listen
     // for these events (according to Apple's Cocoa Event-Handling Guide)

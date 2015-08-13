@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -74,7 +74,7 @@ public:
 #endif
     }
 
-    void freeResource(QOpenGLContext *context)
+    void freeResource(QOpenGLContext *context) Q_DECL_OVERRIDE
     {
         QOpenGLContext *ctx = context;
 #ifdef QT_GL_TEXTURE_GLYPH_CACHE_DEBUG
@@ -86,7 +86,7 @@ public:
             ctx->functions()->glDeleteTextures(1, &m_texture);
     }
 
-    void invalidateResource()
+    void invalidateResource() Q_DECL_OVERRIDE
     {
         m_texture = 0;
         m_fbo = 0;
@@ -106,12 +106,12 @@ public:
     QOpenGLTextureGlyphCache(QFontEngine::GlyphFormat glyphFormat, const QTransform &matrix);
     ~QOpenGLTextureGlyphCache();
 
-    virtual void createTextureData(int width, int height);
-    virtual void resizeTextureData(int width, int height);
-    virtual void fillTexture(const Coord &c, glyph_t glyph, QFixed subPixelPosition);
-    virtual int glyphPadding() const;
-    virtual int maxTextureWidth() const;
-    virtual int maxTextureHeight() const;
+    virtual void createTextureData(int width, int height) Q_DECL_OVERRIDE;
+    virtual void resizeTextureData(int width, int height) Q_DECL_OVERRIDE;
+    virtual void fillTexture(const Coord &c, glyph_t glyph, QFixed subPixelPosition) Q_DECL_OVERRIDE;
+    virtual int glyphPadding() const Q_DECL_OVERRIDE;
+    virtual int maxTextureWidth() const Q_DECL_OVERRIDE;
+    virtual int maxTextureHeight() const Q_DECL_OVERRIDE;
 
     inline GLuint texture() const {
         QOpenGLTextureGlyphCache *that = const_cast<QOpenGLTextureGlyphCache *>(this);

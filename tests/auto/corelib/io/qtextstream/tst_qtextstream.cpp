@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -81,6 +81,7 @@ private slots:
     void readLineMaxlen_data();
     void readLineMaxlen();
     void readLinesFromBufferCRCR();
+    void readLineInto();
 
     // all
     void readAllFromDevice_data();
@@ -186,7 +187,7 @@ private slots:
     void pos();
     void pos2();
     void pos3LargeFile();
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
     void readStdin();
     void readAllFromStdin();
     void readLineFromStdin();
@@ -593,6 +594,63 @@ void tst_QTextStream::readLinesFromBufferCRCR()
     }
 }
 
+class ErrorDevice : public QIODevice
+{
+protected:
+    qint64 readData(char *data, qint64 maxlen) Q_DECL_OVERRIDE
+    {
+        Q_UNUSED(data)
+        Q_UNUSED(maxlen)
+        return -1;
+    }
+
+    qint64 writeData(const char *data, qint64 len) Q_DECL_OVERRIDE
+    {
+        Q_UNUSED(data)
+        Q_UNUSED(len)
+        return -1;
+    }
+};
+
+void tst_QTextStream::readLineInto()
+{
+    QByteArray data = "1\n2\n3";
+
+    QTextStream ts(&data);
+    QString line;
+
+    ts.readLineInto(&line);
+    QCOMPARE(line, QStringLiteral("1"));
+
+    ts.readLineInto(Q_NULLPTR, 0); // read the second line, but don't store it
+
+    ts.readLineInto(&line);
+    QCOMPARE(line, QStringLiteral("3"));
+
+    QVERIFY(!ts.readLineInto(&line));
+    QVERIFY(line.isEmpty());
+
+    QFile file(m_rfc3261FilePath);
+    QVERIFY(file.open(QFile::ReadOnly));
+
+    ts.setDevice(&file);
+    line.reserve(1);
+    int maxLineCapacity = line.capacity();
+
+    while (ts.readLineInto(&line)) {
+        QVERIFY(line.capacity() >= maxLineCapacity);
+        maxLineCapacity = line.capacity();
+    }
+
+    line = "Test string";
+    ErrorDevice errorDevice;
+    QVERIFY(errorDevice.open(QIODevice::ReadOnly));
+    ts.setDevice(&errorDevice);
+
+    QVERIFY(!ts.readLineInto(&line));
+    QVERIFY(line.isEmpty());
+}
+
 // ------------------------------------------------------------------------------
 void tst_QTextStream::readLineFromString_data()
 {
@@ -912,13 +970,28 @@ void tst_QTextStream::lineCount()
 }
 
 // ------------------------------------------------------------------------------
+struct CompareIndicesForArray
+{
+    int *array;
+    CompareIndicesForArray(int *array) : array(array) {}
+    bool operator() (const int i1, const int i2)
+    {
+        return array[i1] < array[i2];
+    }
+};
+
 void tst_QTextStream::performance()
 {
     // Phase #1 - test speed of reading a huge text file with QFile.
     QTime stopWatch;
 
-    int elapsed1 = 0;
-    int elapsed2 = 0;
+    const int N = 3;
+    const char * readMethods[N] = {
+        "QFile::readLine()",
+        "QTextStream::readLine()",
+        "QTextStream::readLine(QString *)"
+    };
+    int elapsed[N] = {0, 0, 0};
 
         stopWatch.restart();
         int nlines1 = 0;
@@ -930,7 +1003,7 @@ void tst_QTextStream::performance()
             file.readLine();
         }
 
-        elapsed1 += stopWatch.elapsed();
+        elapsed[0] = stopWatch.elapsed();
         stopWatch.restart();
 
         int nlines2 = 0;
@@ -943,20 +1016,38 @@ void tst_QTextStream::performance()
             stream.readLine();
         }
 
-        elapsed2 += stopWatch.elapsed();
+        elapsed[1] = stopWatch.elapsed();
+        stopWatch.restart();
+
+        int nlines3 = 0;
+        QFile file3(m_rfc3261FilePath);
+        QVERIFY(file3.open(QFile::ReadOnly));
+
+        QTextStream stream2(&file3);
+        QString line;
+        while (stream2.readLineInto(&line))
+            ++nlines3;
+
+        elapsed[2] = stopWatch.elapsed();
+
         QCOMPARE(nlines1, nlines2);
+        QCOMPARE(nlines2, nlines3);
 
-    qDebug("QFile used %.2f seconds to read the file",
-           elapsed1 / 1000.0);
+    for (int i = 0; i < N; i++) {
+        qDebug("%s used %.3f seconds to read the file", readMethods[i],
+               elapsed[i] / 1000.0);
+    }
 
-    qDebug("QTextStream used %.2f seconds to read the file",
-           elapsed2 / 1000.0);
-    if (elapsed2 > elapsed1) {
-        qDebug("QFile is %.2fx faster than QTextStream",
-               double(elapsed2) / double(elapsed1));
-    } else {
-        qDebug("QTextStream is %.2fx faster than QFile",
-               double(elapsed1) / double(elapsed2));
+    int idx[N] = {0, 1, 2};
+    std::sort(idx, idx + N, CompareIndicesForArray(elapsed));
+
+    for (int i = 0; i < N-1; i++) {
+        int i1 = idx[i];
+        int i2 = idx[i+1];
+        qDebug("Reading by %s is %.2fx faster than by %s",
+               readMethods[i1],
+               double(elapsed[i2]) / double(elapsed[i1]),
+               readMethods[i2]);
     }
 }
 
@@ -1393,9 +1484,12 @@ void tst_QTextStream::pos3LargeFile()
 
 // ------------------------------------------------------------------------------
 // Qt/CE has no stdin/out support for processes
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
 void tst_QTextStream::readStdin()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess stdinProcess;
     stdinProcess.start("stdinProcess/stdinProcess");
     stdinProcess.setReadChannel(QProcess::StandardError);
@@ -1414,12 +1508,16 @@ void tst_QTextStream::readStdin()
     QCOMPARE(a, 1);
     QCOMPARE(b, 2);
     QCOMPARE(c, 3);
+#endif
 }
 
 // ------------------------------------------------------------------------------
 // Qt/CE has no stdin/out support for processes
 void tst_QTextStream::readAllFromStdin()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess stdinProcess;
     stdinProcess.start("readAllStdinProcess/readAllStdinProcess", QIODevice::ReadWrite | QIODevice::Text);
     stdinProcess.setReadChannel(QProcess::StandardError);
@@ -1432,12 +1530,16 @@ void tst_QTextStream::readAllFromStdin()
 
     QVERIFY(stdinProcess.waitForFinished(5000));
     QCOMPARE(stream.readAll(), QString::fromLatin1("hello world\n"));
+#endif
 }
 
 // ------------------------------------------------------------------------------
 // Qt/CE has no stdin/out support for processes
 void tst_QTextStream::readLineFromStdin()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess stdinProcess;
     stdinProcess.start("readLineStdinProcess/readLineStdinProcess", QIODevice::ReadWrite | QIODevice::Text);
     stdinProcess.setReadChannel(QProcess::StandardError);
@@ -1453,6 +1555,7 @@ void tst_QTextStream::readLineFromStdin()
     stdinProcess.closeWriteChannel();
 
     QVERIFY(stdinProcess.waitForFinished(5000));
+#endif
 }
 #endif
 

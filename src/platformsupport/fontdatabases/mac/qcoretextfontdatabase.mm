@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -55,6 +47,18 @@
 #include <QtCore/QtEndian>
 
 QT_BEGIN_NAMESPACE
+
+namespace {
+class AutoReleasePool
+{
+public:
+    AutoReleasePool(): pool([[NSAutoreleasePool alloc] init]) {}
+    ~AutoReleasePool() { [pool release]; }
+
+private:
+    NSAutoreleasePool *pool;
+};
+}
 
 // this could become a list of all languages used for each writing
 // system, instead of using the single most common language.
@@ -177,6 +181,8 @@ QCoreTextFontDatabase::QCoreTextFontDatabase()
 
 QCoreTextFontDatabase::~QCoreTextFontDatabase()
 {
+    foreach (CTFontDescriptorRef ref, m_systemFontDescriptors)
+        CFRelease(ref);
 }
 
 static CFArrayRef availableFamilyNames()
@@ -264,47 +270,37 @@ static void getFontDescription(CTFontDescriptorRef font, FontDescription *fd)
     fd->fixedPitch = false;
 
     if (QCFType<CTFontRef> tempFont = CTFontCreateWithFontDescriptor(font, 0.0, 0)) {
-        uint length = 0;
         uint tag = MAKE_TAG('O', 'S', '/', '2');
         CTFontRef tempFontRef = tempFont;
         void *userData = reinterpret_cast<void *>(&tempFontRef);
-        if (QCoreTextFontEngine::ct_getSfntTable(userData, tag, 0, &length)) {
-            QVarLengthArray<uchar> os2Table(length);
-            if (length >= 86 && QCoreTextFontEngine::ct_getSfntTable(userData, tag, os2Table.data(), &length)) {
-                quint32 unicodeRange[4] = {
-                        qFromBigEndian<quint32>(os2Table.data() + 42),
-                        qFromBigEndian<quint32>(os2Table.data() + 46),
-                        qFromBigEndian<quint32>(os2Table.data() + 50),
-                        qFromBigEndian<quint32>(os2Table.data() + 54)
-                    };
-                quint32 codePageRange[2] = { qFromBigEndian<quint32>(os2Table.data() + 78),
-                                             qFromBigEndian<quint32>(os2Table.data() + 82) };
-                fd->writingSystems = QPlatformFontDatabase::writingSystemsFromTrueTypeBits(unicodeRange, codePageRange);
+        uint length = 128;
+        QVarLengthArray<uchar, 128> os2Table(length);
+        if (QCoreTextFontEngine::ct_getSfntTable(userData, tag, os2Table.data(), &length) && length >= 86) {
+            if (length > uint(os2Table.length())) {
+                os2Table.resize(length);
+                if (!QCoreTextFontEngine::ct_getSfntTable(userData, tag, os2Table.data(), &length))
+                    Q_UNREACHABLE();
+                Q_ASSERT(length >= 86);
             }
+            quint32 unicodeRange[4] = {
+                qFromBigEndian<quint32>(os2Table.data() + 42),
+                qFromBigEndian<quint32>(os2Table.data() + 46),
+                qFromBigEndian<quint32>(os2Table.data() + 50),
+                qFromBigEndian<quint32>(os2Table.data() + 54)
+            };
+            quint32 codePageRange[2] = {
+                qFromBigEndian<quint32>(os2Table.data() + 78),
+                qFromBigEndian<quint32>(os2Table.data() + 82)
+            };
+            fd->writingSystems = QPlatformFontDatabase::writingSystemsFromTrueTypeBits(unicodeRange, codePageRange);
         }
     }
 
     if (styles) {
         if (CFNumberRef weightValue = (CFNumberRef) CFDictionaryGetValue(styles, kCTFontWeightTrait)) {
-            double normalizedWeight;
-            if (CFNumberGetValue(weightValue, kCFNumberDoubleType, &normalizedWeight)) {
-                if (normalizedWeight >= 0.62)
-                    fd->weight = QFont::Black;
-                else if (normalizedWeight >= 0.4)
-                    fd->weight = QFont::Bold;
-                else if (normalizedWeight >= 0.3)
-                    fd->weight = QFont::DemiBold;
-                else if (normalizedWeight >= 0.2)
-                    fd->weight = qt_mediumFontWeight;
-                else if (normalizedWeight == 0.0)
-                    fd->weight = QFont::Normal;
-                else if (normalizedWeight <= -0.4)
-                    fd->weight = QFont::Light;
-                else if (normalizedWeight <= -0.6)
-                    fd->weight = qt_extralightFontWeight;
-                else if (normalizedWeight <= -0.8)
-                    fd->weight = qt_thinFontWeight;
-            }
+            float normalizedWeight;
+            if (CFNumberGetValue(weightValue, kCFNumberFloatType, &normalizedWeight))
+                fd->weight = QCoreTextFontEngine::qtWeightFromCFWeight(normalizedWeight);
         }
         if (CFNumberRef italic = (CFNumberRef) CFDictionaryGetValue(styles, kCTFontSlantTrait)) {
             double d;
@@ -352,11 +348,7 @@ void QCoreTextFontDatabase::populateFromDescriptor(CTFontDescriptorRef font)
 {
     FontDescription fd;
     getFontDescription(font, &fd);
-    populateFromFontDescription(font, fd);
-}
 
-void QCoreTextFontDatabase::populateFromFontDescription(CTFontDescriptorRef font, const FontDescription &fd)
-{
     CFRetain(font);
     QPlatformFontDatabase::registerFont(fd.familyName, fd.styleName, fd.foundryName, fd.weight, fd.style, fd.stretch,
             true /* antialiased */, true /* scalable */,
@@ -367,6 +359,8 @@ void QCoreTextFontDatabase::releaseHandle(void *handle)
 {
     CFRelease(CTFontDescriptorRef(handle));
 }
+
+extern CGAffineTransform qt_transform_from_fontdef(const QFontDef &fontDef);
 
 QFontEngine *QCoreTextFontDatabase::fontEngine(const QFontDef &f, void *usrPtr)
 {
@@ -382,7 +376,8 @@ QFontEngine *QCoreTextFontDatabase::fontEngine(const QFontDef &f, void *usrPtr)
         scaledPointSize = f.pointSize;
 
     CTFontDescriptorRef descriptor = (CTFontDescriptorRef) usrPtr;
-    CTFontRef font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, NULL);
+    CGAffineTransform matrix = qt_transform_from_fontdef(f);
+    CTFontRef font = CTFontCreateWithFontDescriptor(descriptor, scaledPointSize, &matrix);
     if (font) {
         QFontEngine *engine = new QCoreTextFontEngine(font, f);
         engine->fontDef = f;
@@ -457,6 +452,8 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
 {
     Q_UNUSED(style);
     Q_UNUSED(script);
+
+    AutoReleasePool pool;
 
     static QHash<QString, QStringList> fallbackLists;
 
@@ -826,7 +823,11 @@ QFont *QCoreTextFontDatabase::themeFont(QPlatformTheme::Font f) const
     CTFontDescriptorRef fontDesc = fontDescriptorFromTheme(f);
     FontDescription fd;
     getFontDescription(fontDesc, &fd);
-    m_systemFontDescriptors.insert(fontDesc);
+
+    if (!m_systemFontDescriptors.contains(fontDesc))
+        m_systemFontDescriptors.insert(fontDesc);
+    else
+        CFRelease(fontDesc);
 
     QFont *font = new QFont(fd.familyName, fd.pixelSize, fd.weight, fd.style == QFont::StyleItalic);
     return font;
@@ -840,6 +841,11 @@ QFont QCoreTextFontDatabase::defaultFont() const
     }
 
     return QFont(defaultFontName);
+}
+
+bool QCoreTextFontDatabase::fontsAlwaysScalable() const
+{
+    return true;
 }
 
 QList<int> QCoreTextFontDatabase::standardSizes() const

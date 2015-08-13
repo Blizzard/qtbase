@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -307,24 +307,22 @@ void tst_QRawFont::advances()
     bool supportsSubPixelPositions = font_d->fontEngine->supportsSubPixelPositions();
     QVector<QPointF> advances = font.advancesForGlyphIndexes(glyphIndices);
 
-    // On Windows and QNX, freetype engine returns advance of 9 for some of the glyphs
-    // when full hinting is used (default on Windows).
-    bool mayFail = false;
-#if defined (Q_OS_WIN)
-    mayFail = font_d->fontEngine->type() == QFontEngine::Freetype
-              && (hintingPreference == QFont::PreferFullHinting
-               || hintingPreference == QFont::PreferDefaultHinting);
-#elif defined(Q_OS_QNX)
-    mayFail = font_d->fontEngine->type() == QFontEngine::Freetype
-              && hintingPreference == QFont::PreferFullHinting;
-#endif
+    bool mayDiffer = font_d->fontEngine->type() == QFontEngine::Freetype
+                     && (hintingPreference == QFont::PreferFullHinting
+                      || hintingPreference == QFont::PreferDefaultHinting);
 
     for (int i = 0; i < glyphIndices.size(); ++i) {
-        if (mayFail && (i == 0 || i == 5)) {
-            QEXPECT_FAIL("", "FreeType engine reports unexpected advance "
-                             "for some glyphs (9 instead of 8)", Continue);
+        if ((i == 0 || i == 5) && mayDiffer) {
+            QVERIFY2(qRound(advances.at(i).x()) == 8
+                        || qRound(advances.at(i).x()) == 9,
+                     qPrintable(QStringLiteral("%1 != %2 && %1 != %3")
+                                .arg(qRound(advances.at(i).x()))
+                                .arg(8)
+                                .arg(9)));
+        } else {
+            QCOMPARE(qRound(advances.at(i).x()), 8);
         }
-        QVERIFY(qFuzzyCompare(qRound(advances.at(i).x()), 8.0));
+
         if (supportsSubPixelPositions)
             QVERIFY(advances.at(i).x() > 8.0);
 
@@ -342,11 +340,17 @@ void tst_QRawFont::advances()
     QVERIFY(font.advancesForGlyphIndexes(glyphIndices.constData(), advances.data(), numGlyphs));
 
     for (int i = 0; i < glyphIndices.size(); ++i) {
-        if (mayFail && (i == 0 || i == 5)) {
-            QEXPECT_FAIL("", "FreeType engine reports unexpected advance "
-                             "for some glyphs (9 instead of 8)", Continue);
+        if ((i == 0 || i == 5) && mayDiffer) {
+            QVERIFY2(qRound(advances.at(i).x()) == 8
+                        || qRound(advances.at(i).x()) == 9,
+                     qPrintable(QStringLiteral("%1 != %2 && %1 != %3")
+                                .arg(qRound(advances.at(i).x()))
+                                .arg(8)
+                                .arg(9)));
+        } else {
+            QCOMPARE(qRound(advances.at(i).x()), 8);
         }
-        QVERIFY(qFuzzyCompare(qRound(advances.at(i).x()), 8.0));
+
         if (supportsSubPixelPositions)
             QVERIFY(advances.at(i).x() > 8.0);
 
@@ -944,7 +948,7 @@ void tst_QRawFont::rawFontFromInvalidData()
 
     QVERIFY(!font.isValid());
 
-    invalidData.fill(255, 1024);
+    invalidData.fill(char(255), 1024);
     font.loadFromData(invalidData, 10, QFont::PreferDefaultHinting);
 
     QVERIFY(!font.isValid());

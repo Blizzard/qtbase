@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,16 +23,19 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-#include "qeglcompositor_p.h"
 #include "qeglplatformscreen_p.h"
+#include "qeglplatformwindow_p.h"
+#include <QtGui/qwindow.h>
+#include <qpa/qwindowsysteminterface.h>
+#include <QtPlatformSupport/private/qopenglcompositor_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -42,61 +45,102 @@ QT_BEGIN_NAMESPACE
     \since 5.2
     \internal
     \ingroup qpa
-
-    This class provides a lightweight base for QPlatformScreen
-    implementations. It covers basic window stack management which is
-    necessary when compositing multiple raster (widget-based) windows
-    together into one single native surface.
-
-    Reimplementing the virtuals are essential when using
-    QEGLPlatformBackingStore. The context and the window returned from
-    these are the ones that are used when compositing the textures
-    generated from the raster (widget) based windows.
-
-    \note It is up to the QEGLPlatformWindow subclasses to use the
-    functions, like addWindow(), removeWindow(), etc., provided here.
  */
 
 QEGLPlatformScreen::QEGLPlatformScreen(EGLDisplay dpy)
-    : m_dpy(dpy)
+    : m_dpy(dpy),
+      m_pointerWindow(0)
 {
 }
 
 QEGLPlatformScreen::~QEGLPlatformScreen()
 {
-    QEGLCompositor::destroy();
+    QOpenGLCompositor::destroy();
 }
 
-void QEGLPlatformScreen::addWindow(QEGLPlatformWindow *window)
+void QEGLPlatformScreen::handleCursorMove(const QPoint &pos)
 {
-    if (!m_windows.contains(window)) {
-        m_windows.append(window);
-        topWindowChanged(window);
+    const QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
+    const QList<QOpenGLCompositorWindow *> windows = compositor->windows();
+
+    // Generate enter and leave events like a real windowing system would do.
+    if (windows.isEmpty())
+        return;
+
+    // First window is always fullscreen.
+    if (windows.count() == 1) {
+        QWindow *window = windows[0]->sourceWindow();
+        if (m_pointerWindow != window) {
+            m_pointerWindow = window;
+            QWindowSystemInterface::handleEnterEvent(window, window->mapFromGlobal(pos), pos);
+        }
+        return;
     }
-}
 
-void QEGLPlatformScreen::removeWindow(QEGLPlatformWindow *window)
-{
-    m_windows.removeOne(window);
-    if (!m_windows.isEmpty())
-        topWindowChanged(m_windows.last());
-}
-
-void QEGLPlatformScreen::moveToTop(QEGLPlatformWindow *window)
-{
-    m_windows.removeOne(window);
-    m_windows.append(window);
-    topWindowChanged(window);
-}
-
-void QEGLPlatformScreen::changeWindowIndex(QEGLPlatformWindow *window, int newIdx)
-{
-    int idx = m_windows.indexOf(window);
-    if (idx != -1 && idx != newIdx) {
-        m_windows.move(idx, newIdx);
-        if (newIdx == m_windows.size() - 1)
-            topWindowChanged(m_windows.last());
+    QWindow *enter = 0, *leave = 0;
+    for (int i = windows.count() - 1; i >= 0; --i) {
+        QWindow *window = windows[i]->sourceWindow();
+        const QRect geom = window->geometry();
+        if (geom.contains(pos)) {
+            if (m_pointerWindow != window) {
+                leave = m_pointerWindow;
+                m_pointerWindow = window;
+                enter = window;
+            }
+            break;
+        }
     }
+
+    if (enter && leave)
+        QWindowSystemInterface::handleEnterLeaveEvent(enter, leave, enter->mapFromGlobal(pos), pos);
+}
+
+QPixmap QEGLPlatformScreen::grabWindow(WId wid, int x, int y, int width, int height) const
+{
+    QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
+    const QList<QOpenGLCompositorWindow *> windows = compositor->windows();
+    Q_ASSERT(!windows.isEmpty());
+
+    QImage img;
+
+    if (static_cast<QEGLPlatformWindow *>(windows.first()->sourceWindow()->handle())->isRaster()) {
+        // Request the compositor to render everything into an FBO and read it back. This
+        // is of course slow, but it's safe and reliable. It will not include the mouse
+        // cursor, which is a plus.
+        img = compositor->grab();
+    } else {
+        // Just a single OpenGL window without compositing. Do not support this case for now. Doing
+        // glReadPixels is not an option since it would read from the back buffer which may have
+        // undefined content when calling right after a swapBuffers (unless preserved swap is
+        // available and enabled, but we have no support for that).
+        qWarning("grabWindow: Not supported for non-composited OpenGL content. Use QQuickWindow::grabWindow() instead.");
+        return QPixmap();
+    }
+
+    if (!wid) {
+        const QSize screenSize = geometry().size();
+        if (width < 0)
+            width = screenSize.width() - x;
+        if (height < 0)
+            height = screenSize.height() - y;
+        return QPixmap::fromImage(img).copy(x, y, width, height);
+    }
+
+    foreach (QOpenGLCompositorWindow *w, windows) {
+        const QWindow *window = w->sourceWindow();
+        if (window->winId() == wid) {
+            const QRect geom = window->geometry();
+            if (width < 0)
+                width = geom.width() - x;
+            if (height < 0)
+                height = geom.height() - y;
+            QRect rect(geom.topLeft() + QPoint(x, y), QSize(width, height));
+            rect &= window->geometry();
+            return QPixmap::fromImage(img).copy(rect);
+        }
+    }
+
+    return QPixmap();
 }
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -667,12 +667,25 @@ QRect QAccessibleTextWidget::characterRect(int offset) const
 
     if (line.isValid()) {
         qreal x = line.cursorToX(relativeOffset);
-        QFontMetrics fm(textCursor().charFormat().font());
+
+        QTextCharFormat format;
+        QTextBlock::iterator iter = block.begin();
+        if (iter.atEnd())
+            format = block.charFormat();
+        else {
+            while (!iter.atEnd() && !iter.fragment().contains(offset))
+                ++iter;
+            if (iter.atEnd()) // newline should have same format as preceding character
+                --iter;
+            format = iter.fragment().charFormat();
+        }
+
+        QFontMetrics fm(format.font());
         const QString ch = text(offset, offset + 1);
         if (!ch.isEmpty()) {
             int w = fm.width(ch);
             int h = fm.height();
-            r = QRect(layoutPosition.x() + x, layoutPosition.y() + line.y(),
+            r = QRect(layoutPosition.x() + x, layoutPosition.y() + line.y() + line.ascent() + fm.descent() - h,
                       w, h);
             r.moveTo(viewport()->mapToGlobal(r.topLeft()));
         }
@@ -727,23 +740,35 @@ QString QAccessibleTextWidget::attributes(int offset, int *startOffset, int *end
     int blockEnd = blockStart + block.length();
 
     QTextBlock::iterator iter = block.begin();
-    while (!iter.fragment().contains(offset))
+    int lastFragmentIndex = blockStart;
+    while (!iter.atEnd()) {
+        QTextFragment f = iter.fragment();
+        if (f.contains(offset))
+            break;
+        lastFragmentIndex = f.position() + f.length();
         ++iter;
+    }
 
-    QTextFragment fragment = iter.fragment();
-    int pos = fragment.position();
-
-    // text block and fragment may overlap, use the smallest common range
-    *startOffset = qMax(pos, blockStart);
+    QTextCharFormat charFormat;
+    if (!iter.atEnd()) {
+        QTextFragment fragment = iter.fragment();
+        charFormat = fragment.charFormat();
+        int pos = fragment.position();
+        // text block and fragment may overlap, use the smallest common range
+        *startOffset = qMax(pos, blockStart);
+        *endOffset = qMin(pos + fragment.length(), blockEnd);
+    } else {
+        charFormat = block.charFormat();
+        *startOffset = lastFragmentIndex;
+        *endOffset = blockEnd;
+    }
     Q_ASSERT(*startOffset <= offset);
-    *endOffset = qMin(pos + fragment.length(), blockEnd);
     Q_ASSERT(*endOffset >= offset);
 
-    QTextCharFormat charFormat = fragment.charFormat();
     QTextBlockFormat blockFormat = cursor.blockFormat();
 
     QMap<QByteArray, QString> attrs;
-    QString family = charFormat.fontFamily();
+    QString family = charFormat.font().family();
     if (!family.isEmpty()) {
         family = family.replace('\\',QStringLiteral("\\\\"));
         family = family.replace(':',QStringLiteral("\\:"));
@@ -754,17 +779,52 @@ QString QAccessibleTextWidget::attributes(int offset, int *startOffset, int *end
         attrs["font-family"] = QString::fromLatin1("\"%1\"").arg(family);
     }
 
-    int fontSize = int(charFormat.fontPointSize());
+    int fontSize = int(charFormat.font().pointSize());
     if (fontSize)
         attrs["font-size"] = QString::fromLatin1("%1pt").arg(fontSize);
 
     //Different weight values are not handled
-    attrs["font-weight"] = QString::fromLatin1(charFormat.fontWeight() > QFont::Normal ? "bold" : "normal");
+    attrs["font-weight"] = QString::fromLatin1(charFormat.font().weight() > QFont::Normal ? "bold" : "normal");
 
     QFont::Style style = charFormat.font().style();
     attrs["font-style"] = QString::fromLatin1((style == QFont::StyleItalic) ? "italic" : ((style == QFont::StyleOblique) ? "oblique": "normal"));
 
-    attrs["text-underline-style"] = QString::fromLatin1(charFormat.font().underline() ? "solid" : "none");
+    QTextCharFormat::UnderlineStyle underlineStyle = charFormat.underlineStyle();
+    if (underlineStyle == QTextCharFormat::NoUnderline && charFormat.font().underline()) // underline could still be set in the default font
+        underlineStyle = QTextCharFormat::SingleUnderline;
+    QString underlineStyleValue;
+    switch (underlineStyle) {
+        case QTextCharFormat::NoUnderline:
+            break;
+        case QTextCharFormat::SingleUnderline:
+            underlineStyleValue = QStringLiteral("solid");
+            break;
+        case QTextCharFormat::DashUnderline:
+            underlineStyleValue = QStringLiteral("dash");
+            break;
+        case QTextCharFormat::DotLine:
+            underlineStyleValue = QStringLiteral("dash");
+            break;
+        case QTextCharFormat::DashDotLine:
+            underlineStyleValue = QStringLiteral("dot-dash");
+            break;
+        case QTextCharFormat::DashDotDotLine:
+            underlineStyleValue = QStringLiteral("dot-dot-dash");
+            break;
+        case QTextCharFormat::WaveUnderline:
+            underlineStyleValue = QStringLiteral("wave");
+            break;
+        case QTextCharFormat::SpellCheckUnderline:
+            underlineStyleValue = QStringLiteral("wave"); // this is not correct, but provides good approximation at least
+            break;
+        default:
+            qWarning() << "Unknown QTextCharFormat::​UnderlineStyle value " << underlineStyle << " could not be translated to IAccessible2 value";
+            break;
+    }
+    if (!underlineStyleValue.isNull()) {
+        attrs["text-underline-style"] = underlineStyleValue;
+        attrs["text-underline-type"] = QStringLiteral("single"); // if underlineStyleValue is set, there is an underline, and Qt does not support other than single ones
+    } // else both are "none" which is the default - no need to set them
 
     QTextCharFormat::VerticalAlignment alignment = charFormat.verticalAlignment();
     attrs["text-position"] = QString::fromLatin1((alignment == QTextCharFormat::AlignSubScript) ? "sub" : ((alignment == QTextCharFormat::AlignSuperScript) ? "super" : "baseline" ));
@@ -790,7 +850,7 @@ QString QAccessibleTextWidget::attributes(int offset, int *startOffset, int *end
         attrs["text-align"] = QStringLiteral("center");
         break;
     case Qt::AlignJustify:
-        attrs["text-align"] = QStringLiteral("left");
+        attrs["text-align"] = QStringLiteral("justify");
         break;
     }
 

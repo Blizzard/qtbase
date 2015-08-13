@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,21 +23,29 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#include <QtGui/QtGui>
-#include <QtWidgets/QtWidgets>
-#include <QtTest/QtTest>
+#include <QDataWidgetMapper>
+#include <QStandardItemModel>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QTextEdit>
+#include <QVBoxLayout>
+#include <QTest>
+#include <QSignalSpy>
+#include <QMetaType>
 
 class tst_QDataWidgetMapper: public QObject
 {
     Q_OBJECT
 private slots:
+    void initTestCase();
+
     void setModel();
     void navigate();
     void addMapping();
@@ -47,7 +55,11 @@ private slots:
     void mappedWidgetAt();
 
     void comboBox();
+
+    void textEditDoesntChangeFocusOnTab_qtbug3305();
 };
+
+Q_DECLARE_METATYPE(QAbstractItemDelegate::EndEditHint)
 
 static QStandardItemModel *testModel(QObject *parent = 0)
 {
@@ -59,6 +71,11 @@ static QStandardItemModel *testModel(QObject *parent = 0)
     }
 
     return model;
+}
+
+void tst_QDataWidgetMapper::initTestCase()
+{
+    qRegisterMetaType<QAbstractItemDelegate::EndEditHint>();
 }
 
 void tst_QDataWidgetMapper::setModel()
@@ -398,6 +415,64 @@ void tst_QDataWidgetMapper::mappedWidgetAt()
 
     QCOMPARE(mapper.mappedWidgetAt(2), (QWidget*)0);
     QCOMPARE(mapper.mappedWidgetAt(4242), static_cast<QWidget *>(&lineEdit2));
+}
+
+void tst_QDataWidgetMapper::textEditDoesntChangeFocusOnTab_qtbug3305()
+{
+    QDataWidgetMapper mapper;
+    QAbstractItemModel *model = testModel(&mapper);
+    mapper.setModel(model);
+
+    QSignalSpy closeEditorSpy(mapper.itemDelegate(), SIGNAL(closeEditor(QWidget*,QAbstractItemDelegate::EndEditHint)));
+    QVERIFY(closeEditorSpy.isValid());
+
+    QWidget container;
+    container.setLayout(new QVBoxLayout);
+
+    QLineEdit *lineEdit = new QLineEdit;
+    mapper.addMapping(lineEdit, 0);
+    container.layout()->addWidget(lineEdit);
+
+    QTextEdit *textEdit = new QTextEdit;
+    mapper.addMapping(textEdit, 1);
+    container.layout()->addWidget(textEdit);
+
+    lineEdit->setFocus();
+
+    container.show();
+
+    QApplication::setActiveWindow(&container);
+    QVERIFY(QTest::qWaitForWindowActive(&container));
+
+    int closeEditorSpyCount = 0;
+    const QString textEditContents = textEdit->toPlainText();
+
+    QCOMPARE(closeEditorSpy.count(), closeEditorSpyCount);
+    QVERIFY(lineEdit->hasFocus());
+    QVERIFY(!textEdit->hasFocus());
+
+    // this will generate a closeEditor for the tab key, and another for the focus out
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+    closeEditorSpyCount += 2;
+    QTRY_COMPARE(closeEditorSpy.count(), closeEditorSpyCount);
+
+    QTRY_VERIFY(textEdit->hasFocus());
+    QVERIFY(!lineEdit->hasFocus());
+
+    // now that the text edit is focused, a tab keypress will insert a tab, not change focus
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+    QTRY_COMPARE(closeEditorSpy.count(), closeEditorSpyCount);
+
+    QVERIFY(!lineEdit->hasFocus());
+    QVERIFY(textEdit->hasFocus());
+    QCOMPARE(textEdit->toPlainText(), QLatin1Char('\t') + textEditContents);
+
+    // now give focus back to the line edit and check closeEditor gets emitted
+    lineEdit->setFocus();
+    QTRY_VERIFY(lineEdit->hasFocus());
+    QVERIFY(!textEdit->hasFocus());
+    ++closeEditorSpyCount;
+    QCOMPARE(closeEditorSpy.count(), closeEditorSpyCount);
 }
 
 QTEST_MAIN(tst_QDataWidgetMapper)

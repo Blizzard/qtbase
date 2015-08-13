@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -72,6 +72,7 @@ private slots:
     void javaMutableIterator();
     void makeSureTheComfortFunctionsCompile();
     void initializerList();
+    void qhash();
 };
 
 struct IdentityTracker {
@@ -136,6 +137,16 @@ void tst_QSet::operator_eq()
 
         QVERIFY(a != b);
         QVERIFY(!(a == b));
+    }
+
+    {
+        QSet<int> s1, s2;
+        s1.reserve(100);
+        s2.reserve(4);
+        QVERIFY(s1 == s2);
+        s1 << 100 << 200 << 300 << 400;
+        s2 << 400 << 300 << 200 << 100;
+        QVERIFY(s1 == s2);
     }
 }
 
@@ -956,6 +967,67 @@ void tst_QSet::initializerList()
 #else
     QSKIP("Compiler doesn't support initializer lists");
 #endif
+}
+
+QT_BEGIN_NAMESPACE
+extern Q_CORE_EXPORT QBasicAtomicInt qt_qhash_seed; // from qhash.cpp
+QT_END_NAMESPACE
+
+class QtQHashSeedSaver {
+    int oldSeed, newSeed;
+public:
+    explicit QtQHashSeedSaver(int seed)
+        : oldSeed(qt_qhash_seed.fetchAndStoreRelaxed(seed)),
+          newSeed(seed)
+    {}
+    ~QtQHashSeedSaver()
+    {
+        // only restore when no-one else changed the seed in the meantime:
+        qt_qhash_seed.testAndSetRelaxed(newSeed, oldSeed);
+    }
+};
+
+void tst_QSet::qhash()
+{
+    //
+    // check that sets containing the same elements hash to the same value
+    //
+    {
+        // create some deterministic initial state:
+        const QtQHashSeedSaver seed1(0);
+
+        QSet<int> s1;
+        s1.reserve(4);
+        s1 << 400 << 300 << 200 << 100;
+
+        // also change the seed:
+        const QtQHashSeedSaver seed2(0x10101010);
+
+        QSet<int> s2;
+        s2.reserve(100); // provoke different bucket counts
+        s2 << 100 << 200 << 300 << 400; // and insert elements in different order, too
+
+        QVERIFY(s1.capacity() != s2.capacity());
+        QCOMPARE(s1, s2);
+        QVERIFY(!std::equal(s1.cbegin(), s1.cend(), s2.cbegin())); // verify that the order _is_ different
+        QCOMPARE(qHash(s1), qHash(s2));
+    }
+
+    //
+    // check that sets of sets work:
+    //
+    {
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+        QSet<QSet<int> > intSetSet = { { 0, 1, 2 }, { 0, 1 }, { 1, 2 } };
+#else
+        QSet<QSet<int> > intSetSet;
+        QSet<int> intSet01, intSet12;
+        intSet01 << 0 << 1;
+        intSet12 << 1 << 2;
+        intSetSet << intSet01 << intSet12 << (intSet01|intSet12);
+#endif
+        QCOMPARE(intSetSet.size(), 3);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_QSet)

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -658,28 +658,28 @@ public:
         : QGraphicsEffectSourcePrivate(), item(i), info(0)
     {}
 
-    inline void detach()
+    void detach() Q_DECL_OVERRIDE
     {
         item->d_ptr->graphicsEffect = 0;
         item->prepareGeometryChange();
     }
 
-    inline const QGraphicsItem *graphicsItem() const
+    const QGraphicsItem *graphicsItem() const Q_DECL_OVERRIDE
     { return item; }
 
-    inline const QWidget *widget() const
+    const QWidget *widget() const Q_DECL_OVERRIDE
     { return 0; }
 
-    inline void update() {
+    void update() Q_DECL_OVERRIDE {
         item->d_ptr->updateDueToGraphicsEffect = true;
         item->update();
         item->d_ptr->updateDueToGraphicsEffect = false;
     }
 
-    inline void effectBoundingRectChanged()
+    void effectBoundingRectChanged() Q_DECL_OVERRIDE
     { item->prepareGeometryChange(); }
 
-    inline bool isPixmap() const
+    bool isPixmap() const Q_DECL_OVERRIDE
     {
         return item->type() == QGraphicsPixmapItem::Type
                && !(item->flags() & QGraphicsItem::ItemIsSelectable)
@@ -687,10 +687,10 @@ public:
             //|| (item->d_ptr->isObject && qobject_cast<QDeclarativeImage *>(q_func()));
     }
 
-    inline const QStyleOption *styleOption() const
+    const QStyleOption *styleOption() const Q_DECL_OVERRIDE
     { return info ? info->option : 0; }
 
-    inline QRect deviceRect() const
+    QRect deviceRect() const Q_DECL_OVERRIDE
     {
         if (!info || !info->widget) {
             qWarning("QGraphicsEffectSource::deviceRect: Not yet implemented, lacking device context");
@@ -699,11 +699,11 @@ public:
         return info->widget->rect();
     }
 
-    QRectF boundingRect(Qt::CoordinateSystem system) const;
-    void draw(QPainter *);
+    QRectF boundingRect(Qt::CoordinateSystem system) const Q_DECL_OVERRIDE;
+    void draw(QPainter *) Q_DECL_OVERRIDE;
     QPixmap pixmap(Qt::CoordinateSystem system,
                    QPoint *offset,
-                   QGraphicsEffect::PixmapPadMode mode) const;
+                   QGraphicsEffect::PixmapPadMode mode) const Q_DECL_OVERRIDE;
     QRect paddedEffectRect(Qt::CoordinateSystem system, QGraphicsEffect::PixmapPadMode mode, const QRectF &sourceRect, bool *unpadded = 0) const;
 
     QGraphicsItem *item;

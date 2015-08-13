@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -49,6 +49,9 @@ class CustomTreeWidget : public QTreeWidget
 public:
     QModelIndex indexFromItem(QTreeWidgetItem *item, int column = 0) const
     { return QTreeWidget::indexFromItem(item, column); }
+
+    QMimeData * mimeData(const QList<QTreeWidgetItem*> items) const
+    { return QTreeWidget::mimeData(items); }
 };
 
 class tst_QTreeWidget : public QObject
@@ -129,6 +132,8 @@ private slots:
     void task245280_sortChildren();
     void task253109_itemHeight();
 
+    void nonEditableTristate();
+
     // QTreeWidgetItem
     void itemOperatorLessThan();
     void addChild();
@@ -157,6 +162,7 @@ private slots:
     void setChildIndicatorPolicy();
 
     void task20345_sortChildren();
+    void getMimeDataWithInvalidItem();
 
 public slots:
     void itemSelectionChanged();
@@ -635,8 +641,8 @@ void tst_QTreeWidget::setItemHidden2()
     top->setText(0, "ItemList");
     for (int i = 1; i <= 4; i++) {
         leaf = new QTreeWidgetItem(top);
-        leaf->setText(0, QString().sprintf("%d", i));
-        leaf->setText(1, QString().sprintf("Item %d", i));
+        leaf->setText(0, QString::asprintf("%d", i));
+        leaf->setText(1, QString::asprintf("Item %d", i));
     }
 
     if (testWidget->topLevelItemCount() > 0) {
@@ -1043,6 +1049,12 @@ void tst_QTreeWidget::checkState()
 
     firstChild->setCheckState(0, Qt::Unchecked);
     seccondChild->setCheckState(0, Qt::Unchecked);
+    QCOMPARE(item->checkState(0), Qt::Unchecked);
+    QCOMPARE(firstChild->checkState(0), Qt::Unchecked);
+    QCOMPARE(seccondChild->checkState(0), Qt::Unchecked);
+
+    // Can't force the state to PartiallyChecked; state comes from children
+    item->setCheckState(0, Qt::PartiallyChecked);
     QCOMPARE(item->checkState(0), Qt::Unchecked);
     QCOMPARE(firstChild->checkState(0), Qt::Unchecked);
     QCOMPARE(seccondChild->checkState(0), Qt::Unchecked);
@@ -3162,6 +3174,40 @@ void tst_QTreeWidget::task217309()
     QVERIFY(item.data(0, Qt::CheckStateRole) == Qt::Checked);
 }
 
+void tst_QTreeWidget::nonEditableTristate()
+{
+    // A tree with checkable items, the parent is tristate
+    QTreeWidget *tree = new QTreeWidget;
+    QTreeWidgetItem *item = new QTreeWidgetItem();
+    tree->insertTopLevelItem(0, item);
+    item->setFlags(item->flags() | Qt::ItemIsTristate);
+    item->setCheckState(0, Qt::Unchecked);
+    QTreeWidgetItem *subitem1 = new QTreeWidgetItem(item);
+    subitem1->setCheckState(0, Qt::Unchecked);
+    QTreeWidgetItem *subitem2 = new QTreeWidgetItem(item);
+    subitem2->setCheckState(0, Qt::Unchecked);
+    QCOMPARE(int(item->checkState(0)), int(Qt::Unchecked));
+    tree->show();
+
+    // Test clicking on the parent item, it should become Checked (not PartiallyChecked)
+    QStyleOptionViewItem option;
+    option.rect = tree->visualRect(tree->model()->index(0, 0));
+    option.state |= QStyle::State_Enabled;
+    option.features |= QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
+    option.checkState = item->checkState(0);
+
+    const int checkMargin = qApp->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, 0, 0) + 1;
+    QPoint pos = qApp->style()->subElementRect(QStyle::SE_ViewItemCheckIndicator, &option, 0).center() + QPoint(checkMargin, 0);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(int(item->checkState(0)), int(Qt::Checked));
+
+    // Click again, it should become Unchecked.
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(int(item->checkState(0)), int(Qt::Unchecked));
+
+    delete tree;
+}
+
 class TreeWidgetItem : public QTreeWidgetItem
 {
 
@@ -3368,6 +3414,13 @@ void tst_QTreeWidget::task20345_sortChildren()
     QVERIFY(1);
 }
 
+void tst_QTreeWidget::getMimeDataWithInvalidItem()
+{
+    CustomTreeWidget w;
+    QTest::ignoreMessage(QtWarningMsg, "QTreeWidget::mimeData: Null-item passed");
+    QMimeData *md = w.mimeData(QList<QTreeWidgetItem*>() << Q_NULLPTR);
+    QVERIFY(!md);
+}
 
 QTEST_MAIN(tst_QTreeWidget)
 #include "tst_qtreewidget.moc"

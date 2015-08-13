@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Jeremy Lainé <jeremy.laine@m4x.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -145,12 +145,16 @@ void tst_QDnsLookup::lookup_data()
 
     QTest::newRow("ns-empty") << int(QDnsLookup::NS) << "" << int(QDnsLookup::InvalidRequestError) << "" << "" << "" << "" << "" << "" << "";
     QTest::newRow("ns-notfound") << int(QDnsLookup::NS) << "invalid.invalid" << int(QDnsLookup::NotFoundError) << "" << "" << "" << "" << "" << "" << "";
-    QTest::newRow("ns-single") << int(QDnsLookup::NS) << "ns-single" << int(QDnsLookup::NoError) << "" << "" << "" << "ns-foo.linpro.net." << "" << "" << "";
-    QTest::newRow("ns-multi") << int(QDnsLookup::NS) << "ns-multi" << int(QDnsLookup::NoError) << "" << "" << "" << "ns-bar.linpro.net.;ns-foo.linpro.net." << "" << "" << "";
+    QTest::newRow("ns-single") << int(QDnsLookup::NS) << "ns-single" << int(QDnsLookup::NoError) << "" << "" << "" << "ns11.cloudns.net." << "" << "" << "";
+    QTest::newRow("ns-multi") << int(QDnsLookup::NS) << "ns-multi" << int(QDnsLookup::NoError) << "" << "" << "" << "ns11.cloudns.net.;ns12.cloudns.net." << "" << "" << "";
 
     QTest::newRow("ptr-empty") << int(QDnsLookup::PTR) << "" << int(QDnsLookup::InvalidRequestError) << "" << "" << "" << "" << "" << "" << "";
     QTest::newRow("ptr-notfound") << int(QDnsLookup::PTR) << "invalid.invalid" << int(QDnsLookup::NotFoundError) << "" << "" << "" << "" << "" << "" << "";
+#if 0
+    // temporarily disabled since the new hosting provider can't insert
+    // PTR records outside of the in-addr.arpa zone
     QTest::newRow("ptr-single") << int(QDnsLookup::PTR) << "ptr-single" << int(QDnsLookup::NoError) << "" << "" << "" << "" << "a-single" << "" << "";
+#endif
 
     QTest::newRow("srv-empty") << int(QDnsLookup::SRV) << "" << int(QDnsLookup::InvalidRequestError) << "" << "" << "" << "" << "" << "" << "";
     QTest::newRow("srv-notfound") << int(QDnsLookup::SRV) << "invalid.invalid" << int(QDnsLookup::NotFoundError) << "" << "" << "" << "" << "" << "" << "";
@@ -166,8 +170,41 @@ void tst_QDnsLookup::lookup_data()
     QTest::newRow("txt-empty") << int(QDnsLookup::TXT) << "" << int(QDnsLookup::InvalidRequestError) << "" << "" << "" << "" << "" << "" << "";
     QTest::newRow("txt-notfound") << int(QDnsLookup::TXT) << "invalid.invalid" << int(QDnsLookup::NotFoundError) << "" << "" << "" << "" << "" << "" << "";
     QTest::newRow("txt-single") << int(QDnsLookup::TXT) << "txt-single" << int(QDnsLookup::NoError) << "" << "" << "" << "" << "" << "" << "Hello";
-    QTest::newRow("txt-multi-onerr") << int(QDnsLookup::TXT) << "txt-multi-onerr" << int(QDnsLookup::NoError) << "" << "" << "" << "" << "" << "" << "Hello World";
+    QTest::newRow("txt-multi-onerr") << int(QDnsLookup::TXT) << "txt-multi-onerr" << int(QDnsLookup::NoError) << "" << "" << "" << "" << "" << ""
+                                     << QString::fromLatin1("Hello\0World", sizeof("Hello\0World") - 1);
     QTest::newRow("txt-multi-multirr") << int(QDnsLookup::TXT) << "txt-multi-multirr" << int(QDnsLookup::NoError) << "" << "" << "" << "" << "" << "" << "Hello;World";
+}
+
+static QByteArray msgDnsLookup(QDnsLookup::Error actualError,
+                               int expectedError,
+                               const QString &domain,
+                               const QString &cname,
+                               const QString &host,
+                               const QString &srv,
+                               const QString &mx,
+                               const QString &ns,
+                               const QString &ptr,
+                               const QString &errorString)
+{
+    QString result;
+    QTextStream str(&result);
+    str << "Actual error: " << actualError;
+    if (!errorString.isEmpty())
+        str << " (" << errorString << ')';
+    str << ", expected: " << expectedError;
+    str << ", domain: " << domain;
+    if (!cname.isEmpty())
+        str << ", cname: " << cname;
+    str << ", host: " << host;
+    if (!srv.isEmpty())
+        str << " server: " << srv;
+    if (!mx.isEmpty())
+        str << " mx: " << mx;
+    if (!ns.isEmpty())
+        str << " ns: " << ns;
+    if (!ptr.isEmpty())
+        str << " ptr: " << ptr;
+    return result.toLocal8Bit();
 }
 
 void tst_QDnsLookup::lookup()
@@ -200,7 +237,14 @@ void tst_QDnsLookup::lookup()
     lookup.lookup();
     QVERIFY(waitForDone(&lookup));
     QVERIFY(lookup.isFinished());
-    QVERIFY2(int(lookup.error()) == error, qPrintable(lookup.errorString()));
+
+#if defined(Q_OS_ANDROID)
+    if (lookup.errorString() == QStringLiteral("Not yet supported on Android"))
+        QEXPECT_FAIL("", "Not yet supported on Android", Abort);
+#endif
+
+    QVERIFY2(int(lookup.error()) == error,
+             msgDnsLookup(lookup.error(), error, domain, cname, host, srv, mx, ns, ptr, lookup.errorString()));
     if (error == QDnsLookup::NoError)
         QVERIFY(lookup.errorString().isEmpty());
     QCOMPARE(int(lookup.type()), type);
@@ -276,7 +320,7 @@ void tst_QDnsLookup::lookup()
         QString text;
         foreach (const QByteArray &ba, record.values()) {
             if (!text.isEmpty())
-                text += ' ';
+                text += '\0';
             text += QString::fromLatin1(ba);
         }
         texts << text;
@@ -295,6 +339,12 @@ void tst_QDnsLookup::lookupReuse()
     lookup.lookup();
     QVERIFY(waitForDone(&lookup));
     QVERIFY(lookup.isFinished());
+
+#if defined(Q_OS_ANDROID)
+    if (lookup.errorString() == QStringLiteral("Not yet supported on Android"))
+        QEXPECT_FAIL("", "Not yet supported on Android", Abort);
+#endif
+
     QCOMPARE(int(lookup.error()), int(QDnsLookup::NoError));
     QVERIFY(!lookup.hostAddressRecords().isEmpty());
     QCOMPARE(lookup.hostAddressRecords().first().name(), domainName("a-single"));
@@ -333,6 +383,12 @@ void tst_QDnsLookup::lookupAbortRetry()
     lookup.lookup();
     QVERIFY(waitForDone(&lookup));
     QVERIFY(lookup.isFinished());
+
+#if defined(Q_OS_ANDROID)
+    if (lookup.errorString() == QStringLiteral("Not yet supported on Android"))
+        QEXPECT_FAIL("", "Not yet supported on Android", Abort);
+#endif
+
     QCOMPARE(int(lookup.error()), int(QDnsLookup::NoError));
     QVERIFY(!lookup.hostAddressRecords().isEmpty());
     QCOMPARE(lookup.hostAddressRecords().first().name(), domainName("aaaa-single"));

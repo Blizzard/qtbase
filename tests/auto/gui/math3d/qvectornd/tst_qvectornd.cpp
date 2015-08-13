@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,6 +36,7 @@
 #include <QtGui/qvector2d.h>
 #include <QtGui/qvector3d.h>
 #include <QtGui/qvector4d.h>
+#include <QtGui/qmatrix4x4.h>
 
 class tst_QVectorND : public QObject
 {
@@ -113,6 +114,13 @@ private slots:
     void divide4_data();
     void divide4();
 
+    void divideFactor2_data();
+    void divideFactor2();
+    void divideFactor3_data();
+    void divideFactor3();
+    void divideFactor4_data();
+    void divideFactor4();
+
     void negate2_data();
     void negate2();
     void negate3_data();
@@ -141,6 +149,11 @@ private slots:
     void dotProduct3();
     void dotProduct4_data();
     void dotProduct4();
+
+    void project_data();
+    void project();
+    void unproject_data();
+    void unproject();
 
     void properties();
     void metaTypes();
@@ -654,7 +667,7 @@ void tst_QVectorND::length2_data()
     QTest::newRow("1y")   <<  0.0f <<  1.0f << 1.0f;
     QTest::newRow("-1x")  << -1.0f <<  0.0f << 1.0f;
     QTest::newRow("-1y")  <<  0.0f << -1.0f << 1.0f;
-    QTest::newRow("two")  <<  2.0f << -2.0f << sqrtf(8.0f);
+    QTest::newRow("two")  <<  2.0f << -2.0f << std::sqrt(8.0f);
 }
 void tst_QVectorND::length2()
 {
@@ -682,7 +695,7 @@ void tst_QVectorND::length3_data()
     QTest::newRow("-1x") << -1.0f << 0.0f << 0.0f << 1.0f;
     QTest::newRow("-1y") << 0.0f << -1.0f << 0.0f << 1.0f;
     QTest::newRow("-1z") << 0.0f << 0.0f << -1.0f << 1.0f;
-    QTest::newRow("two") << 2.0f << -2.0f << 2.0f << sqrtf(12.0f);
+    QTest::newRow("two") << 2.0f << -2.0f << 2.0f << std::sqrt(12.0f);
 }
 void tst_QVectorND::length3()
 {
@@ -714,7 +727,7 @@ void tst_QVectorND::length4_data()
     QTest::newRow("-1y") << 0.0f << -1.0f << 0.0f << 0.0f << 1.0f;
     QTest::newRow("-1z") << 0.0f << 0.0f << -1.0f << 0.0f << 1.0f;
     QTest::newRow("-1w") << 0.0f << 0.0f << 0.0f << -1.0f << 1.0f;
-    QTest::newRow("two") << 2.0f << -2.0f << 2.0f << 2.0f << sqrtf(16.0f);
+    QTest::newRow("two") << 2.0f << -2.0f << 2.0f << 2.0f << std::sqrt(16.0f);
 }
 void tst_QVectorND::length4()
 {
@@ -1623,13 +1636,151 @@ void tst_QVectorND::multiplyFactor4()
     QCOMPARE(v3.w(), v1.w() * factor);
 }
 
-// Test vector division by a factor for 2D vectors.
+// Test component-wise vector division for 2D vectors.
 void tst_QVectorND::divide2_data()
 {
     // Use the same test data as the multiply test.
-    multiplyFactor2_data();
+    multiply2_data();
 }
 void tst_QVectorND::divide2()
+{
+    QFETCH(float, x1);
+    QFETCH(float, y1);
+    QFETCH(float, x2);
+    QFETCH(float, y2);
+    QFETCH(float, x3);
+    QFETCH(float, y3);
+
+    QVector2D v1(x1, y1);
+    QVector2D v2(x2, y2);
+    QVector2D v3(x3, y3);
+
+    if (v2.x() != 0.0f && v2.y() != 0.0f) {
+        QVERIFY((v3 / v2) == v1);
+
+        QVector2D v4(v3);
+        v4 /= v2;
+        QVERIFY(v4 == v1);
+
+        QCOMPARE(v4.x(), v3.x() / v2.x());
+        QCOMPARE(v4.y(), v3.y() / v2.y());
+    }
+    if (v1.x() != 0.0f && v1.y() != 0.0f) {
+        QVERIFY((v3 / v1) == v2);
+
+        QVector2D v4(v3);
+        v4 /= v1;
+        QVERIFY(v4 == v2);
+
+        QCOMPARE(v4.x(), v3.x() / v1.x());
+        QCOMPARE(v4.y(), v3.y() / v1.y());
+    }
+}
+
+// Test component-wise vector division for 3D vectors.
+void tst_QVectorND::divide3_data()
+{
+    // Use the same test data as the multiply test.
+    multiply3_data();
+}
+void tst_QVectorND::divide3()
+{
+    QFETCH(float, x1);
+    QFETCH(float, y1);
+    QFETCH(float, z1);
+    QFETCH(float, x2);
+    QFETCH(float, y2);
+    QFETCH(float, z2);
+    QFETCH(float, x3);
+    QFETCH(float, y3);
+    QFETCH(float, z3);
+
+    QVector3D v1(x1, y1, z1);
+    QVector3D v2(x2, y2, z2);
+    QVector3D v3(x3, y3, z3);
+
+    if (v2.x() != 0.0f && v2.y() != 0.0f && v2.z() != 0.0f) {
+        QVERIFY((v3 / v2) == v1);
+
+        QVector3D v4(v3);
+        v4 /= v2;
+        QVERIFY(v4 == v1);
+
+        QCOMPARE(v4.x(), v3.x() / v2.x());
+        QCOMPARE(v4.y(), v3.y() / v2.y());
+        QCOMPARE(v4.z(), v3.z() / v2.z());
+    }
+    if (v1.x() != 0.0f && v1.y() != 0.0f && v1.z() != 0.0f) {
+        QVERIFY((v3 / v1) == v2);
+
+        QVector3D v4(v3);
+        v4 /= v1;
+        QVERIFY(v4 == v2);
+
+        QCOMPARE(v4.x(), v3.x() / v1.x());
+        QCOMPARE(v4.y(), v3.y() / v1.y());
+        QCOMPARE(v4.z(), v3.z() / v1.z());
+    }
+}
+
+// Test component-wise vector division for 4D vectors.
+void tst_QVectorND::divide4_data()
+{
+    // Use the same test data as the multiply test.
+    multiply4_data();
+}
+void tst_QVectorND::divide4()
+{
+    QFETCH(float, x1);
+    QFETCH(float, y1);
+    QFETCH(float, z1);
+    QFETCH(float, w1);
+    QFETCH(float, x2);
+    QFETCH(float, y2);
+    QFETCH(float, z2);
+    QFETCH(float, w2);
+    QFETCH(float, x3);
+    QFETCH(float, y3);
+    QFETCH(float, z3);
+    QFETCH(float, w3);
+
+    QVector4D v1(x1, y1, z1, w1);
+    QVector4D v2(x2, y2, z2, w2);
+    QVector4D v3(x3, y3, z3, w3);
+
+    if (v2.x() != 0.0f && v2.y() != 0.0f && v2.z() != 0.0f && v2.w() != 0.0f) {
+        QVERIFY((v3 / v2) == v1);
+
+        QVector4D v4(v3);
+        v4 /= v2;
+        QVERIFY(v4 == v1);
+
+        QCOMPARE(v4.x(), v3.x() / v2.x());
+        QCOMPARE(v4.y(), v3.y() / v2.y());
+        QCOMPARE(v4.z(), v3.z() / v2.z());
+        QCOMPARE(v4.w(), v3.w() / v2.w());
+    }
+    if (v1.x() != 0.0f && v1.y() != 0.0f && v1.z() != 0.0f && v1.w() != 0.0f) {
+        QVERIFY((v3 / v1) == v2);
+
+        QVector4D v4(v3);
+        v4 /= v1;
+        QVERIFY(v4 == v2);
+
+        QCOMPARE(v4.x(), v3.x() / v1.x());
+        QCOMPARE(v4.y(), v3.y() / v1.y());
+        QCOMPARE(v4.z(), v3.z() / v1.z());
+        QCOMPARE(v4.w(), v3.w() / v1.w());
+    }
+}
+
+// Test vector division by a factor for 2D vectors.
+void tst_QVectorND::divideFactor2_data()
+{
+    // Use the same test data as the multiplyFactor test.
+    multiplyFactor2_data();
+}
+void tst_QVectorND::divideFactor2()
 {
     QFETCH(float, x1);
     QFETCH(float, y1);
@@ -1654,12 +1805,12 @@ void tst_QVectorND::divide2()
 }
 
 // Test vector division by a factor for 3D vectors.
-void tst_QVectorND::divide3_data()
+void tst_QVectorND::divideFactor3_data()
 {
-    // Use the same test data as the multiply test.
+    // Use the same test data as the multiplyFactor test.
     multiplyFactor3_data();
 }
-void tst_QVectorND::divide3()
+void tst_QVectorND::divideFactor3()
 {
     QFETCH(float, x1);
     QFETCH(float, y1);
@@ -1687,12 +1838,12 @@ void tst_QVectorND::divide3()
 }
 
 // Test vector division by a factor for 4D vectors.
-void tst_QVectorND::divide4_data()
+void tst_QVectorND::divideFactor4_data()
 {
-    // Use the same test data as the multiply test.
+    // Use the same test data as the multiplyFactor test.
     multiplyFactor4_data();
 }
-void tst_QVectorND::divide4()
+void tst_QVectorND::divideFactor4()
 {
     QFETCH(float, x1);
     QFETCH(float, y1);
@@ -2289,6 +2440,158 @@ void tst_QVectorND::dotProduct4()
     float d = x1 * x2 + y1 * y2 + z1 * z2 + w1 * w2;
 
     QCOMPARE(QVector4D::dotProduct(v1, v2), d);
+}
+
+void tst_QVectorND::project_data()
+{
+    QTest::addColumn<QVector3D>("point");
+    QTest::addColumn<QRect>("viewport");
+    QTest::addColumn<QMatrix4x4>("projection");
+    QTest::addColumn<QMatrix4x4>("view");
+    QTest::addColumn<QVector2D>("result");
+
+    QMatrix4x4 projection;
+    projection.ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 1000.0f);
+
+    QMatrix4x4 view;
+    // Located at (0, 0, 10), looking at origin, y is up
+    view.lookAt(QVector3D(0.0f, 0.0f, 10.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(0.0f, 1.0f, 0.0f));
+
+    QMatrix4x4 nullMatrix(0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f);
+
+    QTest::newRow("center")
+        << QVector3D(0.0f, 0.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector2D(400.0f, 300.0f);
+
+    QTest::newRow("topLeft")
+        << QVector3D(-1.0f, 1.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector2D(0.0f, 600.0f);
+
+    QTest::newRow("topRight")
+        << QVector3D(1.0f, 1.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector2D(800.0f, 600.0f);
+
+    QTest::newRow("bottomLeft")
+        << QVector3D(-1.0f, -1.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector2D(0.0f, 0.0f);
+
+    QTest::newRow("bottomRight")
+        << QVector3D(1.0f, -1.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector2D(800.0f, 0.0f);
+
+    QTest::newRow("nullMatrix")
+        << QVector3D(0.0f, 0.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << nullMatrix
+        << nullMatrix
+        << QVector2D(400.0f, 300.0f);
+}
+
+void tst_QVectorND::project()
+{
+    QFETCH(QVector3D, point);
+    QFETCH(QRect, viewport);
+    QFETCH(QMatrix4x4, projection);
+    QFETCH(QMatrix4x4, view);
+    QFETCH(QVector2D, result);
+
+    QVector3D project = point.project(view, projection, viewport);
+
+    QCOMPARE(project.toVector2D(), result);
+}
+
+void tst_QVectorND::unproject_data()
+{
+    QTest::addColumn<QVector3D>("point");
+    QTest::addColumn<QRect>("viewport");
+    QTest::addColumn<QMatrix4x4>("projection");
+    QTest::addColumn<QMatrix4x4>("view");
+    QTest::addColumn<QVector3D>("result");
+
+    QMatrix4x4 projection;
+    projection.ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 1000.0f);
+
+    QMatrix4x4 view;
+    // Located at (0, 0, 10), looking at origin, y is up
+    view.lookAt(QVector3D(0.0f, 0.0f, 10.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(0.0f, 1.0f, 0.0f));
+
+    QMatrix4x4 nullMatrix(0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 0.0f);
+
+    QTest::newRow("center")
+        << QVector3D(400.0f, 300.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector3D(0.0f, 0.0f, 9.9f);
+
+    QTest::newRow("topLeft")
+        << QVector3D(0.0f, 600.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector3D(-1.0f, 1.0f, 9.9f);
+
+    QTest::newRow("topRight")
+        << QVector3D(800.0f, 600.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector3D(1.0f, 1.0f, 9.9f);
+
+    QTest::newRow("bottomLeft")
+        << QVector3D(0.0f, 0.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector3D(-1.0, -1.0f, 9.9f);
+
+    QTest::newRow("bottomRight")
+        << QVector3D(800.0f, 0.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << projection
+        << view
+        << QVector3D(1.0f, -1.0f, 9.9f);
+
+    QTest::newRow("nullMatrix")
+        << QVector3D(400.0f, 300.0f, 0.0f)
+        << QRect(0.0f, 0.0f, 800.0f, 600.0f)
+        << nullMatrix
+        << nullMatrix
+        << QVector3D(0.0f, 0.0f, -1.0f);
+
+}
+
+void tst_QVectorND::unproject()
+{
+    QFETCH(QVector3D, point);
+    QFETCH(QRect, viewport);
+    QFETCH(QMatrix4x4, projection);
+    QFETCH(QMatrix4x4, view);
+    QFETCH(QVector3D, result);
+
+    QVector3D unproject = point.unproject(view, projection, viewport);
+    QVERIFY(qFuzzyCompare(unproject, result));
 }
 
 class tst_QVectorNDProperties : public QObject

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -131,6 +131,7 @@ signals:
     void encrypted();
     void sslErrors(const QList<QSslError> &, bool *, QList<QSslError> *);
     void sslConfigurationChanged(const QSslConfiguration);
+    void preSharedKeyAuthenticationRequired(QSslPreSharedKeyAuthenticator *);
 #endif
     void downloadMetaData(QList<QPair<QByteArray,QByteArray> >, int, QString, bool,
                           QSharedPointer<char>, qint64, bool);
@@ -161,6 +162,7 @@ protected slots:
 #ifndef QT_NO_SSL
     void encryptedSlot();
     void sslErrorsSlot(const QList<QSslError> &errors);
+    void preSharedKeyAuthenticationRequiredSlot(QSslPreSharedKeyAuthenticator *authenticator);
 #endif
 
     void synchronousAuthenticationRequiredSlot(const QHttpNetworkRequest &request, QAuthenticator *);
@@ -187,6 +189,7 @@ protected:
     QByteArray m_dataArray;
     bool m_atEnd;
     qint64 m_size;
+    qint64 m_pos; // to match calls of haveDataSlot with the expected position
 public:
     QNonContiguousByteDeviceThreadForwardImpl(bool aE, qint64 s)
         : QNonContiguousByteDevice(),
@@ -194,7 +197,8 @@ public:
           m_amount(0),
           m_data(0),
           m_atEnd(aE),
-          m_size(s)
+          m_size(s),
+          m_pos(0)
     {
     }
 
@@ -202,7 +206,12 @@ public:
     {
     }
 
-    const char* readPointer(qint64 maximumLength, qint64 &len)
+    qint64 pos() Q_DECL_OVERRIDE
+    {
+        return m_pos;
+    }
+
+    const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE
     {
         if (m_amount > 0) {
             len = m_amount;
@@ -222,23 +231,22 @@ public:
         return 0;
     }
 
-    bool advanceReadPointer(qint64 a)
+    bool advanceReadPointer(qint64 a) Q_DECL_OVERRIDE
     {
         if (m_data == 0)
             return false;
 
         m_amount -= a;
         m_data += a;
+        m_pos += a;
 
-        // To main thread to inform about our state
-        emit processedData(a);
-
-        // FIXME possible optimization, already ask user thread for some data
+        // To main thread to inform about our state. The m_pos will be sent as a sanity check.
+        emit processedData(m_pos, a);
 
         return true;
     }
 
-    bool atEnd()
+    bool atEnd() Q_DECL_OVERRIDE
     {
         if (m_amount > 0)
             return false;
@@ -246,26 +254,42 @@ public:
             return m_atEnd;
     }
 
-    bool reset()
+    bool reset() Q_DECL_OVERRIDE
     {
         m_amount = 0;
         m_data = 0;
+        m_dataArray.clear();
+
+        if (wantDataPending) {
+            // had requested the user thread to send some data (only 1 in-flight at any moment)
+            wantDataPending = false;
+        }
 
         // Communicate as BlockingQueuedConnection
         bool b = false;
         emit resetData(&b);
+        if (b) {
+            // the reset succeeded, we're at pos 0 again
+            m_pos = 0;
+            // the HTTP code will anyway abort the request if !b.
+        }
         return b;
     }
 
-    qint64 size()
+    qint64 size() Q_DECL_OVERRIDE
     {
         return m_size;
     }
 
 public slots:
     // From user thread:
-    void haveDataSlot(QByteArray dataArray, bool dataAtEnd, qint64 dataSize)
+    void haveDataSlot(qint64 pos, QByteArray dataArray, bool dataAtEnd, qint64 dataSize)
     {
+        if (pos != m_pos) {
+            // Sometimes when re-sending a request in the qhttpnetwork* layer there is a pending haveData from the
+            // user thread on the way to us. We need to ignore it since it is the data for the wrong(later) chunk.
+            return;
+        }
         wantDataPending = false;
 
         m_dataArray = dataArray;
@@ -285,7 +309,7 @@ signals:
 
     // to main thread:
     void wantData(qint64);
-    void processedData(qint64);
+    void processedData(qint64 pos, qint64 amount);
     void resetData(bool *b);
 };
 

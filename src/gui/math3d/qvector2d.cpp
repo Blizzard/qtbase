@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,6 +61,14 @@ QT_BEGIN_NAMESPACE
     \fn QVector2D::QVector2D()
 
     Constructs a null vector, i.e. with coordinates (0, 0).
+*/
+
+/*!
+    \fn QVector2D::QVector2D(Qt::Initialization)
+    \since 5.5
+    \internal
+
+    Constructs a vector without initializing the contents.
 */
 
 /*!
@@ -181,7 +189,7 @@ float QVector2D::length() const
     // Need some extra precision if the length is very small.
     double len = double(xp) * double(xp) +
                  double(yp) * double(yp);
-    return float(sqrt(len));
+    return float(std::sqrt(len));
 }
 
 /*!
@@ -212,7 +220,7 @@ QVector2D QVector2D::normalized() const
     if (qFuzzyIsNull(len - 1.0f)) {
         return *this;
     } else if (!qFuzzyIsNull(len)) {
-        double sqrtLen = sqrt(len);
+        double sqrtLen = std::sqrt(len);
         return QVector2D(float(double(xp) / sqrtLen), float(double(yp) / sqrtLen));
     } else {
         return QVector2D();
@@ -233,7 +241,7 @@ void QVector2D::normalize()
     if (qFuzzyIsNull(len - 1.0f) || qFuzzyIsNull(len))
         return;
 
-    len = sqrt(len);
+    len = std::sqrt(len);
 
     xp = float(double(xp) / len);
     yp = float(double(yp) / len);
@@ -311,6 +319,16 @@ float QVector2D::distanceToLine
 
     Divides this vector's coordinates by the given \a divisor, and
     returns a reference to this vector.
+
+    \sa operator*=()
+*/
+
+/*!
+    \fn QVector2D &QVector2D::operator/=(const QVector2D &vector)
+    \since 5.5
+
+    Divides the components of this vector by the corresponding
+    components in \a vector.
 
     \sa operator*=()
 */
@@ -407,6 +425,17 @@ float QVector2D::dotProduct(const QVector2D& v1, const QVector2D& v2)
 */
 
 /*!
+    \fn const QVector2D operator/(const QVector2D &vector, const QVector2D &divisor)
+    \relates QVector2D
+    \since 5.5
+
+    Returns the QVector2D object formed by dividing components of the given
+    \a vector by a respective components of the given \a divisor.
+
+    \sa QVector2D::operator/=()
+*/
+
+/*!
     \fn bool qFuzzyCompare(const QVector2D& v1, const QVector2D& v2)
     \relates QVector2D
 
@@ -470,8 +499,9 @@ QVector2D::operator QVariant() const
 
 QDebug operator<<(QDebug dbg, const QVector2D &vector)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QVector2D(" << vector.x() << ", " << vector.y() << ')';
-    return dbg.space();
+    return dbg;
 }
 
 #endif

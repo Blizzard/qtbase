@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -85,7 +85,7 @@
 
 #include "../../../network-settings.h"
 
-#define TEST_DOMAIN ".test.qt-project.org"
+#define TEST_DOMAIN ".test.macieira.org"
 
 
 class tst_QHostInfo : public QObject
@@ -126,7 +126,6 @@ private slots:
     void cache();
 
     void abortHostLookup();
-    void abortHostLookupInDifferentThread();
 protected slots:
     void resultsReady(const QHostInfo &);
 
@@ -620,26 +619,6 @@ public slots:
 public:
     int id;
 };
-
-void tst_QHostInfo::abortHostLookupInDifferentThread()
-{
-    //reset counter
-    lookupsDoneCounter = 0;
-    bool valid = false;
-    int id = -1;
-    QHostInfo result = qt_qhostinfo_lookup("a-single" TEST_DOMAIN, this, SLOT(resultsReady(QHostInfo)), &valid, &id);
-    QVERIFY(!valid);
-    QThread thread;
-    LookupAborter aborter;
-    aborter.id = id;
-    aborter.moveToThread(&thread);
-    connect(&thread, SIGNAL(started()), &aborter, SLOT(abort()));
-    //it is assumed that the DNS request/response in the backend is slower than it takes to schedule the thread and call abort
-    thread.start();
-    QVERIFY(thread.wait(5000));
-    QTestEventLoop::instance().enterLoop(5);
-    QCOMPARE(lookupsDoneCounter, 0);
-}
 
 QTEST_MAIN(tst_QHostInfo)
 #include "tst_qhostinfo.moc"

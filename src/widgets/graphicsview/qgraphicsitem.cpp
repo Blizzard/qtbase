@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -736,7 +736,6 @@
 #include "qgraphicsproxywidget.h"
 #include "qgraphicsscenebsptreeindex_p.h"
 #include <QtCore/qbitarray.h>
-#include <QtCore/qdebug.h>
 #include <QtCore/qpoint.h>
 #include <QtCore/qstack.h>
 #include <QtCore/qtimer.h>
@@ -761,8 +760,7 @@
 #include <private/qwidget_p.h>
 #include <private/qapplication_p.h>
 #include <private/qgesturemanager_p.h>
-
-#include <math.h>
+#include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -2447,7 +2445,12 @@ void QGraphicsItemPrivate::setVisibleHelper(bool newVisible, bool explicitly,
     Items are visible by default; it is unnecessary to call
     setVisible() on a new item.
 
-    \sa isVisible(), show(), hide()
+    \note An item with opacity set to 0 will still be considered visible,
+    although it will be treated like an invisible item: mouse events will pass
+    through it, it will not be included in the items returned by
+    QGraphicsView::items(), and so on. However, the item will retain the focus.
+
+    \sa isVisible(), show(), hide(), setOpacity()
 */
 void QGraphicsItem::setVisible(bool visible)
 {
@@ -2715,7 +2718,11 @@ qreal QGraphicsItem::effectiveOpacity() const
     with the parent: ItemIgnoresParentOpacity and
     ItemDoesntPropagateOpacityToChildren.
 
-    \sa opacity(), effectiveOpacity()
+    \note Setting the opacity of an item to 0 will not make the item invisible
+    (according to isVisible()), but the item will be treated like an invisible
+    one. See the documentation of setVisible() for more information.
+
+    \sa opacity(), effectiveOpacity(), setVisible()
 */
 void QGraphicsItem::setOpacity(qreal opacity)
 {
@@ -6583,7 +6590,7 @@ void QGraphicsItem::setData(int key, const QVariant &value)
 
     For example:
 
-    \snippet code/src_gui_graphicsview_qgraphicsitem.cpp QGraphicsItem type
+    \snippet code/src_gui_graphicsview_qgraphicsitem.cpp 1
 
     \sa UserType
 */
@@ -7383,7 +7390,7 @@ void QGraphicsItem::setInputMethodHints(Qt::InputMethodHints hints)
     QWidget *fw = QApplication::focusWidget();
     if (!fw)
         return;
-    qApp->inputMethod()->update(Qt::ImHints);
+    QGuiApplication::inputMethod()->update(Qt::ImHints);
 }
 
 /*!
@@ -7395,13 +7402,13 @@ void QGraphicsItem::setInputMethodHints(Qt::InputMethodHints hints)
 */
 void QGraphicsItem::updateMicroFocus()
 {
-#if !defined(QT_NO_IM) && defined(Q_WS_X11)
+#if !defined(QT_NO_IM) && defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (QWidget *fw = QApplication::focusWidget()) {
         if (scene()) {
             for (int i = 0 ; i < scene()->views().count() ; ++i) {
                 if (scene()->views().at(i) == fw) {
                     if (qApp)
-                        qApp->inputMethod()->update(Qt::ImQueryAll);
+                        QGuiApplication::inputMethod()->update(Qt::ImQueryAll);
                     break;
                 }
             }
@@ -8022,16 +8029,6 @@ void QGraphicsItemPrivate::resetHeight()
   This signal gets emitted whenever the visibility of the item changes
 
   \sa visible
-*/
-
-/*!
-  \fn const QObjectList &QGraphicsObject::children() const
-  \internal
-
-  This function returns the same value as QObject::children(). It's
-  provided to differentiate between the obsolete member
-  QGraphicsItem::children() and QObject::children(). QGraphicsItem now
-  provides childItems() instead.
 */
 
 /*!
@@ -9782,6 +9779,7 @@ QVariant QGraphicsPixmapItem::extension(const QVariant &variant) const
     using textWidth().
 
     \note In order to align HTML text in the center, the item's text width must be set.
+    Otherwise, you can call adjustSize() after setting the item's text.
 
     \image graphicsview-textitem.png
 
@@ -10143,9 +10141,9 @@ bool QGraphicsTextItem::sceneEvent(QEvent *event)
         // Reset the focus widget's input context, regardless
         // of how this item gained or lost focus.
         if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
-            qApp->inputMethod()->reset();
+            QGuiApplication::inputMethod()->reset();
         } else {
-            qApp->inputMethod()->update(Qt::ImQueryInput);
+            QGuiApplication::inputMethod()->update(Qt::ImQueryInput);
         }
         break;
     case QEvent::ShortcutOverride:
@@ -11285,8 +11283,24 @@ QPixmap QGraphicsItemEffectSourcePrivate::pixmap(Qt::CoordinateSystem system, QP
 #endif //QT_NO_GRAPHICSEFFECT
 
 #ifndef QT_NO_DEBUG_STREAM
+static void formatGraphicsItemHelper(QDebug debug, const QGraphicsItem *item)
+{
+    if (const QGraphicsItem *parent = item->parentItem())
+          debug << ", parent=" << static_cast<const void *>(parent);
+    debug << ", pos=";
+    QtDebugUtils::formatQPoint(debug, item->pos());
+    if (const qreal z = item->zValue())
+        debug << ", z=" << z;
+    if (item->flags())
+        debug <<  ", flags=" << item->flags();
+}
+
+// FIXME: Qt 6: Make this QDebug operator<<(QDebug debug, const QGraphicsItem *item)
 QDebug operator<<(QDebug debug, QGraphicsItem *item)
 {
+    QDebugStateSaver saver(debug);
+    debug.nospace();
+
     if (!item) {
         debug << "QGraphicsItem(0)";
         return debug;
@@ -11296,29 +11310,40 @@ QDebug operator<<(QDebug debug, QGraphicsItem *item)
         debug << o->metaObject()->className();
     else
         debug << "QGraphicsItem";
-    debug << "(this =" << (void*)item
-          << ", parent =" << (void*)item->parentItem()
-          << ", pos =" << item->pos()
-          << ", z =" << item->zValue() << ", flags = "
-          << item->flags() << ")";
+    debug << '(' << static_cast<const void *>(item);
+    if (const QGraphicsProxyWidget *pw = qgraphicsitem_cast<const QGraphicsProxyWidget *>(item)) {
+        debug << ", widget=";
+        if (const QWidget *w = pw->widget()) {
+            debug << w->metaObject()->className() << '(' << static_cast<const void *>(w);
+            if (!w->objectName().isEmpty())
+                debug << ", name=" << w->objectName();
+            debug << ')';
+        } else {
+            debug << "QWidget(0)";
+        }
+    }
+    formatGraphicsItemHelper(debug, item);
+    debug << ')';
     return debug;
 }
 
+// FIXME: Qt 6: Make this QDebug operator<<(QDebug debug, const QGraphicsObject *item)
 QDebug operator<<(QDebug debug, QGraphicsObject *item)
 {
+    QDebugStateSaver saver(debug);
+    debug.nospace();
+
     if (!item) {
         debug << "QGraphicsObject(0)";
         return debug;
     }
 
-    debug.nospace() << item->metaObject()->className() << '(' << (void*)item;
+    debug << item->metaObject()->className() << '(' << static_cast<const void *>(item);
     if (!item->objectName().isEmpty())
-        debug << ", name = " << item->objectName();
-    debug.nospace() << ", parent = " << ((void*)item->parentItem())
-          << ", pos = " << item->pos()
-          << ", z = " << item->zValue() << ", flags = "
-          << item->flags() << ')';
-    return debug.space();
+        debug << ", name=" << item->objectName();
+    formatGraphicsItemHelper(debug, item);
+    debug << ')';
+    return debug;
 }
 
 QDebug operator<<(QDebug debug, QGraphicsItem::GraphicsItemChange change)

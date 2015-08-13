@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -37,11 +37,9 @@
 #include "common.h"
 #include <limits>
 
-#include <dbus/dbus.h>
-
-#define QT_LINKED_LIBDBUS
 #include <QtDBus/private/qdbusutil_p.h>
 #include <QtDBus/private/qdbusconnection_p.h>
+#include <QtDBus/private/qdbus_symbols_p.h>
 
 static const char serviceName[] = "org.qtproject.autotests.qpong";
 static const char objectPath[] = "/org/qtproject/qpong";
@@ -84,10 +82,8 @@ private slots:
     void sendCallErrors_data();
     void sendCallErrors();
 
-#ifdef DBUS_TYPE_UNIX_FD
     void receiveUnknownType_data();
     void receiveUnknownType();
-#endif
 
     void demarshallPrimitives_data();
     void demarshallPrimitives();
@@ -130,32 +126,24 @@ void tst_QDBusMarshall::initTestCase()
     commonInit();
     QDBusConnection con = QDBusConnection::sessionBus();
     fileDescriptorPassing = con.connectionCapabilities() & QDBusConnection::UnixFileDescriptorPassing;
-#ifdef Q_OS_WIN
-    proc.start("qpong");
-#else
-    proc.start("./qpong/qpong");
-#endif
-    if (!QDBusConnection::sessionBus().interface()->isServiceRegistered(serviceName)) {
-        QVERIFY(proc.waitForStarted());
 
-        QVERIFY(con.isConnected());
-        con.connect("org.freedesktop.DBus", QString(), "org.freedesktop.DBus", "NameOwnerChanged",
-                    QStringList() << serviceName << QString(""), QString(),
-                    &QTestEventLoop::instance(), SLOT(exitLoop()));
-        QTestEventLoop::instance().enterLoop(2);
-        QVERIFY(!QTestEventLoop::instance().timeout());
-        QVERIFY(QDBusConnection::sessionBus().interface()->isServiceRegistered(serviceName));
-        con.disconnect("org.freedesktop.DBus", QString(), "org.freedesktop.DBus", "NameOwnerChanged",
-                       QStringList() << serviceName << QString(""), QString(),
-                       &QTestEventLoop::instance(), SLOT(exitLoop()));
-    }
+#ifdef Q_OS_WIN
+#  define EXE ".exe"
+#else
+#  define EXE ""
+#endif
+    proc.setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    proc.start(QFINDTESTDATA("qpong/qpong" EXE));
+    QVERIFY2(proc.waitForStarted(), qPrintable(proc.errorString()));
+    QVERIFY(proc.waitForReadyRead());
 }
 
 void tst_QDBusMarshall::cleanupTestCase()
 {
-    proc.close();
-    proc.terminate();
+    QDBusMessage msg = QDBusMessage::createMethodCall(serviceName, objectPath, interfaceName, "quit");
+    QDBusConnection::sessionBus().call(msg);
     proc.waitForFinished(200);
+    proc.close();
 }
 
 int tst_QDBusMarshall::fileDescriptorForTest()
@@ -1024,7 +1012,6 @@ void tst_QDBusMarshall::sendCallErrors()
     QCOMPARE(reply.errorMessage(), errorMsg);
 }
 
-#ifdef DBUS_TYPE_UNIX_FD
 // If DBUS_TYPE_UNIX_FD is not defined, it means the current system's D-Bus library is too old for this test
 void tst_QDBusMarshall::receiveUnknownType_data()
 {
@@ -1041,23 +1028,31 @@ struct DisconnectRawDBus {
     {
         if (!connection)
             return;
-        dbus_connection_close(connection);
-        dbus_connection_unref(connection);
+        q_dbus_connection_close(connection);
+        q_dbus_connection_unref(connection);
     }
 };
-template <typename T, void (*unref)(T *)> struct GenericUnref
+struct UnrefDBusMessage
 {
-    static void cleanup(T *type)
+    static void cleanup(DBusMessage *type)
     {
         if (!type) return;
-        unref(type);
+        q_dbus_message_unref(type);
+    }
+};
+struct UnrefDBusPendingCall
+{
+    static void cleanup(DBusPendingCall *type)
+    {
+        if (!type) return;
+        q_dbus_pending_call_unref(type);
     }
 };
 
 // use these scoped types to avoid memory leaks if QVERIFY or QCOMPARE fails
 typedef QScopedPointer<DBusConnection, DisconnectRawDBus> ScopedDBusConnection;
-typedef QScopedPointer<DBusMessage, GenericUnref<DBusMessage, dbus_message_unref> > ScopedDBusMessage;
-typedef QScopedPointer<DBusPendingCall, GenericUnref<DBusPendingCall, dbus_pending_call_unref> > ScopedDBusPendingCall;
+typedef QScopedPointer<DBusMessage, UnrefDBusMessage> ScopedDBusMessage;
+typedef QScopedPointer<DBusPendingCall, UnrefDBusPendingCall> ScopedDBusPendingCall;
 
 template <typename T> struct SetResetValue
 {
@@ -1074,6 +1069,27 @@ public:
     }
 };
 
+// mostly the same as qdbusintegrator.cpp:connectionCapabilies
+static bool canSendUnixFd(DBusConnection *connection)
+{
+    typedef dbus_bool_t (*can_send_type_t)(DBusConnection *, int);
+    static can_send_type_t can_send_type = 0;
+
+#if defined(QT_LINKED_LIBDBUS)
+# if DBUS_VERSION-0 >= 0x010400
+    can_send_type = dbus_connection_can_send_type;
+# endif
+#else
+    // run-time check if the next functions are available
+    can_send_type = (can_send_type_t)qdbus_resolve_conditionally("dbus_connection_can_send_type");
+#endif
+
+#ifndef DBUS_TYPE_UNIX_FD
+# define DBUS_TYPE_UNIX_FD int('h')
+#endif
+    return can_send_type && can_send_type(connection, DBUS_TYPE_UNIX_FD);
+}
+
 void tst_QDBusMarshall::receiveUnknownType()
 {
     QDBusConnection con = QDBusConnection::sessionBus();
@@ -1082,12 +1098,13 @@ void tst_QDBusMarshall::receiveUnknownType()
     // this needs to be implemented in raw
     // open a new connection to the bus daemon
     DBusError error;
-    dbus_error_init(&error);
-    ScopedDBusConnection rawcon(dbus_bus_get_private(DBUS_BUS_SESSION, &error));
+    q_dbus_error_init(&error);
+    ScopedDBusConnection rawcon(q_dbus_bus_get_private(DBUS_BUS_SESSION, &error));
     QVERIFY2(rawcon.data(), error.name);
 
     // check if this bus supports passing file descriptors
-    if (!dbus_connection_can_send_type(rawcon.data(), DBUS_TYPE_UNIX_FD))
+
+    if (!canSendUnixFd(rawcon.data()))
         QSKIP("Your session bus does not allow sending Unix file descriptors");
 
     // make sure this QDBusConnection won't handle Unix file descriptors
@@ -1098,18 +1115,20 @@ void tst_QDBusMarshall::receiveUnknownType()
         // create a call back to us containing a file descriptor
         QDBusMessageSpy spy;
         con.registerObject("/spyObject", &spy, QDBusConnection::ExportAllSlots);
-        ScopedDBusMessage msg(dbus_message_new_method_call(con.baseService().toLatin1(), "/spyObject", NULL, "theSlot"));
+        ScopedDBusMessage msg(q_dbus_message_new_method_call(con.baseService().toLatin1(), "/spyObject", NULL, "theSlot"));
 
         int fd = fileno(stdout);
-        dbus_message_append_args(msg.data(), DBUS_TYPE_UNIX_FD, &fd, DBUS_TYPE_INVALID);
+        DBusMessageIter iter;
+        q_dbus_message_iter_init_append(msg.data(), &iter);
+        q_dbus_message_iter_append_basic(&iter, DBUS_TYPE_UNIX_FD, &fd);
 
         // try to send to us
         DBusPendingCall *pending_ptr;
-        dbus_connection_send_with_reply(rawcon.data(), msg.data(), &pending_ptr, 1000);
+        q_dbus_connection_send_with_reply(rawcon.data(), msg.data(), &pending_ptr, 1000);
         ScopedDBusPendingCall pending(pending_ptr);
 
         // check that it got sent
-        while (dbus_connection_dispatch(rawcon.data()) == DBUS_DISPATCH_DATA_REMAINS)
+        while (q_dbus_connection_dispatch(rawcon.data()) == DBUS_DISPATCH_DATA_REMAINS)
             ;
 
         // now spin our event loop. We don't catch this call, so let's get the reply
@@ -1118,7 +1137,7 @@ void tst_QDBusMarshall::receiveUnknownType()
         loop.exec();
 
         // now try to receive the reply
-        dbus_pending_call_block(pending.data());
+        q_dbus_pending_call_block(pending.data());
 
         // check that the spy received what it was supposed to receive
         QCOMPARE(spy.list.size(), 1);
@@ -1126,48 +1145,49 @@ void tst_QDBusMarshall::receiveUnknownType()
         QFETCH(int, receivedTypeId);
         QCOMPARE(spy.list.at(0).arguments().at(0).userType(), receivedTypeId);
 
-        msg.reset(dbus_pending_call_steal_reply(pending.data()));
+        msg.reset(q_dbus_pending_call_steal_reply(pending.data()));
         QVERIFY(msg);
-        QCOMPARE(dbus_message_get_type(msg.data()), DBUS_MESSAGE_TYPE_METHOD_RETURN);
-        QCOMPARE(dbus_message_get_signature(msg.data()), DBUS_TYPE_INT32_AS_STRING);
+        QCOMPARE(q_dbus_message_get_type(msg.data()), DBUS_MESSAGE_TYPE_METHOD_RETURN);
+        QCOMPARE(q_dbus_message_get_signature(msg.data()), DBUS_TYPE_INT32_AS_STRING);
 
         int retval;
-        QVERIFY(dbus_message_get_args(msg.data(), &error, DBUS_TYPE_INT32, &retval, DBUS_TYPE_INVALID));
+        QVERIFY(q_dbus_message_iter_init(msg.data(), &iter));
+        q_dbus_message_iter_get_basic(&iter, &retval);
         QCOMPARE(retval, 42);
     } else {
         // create a signal that we'll emit
         static const char signalName[] = "signalName";
         static const char interfaceName[] = "local.interface.name";
-        ScopedDBusMessage msg(dbus_message_new_signal("/", interfaceName, signalName));
-        con.connect(dbus_bus_get_unique_name(rawcon.data()), QString(), interfaceName, signalName, &QTestEventLoop::instance(), SLOT(exitLoop()));
+        ScopedDBusMessage msg(q_dbus_message_new_signal("/", interfaceName, signalName));
+        con.connect(q_dbus_bus_get_unique_name(rawcon.data()), QString(), interfaceName, signalName, &QTestEventLoop::instance(), SLOT(exitLoop()));
 
         QDBusMessageSpy spy;
-        con.connect(dbus_bus_get_unique_name(rawcon.data()), QString(), interfaceName, signalName, &spy, SLOT(theSlot(QDBusMessage)));
+        con.connect(q_dbus_bus_get_unique_name(rawcon.data()), QString(), interfaceName, signalName, &spy, SLOT(theSlot(QDBusMessage)));
 
         DBusMessageIter iter;
-        dbus_message_iter_init_append(msg.data(), &iter);
+        q_dbus_message_iter_init_append(msg.data(), &iter);
         int fd = fileno(stdout);
 
         if (qstrcmp(QTest::currentDataTag(), "type-naked") == 0) {
             // send naked
-            dbus_message_iter_append_basic(&iter, DBUS_TYPE_UNIX_FD, &fd);
+            q_dbus_message_iter_append_basic(&iter, DBUS_TYPE_UNIX_FD, &fd);
         } else {
             DBusMessageIter subiter;
             if (qstrcmp(QTest::currentDataTag(), "type-variant") == 0)
-                dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT, DBUS_TYPE_UNIX_FD_AS_STRING, &subiter);
+                q_dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT, DBUS_TYPE_UNIX_FD_AS_STRING, &subiter);
             else if (qstrcmp(QTest::currentDataTag(), "type-array") == 0)
-                dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_UNIX_FD_AS_STRING, &subiter);
+                q_dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_UNIX_FD_AS_STRING, &subiter);
             else if (qstrcmp(QTest::currentDataTag(), "type-struct") == 0)
-                dbus_message_iter_open_container(&iter, DBUS_TYPE_STRUCT, 0, &subiter);
-            dbus_message_iter_append_basic(&subiter, DBUS_TYPE_UNIX_FD, &fd);
-            dbus_message_iter_close_container(&iter, &subiter);
+                q_dbus_message_iter_open_container(&iter, DBUS_TYPE_STRUCT, 0, &subiter);
+            q_dbus_message_iter_append_basic(&subiter, DBUS_TYPE_UNIX_FD, &fd);
+            q_dbus_message_iter_close_container(&iter, &subiter);
         }
 
         // send it
-        dbus_connection_send(rawcon.data(), msg.data(), 0);
+        q_dbus_connection_send(rawcon.data(), msg.data(), 0);
 
         // check that it got sent
-        while (dbus_connection_dispatch(rawcon.data()) == DBUS_DISPATCH_DATA_REMAINS)
+        while (q_dbus_connection_dispatch(rawcon.data()) == DBUS_DISPATCH_DATA_REMAINS)
             ;
 
         // now let's see what happens
@@ -1180,7 +1200,6 @@ void tst_QDBusMarshall::receiveUnknownType()
         QCOMPARE(spy.list.at(0).arguments().at(0).userType(), receivedTypeId);
     }
 }
-#endif
 
 void tst_QDBusMarshall::demarshallPrimitives_data()
 {

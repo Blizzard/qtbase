@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -141,12 +141,12 @@ public:
     static QWhatsThat *instance;
 
 protected:
-    void showEvent(QShowEvent *e);
-    void mousePressEvent(QMouseEvent*);
-    void mouseReleaseEvent(QMouseEvent*);
-    void mouseMoveEvent(QMouseEvent*);
-    void keyPressEvent(QKeyEvent*);
-    void paintEvent(QPaintEvent*);
+    void showEvent(QShowEvent *e) Q_DECL_OVERRIDE;
+    void mousePressEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    void mouseReleaseEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent*) Q_DECL_OVERRIDE;
+    void keyPressEvent(QKeyEvent*) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
 
 private:
     QPointer<QWidget>widget;
@@ -361,7 +361,7 @@ class QWhatsThisPrivate : public QObject
     QWhatsThisPrivate();
     ~QWhatsThisPrivate();
     static QWhatsThisPrivate *instance;
-    bool eventFilter(QObject *, QEvent *);
+    bool eventFilter(QObject *, QEvent *) Q_DECL_OVERRIDE;
     QPointer<QAction> action;
     static void say(QWidget *, const QString &, int x = 0, int y = 0);
     static void notifyToplevels(QEvent *e);
@@ -495,7 +495,7 @@ private slots:
 QWhatsThisAction::QWhatsThisAction(QObject *parent) : QAction(tr("What's This?"), parent)
 {
 #ifndef QT_NO_IMAGEFORMAT_XPM
-    QPixmap p((const char**)button_image);
+    QPixmap p(button_image);
     setIcon(p);
 #endif
     setCheckable(true);
@@ -567,7 +567,7 @@ void QWhatsThisPrivate::say(QWidget * widget, const QString &text, int x, int y)
     // make a fresh widget, and set it up
     QWhatsThat *whatsThat = new QWhatsThat(
         text,
-#if defined(Q_WS_X11) && !defined(QT_NO_CURSOR)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11) && !defined(QT_NO_CURSOR)
         QApplication::desktop()->screen(widget ? widget->x11Info().screen() : QCursor::x11Screen()),
 #else
         0,
@@ -580,11 +580,11 @@ void QWhatsThisPrivate::say(QWidget * widget, const QString &text, int x, int y)
 
     int scr = (widget ?
                 QApplication::desktop()->screenNumber(widget) :
-#if defined(Q_WS_X11) && !defined(QT_NO_CURSOR)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11) && !defined(QT_NO_CURSOR)
                 QCursor::x11Screen()
 #else
                 QApplication::desktop()->screenNumber(QPoint(x,y))
-#endif // Q_WS_X11
+#endif // Q_DEAD_CODE_FROM_QT4_X11
                );
     QRect screen = QApplication::desktop()->screenGeometry(scr);
 

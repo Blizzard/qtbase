@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -132,7 +132,7 @@ void QProgressBar::initStyleOption(QStyleOptionProgressBar *option) const
 
     if (QStyleOptionProgressBarV2 *optionV2
             = qstyleoption_cast<QStyleOptionProgressBarV2 *>(option)) {
-        optionV2->orientation = d->orientation;  // ### Qt 5: use State_Horizontal instead
+        optionV2->orientation = d->orientation;  // ### Qt 6: remove this member from QStyleOptionProgressBarV2
         optionV2->invertedAppearance = d->invertedAppearance;
         optionV2->bottomToTop = (d->textDirection == QProgressBar::BottomToTop);
     }
@@ -347,6 +347,8 @@ int QProgressBar::value() const
     If the current value falls outside the new range, the progress bar is reset
     with reset().
 
+    The QProgressBar can be set to undetermined state by using setRange(0, 0).
+
     \sa minimum, maximum
 */
 void QProgressBar::setRange(int minimum, int maximum)
@@ -426,7 +428,7 @@ QSize QProgressBar::sizeHint() const
     int cw = style()->pixelMetric(QStyle::PM_ProgressBarChunkWidth, &opt, this);
     QSize size = QSize(qMax(9, cw) * 7 + fm.width(QLatin1Char('0')) * 4, fm.height() + 8);
     if (opt.orientation == Qt::Vertical)
-        size.transpose();
+        size = size.transposed();
     return style()->sizeFromContents(QStyle::CT_ProgressBar, &opt, size, this);
 }
 
@@ -525,7 +527,7 @@ Qt::Orientation QProgressBar::orientation() const
     \property QProgressBar::invertedAppearance
     \brief whether or not a progress bar shows its progress inverted
 
-    If this property is \c false, the progress bar grows in the other
+    If this property is \c true, the progress bar grows in the other
     direction (e.g. from right to left). By default, the progress bar
     is not inverted.
 

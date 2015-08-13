@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -250,8 +250,6 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
 
     int state = option->state;
     if (!QWindowsVistaStylePrivate::useVista()) {
-        foreach (const QObject *target, d->animationTargets())
-            d->stopAnimation(target);
         QWindowsStyle::drawPrimitive(element, option, painter, widget);
         return;
     }
@@ -652,15 +650,18 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
     case PE_PanelItemViewItem:
         {
             const QStyleOptionViewItem *vopt;
-            const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget);
             bool newStyle = true;
+            QAbstractItemView::SelectionBehavior selectionBehavior = QAbstractItemView::SelectRows;
+            QAbstractItemView::SelectionMode selectionMode = QAbstractItemView::NoSelection;
+            if (const QAbstractItemView *view = qobject_cast<const QAbstractItemView *>(widget)) {
+                newStyle = !qobject_cast<const QTableView*>(view);
+                selectionBehavior = view->selectionBehavior();
+                selectionMode = view->selectionMode();
+            }
 
-            if (qobject_cast<const QTableView*>(widget))
-                newStyle = false;
-
-            if (newStyle && view && (vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option))) {
+            if (newStyle && (vopt = qstyleoption_cast<const QStyleOptionViewItem *>(option))) {
                 bool selected = vopt->state & QStyle::State_Selected;
-                bool hover = vopt->state & QStyle::State_MouseOver;
+                const bool hover = selectionMode != QAbstractItemView::NoSelection && (vopt->state & QStyle::State_MouseOver);
                 bool active = vopt->state & QStyle::State_Active;
 
                 if (vopt->features & QStyleOptionViewItem::Alternate)
@@ -679,10 +680,8 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 if (vopt->showDecorationSelected)
                     sectionSize = vopt->rect.size();
 
-                if (view->selectionBehavior() == QAbstractItemView::SelectRows)
+                if (selectionBehavior == QAbstractItemView::SelectRows)
                     sectionSize.setWidth(vopt->rect.width());
-                if (view->selectionMode() == QAbstractItemView::NoSelection)
-                    hover = false;
                 QPixmap pixmap;
 
                 if (vopt->backgroundBrush.style() != Qt::NoBrush) {
@@ -809,8 +808,6 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
     QWindowsVistaStylePrivate *d = const_cast<QWindowsVistaStylePrivate*>(d_func());
 
     if (!QWindowsVistaStylePrivate::useVista()) {
-        foreach (const QObject *target, d->animationTargets())
-            d->stopAnimation(target);
         QWindowsStyle::drawControl(element, option, painter, widget);
         return;
     }
@@ -1382,9 +1379,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
             bool verticalTitleBar = v2 == 0 ? false : v2->verticalTitleBar;
 
             if (verticalTitleBar) {
-                QSize s = rect.size();
-                s.transpose();
-                rect.setSize(s);
+                rect.setSize(rect.size().transposed());
 
                 painter->translate(rect.left() - 1, rect.top() + rect.width());
                 painter->rotate(-90);
@@ -1495,8 +1490,6 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
 {
     QWindowsVistaStylePrivate *d = const_cast<QWindowsVistaStylePrivate*>(d_func());
     if (!QWindowsVistaStylePrivate::useVista()) {
-        foreach (const QObject *target, d->animationTargets())
-            d->stopAnimation(target);
         QWindowsStyle::drawComplexControl(control, option, painter, widget);
         return;
     }
@@ -2111,6 +2104,9 @@ int QWindowsVistaStyle::styleHint(StyleHint hint, const QStyleOption *option, co
             ret = option->palette.color(QPalette::Base).darker(118).rgb();
         else
             ret = -1;
+        break;
+    case SH_Header_ArrowAlignment:
+        ret = Qt::AlignTop | Qt::AlignHCenter;
         break;
     default:
         ret = QWindowsXPStyle::styleHint(hint, option, widget, returnData);

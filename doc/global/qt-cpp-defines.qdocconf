@@ -7,7 +7,7 @@ defines                 += Q_QDOC \
                           QT_KEYPAD_NAVIGATION \
                           QT_NO_EGL \
                           QT3_SUPPORT \
-                          Q_WS_.* \
+                          Q_DEAD_CODE_FROM_QT4_.* \
                           Q_OS_.* \
                           Q_BYTE_ORDER \
                           QT_DEPRECATED \
@@ -28,10 +28,12 @@ Cpp.ignoretokens        += \
                           Q_CORE_EXPORT_INLINE \
                           Q_DBUS_EXPORT \
                           Q_DECL_CONSTEXPR \
+                          Q_DECL_RELAXED_CONSTEXPR \
                           Q_DECL_CONST_FUNCTION \
                           Q_DECL_DEPRECATED \
                           Q_DECL_NOEXCEPT \
                           Q_DECL_FINAL \
+                          Q_DECL_OVERRIDE \
                           Q_DECL_NOTHROW \
                           Q_DECL_PURE_FUNCTION \
                           Q_DECL_UNUSED \
@@ -114,6 +116,8 @@ Cpp.ignoretokens        += \
                           QT_END_NAMESPACE \
                           QT_FASTCALL \
                           QT_MUTEX_LOCK_NOEXCEPT \
+                          QT_WARNING_PUSH \
+                          QT_WARNING_POP \
                           QT_WIDGET_PLUGIN_EXPORT \
                           QWEBKIT_EXPORT
 
@@ -136,10 +140,16 @@ Cpp.ignoredirectives    += \
                           QT_DEPRECATED_X \
                           Q_DISABLE_COPY \
                           Q_DUMMY_COMPARISON_OPERATOR \
+                          Q_ENUM \
                           Q_ENUMS \
+                          Q_FLAG \
                           Q_FLAGS \
                           Q_INTERFACES \
                           Q_PRIVATE_PROPERTY \
                           QT_FORWARD_DECLARE_CLASS \
                           Q_DECLARE_HANDLE \
-                          Q_REVISION
+                          Q_REVISION \
+                          QT_WARNING_DISABLE_CLANG \
+                          QT_WARNING_DISABLE_GCC \
+                          QT_WARNING_DISABLE_INTEL \
+                          QT_WARNING_DISABLE_MSVC

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1229,7 +1229,7 @@ const QAndroidStyle::AndroidDrawable * QAndroidStyle::AndroidStateDrawable::best
 int QAndroidStyle::AndroidStateDrawable::extractState(const QVariantMap &value)
 {
     int state = QStyle::State_Enabled | QStyle::State_Active;;
-    foreach (const QString key, value.keys()) {
+    foreach (const QString &key, value.keys()) {
         bool val = value.value(key).toString() == QLatin1String("true");
         if (key == QLatin1String("enabled")) {
             if (val)
@@ -1719,28 +1719,43 @@ void QAndroidStyle::AndroidSeekBarControl::drawControl(const QStyleOption *optio
            qstyleoption_cast<const QStyleOptionSlider *>(option)) {
         double factor = double(styleOption->sliderPosition - styleOption->minimum)
                 / double(styleOption->maximum - styleOption->minimum);
+
+        // Android does not have a vertical slider. To support the vertical orientation, we rotate
+        // the painter and pretend that we are horizontal.
+        if (styleOption->orientation == Qt::Vertical)
+            factor = 1 - factor;
+
         if (m_progressDrawable->type() == QAndroidStyle::Layer) {
             QAndroidStyle::AndroidDrawable *clipDrawable = static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->layer(m_progressId);
             if (clipDrawable->type() == QAndroidStyle::Clip)
-                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(factor, styleOption->orientation);
+                static_cast<QAndroidStyle::AndroidClipDrawable *>(clipDrawable)->setFactor(factor, Qt::Horizontal);
             else
-                static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->setFactor(m_progressId, factor, styleOption->orientation);
+                static_cast<QAndroidStyle::AndroidLayerDrawable *>(m_progressDrawable)->setFactor(m_progressId, factor, Qt::Horizontal);
         }
         const AndroidDrawable *drawable = m_seekBarThumb;
         if (drawable->type() == State)
             drawable = static_cast<const QAndroidStyle::AndroidStateDrawable *>(m_seekBarThumb)->bestAndroidStateMatch(option);
         QStyleOption copy(*option);
+
+        p->save();
+
+        if (styleOption->orientation == Qt::Vertical) {
+            // rotate the painter, and transform the rectangle to match
+            p->rotate(90);
+            copy.rect = QRect(copy.rect.y(), copy.rect.x() - copy.rect.width(), copy.rect.height(), copy.rect.width());
+        }
+
         copy.rect.setHeight(m_progressDrawable->size().height());
         copy.rect.setWidth(copy.rect.width() - drawable->size().width());
         const int yTranslate = abs(drawable->size().height() - copy.rect.height()) / 2;
         copy.rect.translate(drawable->size().width() / 2, yTranslate);
         m_progressDrawable->draw(p, &copy);
-        if (styleOption->orientation == Qt::Vertical)
-            qCritical() << "Vertical slider are not supported";
         int pos = copy.rect.width() * factor - drawable->size().width() / 2;
         copy.rect.translate(pos, -yTranslate);
         copy.rect.setSize(drawable->size());
         m_seekBarThumb->draw(p, &copy);
+
+        p->restore();
     }
 }
 
@@ -1772,8 +1787,13 @@ QRect QAndroidStyle::AndroidSeekBarControl::subControlRect(const QStyleOptionCom
         QRect r(option->rect);
         double factor = double(styleOption->sliderPosition - styleOption->minimum)
                 / (styleOption->maximum - styleOption->minimum);
-        int pos = option->rect.width() * factor - double(drawable->size().width() / 2);
-        r.setX(r.x() + pos);
+        if (styleOption->orientation == Qt::Vertical) {
+            int pos = option->rect.height() * (1 - factor) - double(drawable->size().height() / 2);
+            r.setY(r.y() + pos);
+        } else {
+            int pos = option->rect.width() * factor - double(drawable->size().width() / 2);
+            r.setX(r.x() + pos);
+        }
         r.setSize(drawable->size());
         return r;
     }
@@ -1791,6 +1811,10 @@ QRect QAndroidStyle::AndroidSpinnerControl::subControlRect(const QStyleOptionCom
 {
     if (sc == QStyle::SC_ComboBoxListBoxPopup)
         return option->rect;
+    if (sc == QStyle::SC_ComboBoxArrow) {
+        const QRect editField = subControlRect(option, QStyle::SC_ComboBoxEditField, widget);
+        return QRect(editField.topRight(), QSize(option->rect.width() - editField.width(), option->rect.height()));
+    }
     return AndroidControl::subControlRect(option, sc, widget);
 }
 

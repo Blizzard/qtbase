@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,7 +46,7 @@
 #include "qdebug.h"
 #include "qpalette.h"
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #include <private/qt_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -606,7 +606,7 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
 /*!
   Constructs a null icon.
 */
-QIcon::QIcon()
+QIcon::QIcon() Q_DECL_NOEXCEPT
     : d(0)
 {
 }
@@ -1024,15 +1024,15 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
     d->engine->addFile(fileName, size, mode, state);
 
     // Check if a "@2x" file exists and add it.
-    static bool disable2xImageLoading = !qgetenv("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING").isEmpty();
+    static bool disable2xImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
     if (!disable2xImageLoading && qApp->devicePixelRatio() > 1.0) {
+        QString at2xfileName = fileName;
         int dotIndex = fileName.lastIndexOf(QLatin1Char('.'));
-        if (dotIndex != -1) {
-            QString at2xfileName = fileName;
-            at2xfileName.insert(dotIndex, QStringLiteral("@2x"));
-            if (QFile::exists(at2xfileName))
-                d->engine->addFile(at2xfileName, size, mode, state);
-        }
+        if (dotIndex == -1) /* no dot */
+            dotIndex = fileName.size(); /* append */
+        at2xfileName.insert(dotIndex, QStringLiteral("@2x"));
+        if (QFile::exists(at2xfileName))
+            d->engine->addFile(at2xfileName, size, mode, state);
     }
 }
 
@@ -1197,7 +1197,7 @@ bool QIcon::hasThemeIcon(const QString &name)
 {
     QIcon icon = fromTheme(name);
 
-    return !icon.isNull();
+    return icon.name() == name;
 }
 
 

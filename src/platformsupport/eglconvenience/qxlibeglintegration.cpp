@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,15 +23,18 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include <QLoggingCategory>
 #include "qxlibeglintegration_p.h"
+
+Q_LOGGING_CATEGORY(lcXlibEglDebug, "qt.egl.xlib.debug")
 
 VisualID QXlibEglIntegration::getCompatibleVisualId(Display *display, EGLDisplay eglDisplay, EGLConfig config)
 {
@@ -67,8 +70,14 @@ VisualID QXlibEglIntegration::getCompatibleVisualId(Display *display, EGLDisplay
         chosenVisualInfo = XGetVisualInfo(display, VisualIDMask, &visualInfoTemplate, &matchingCount);
         if (chosenVisualInfo) {
             // Skip size checks if implementation supports non-matching visual
-            // and config (http://bugreports.qt-project.org/browse/QTBUG-9444).
+            // and config (QTBUG-9444).
             if (q_hasEglExtension(eglDisplay,"EGL_NV_post_convert_rounding")) {
+                XFree(chosenVisualInfo);
+                return visualId;
+            }
+            // Skip also for i.MX6 where 565 visuals are suggested for the default 444 configs and it works just fine.
+            const char *vendor = eglQueryString(eglDisplay, EGL_VENDOR);
+            if (vendor && strstr(vendor, "Vivante")) {
                 XFree(chosenVisualInfo);
                 return visualId;
             }
@@ -87,31 +96,26 @@ VisualID QXlibEglIntegration::getCompatibleVisualId(Display *display, EGLDisplay
             // configs. In such a case we have to fall back to XGetVisualInfo.
             if (!visualMatchesConfig) {
                 visualId = 0;
-#ifdef QT_DEBUG_X11_VISUAL_SELECTION
-                qWarning("Warning: EGL suggested using X Visual ID %d (%d %d %d depth %d) for EGL config %d (%d %d %d %d), but this is incompatible",
-                         (int)visualId, visualRedSize, visualGreenSize, visualBlueSize, chosenVisualInfo->depth,
-                         configId, configRedSize, configGreenSize, configBlueSize, configAlphaSize);
-#endif
+                qCDebug(lcXlibEglDebug,
+                        "EGL suggested using X Visual ID %d (%d %d %d depth %d) for EGL config %d"
+                        "(%d %d %d %d), but this is incompatible",
+                        (int)visualId, visualRedSize, visualGreenSize, visualBlueSize, chosenVisualInfo->depth,
+                        configId, configRedSize, configGreenSize, configBlueSize, configAlphaSize);
             }
         } else {
-            qWarning("Warning: EGL suggested using X Visual ID %d for EGL config %d, but that isn't a valid ID",
-                     (int)visualId, configId);
+            qCDebug(lcXlibEglDebug, "EGL suggested using X Visual ID %d for EGL config %d, but that isn't a valid ID",
+                    (int)visualId, configId);
             visualId = 0;
         }
         XFree(chosenVisualInfo);
     }
-#ifdef QT_DEBUG_X11_VISUAL_SELECTION
     else
-        qDebug("EGL did not suggest a VisualID (EGL_NATIVE_VISUAL_ID was zero) for EGLConfig %d", configId);
-#endif
+        qCDebug(lcXlibEglDebug, "EGL did not suggest a VisualID (EGL_NATIVE_VISUAL_ID was zero) for EGLConfig %d", configId);
 
     if (visualId) {
-#ifdef QT_DEBUG_X11_VISUAL_SELECTION
-        if (configAlphaSize > 0)
-            qDebug("Using ARGB Visual ID %d provided by EGL for config %d", (int)visualId, configId);
-        else
-            qDebug("Using Opaque Visual ID %d provided by EGL for config %d", (int)visualId, configId);
-#endif
+        qCDebug(lcXlibEglDebug, configAlphaSize > 0
+                ? "Using ARGB Visual ID %d provided by EGL for config %d"
+                : "Using Opaque Visual ID %d provided by EGL for config %d", (int)visualId, configId);
         return visualId;
     }
 
@@ -143,9 +147,7 @@ VisualID QXlibEglIntegration::getCompatibleVisualId(Display *display, EGLDisplay
     }
 
     if (visualId) {
-#ifdef QT_DEBUG_X11_VISUAL_SELECTION
-        qDebug("Using Visual ID %d provided by XGetVisualInfo for EGL config %d", (int)visualId, configId);
-#endif
+        qCDebug(lcXlibEglDebug, "Using Visual ID %d provided by XGetVisualInfo for EGL config %d", (int)visualId, configId);
         return visualId;
     }
 

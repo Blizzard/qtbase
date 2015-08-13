@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -58,10 +58,15 @@ private slots:
     void readLine2();
 
     void peekBug();
+    void readAllKeepPosition();
 };
 
 void tst_QIODevice::initTestCase()
 {
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QVERIFY(QFileInfo(QStringLiteral("./tst_qiodevice.cpp")).exists()
+            || QFile::copy(QStringLiteral(":/tst_qiodevice.cpp"), QStringLiteral("./tst_qiodevice.cpp")));
+#endif
 }
 
 // Testing get/set functions
@@ -219,7 +224,7 @@ void tst_QIODevice::unget()
         buf[0] = '@';
         buf[1] = '@';
         QTest::ignoreMessage(QtWarningMsg,
-                              "QIODevice::readLine: Called with maxSize < 2");
+                              "QIODevice::readLine (QBuffer): Called with maxSize < 2");
         QCOMPARE(buffer.readLine(buf, 1), qint64(-1));
         QCOMPARE(buffer.readLine(buf, 2), qint64(i < 4 ? 1 : -1));
         switch (i) {
@@ -578,6 +583,49 @@ void tst_QIODevice::peekBug()
     QCOMPARE(onetwo[0], 'e');
     QCOMPARE(onetwo[1], 'f');
 
+}
+
+class SequentialReadBuffer : public QIODevice
+{
+public:
+    SequentialReadBuffer(const char *data) : QIODevice(), buf(data), offset(0) { }
+
+    bool isSequential() const Q_DECL_OVERRIDE { return true; }
+    const QByteArray &buffer() const { return buf; }
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) Q_DECL_OVERRIDE
+    {
+        maxSize = qMin(maxSize, qint64(buf.size() - offset));
+        memcpy(data, buf.constData() + offset, maxSize);
+        offset += maxSize;
+        return maxSize;
+    }
+    qint64 writeData(const char * /* data */, qint64 /* maxSize */) Q_DECL_OVERRIDE
+    {
+        return -1;
+    }
+
+private:
+    QByteArray buf;
+    int offset;
+};
+
+// Test readAll() on position change for sequential device
+void tst_QIODevice::readAllKeepPosition()
+{
+    SequentialReadBuffer buffer("Hello world!");
+    buffer.open(QIODevice::ReadOnly);
+    char c;
+
+    QVERIFY(buffer.getChar(&c));
+    QCOMPARE(buffer.pos(), qint64(0));
+    buffer.ungetChar(c);
+    QCOMPARE(buffer.pos(), qint64(0));
+
+    QByteArray resultArray = buffer.readAll();
+    QCOMPARE(buffer.pos(), qint64(0));
+    QCOMPARE(resultArray, buffer.buffer());
 }
 
 QTEST_MAIN(tst_QIODevice)

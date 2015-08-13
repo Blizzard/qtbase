@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -383,12 +383,12 @@ struct QCheckPoint
 };
 Q_DECLARE_TYPEINFO(QCheckPoint, Q_PRIMITIVE_TYPE);
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCheckPoint &checkPoint, QFixed y)
+static bool operator<(const QCheckPoint &checkPoint, QFixed y)
 {
     return checkPoint.y < y;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCheckPoint &checkPoint, int pos)
+static bool operator<(const QCheckPoint &checkPoint, int pos)
 {
     return checkPoint.positionInFrame < pos;
 }
@@ -396,17 +396,17 @@ Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCheckPoint &checkPoint, int pos)
 #if defined(Q_CC_MSVC) && _MSC_VER < 1600
 //The STL implementation of MSVC 2008 requires the definitions
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCheckPoint &checkPoint1, const QCheckPoint &checkPoint2)
+static bool operator<(const QCheckPoint &checkPoint1, const QCheckPoint &checkPoint2)
 {
     return checkPoint1.y < checkPoint2.y;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(QFixed y, const QCheckPoint &checkPoint)
+static bool operator<(QFixed y, const QCheckPoint &checkPoint)
 {
     return y < checkPoint.y;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(int pos, const QCheckPoint &checkPoint)
+static bool operator<(int pos, const QCheckPoint &checkPoint)
 {
     return pos < checkPoint.positionInFrame;
 }
@@ -504,8 +504,6 @@ public:
     void layoutBlock(const QTextBlock &bl, int blockPosition, const QTextBlockFormat &blockFormat,
                      QTextLayoutStruct *layoutStruct, int layoutFrom, int layoutTo, const QTextBlockFormat *previousBlockFormat);
     void layoutFlow(QTextFrame::Iterator it, QTextLayoutStruct *layoutStruct, int layoutFrom, int layoutTo, QFixed width = 0);
-    void pageBreakInsideTable(QTextTable *table, QTextLayoutStruct *layoutStruct);
-
 
     void floatMargins(const QFixed &y, const QTextLayoutStruct *layoutStruct, QFixed *left, QFixed *right) const;
     QFixed findY(QFixed yFrom, const QTextLayoutStruct *layoutStruct, QFixed requiredWidth) const;
@@ -1115,6 +1113,13 @@ void QTextDocumentLayoutPrivate::drawTableCell(const QRectF &cellRect, QPainter 
     const QFixed leftPadding = td->leftPadding(fmt);
     const QFixed topPadding = td->topPadding(fmt);
 
+    qreal topMargin = (td->effectiveTopMargin + td->cellSpacing + td->border).toReal();
+    qreal bottomMargin = (td->effectiveBottomMargin + td->cellSpacing + td->border).toReal();
+
+    const int headerRowCount = qMin(table->format().headerRowCount(), table->rows() - 1);
+    if (r >= headerRowCount)
+        topMargin += td->headerHeight.toReal();
+
     if (td->border != 0) {
         const QBrush oldBrush = painter->brush();
         const QPen oldPen = painter->pen();
@@ -1142,13 +1147,6 @@ void QTextDocumentLayoutPrivate::drawTableCell(const QRectF &cellRect, QPainter 
             break;
         }
 
-        qreal topMargin = (td->effectiveTopMargin + td->cellSpacing + td->border).toReal();
-        qreal bottomMargin = (td->effectiveBottomMargin + td->cellSpacing + td->border).toReal();
-
-        const int headerRowCount = qMin(table->format().headerRowCount(), table->rows() - 1);
-        if (r >= headerRowCount)
-            topMargin += td->headerHeight.toReal();
-
         drawBorder(painter, borderRect, topMargin, bottomMargin,
                    border, table->format().borderBrush(), cellBorder);
 
@@ -1159,7 +1157,30 @@ void QTextDocumentLayoutPrivate::drawTableCell(const QRectF &cellRect, QPainter 
     const QBrush bg = cell.format().background();
     const QPointF brushOrigin = painter->brushOrigin();
     if (bg.style() != Qt::NoBrush) {
-        fillBackground(painter, cellRect, bg, cellRect.topLeft());
+        const qreal pageHeight = document->pageSize().height();
+        const int topPage = pageHeight > 0 ? static_cast<int>(cellRect.top() / pageHeight) : 0;
+        const int bottomPage = pageHeight > 0 ? static_cast<int>((cellRect.bottom()) / pageHeight) : 0;
+
+        if (topPage == bottomPage)
+            fillBackground(painter, cellRect, bg, cellRect.topLeft());
+        else {
+            for (int i = topPage; i <= bottomPage; ++i) {
+                QRectF clipped = cellRect.toRect();
+
+                if (topPage != bottomPage) {
+                    const qreal top = qMax(i * pageHeight + topMargin, cell_context.clip.top());
+                    const qreal bottom = qMin((i + 1) * pageHeight - bottomMargin, cell_context.clip.bottom());
+
+                    clipped.setTop(qMax(clipped.top(), top));
+                    clipped.setBottom(qMin(clipped.bottom(), bottom));
+
+                    if (clipped.bottom() <= clipped.top())
+                        continue;
+
+                    fillBackground(painter, clipped, bg, cellRect.topLeft());
+                }
+            }
+        }
 
         if (bg.style() > Qt::SolidPattern)
             painter->setBrushOrigin(cellRect.topLeft());
@@ -1267,7 +1288,7 @@ void QTextDocumentLayoutPrivate::drawBlock(const QPointF &offset, QPainter *pain
     const QTextLayout *tl = bl.layout();
     QRectF r = tl->boundingRect();
     r.translate(offset + tl->position());
-    if (context.clip.isValid() && (r.bottom() < context.clip.y() || r.top() > context.clip.bottom()))
+    if (!bl.isVisible() || (context.clip.isValid() && (r.bottom() < context.clip.y() || r.top() > context.clip.bottom())))
         return;
 //      LDEBUG << debug_indent << "drawBlock" << bl.position() << "at" << offset << "br" << tl->boundingRect();
 
@@ -2409,7 +2430,7 @@ void QTextDocumentLayoutPrivate::layoutFlow(QTextFrame::Iterator it, QTextLayout
             ++it;
         } else {
             QTextFrame::Iterator lastIt;
-            if (!previousIt.atEnd())
+            if (!previousIt.atEnd() && previousIt != it)
                 lastIt = previousIt;
             previousIt = it;
             QTextBlock block = it.currentBlock();
@@ -2557,6 +2578,8 @@ void QTextDocumentLayoutPrivate::layoutBlock(const QTextBlock &bl, int blockPosi
                                              QTextLayoutStruct *layoutStruct, int layoutFrom, int layoutTo, const QTextBlockFormat *previousBlockFormat)
 {
     Q_Q(QTextDocumentLayout);
+    if (!bl.isVisible())
+        return;
 
     QTextLayout *tl = bl.layout();
     const int blockLength = bl.length();
@@ -3242,7 +3265,7 @@ QRectF QTextDocumentLayoutPrivate::frameBoundingRectInternal(QTextFrame *frame) 
 QRectF QTextDocumentLayout::blockBoundingRect(const QTextBlock &block) const
 {
     Q_D(const QTextDocumentLayout);
-    if (d->docPrivate->pageSize.isNull() || !block.isValid())
+    if (d->docPrivate->pageSize.isNull() || !block.isValid() || !block.isVisible())
         return QRectF();
     d->ensureLayoutedByPosition(block.position() + block.length());
     QTextFrame *frame = d->document->frameAt(block.position());

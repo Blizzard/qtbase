@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -73,6 +73,14 @@ static const float inv_dist_to_plane = 1.0f / 1024.0f;
     \fn QMatrix4x4::QMatrix4x4()
 
     Constructs an identity matrix.
+*/
+
+/*!
+    \fn QMatrix4x4::QMatrix4x4(Qt::Initialization)
+    \since 5.5
+    \internal
+
+    Constructs a matrix without initializing the contents.
 */
 
 /*!
@@ -287,6 +295,18 @@ QMatrix4x4::QMatrix4x4(const QTransform& transform)
     Sets the elements of row \a index to the components of \a value.
 
     \sa row(), setColumn()
+*/
+
+/*!
+    \fn bool QMatrix4x4::isAffine() const
+    \since 5.5
+
+    Returns \c true if this matrix is affine matrix; false otherwise.
+
+    An affine matrix is a 4x4 matrix with row 3 equal to (0, 0, 0, 1),
+    e.g. no projective coefficients.
+
+    \sa isIdentity()
 */
 
 /*!
@@ -1105,8 +1125,8 @@ void QMatrix4x4::rotate(float angle, float x, float y, float z)
         c = -1.0f;
     } else {
         float a = angle * M_PI / 180.0f;
-        c = cosf(a);
-        s = sinf(a);
+        c = std::cos(a);
+        s = std::sin(a);
     }
     if (x == 0.0f) {
         if (y == 0.0f) {
@@ -1166,7 +1186,7 @@ void QMatrix4x4::rotate(float angle, float x, float y, float z)
                  double(y) * double(y) +
                  double(z) * double(z);
     if (!qFuzzyCompare(len, 1.0) && !qFuzzyIsNull(len)) {
-        len = sqrt(len);
+        len = std::sqrt(len);
         x = float(double(x) / len);
         y = float(double(y) / len);
         z = float(double(z) / len);
@@ -1214,8 +1234,8 @@ void QMatrix4x4::projectedRotate(float angle, float x, float y, float z)
         c = -1.0f;
     } else {
         float a = angle * M_PI / 180.0f;
-        c = cosf(a);
-        s = sinf(a);
+        c = std::cos(a);
+        s = std::sin(a);
     }
     if (x == 0.0f) {
         if (y == 0.0f) {
@@ -1262,7 +1282,7 @@ void QMatrix4x4::projectedRotate(float angle, float x, float y, float z)
                  double(y) * double(y) +
                  double(z) * double(z);
     if (!qFuzzyCompare(len, 1.0) && !qFuzzyIsNull(len)) {
-        len = sqrt(len);
+        len = std::sqrt(len);
         x = float(double(x) / len);
         y = float(double(y) / len);
         z = float(double(z) / len);
@@ -1302,27 +1322,33 @@ void QMatrix4x4::rotate(const QQuaternion& quaternion)
 {
     // Algorithm from:
     // http://www.j3d.org/matrix_faq/matrfaq_latest.html#Q54
-    QMatrix4x4 m(1);
-    float xx = quaternion.x() * quaternion.x();
-    float xy = quaternion.x() * quaternion.y();
-    float xz = quaternion.x() * quaternion.z();
-    float xw = quaternion.x() * quaternion.scalar();
-    float yy = quaternion.y() * quaternion.y();
-    float yz = quaternion.y() * quaternion.z();
-    float yw = quaternion.y() * quaternion.scalar();
-    float zz = quaternion.z() * quaternion.z();
-    float zw = quaternion.z() * quaternion.scalar();
-    m.m[0][0] = 1.0f - 2 * (yy + zz);
-    m.m[1][0] =        2 * (xy - zw);
-    m.m[2][0] =        2 * (xz + yw);
+
+    QMatrix4x4 m(Qt::Uninitialized);
+
+    const float f2x = quaternion.x() + quaternion.x();
+    const float f2y = quaternion.y() + quaternion.y();
+    const float f2z = quaternion.z() + quaternion.z();
+    const float f2xw = f2x * quaternion.scalar();
+    const float f2yw = f2y * quaternion.scalar();
+    const float f2zw = f2z * quaternion.scalar();
+    const float f2xx = f2x * quaternion.x();
+    const float f2xy = f2x * quaternion.y();
+    const float f2xz = f2x * quaternion.z();
+    const float f2yy = f2y * quaternion.y();
+    const float f2yz = f2y * quaternion.z();
+    const float f2zz = f2z * quaternion.z();
+
+    m.m[0][0] = 1.0f - (f2yy + f2zz);
+    m.m[1][0] =         f2xy - f2zw;
+    m.m[2][0] =         f2xz + f2yw;
     m.m[3][0] = 0.0f;
-    m.m[0][1] =        2 * (xy + zw);
-    m.m[1][1] = 1.0f - 2 * (xx + zz);
-    m.m[2][1] =        2 * (yz - xw);
+    m.m[0][1] =         f2xy + f2zw;
+    m.m[1][1] = 1.0f - (f2xx + f2zz);
+    m.m[2][1] =         f2yz - f2xw;
     m.m[3][1] = 0.0f;
-    m.m[0][2] =        2 * (xz - yw);
-    m.m[1][2] =        2 * (yz + xw);
-    m.m[2][2] = 1.0f - 2 * (xx + yy);
+    m.m[0][2] =         f2xz - f2yw;
+    m.m[1][2] =         f2yz + f2xw;
+    m.m[2][2] = 1.0f - (f2xx + f2yy);
     m.m[3][2] = 0.0f;
     m.m[0][3] = 0.0f;
     m.m[1][3] = 0.0f;
@@ -1467,10 +1493,10 @@ void QMatrix4x4::perspective(float verticalAngle, float aspectRatio, float nearP
     // Construct the projection.
     QMatrix4x4 m(1);
     float radians = (verticalAngle / 2.0f) * M_PI / 180.0f;
-    float sine = sinf(radians);
+    float sine = std::sin(radians);
     if (sine == 0.0f)
         return;
-    float cotan = cosf(radians) / sine;
+    float cotan = std::cos(radians) / sine;
     float clip = farPlane - nearPlane;
     m.m[0][0] = cotan / aspectRatio;
     m.m[1][0] = 0.0f;
@@ -1497,14 +1523,21 @@ void QMatrix4x4::perspective(float verticalAngle, float aspectRatio, float nearP
 #ifndef QT_NO_VECTOR3D
 
 /*!
-    Multiplies this matrix by another that applies an \a eye position
-    transformation.  The \a center value indicates the center of the
-    view that the \a eye is looking at.  The \a up value indicates
-    which direction should be considered up with respect to the \a eye.
+    Multiplies this matrix by a viewing matrix derived from an eye
+    point. The \a center value indicates the center of the view that
+    the \a eye is looking at.  The \a up value indicates which direction
+    should be considered up with respect to the \a eye.
+
+    \note The \a up vector must not be parallel to the line of sight
+    from \a eye to \a center.
 */
 void QMatrix4x4::lookAt(const QVector3D& eye, const QVector3D& center, const QVector3D& up)
 {
-    QVector3D forward = (center - eye).normalized();
+    QVector3D forward = center - eye;
+    if (qFuzzyIsNull(forward.x()) && qFuzzyIsNull(forward.y()) && qFuzzyIsNull(forward.z()))
+        return;
+
+    forward.normalize();
     QVector3D side = QVector3D::crossProduct(forward, up).normalized();
     QVector3D upVector = QVector3D::crossProduct(side, forward);
 
@@ -1977,6 +2010,7 @@ QMatrix4x4::operator QVariant() const
 
 QDebug operator<<(QDebug dbg, const QMatrix4x4 &m)
 {
+    QDebugStateSaver saver(dbg);
     // Create a string that represents the matrix type.
     QByteArray bits;
     if (m.flagBits == QMatrix4x4::Identity) {
@@ -2006,7 +2040,7 @@ QDebug operator<<(QDebug dbg, const QMatrix4x4 &m)
         << m(2, 0) << m(2, 1) << m(2, 2) << m(2, 3) << endl
         << m(3, 0) << m(3, 1) << m(3, 2) << m(3, 3) << endl
         << qSetFieldWidth(0) << ')';
-    return dbg.space();
+    return dbg;
 }
 
 #endif

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -41,6 +41,7 @@
 #include "blurpicker.h"
 
 #include <QtWidgets>
+#include <QtCore/qmath.h>
 
 #include "blureffect.h"
 
@@ -76,8 +77,8 @@ void BlurPicker::setIndex(qreal index)
     for (int i = 0; i < m_icons.count(); ++i) {
         QGraphicsItem *icon = m_icons[i];
         qreal a = ((i + m_index) * 2 * M_PI) / m_icons.count();
-        qreal xs = 170 * sin(a);
-        qreal ys = 100 * cos(a);
+        qreal xs = 170 * qSin(a);
+        qreal ys = 100 * qCos(a);
         QPointF pos(xs, ys);
         pos = QTransform().rotate(-20).map(pos);
         pos -= QPointF(40, 40);

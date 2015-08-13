@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -204,7 +204,6 @@
                   QT_.*_LIB \
                   QT_COMPAT \
                   QT3_SUPPORT \
-                  Q_WS_.* \
                   Q_OS_.* \
                   Q_BYTE_ORDER \
                   __cplusplus
@@ -214,14 +213,14 @@
     symbols to be defined. For example:
 
     \code
-        #ifdef Q_WS_WIN
+        #ifdef Q_OS_WIN
           HDC getDC() const;
           void releaseDC(HDC) const;
         #endif
     \endcode
 
-    Since the Q_WS_.* regular expression (specified using the \c
-    defines variable) matches Q_WS_WIN, QDoc will process the code
+    Since the Q_OS_.* regular expression (specified using the \c
+    defines variable) matches Q_OS_WIN, QDoc will process the code
     within #ifdef and #endif in our example.
 
     You can also define preprocessor symbols manually on the command
@@ -1410,7 +1409,7 @@
     \code
     project     = Qt
     description = Qt Reference Documentation
-    url         = http://qt-project.org/doc/qt-4.8/
+    url         = http://doc.qt.io/qt-4.8/
 
          ...
     \endcode
@@ -1433,7 +1432,7 @@
     \code
         project     = Qt
         description = Qt Reference Documentation
-        url         = http://qt-project.org/doc/qt-4.8/
+        url         = http://doc.qt.io/qt-4.8/
 
         ...
     \endcode
@@ -1531,7 +1530,7 @@
     \page 21-3-qt-dita-xml-output.html
     \previouspage minimum.qdocconf
     \contentspage QDoc Manual
-    \nextpage QDoc Manual
+    \nextpage QA Pages
 
     \title Generating DITA XML Output
 
@@ -1576,7 +1575,7 @@
     dita.metadata.default.author      = Qt Development Frameworks
     dita.metadata.default.permissions = all
     dita.metadata.default.publisher   = Qt Project
-    dita.metadata.default.copyryear = 2014
+    dita.metadata.default.copyryear = 2015
     dita.metadata.default.copyrholder = Qt Project
     dita.metadata.default.audience = programmer
     \endcode

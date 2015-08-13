@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -238,7 +238,7 @@ bool QPaintEngineExPrivate::hasClipOperations() const
  *
  */
 
-static QPainterPath::ElementType qpaintengineex_ellipse_types[] = {
+static const QPainterPath::ElementType qpaintengineex_ellipse_types[] = {
     QPainterPath::MoveToElement,
     QPainterPath::CurveToElement,
     QPainterPath::CurveToDataElement,
@@ -257,7 +257,7 @@ static QPainterPath::ElementType qpaintengineex_ellipse_types[] = {
     QPainterPath::CurveToDataElement
 };
 
-static QPainterPath::ElementType qpaintengineex_line_types_16[] = {
+static const QPainterPath::ElementType qpaintengineex_line_types_16[] = {
     QPainterPath::MoveToElement, QPainterPath::LineToElement,
     QPainterPath::MoveToElement, QPainterPath::LineToElement,
     QPainterPath::MoveToElement, QPainterPath::LineToElement,
@@ -276,7 +276,7 @@ static QPainterPath::ElementType qpaintengineex_line_types_16[] = {
     QPainterPath::MoveToElement, QPainterPath::LineToElement
 };
 
-static QPainterPath::ElementType qpaintengineex_rect4_types_32[] = {
+static const QPainterPath::ElementType qpaintengineex_rect4_types_32[] = {
     QPainterPath::MoveToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, // 1
     QPainterPath::MoveToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, // 2
     QPainterPath::MoveToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, QPainterPath::LineToElement, // 3
@@ -312,7 +312,7 @@ static QPainterPath::ElementType qpaintengineex_rect4_types_32[] = {
 };
 
 
-static QPainterPath::ElementType qpaintengineex_roundedrect_types[] = {
+static const QPainterPath::ElementType qpaintengineex_roundedrect_types[] = {
     QPainterPath::MoveToElement,
     QPainterPath::LineToElement,
     QPainterPath::CurveToElement,
@@ -521,23 +521,23 @@ void QPaintEngineEx::stroke(const QVectorPath &path, const QPen &pen)
                 while (points < lastPoint) {
                     switch (*types) {
                     case QPainterPath::MoveToElement: {
-                        QPointF pt = (*(QPointF *) points) * state()->matrix;
+                        QPointF pt = (*(const QPointF *) points) * state()->matrix;
                         d->activeStroker->moveTo(pt.x(), pt.y());
                         points += 2;
                         ++types;
                         break;
                     }
                     case QPainterPath::LineToElement: {
-                        QPointF pt = (*(QPointF *) points) * state()->matrix;
+                        QPointF pt = (*(const QPointF *) points) * state()->matrix;
                         d->activeStroker->lineTo(pt.x(), pt.y());
                         points += 2;
                         ++types;
                         break;
                     }
                     case QPainterPath::CurveToElement: {
-                        QPointF c1 = ((QPointF *) points)[0] * state()->matrix;
-                        QPointF c2 = ((QPointF *) points)[1] * state()->matrix;
-                        QPointF e =  ((QPointF *) points)[2] * state()->matrix;
+                        QPointF c1 = ((const QPointF *) points)[0] * state()->matrix;
+                        QPointF c2 = ((const QPointF *) points)[1] * state()->matrix;
+                        QPointF e =  ((const QPointF *) points)[2] * state()->matrix;
                         d->activeStroker->cubicTo(c1.x(), c1.y(), c2.x(), c2.y(), e.x(), e.y());
                         points += 6;
                         types += 3;
@@ -549,16 +549,16 @@ void QPaintEngineEx::stroke(const QVectorPath &path, const QPen &pen)
                     }
                 }
                 if (path.hasImplicitClose()) {
-                    QPointF pt = * ((QPointF *) path.points()) * state()->matrix;
+                    QPointF pt = * ((const QPointF *) path.points()) * state()->matrix;
                     d->activeStroker->lineTo(pt.x(), pt.y());
                 }
 
             } else {
-                QPointF p = ((QPointF *)points)[0] * state()->matrix;
+                QPointF p = ((const QPointF *)points)[0] * state()->matrix;
                 d->activeStroker->moveTo(p.x(), p.y());
                 points += 2;
                 while (points < lastPoint) {
-                    QPointF p = ((QPointF *)points)[0] * state()->matrix;
+                    QPointF p = ((const QPointF *)points)[0] * state()->matrix;
                     d->activeStroker->lineTo(p.x(), p.y());
                     points += 2;
                 }
@@ -786,7 +786,7 @@ void QPaintEngineEx::drawLines(const QLine *lines, int lineCount)
         qreal pts[64];
         int count2 = count<<1;
         for (int i=0; i<count2; ++i)
-            pts[i] = ((int *) lines)[i];
+            pts[i] = ((const int *) lines)[i];
 
         QVectorPath path(pts, count, qpaintengineex_line_types_16, QVectorPath::LinesHint);
         stroke(path, state()->pen);
@@ -802,7 +802,7 @@ void QPaintEngineEx::drawLines(const QLineF *lines, int lineCount)
     while (elementCount > 0) {
         int count = qMin(elementCount, 32);
 
-        QVectorPath path((qreal *) lines, count, qpaintengineex_line_types_16,
+        QVectorPath path((const qreal *) lines, count, qpaintengineex_line_types_16,
                          QVectorPath::LinesHint);
         stroke(path, state()->pen);
 
@@ -906,7 +906,7 @@ void QPaintEngineEx::drawPoints(const QPoint *points, int pointCount)
 
 void QPaintEngineEx::drawPolygon(const QPointF *points, int pointCount, PolygonDrawMode mode)
 {
-    QVectorPath path((qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
+    QVectorPath path((const qreal *) points, pointCount, 0, QVectorPath::polygonFlags(mode));
 
     if (mode == PolylineMode)
         stroke(path, state()->pen);
@@ -920,7 +920,7 @@ void QPaintEngineEx::drawPolygon(const QPoint *points, int pointCount, PolygonDr
     QVarLengthArray<qreal> pts(count);
 
     for (int i=0; i<count; ++i)
-        pts[i] = ((int *) points)[i];
+        pts[i] = ((const int *) points)[i];
 
     QVectorPath path(pts.data(), pointCount, 0, QVectorPath::polygonFlags(mode));
 
@@ -1075,9 +1075,9 @@ void QPaintEngineEx::drawStaticTextItem(QStaticTextItem *staticTextItem)
     }
 }
 
-bool QPaintEngineEx::requiresPretransformedGlyphPositions(QFontEngine *, const QTransform &t) const
+bool QPaintEngineEx::requiresPretransformedGlyphPositions(QFontEngine *, const QTransform &) const
 {
-    return t.type() >= QTransform::TxProject;
+    return false;
 }
 
 bool QPaintEngineEx::shouldDrawCachedGlyphs(QFontEngine *fontEngine, const QTransform &m) const

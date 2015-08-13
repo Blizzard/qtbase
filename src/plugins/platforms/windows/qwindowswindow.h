@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,9 +40,9 @@
 #endif
 #include "qwindowsscaling.h"
 #include "qwindowscursor.h"
-#include "qwindowsopenglcontext.h"
 
 #include <qpa/qplatformwindow.h>
+#include <QtPlatformHeaders/qwindowswindowfunctions.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -86,6 +86,7 @@ struct QWindowCreationContext
 #endif
 
     QWindowsGeometryHint geometryHint;
+    const QWindow *window;
     DWORD style;
     DWORD exStyle;
     QRect requestedGeometry;
@@ -111,9 +112,6 @@ struct QWindowsWindowData
     bool emptyDefaultMargins; // User-defined, zero out default margins
     HWND hwnd;
     bool embedded;
-#ifndef QT_NO_OPENGL
-    QSharedPointer<QWindowsStaticOpenGLContext> staticOpenGLContext;
-#endif // QT_NO_OPENGL
 	bool marginsApplied;
 
     static QWindowsWindowData create(const QWindow *w,
@@ -144,7 +142,9 @@ public:
         Exposed = 0x10000,
         WithinCreate = 0x20000,
         WithinMaximize = 0x40000,
-        MaximizeToFullScreen = 0x80000
+        MaximizeToFullScreen = 0x80000,
+        InputMethodDisabled = 0x100000,
+        Compositing = 0x200000
     };
 
     QWindowsWindow(QWindow *window, const QWindowsWindowData &data);
@@ -188,6 +188,8 @@ public:
     void windowEvent(QEvent *event);
 
     void propagateSizeHints() Q_DECL_OVERRIDE;
+    static bool handleGeometryChangingMessage(MSG *message, const QWindow *qWindow, const QMargins &marginsDp);
+    bool handleGeometryChanging(MSG *message) const;
     QMargins frameMarginsDp() const;
     QMargins frameMargins() const Q_DECL_OVERRIDE { return frameMarginsDp() / QWindowsScaling::factor(); }
 
@@ -247,8 +249,6 @@ public:
     void setCursor(const QWindowsWindowCursor &c);
     void applyCursor();
 
-    static QByteArray debugWindowFlags(Qt::WindowFlags wf);
-
     inline bool testFlag(unsigned f) const  { return (m_flags & f) != 0; }
     inline void setFlag(unsigned f) const   { m_flags |= f; }
     inline void clearFlag(unsigned f) const { m_flags &= ~f; }
@@ -257,7 +257,9 @@ public:
     bool isEnabled() const;
     void setWindowIcon(const QIcon &icon);
 
-    void *surface(void *nativeConfig);
+    void *surface(void *nativeConfig, int *err);
+    void invalidateSurface() Q_DECL_OVERRIDE;
+    void aboutToMakeCurrent();
 
 #ifndef Q_OS_WINCE
     void setAlertState(bool enabled);
@@ -265,6 +267,9 @@ public:
     void alertWindow(int durationMs = 0);
     void stopAlertWindow();
 #endif
+
+    static void setTouchWindowTouchTypeStatic(QWindow *window, QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes);
+    void registerTouchWindow(QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes = QWindowsWindowFunctions::NormalTouch);
 
 private:
     inline void show_sys() const;
@@ -280,7 +285,7 @@ private:
     void destroyWindow();
     inline bool isDropSiteEnabled() const { return m_dropTarget != 0; }
     void setDropSiteEnabled(bool enabled);
-    void updateDropSite();
+    void updateDropSite(bool topLevel);
     void handleGeometryChange();
     void handleWindowStateChange(Qt::WindowState state);
     inline void destroyIcon();

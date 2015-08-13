@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -162,6 +162,8 @@ protected:
 class Q_GUI_EXPORT QWheelEvent : public QInputEvent
 {
 public:
+    enum { DefaultDeltasPerStep = 120 };
+
     QWheelEvent(const QPointF &pos, int delta,
                 Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers,
                 Qt::Orientation orient = Qt::Vertical);
@@ -174,7 +176,9 @@ public:
     QWheelEvent(const QPointF &pos, const QPointF& globalPos,
                 QPoint pixelDelta, QPoint angleDelta, int qt4Delta, Qt::Orientation qt4Orientation,
                 Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, Qt::ScrollPhase phase);
-
+    QWheelEvent(const QPointF &pos, const QPointF &globalPos, QPoint pixelDelta, QPoint angleDelta,
+                int qt4Delta, Qt::Orientation qt4Orientation, Qt::MouseButtons buttons,
+                Qt::KeyboardModifiers modifiers, Qt::ScrollPhase phase, Qt::MouseEventSource source);
     ~QWheelEvent();
 
 
@@ -199,6 +203,8 @@ public:
 
     inline Qt::ScrollPhase phase() const { return Qt::ScrollPhase(ph); }
 
+    Qt::MouseEventSource source() const { return Qt::MouseEventSource(src); }
+
 protected:
     QPointF p;
     QPointF g;
@@ -208,7 +214,8 @@ protected:
     Qt::Orientation qt4O;
     Qt::MouseButtons mouseState;
     uint ph : 2;
-    int reserved : 30;
+    uint src: 2;
+    int reserved : 28;
 };
 #endif
 
@@ -216,12 +223,12 @@ protected:
 class Q_GUI_EXPORT QTabletEvent : public QInputEvent
 {
     Q_GADGET
-    Q_ENUMS(TabletDevice)
-    Q_ENUMS(PointerType)
 public:
     enum TabletDevice { NoDevice, Puck, Stylus, Airbrush, FourDMouse,
                         XFreeEraser /*internal*/, RotationStylus };
+    Q_ENUM(TabletDevice)
     enum PointerType { UnknownPointer, Pen, Cursor, Eraser };
+    Q_ENUM(PointerType)
     QTabletEvent(Type t, const QPointF &pos, const QPointF &globalPos,
                  int device, int pointerType, qreal pressure, int xTilt, int yTilt,
                  qreal tangentialPressure, qreal rotation, int z,
@@ -408,6 +415,23 @@ public:
 
 protected:
     QRegion rgn;
+};
+
+class Q_GUI_EXPORT QPlatformSurfaceEvent : public QEvent
+{
+public:
+    enum SurfaceEventType {
+        SurfaceCreated,
+        SurfaceAboutToBeDestroyed
+    };
+
+    explicit QPlatformSurfaceEvent(SurfaceEventType surfaceEventType);
+    ~QPlatformSurfaceEvent();
+
+    inline SurfaceEventType surfaceEventType() const { return m_surfaceEventType; }
+
+protected:
+    SurfaceEventType m_surfaceEventType;
 };
 
 class Q_GUI_EXPORT QResizeEvent : public QEvent
@@ -767,8 +791,10 @@ public:
         explicit TouchPoint(int id = -1);
         TouchPoint(const TouchPoint &other);
 #ifdef Q_COMPILER_RVALUE_REFS
-        TouchPoint(TouchPoint &&other) : d(other.d) { other.d = 0; }
-        TouchPoint &operator=(TouchPoint &&other)
+        TouchPoint(TouchPoint &&other) Q_DECL_NOEXCEPT
+            : d(0)
+        { qSwap(d, other.d); }
+        TouchPoint &operator=(TouchPoint &&other) Q_DECL_NOEXCEPT
         { qSwap(d, other.d); return *this; }
 #endif
         ~TouchPoint();
@@ -776,7 +802,8 @@ public:
         TouchPoint &operator=(const TouchPoint &other)
         { if ( d != other.d ) { TouchPoint copy(other); swap(copy); } return *this; }
 
-        void swap(TouchPoint &other) { qSwap(d, other.d); }
+        void swap(TouchPoint &other) Q_DECL_NOEXCEPT
+        { qSwap(d, other.d); }
 
         int id() const;
 

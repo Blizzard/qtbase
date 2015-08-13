@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,6 +33,10 @@
 
 #ifndef QT_NO_DIRECTWRITE
 
+#if WINVER < 0x0600
+#  undef WINVER
+#  define WINVER 0x0600
+#endif
 #if _WIN32_WINNT < 0x0600
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0600
@@ -61,9 +65,13 @@ namespace {
     class GeometrySink: public IDWriteGeometrySink
     {
     public:
-        GeometrySink(QPainterPath *path) : m_path(path), m_refCount(0)
+        GeometrySink(QPainterPath *path)
+            : m_refCount(0), m_path(path)
         {
             Q_ASSERT(m_path != 0);
+        }
+        virtual ~GeometrySink()
+        {
         }
 
         IFACEMETHOD_(void, AddBeziers)(const D2D1_BEZIER_SEGMENT *beziers, UINT bezierCount);
@@ -183,10 +191,6 @@ namespace {
     preference of a font is set to None or Vertical hinting. The font
     database uses most of the same logic but creates a direct write
     font based on the LOGFONT rather than a GDI handle.
-
-    The engine is currently regarded as experimental, meaning that code
-    using it should do substantial testing to make sure it covers their
-    use cases.
 
     Will probably be superseded by a common Free Type font engine in Qt 5.X.
 */
@@ -485,15 +489,11 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph, QFixed sub
 {
     QImage im = imageForGlyph(glyph, subPixelPosition, 0, QTransform());
 
-    QImage indexed(im.width(), im.height(), QImage::Format_Indexed8);
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-    indexed.setColorTable(colors);
+    QImage alphaMap(im.width(), im.height(), QImage::Format_Alpha8);
 
     for (int y=0; y<im.height(); ++y) {
         uint *src = (uint*) im.scanLine(y);
-        uchar *dst = indexed.scanLine(y);
+        uchar *dst = alphaMap.scanLine(y);
         for (int x=0; x<im.width(); ++x) {
             *dst = 255 - (m_fontEngineData->pow_gamma[qGray(0xffffffff - *src)] * 255. / 2047.);
             ++dst;
@@ -501,7 +501,7 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph, QFixed sub
         }
     }
 
-    return indexed;
+    return alphaMap;
 }
 
 bool QWindowsFontEngineDirectWrite::supportsSubPixelPositions() const
@@ -515,8 +515,9 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
                                              const QTransform &xform)
 {
     glyph_metrics_t metrics = QFontEngine::boundingBox(t, xform);
-    int width = (metrics.width + margin * 2 + 4).ceil().toInt() ;
-    int height = (metrics.height + margin * 2 + 4).ceil().toInt();
+    // This needs to be kept in sync with alphaMapBoundingBox
+    int width = (metrics.width + margin * 2).ceil().toInt() ;
+    int height = (metrics.height + margin * 2).ceil().toInt();
 
     UINT16 glyphIndex = t;
     FLOAT glyphAdvance = metrics.xoff.toReal();
@@ -697,6 +698,18 @@ QString QWindowsFontEngineDirectWrite::fontNameSubstitute(const QString &familyN
     static const char keyC[] = "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\"
                                "FontSubstitutes";
     return QSettings(QLatin1String(keyC), QSettings::NativeFormat).value(familyName, familyName).toString();
+}
+
+glyph_metrics_t QWindowsFontEngineDirectWrite::alphaMapBoundingBox(glyph_t glyph, QFixed pos, const QTransform &matrix, GlyphFormat format)
+{
+    Q_UNUSED(pos);
+    int margin = 0;
+    if (format == QFontEngine::Format_A32 || format == QFontEngine::Format_ARGB)
+        margin = glyphMargin(QFontEngine::Format_A32);
+    glyph_metrics_t gm = QFontEngine::boundingBox(glyph, matrix);
+    gm.width += margin * 2;
+    gm.height += margin * 2;
+    return gm;
 }
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -65,6 +65,7 @@ private slots:
     void aliasForUTF16() const;
     void mibForTSCII() const;
     void codecForTSCII() const;
+    void iso8859_16() const;
 
     void utf8Codec_data();
     void utf8Codec();
@@ -84,7 +85,7 @@ private slots:
     void codecForUtfText_data();
     void codecForUtfText();
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_PROCESS)
+#if defined(Q_OS_UNIX)
     void toLocal8Bit();
 #endif
 
@@ -512,6 +513,13 @@ void tst_QTextCodec::codecForTSCII() const
     QTextCodec *codec = QTextCodec::codecForMib(2107);
     QVERIFY(codec);
     QCOMPARE(codec->mibEnum(), 2107);
+}
+
+void tst_QTextCodec::iso8859_16() const
+{
+    QTextCodec *codec = QTextCodec::codecForName("ISO8859-16");
+    QVERIFY(codec);
+    QCOMPARE(codec->name(), QByteArray("ISO-8859-16"));
 }
 
 static QString fromInvalidUtf8Sequence(const QByteArray &ba)
@@ -2070,9 +2078,12 @@ void tst_QTextCodec::codecForUtfText()
         QVERIFY(codec == 0);
 }
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_PROCESS)
+#if defined(Q_OS_UNIX)
 void tst_QTextCodec::toLocal8Bit()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess process;
     process.start("echo/echo");
     QString string(QChar(0x410));
@@ -2082,6 +2093,7 @@ void tst_QTextCodec::toLocal8Bit()
     process.waitForFinished();
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QCOMPARE(process.exitCode(), 0);
+#endif
 }
 #endif
 

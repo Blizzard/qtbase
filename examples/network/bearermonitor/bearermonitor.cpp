@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -56,13 +56,8 @@ BearerMonitor::BearerMonitor(QWidget *parent)
 :   QWidget(parent)
 {
     setupUi(this);
-#ifdef MAEMO_UI
-    newSessionButton->hide();
-    deleteSessionButton->hide();
-#else
     delete tabWidget->currentWidget();
     sessionGroup->hide();
-#endif
     updateConfigurations();
     onlineStateChanged(!manager.allConfigurations(QNetworkConfiguration::Active).isEmpty());
     QNetworkConfiguration defaultConfiguration = manager.defaultConfiguration();
@@ -99,10 +94,8 @@ BearerMonitor::BearerMonitor(QWidget *parent)
 
     connect(newSessionButton, SIGNAL(clicked()),
             this, SLOT(createNewSession()));
-#ifndef MAEMO_UI
     connect(deleteSessionButton, SIGNAL(clicked()),
             this, SLOT(deleteSession()));
-#endif
     connect(scanButton, SIGNAL(clicked()),
             this, SLOT(performScan()));
 
@@ -385,9 +378,7 @@ void BearerMonitor::createSessionFor(QTreeWidgetItem *item)
 
     tabWidget->addTab(session, conf.name());
 
-#ifndef MAEMO_UI
     sessionGroup->show();
-#endif
 
     sessionWidgets.append(session);
 }
@@ -400,7 +391,6 @@ void BearerMonitor::createNewSession()
     createSessionFor(item);
 }
 
-#ifndef MAEMO_UI
 void BearerMonitor::deleteSession()
 {
     SessionWidget *session = qobject_cast<SessionWidget *>(tabWidget->currentWidget());
@@ -413,7 +403,6 @@ void BearerMonitor::deleteSession()
             sessionGroup->hide();
     }
 }
-#endif
 
 void BearerMonitor::performScan()
 {

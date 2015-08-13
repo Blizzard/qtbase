@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1054,22 +1054,22 @@ void tst_QAlgorithms::popCount_data_impl(size_t sizeof_T_Int)
         const uint bits = bitsSetInByte(byte);
         const quint64 value = static_cast<quint64>(byte);
         const quint64 input = value << ((i % sizeof_T_Int) * 8U);
-        newRow(qPrintable(QString().sprintf("0x%016llx", input))) << input << bits;
+        newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bits;
     }
 
     // and some random ones:
     if (sizeof_T_Int >= 8)
         for (size_t i = 0; i < 1000; ++i) {
             const quint64 input = quint64(qrand()) << 32 | quint32(qrand());
-            newRow(qPrintable(QString().sprintf("0x%016llx", input))) << input << bitsSetInInt64(input);
+            newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bitsSetInInt64(input);
         }
         else if (sizeof_T_Int >= 2)
             for (size_t i = 0; i < 1000 ; ++i) {
                 const quint32 input = qrand();
                 if (sizeof_T_Int >= 4)
-                    newRow(qPrintable(QString().sprintf("0x%08x", input))) << quint64(input) << bitsSetInInt(input);
+                    newRow(qPrintable(QString::asprintf("0x%08x", input))) << quint64(input) << bitsSetInInt(input);
                 else
-                    newRow(qPrintable(QString().sprintf("0x%04x", quint16(input & 0xFFFF)))) << quint64(input & 0xFFFF) << bitsSetInShort(input & 0xFFFF);
+                    newRow(qPrintable(QString::asprintf("0x%04x", quint16(input & 0xFFFF)))) << quint64(input & 0xFFFF) << bitsSetInShort(input & 0xFFFF);
             }
 }
 

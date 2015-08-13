@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -106,6 +106,12 @@ struct PixmapEntry : public QIconLoaderEngineEntry
 
 typedef QList<QIconLoaderEngineEntry*> QThemeIconEntries;
 
+struct QThemeIconInfo
+{
+    QThemeIconEntries entries;
+    QString iconName;
+};
+
 class QIconLoaderEngine : public QIconEngine
 {
 public:
@@ -126,7 +132,7 @@ private:
     void virtual_hook(int id, void *data);
     QIconLoaderEngineEntry *entryForSize(const QSize &size);
     QIconLoaderEngine(const QIconLoaderEngine &other);
-    QThemeIconEntries m_entries;
+    QThemeIconInfo m_info;
     QString m_iconName;
     uint m_key;
 
@@ -140,11 +146,11 @@ public:
     QIconTheme() : m_valid(false) {}
     QStringList parents() { return m_parents; }
     QVector<QIconDirInfo> keyList() { return m_keyList; }
-    QString contentDir() { return m_contentDir; }
+    QStringList contentDirs() { return m_contentDirs; }
     bool isValid() { return m_valid; }
 
 private:
-    QString m_contentDir;
+    QStringList m_contentDirs;
     QVector<QIconDirInfo> m_keyList;
     QStringList m_parents;
     bool m_valid;
@@ -154,7 +160,7 @@ class Q_GUI_EXPORT QIconLoader
 {
 public:
     QIconLoader();
-    QThemeIconEntries loadIcon(const QString &iconName) const;
+    QThemeIconInfo loadIcon(const QString &iconName) const;
     uint themeKey() const { return m_themeKey; }
 
     QString themeName() const { return m_userTheme.isEmpty() ? m_systemTheme : m_userTheme; }
@@ -169,9 +175,9 @@ public:
     void ensureInitialized();
 
 private:
-    QThemeIconEntries findIconHelper(const QString &themeName,
-                                     const QString &iconName,
-                                     QStringList &visited) const;
+    QThemeIconInfo findIconHelper(const QString &themeName,
+                                  const QString &iconName,
+                                  QStringList &visited) const;
     uint m_themeKey;
     bool m_supportsSvg;
     bool m_initialized;

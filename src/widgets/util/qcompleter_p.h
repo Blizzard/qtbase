@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -101,7 +101,7 @@ class QIndexMapper
 public:
     QIndexMapper() : v(false), f(0), t(-1) { }
     QIndexMapper(int f, int t) : v(false), f(f), t(t) { }
-    QIndexMapper(QVector<int> vec) : v(true), vector(vec), f(-1), t(-1) { }
+    QIndexMapper(const QVector<int> &vec) : v(true), vector(vec), f(-1), t(-1) { }
 
     inline int count() const { return v ? vector.count() : t - f + 1; }
     inline int operator[] (int index) const { return v ? vector[index] : f + index; }
@@ -167,7 +167,7 @@ class QSortedModelEngine : public QCompletionEngine
 {
 public:
     QSortedModelEngine(QCompleterPrivate *c) : QCompletionEngine(c) { }
-    QMatchData filter(const QString&, const QModelIndex&, int);
+    QMatchData filter(const QString&, const QModelIndex&, int) Q_DECL_OVERRIDE;
     QIndexMapper indexHint(QString, const QModelIndex&, Qt::SortOrder);
     Qt::SortOrder sortOrder(const QModelIndex&) const;
 };
@@ -177,8 +177,8 @@ class QUnsortedModelEngine : public QCompletionEngine
 public:
     QUnsortedModelEngine(QCompleterPrivate *c) : QCompletionEngine(c) { }
 
-    void filterOnDemand(int);
-    QMatchData filter(const QString&, const QModelIndex&, int);
+    void filterOnDemand(int) Q_DECL_OVERRIDE;
+    QMatchData filter(const QString&, const QModelIndex&, int) Q_DECL_OVERRIDE;
 private:
     int buildIndices(const QString& str, const QModelIndex& parent, int n,
                      const QIndexMapper& iv, QMatchData* m);
@@ -189,7 +189,7 @@ class QCompleterItemDelegate : public QItemDelegate
 public:
     QCompleterItemDelegate(QAbstractItemView *view)
         : QItemDelegate(view), view(view) { }
-    void paint(QPainter *p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const {
+    void paint(QPainter *p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const Q_DECL_OVERRIDE {
         QStyleOptionViewItem optCopy = opt;
         optCopy.showDecorationSelected = true;
         if (view->currentIndex() == idx)
@@ -218,16 +218,16 @@ public:
     bool setCurrentRow(int row);
     QModelIndex currentIndex(bool) const;
 
-    QModelIndex index(int row, int column, const QModelIndex & = QModelIndex()) const;
-    int rowCount(const QModelIndex &index = QModelIndex()) const;
-    int columnCount(const QModelIndex &index = QModelIndex()) const;
-    bool hasChildren(const QModelIndex &parent = QModelIndex()) const;
-    QModelIndex parent(const QModelIndex & = QModelIndex()) const { return QModelIndex(); }
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const;
+    QModelIndex index(int row, int column, const QModelIndex & = QModelIndex()) const Q_DECL_OVERRIDE;
+    int rowCount(const QModelIndex &index = QModelIndex()) const Q_DECL_OVERRIDE;
+    int columnCount(const QModelIndex &index = QModelIndex()) const Q_DECL_OVERRIDE;
+    bool hasChildren(const QModelIndex &parent = QModelIndex()) const Q_DECL_OVERRIDE;
+    QModelIndex parent(const QModelIndex & = QModelIndex()) const Q_DECL_OVERRIDE { return QModelIndex(); }
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const Q_DECL_OVERRIDE;
 
-    void setSourceModel(QAbstractItemModel *sourceModel);
-    QModelIndex mapToSource(const QModelIndex& proxyIndex) const;
-    QModelIndex mapFromSource(const QModelIndex& sourceIndex) const;
+    void setSourceModel(QAbstractItemModel *sourceModel) Q_DECL_OVERRIDE;
+    QModelIndex mapToSource(const QModelIndex& proxyIndex) const Q_DECL_OVERRIDE;
+    QModelIndex mapFromSource(const QModelIndex& sourceIndex) const Q_DECL_OVERRIDE;
 
     QCompleterPrivate *c;
     QScopedPointer<QCompletionEngine> engine;

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -103,13 +103,14 @@ typedef int NativeFileHandle;
     \a path is used as a template when generating unique paths, \a pos
     identifies the position of the first character that will be replaced in the
     template and \a length the number of characters that may be substituted.
+    \a mode specifies the file mode bits (not used on Windows).
 
     Returns an open handle to the newly created file if successful, an invalid
     handle otherwise. In both cases, the string in \a path will be changed and
     contain the generated path name.
 */
 static bool createFileFromTemplate(NativeFileHandle &file,
-        QFileSystemEntry::NativePath &path, size_t pos, size_t length,
+        QFileSystemEntry::NativePath &path, size_t pos, size_t length, quint32 mode,
         QSystemError &error)
 {
     Q_ASSERT(length != 0);
@@ -143,6 +144,8 @@ static bool createFileFromTemplate(NativeFileHandle &file,
     for (;;) {
         // Atomically create file and obtain handle
 #if defined(Q_OS_WIN)
+        Q_UNUSED(mode);
+
 #  ifndef Q_OS_WINRT
         file = CreateFile((const wchar_t *)path.constData(),
                 GENERIC_READ | GENERIC_WRITE,
@@ -175,7 +178,7 @@ static bool createFileFromTemplate(NativeFileHandle &file,
 #else // POSIX
         file = QT_OPEN(path.constData(),
                 QT_OPEN_CREAT | O_EXCL | QT_OPEN_RDWR | QT_OPEN_LARGEFILE,
-                0600);
+                static_cast<mode_t>(mode));
 
         if (file != -1)
             return true;
@@ -222,6 +225,7 @@ static bool createFileFromTemplate(NativeFileHandle &file,
     }
 
     Q_ASSERT(false);
+    return false;
 }
 
 //************* QTemporaryFileEngine
@@ -332,7 +336,7 @@ bool QTemporaryFileEngine::open(QIODevice::OpenMode openMode)
     NativeFileHandle &file = d->fd;
 #endif
 
-    if (!createFileFromTemplate(file, filename, phPos, phLength, error)) {
+    if (!createFileFromTemplate(file, filename, phPos, phLength, fileMode, error)) {
         setError(QFile::OpenError, error.toString());
         return false;
     }
@@ -406,9 +410,9 @@ QAbstractFileEngine *QTemporaryFilePrivate::engine() const
 {
     if (!fileEngine) {
         if (fileName.isEmpty())
-            fileEngine = new QTemporaryFileEngine(templateName);
+            fileEngine = new QTemporaryFileEngine(templateName, 0600);
         else
-            fileEngine = new QTemporaryFileEngine(fileName, false);
+            fileEngine = new QTemporaryFileEngine(fileName, 0600, false);
     }
     return fileEngine;
 }

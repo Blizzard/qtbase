@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,6 +38,7 @@
 #include <QDebug>
 #include <QFormLayout>
 #include <QLineEdit>
+#include <QDesktopWidget>
 
 int i = 0;
 
@@ -66,22 +67,23 @@ void screenAdded(QScreen* screen)
     w->layout()->insertRow(0, "virtualSiblings", siblingsField);
     updateSiblings(w);
 
-    // This doesn't work.  If the multiple screens are part of
-    // a virtual desktop (i.e. they are virtual siblings), then
-    // setScreen has no effect, and we need the code below to
-    // change the window geometry.  If on the other hand the
-    // screens are really separate, so that windows are not
-    // portable between them, XCreateWindow needs to have not just
-    // a different root Window but also a different Display, in order to
-    // put the window on the other screen.  That would require a
-    // different QXcbConnection.  So this setScreen call doesn't seem useful.
-    //w->windowHandle()->setScreen(screen);
+    // Set the screen via QDesktopWidget. This corresponds to setScreen() for the underlying
+    // QWindow. This is essential when having separate X screens since the the positioning below is
+    // not sufficient to get the windows show up on the desired screen.
+    QList<QScreen *> screens = QGuiApplication::screens();
+    int screenNumber = screens.indexOf(screen);
+    Q_ASSERT(screenNumber >= 0);
+    w->setParent(qApp->desktop()->screen(screenNumber));
 
-    // But this works as long as the screens are all virtual siblings
     w->show();
+
+    // Position the windows so that they end up at the center of the corresponding screen.
     QRect geom = w->geometry();
+    geom.setSize(w->sizeHint());
+    if (geom.height() > screen->geometry().height())
+        geom.setHeight(screen->geometry().height() * 9 / 10);
     geom.moveCenter(screen->geometry().center());
-    w->move(geom.topLeft());
+    w->setGeometry(geom);
 
     props->insert(screen, w);
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -78,9 +78,7 @@ QByteArray ConnectionManager::clientId() const
         // Generate peer id
         int startupTime = int(QDateTime::currentDateTime().toTime_t());
 
-        QString s;
-        s.sprintf("-QT%04x-", (QT_VERSION % 0xffff00) >> 8);
-        id += s.toLatin1();
+        id += QString::asprintf("-QT%04x-", (QT_VERSION % 0xffff00) >> 8).toLatin1();
         id += QByteArray::number(startupTime, 10);
         id += QByteArray(20 - id.size(), '-');
     }

@@ -20,8 +20,7 @@ MODULE_DEFINES = \
         QT_NO_UNICODETABLES \
         QT_NO_USING_NAMESPACE \
         QT_NO_DEPRECATED \
-        QT_NO_TRANSLATION \
-        QT_QMAKE_LOCATION=\\\"$$QMAKE_QMAKE\\\"
+        QT_NO_TRANSLATION
 
 DEFINES += \
     $$MODULE_DEFINES \
@@ -130,14 +129,21 @@ win32:SOURCES += ../../corelib/io/qfilesystemengine_win.cpp \
                  ../../corelib/plugin/qsystemlibrary.cpp \
 
 mac {
-   SOURCES += ../../corelib/kernel/qcoreapplication_mac.cpp \
-              ../../corelib/kernel/qcore_mac.cpp
-   LIBS += -framework CoreServices
+    SOURCES += \
+        ../../corelib/kernel/qcoreapplication_mac.cpp \
+        ../../corelib/kernel/qcore_mac.cpp
+    OBJECTIVE_SOURCES += \
+        ../../corelib/kernel/qcore_mac_objc.mm
+
+    LIBS += -framework Foundation
+    osx: LIBS_PRIVATE += -framework CoreServices
+    ios: LIBS_PRIVATE += -framework UIKit
 }
 
 macx {
-    SOURCES += \
-        ../../corelib/io/qstandardpaths_mac.cpp
+    OBJECTIVE_SOURCES += \
+        ../../corelib/tools/qstring_mac.mm \
+        ../../corelib/io/qstandardpaths_mac.mm
 } else:unix {
     SOURCES += \
         ../../corelib/io/qstandardpaths_unix.cpp

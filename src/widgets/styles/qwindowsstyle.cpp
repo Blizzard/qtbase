@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -299,8 +299,8 @@ void QWindowsStyle::polish(QPalette &pal)
 
 int QWindowsStylePrivate::pixelMetricFromSystemDp(QStyle::PixelMetric pm, const QStyleOption *, const QWidget *widget)
 {
-    switch (pm) {
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+    switch (pm) {
     case QStyle::PM_DockWidgetFrameWidth:
 #  ifndef Q_OS_WINCE
         return GetSystemMetrics(SM_CXFRAME);
@@ -337,13 +337,14 @@ int QWindowsStylePrivate::pixelMetricFromSystemDp(QStyle::PixelMetric pm, const 
 #  else
         return GetSystemMetrics(SM_CYDLGFRAME);
 #  endif
-#else
-    Q_UNUSED(widget)
-#endif // Q_OS_WIN
 
     default:
         break;
     }
+#else // Q_OS_WIN && !Q_OS_WINRT
+    Q_UNUSED(pm);
+    Q_UNUSED(widget);
+#endif
     return QWindowsStylePrivate::InvalidMetric;
 }
 
@@ -586,6 +587,17 @@ int QWindowsStyle::styleHint(StyleHint hint, const QStyleOption *opt, const QWid
         break;
     }
 #endif // Q_OS_WIN && !Q_OS_WINRT
+    case SH_Menu_SubMenuSloppyCloseTimeout:
+    case SH_Menu_SubMenuPopupDelay: {
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+        DWORD delay;
+        if (SystemParametersInfo(SPI_GETMENUSHOWDELAY, 0, &delay, 0))
+            ret = delay;
+        else
+#endif // Q_OS_WIN && !Q_OS_WINCE && !Q_OS_WINRT
+            ret = 400;
+        break;
+    }
 #ifndef QT_NO_RUBBERBAND
     case SH_RubberBand_Mask:
         if (const QStyleOptionRubberBand *rbOpt = qstyleoption_cast<const QStyleOptionRubberBand *>(opt)) {
@@ -1514,8 +1526,14 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
                 p->setBackground(opt->palette.dark().color());
                 p->setBrush(br);
             } else {
-                QPixmap pm = opt->palette.brush(QPalette::Light).texture();
-                br = !pm.isNull() ? QBrush(pm) : QBrush(opt->palette.light().color(), Qt::Dense4Pattern);
+                const QBrush paletteBrush = opt->palette.brush(QPalette::Light);
+                if (paletteBrush.style() == Qt::TexturePattern) {
+                    if (qHasPixmapTexture(paletteBrush))
+                        br = QBrush(paletteBrush.texture());
+                    else
+                        br = QBrush(paletteBrush.textureImage());
+                } else
+                    br = QBrush(opt->palette.light().color(), Qt::Dense4Pattern);
                 p->setBackground(opt->palette.background().color());
                 p->setBrush(br);
             }
@@ -1525,8 +1543,15 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
             break; }
     case CE_ScrollBarSlider:
         if (!(opt->state & State_Enabled)) {
-            QPixmap pm = opt->palette.brush(QPalette::Light).texture();
-            QBrush br = !pm.isNull() ? QBrush(pm) : QBrush(opt->palette.light().color(), Qt::Dense4Pattern);
+            QBrush br;
+            const QBrush paletteBrush = opt->palette.brush(QPalette::Light);
+            if (paletteBrush.style() == Qt::TexturePattern) {
+                if (qHasPixmapTexture(paletteBrush))
+                    br = QBrush(paletteBrush.texture());
+                else
+                    br = QBrush(paletteBrush.textureImage());
+            } else
+                br = QBrush(opt->palette.light().color(), Qt::Dense4Pattern);
             p->setPen(Qt::NoPen);
             p->setBrush(br);
             p->setBackgroundMode(Qt::OpaqueMode);
@@ -1756,9 +1781,7 @@ void QWindowsStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPai
             QRect r = rect;
 
             if (verticalTitleBar) {
-                QSize s = r.size();
-                s.transpose();
-                r.setSize(s);
+                r.setSize(r.size().transposed());
 
                 p->save();
                 p->translate(r.left(), r.top() + r.width());

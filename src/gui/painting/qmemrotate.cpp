@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -473,6 +473,21 @@ QT_IMPL_MEMROTATE(quint16)
 QT_IMPL_MEMROTATE(quint24)
 QT_IMPL_MEMROTATE(quint8)
 
+void qt_memrotate90_8(const uchar *srcPixels, int w, int h, int sbpl, uchar *destPixels, int dbpl)
+{
+    qt_memrotate90(srcPixels, w, h, sbpl, destPixels, dbpl);
+}
+
+void qt_memrotate180_8(const uchar *srcPixels, int w, int h, int sbpl, uchar *destPixels, int dbpl)
+{
+    qt_memrotate180(srcPixels, w, h, sbpl, destPixels, dbpl);
+}
+
+void qt_memrotate270_8(const uchar *srcPixels, int w, int h, int sbpl, uchar *destPixels, int dbpl)
+{
+    qt_memrotate270(srcPixels, w, h, sbpl, destPixels, dbpl);
+}
+
 void qt_memrotate90_16(const uchar *srcPixels, int w, int h, int sbpl, uchar *destPixels, int dbpl)
 {
     qt_memrotate90((const ushort *)srcPixels, w, h, sbpl, (ushort *)destPixels, dbpl);
@@ -529,6 +544,8 @@ MemRotateFunc qMemRotateFunctions[QImage::NImageFormats][3] =
     { qt_memrotate90_32, qt_memrotate180_32, qt_memrotate270_32 },      // Format_A2BGR30_Premultiplied,
     { qt_memrotate90_32, qt_memrotate180_32, qt_memrotate270_32 },      // Format_RGB30,
     { qt_memrotate90_32, qt_memrotate180_32, qt_memrotate270_32 },      // Format_A2RGB30_Premultiplied,
+    { qt_memrotate90_8, qt_memrotate180_8, qt_memrotate270_8 },         // Format_Alpha8,
+    { qt_memrotate90_8, qt_memrotate180_8, qt_memrotate270_8 },         // Format_Grayscale8,
 };
 
 QT_END_NAMESPACE

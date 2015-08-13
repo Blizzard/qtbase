@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -98,8 +98,8 @@ public:
 
     void setConvolutionKernel(const qreal *matrix, int rows, int columns);
 
-    QRectF boundingRectFor(const QRectF &rect) const;
-    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const;
+    QRectF boundingRectFor(const QRectF &rect) const Q_DECL_OVERRIDE;
+    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const Q_DECL_OVERRIDE;
 
 private:
     friend class QGLPixmapConvolutionFilter;
@@ -126,8 +126,8 @@ public:
     qreal radius() const;
     QGraphicsBlurEffect::BlurHints blurHints() const;
 
-    QRectF boundingRectFor(const QRectF &rect) const;
-    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const;
+    QRectF boundingRectFor(const QRectF &rect) const Q_DECL_OVERRIDE;
+    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const Q_DECL_OVERRIDE;
 
 private:
     friend class QGLPixmapBlurFilter;
@@ -149,7 +149,7 @@ public:
     void setStrength(qreal strength);
     qreal strength() const;
 
-    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const;
+    void draw(QPainter *painter, const QPointF &dest, const QPixmap &src, const QRectF &srcRect = QRectF()) const Q_DECL_OVERRIDE;
 };
 
 class QPixmapDropShadowFilterPrivate;
@@ -163,8 +163,8 @@ public:
     QPixmapDropShadowFilter(QObject *parent = 0);
     ~QPixmapDropShadowFilter();
 
-    QRectF boundingRectFor(const QRectF &rect) const;
-    void draw(QPainter *p, const QPointF &pos, const QPixmap &px, const QRectF &src = QRectF()) const;
+    QRectF boundingRectFor(const QRectF &rect) const Q_DECL_OVERRIDE;
+    void draw(QPainter *p, const QPointF &pos, const QPixmap &px, const QRectF &src = QRectF()) const Q_DECL_OVERRIDE;
 
     qreal blurRadius() const;
     void setBlurRadius(qreal radius);

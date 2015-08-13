@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -131,7 +131,7 @@ QT_BEGIN_NAMESPACE
     \value SystemTime         The human-readable system time. This clock is not monotonic.
     \value MonotonicClock     The system's monotonic clock, usually found in Unix systems. This clock is monotonic and does not overflow.
     \value TickCounter        The system's tick counter, used on Windows systems. This clock may overflow.
-    \value MachAbsoluteTime   The Mach kernel's absolute time (Mac OS X). This clock is monotonic and does not overflow.
+    \value MachAbsoluteTime   The Mach kernel's absolute time (OS X and iOS). This clock is monotonic and does not overflow.
     \value PerformanceCounter The high-resolution performance counter provided by Windows. This clock is monotonic and does not overflow.
 
     \section2 SystemTime
@@ -173,8 +173,8 @@ QT_BEGIN_NAMESPACE
     \section2 MachAbsoluteTime
 
     This clock type is based on the absolute time presented by Mach kernels,
-    such as that found on Mac OS X. This clock type is presented separately
-    from MonotonicClock since Mac OS X is also a Unix system and may support
+    such as that found on OS X. This clock type is presented separately
+    from MonotonicClock since OS X and iOS are also Unix systems and may support
     a POSIX monotonic clock with values differing from the Mach absolute
     time.
 

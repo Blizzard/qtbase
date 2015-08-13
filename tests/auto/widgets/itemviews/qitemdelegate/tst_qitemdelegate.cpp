@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -782,10 +782,8 @@ void tst_QItemDelegate::dateTimeEditor()
     widget.setFocus();
     widget.editItem(item2);
 
-    QTestEventLoop::instance().enterLoop(1);
-
+    QTRY_VERIFY(widget.viewport()->findChild<QDateEdit *>());
     QDateEdit *dateEditor = widget.viewport()->findChild<QDateEdit *>();
-    QVERIFY(dateEditor);
     QCOMPARE(dateEditor->date(), date);
     dateEditor->setDate(date.addDays(60));
 
@@ -1085,8 +1083,6 @@ void tst_QItemDelegate::decoration()
 
 void tst_QItemDelegate::editorEvent_data()
 {
-    QTest::addColumn<QRect>("rect");
-    QTest::addColumn<QString>("text");
     QTest::addColumn<int>("checkState");
     QTest::addColumn<int>("flags");
     QTest::addColumn<bool>("inCheck");
@@ -1095,16 +1091,16 @@ void tst_QItemDelegate::editorEvent_data()
     QTest::addColumn<bool>("edited");
     QTest::addColumn<int>("expectedCheckState");
 
-    QTest::newRow("unchecked, checkable, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
-        << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
+    const int defaultFlags = (int)(Qt::ItemIsEditable
             |Qt::ItemIsSelectable
             |Qt::ItemIsUserCheckable
             |Qt::ItemIsEnabled
             |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+            |Qt::ItemIsDropEnabled);
+
+    QTest::newRow("unchecked, checkable, release")
+        << (int)(Qt::Unchecked)
+        << defaultFlags
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1112,15 +1108,8 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Checked);
 
     QTest::newRow("checked, checkable, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Checked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << defaultFlags
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1128,15 +1117,8 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Unchecked);
 
     QTest::newRow("unchecked, checkable, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << defaultFlags
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1144,15 +1126,8 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Checked);
 
     QTest::newRow("unchecked, checkable, release, right button")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << defaultFlags
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::RightButton)
@@ -1160,15 +1135,8 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Unchecked);
 
     QTest::newRow("unchecked, checkable, release outside")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << defaultFlags
         << false
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1176,15 +1144,8 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Unchecked);
 
     QTest::newRow("unchecked, checkable, dblclick")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << defaultFlags
         << true
         << (int)(QEvent::MouseButtonDblClick)
         << (int)(Qt::LeftButton)
@@ -1192,33 +1153,17 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Unchecked);
 
     QTest::newRow("unchecked, tristate, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Unchecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsTristate
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << (int)(defaultFlags | Qt::ItemIsTristate)
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
         << true
-        << (int)(Qt::PartiallyChecked);
+        << (int)(Qt::Checked);
 
     QTest::newRow("partially checked, tristate, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::PartiallyChecked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsTristate
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << (int)(defaultFlags | Qt::ItemIsTristate)
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1226,16 +1171,35 @@ void tst_QItemDelegate::editorEvent_data()
         << (int)(Qt::Checked);
 
     QTest::newRow("checked, tristate, release")
-        << QRect(0, 0, 20, 20)
-        << QString("foo")
         << (int)(Qt::Checked)
-        << (int)(Qt::ItemIsEditable
-            |Qt::ItemIsSelectable
-            |Qt::ItemIsUserCheckable
-            |Qt::ItemIsTristate
-            |Qt::ItemIsEnabled
-            |Qt::ItemIsDragEnabled
-            |Qt::ItemIsDropEnabled)
+        << (int)(defaultFlags | Qt::ItemIsTristate)
+        << true
+        << (int)(QEvent::MouseButtonRelease)
+        << (int)(Qt::LeftButton)
+        << true
+        << (int)(Qt::Unchecked);
+
+    QTest::newRow("unchecked, user-tristate, release")
+        << (int)(Qt::Unchecked)
+        << (int)(defaultFlags | Qt::ItemIsUserTristate)
+        << true
+        << (int)(QEvent::MouseButtonRelease)
+        << (int)(Qt::LeftButton)
+        << true
+        << (int)(Qt::PartiallyChecked);
+
+    QTest::newRow("partially checked, user-tristate, release")
+        << (int)(Qt::PartiallyChecked)
+        << (int)(defaultFlags | Qt::ItemIsUserTristate)
+        << true
+        << (int)(QEvent::MouseButtonRelease)
+        << (int)(Qt::LeftButton)
+        << true
+        << (int)(Qt::Checked);
+
+    QTest::newRow("checked, user-tristate, release")
+        << (int)(Qt::Checked)
+        << (int)(defaultFlags | Qt::ItemIsUserTristate)
         << true
         << (int)(QEvent::MouseButtonRelease)
         << (int)(Qt::LeftButton)
@@ -1245,8 +1209,6 @@ void tst_QItemDelegate::editorEvent_data()
 
 void tst_QItemDelegate::editorEvent()
 {
-    QFETCH(QRect, rect);
-    QFETCH(QString, text);
     QFETCH(int, checkState);
     QFETCH(int, flags);
     QFETCH(bool, inCheck);
@@ -1260,12 +1222,12 @@ void tst_QItemDelegate::editorEvent()
     QVERIFY(index.isValid());
 
     QStandardItem *item = model.itemFromIndex(index);
-    item->setText(text);
+    item->setText("foo");
     item->setCheckState((Qt::CheckState)checkState);
     item->setFlags((Qt::ItemFlags)flags);
 
     QStyleOptionViewItem option;
-    option.rect = rect;
+    option.rect = QRect(0, 0, 20, 20);
     option.state |= QStyle::State_Enabled;
     // mimic QStyledItemDelegate::initStyleOption logic
     option.features |= QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
@@ -1304,11 +1266,19 @@ void tst_QItemDelegate::enterKey_data()
     QTest::addColumn<bool>("expectedFocus");
 
     QTest::newRow("lineedit enter") << LineEdit << int(Qt::Key_Enter) << false;
+    QTest::newRow("lineedit return") << LineEdit << int(Qt::Key_Return) << false;
+    QTest::newRow("lineedit tab") << LineEdit << int(Qt::Key_Tab) << false;
+    QTest::newRow("lineedit backtab") << LineEdit << int(Qt::Key_Backtab) << false;
+
     QTest::newRow("textedit enter") << TextEdit << int(Qt::Key_Enter) << true;
+    QTest::newRow("textedit return") << TextEdit << int(Qt::Key_Return) << true;
+    QTest::newRow("textedit tab") << TextEdit << int(Qt::Key_Tab) << true;
+    QTest::newRow("textedit backtab") << TextEdit << int(Qt::Key_Backtab) << false;
+
     QTest::newRow("plaintextedit enter") << PlainTextEdit << int(Qt::Key_Enter) << true;
     QTest::newRow("plaintextedit return") << PlainTextEdit << int(Qt::Key_Return) << true;
-    QTest::newRow("plaintextedit tab") << PlainTextEdit << int(Qt::Key_Tab) << false;
-    QTest::newRow("lineedit tab") << LineEdit << int(Qt::Key_Tab) << false;
+    QTest::newRow("plaintextedit tab") << PlainTextEdit << int(Qt::Key_Tab) << true;
+    QTest::newRow("plaintextedit backtab") << PlainTextEdit << int(Qt::Key_Backtab) << false;
 }
 
 void tst_QItemDelegate::enterKey()
@@ -1366,10 +1336,11 @@ void tst_QItemDelegate::enterKey()
     QTest::keyClick(editor, Qt::Key(key));
     QApplication::processEvents();
 
-    // The line edit has already been destroyed, so avoid that case.
-    if (widget == TextEdit || widget == PlainTextEdit) {
+    if (expectedFocus) {
         QVERIFY(!editor.isNull());
-        QCOMPARE(editor && editor->hasFocus(), expectedFocus);
+        QVERIFY(editor->hasFocus());
+    } else {
+        QTRY_VERIFY(editor.isNull()); // editor deletion happens via deleteLater
     }
 }
 

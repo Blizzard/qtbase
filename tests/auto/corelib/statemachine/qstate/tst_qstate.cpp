@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,23 +41,13 @@ class tst_QState : public QObject
 {
     Q_OBJECT
 
-public:
-    tst_QState();
-
 private slots:
     void assignProperty();
     void assignPropertyTwice();
     void historyInitialState();
     void transitions();
     void privateSignals();
-
-private:
-    bool functionCalled;
 };
-
-tst_QState::tst_QState() : functionCalled(false)
-{
-}
 
 class TestClass: public QObject
 {
@@ -205,12 +195,16 @@ void tst_QState::transitions()
     QVERIFY(s1.transitions().isEmpty());
 
     QAbstractTransition *t1 = s1.addTransition(this, SIGNAL(destroyed()), &s2);
+    QAbstractTransition *t1_1 = s1.addTransition(this, &tst_QState::destroyed, &s2);
     QVERIFY(t1 != 0);
-    QCOMPARE(s1.transitions().count(), 1);
+    QVERIFY(t1_1 != 0);
+    QCOMPARE(s1.transitions().count(), 2);
     QCOMPARE(s1.transitions().first(), t1);
+    QCOMPARE(s1.transitions().last(), t1_1);
     QVERIFY(s2.transitions().isEmpty());
 
     s1.removeTransition(t1);
+    s1.removeTransition(t1_1);
     QVERIFY(s1.transitions().isEmpty());
 
     s1.addTransition(t1);

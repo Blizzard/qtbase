@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -57,7 +57,7 @@ public:
         BriefRight,
         C,
         CaptionLeft,
-        CaptionRight,           // 10
+        CaptionRight,
         Code,
         CodeBad,
         CodeNew,
@@ -67,7 +67,7 @@ public:
         DivLeft,
         DivRight,
         EndQmlText,
-        FootnoteLeft,           // 20
+        FootnoteLeft,
         FootnoteRight,
         FormatElse,
         FormatEndif,
@@ -77,17 +77,18 @@ public:
         GeneratedList,
         GuidLink,
         HR,
-        Image,                  // 30
+        Image,
         ImageText,
         ImportantLeft,
         ImportantRight,
         InlineImage,
         JavaScript,
         EndJavaScript,
+        Keyword,
         LegaleseLeft,
         LegaleseRight,
         LineBreak,
-        Link,                   // 40
+        Link,
         LinkNode,
         ListLeft,
         ListItemNumber,
@@ -96,8 +97,10 @@ public:
         ListItemLeft,
         ListItemRight,
         ListRight,
+        NavAutoLink,
+        NavLink,
         Nop,
-        NoteLeft,               // 50
+        NoteLeft,
         NoteRight,
         ParaLeft,
         ParaRight,
@@ -107,7 +110,7 @@ public:
         QuotationRight,
         RawString,
         SectionLeft,
-        SectionRight,           // 60
+        SectionRight,
         SectionHeadingLeft,
         SectionHeadingRight,
         SidebarLeft,
@@ -117,7 +120,7 @@ public:
         SnippetIdentifier,
         SnippetLocation,
         String,
-        TableLeft,              // 70
+        TableLeft,
         TableRight,
         TableHeaderLeft,
         TableHeaderRight,
@@ -127,7 +130,7 @@ public:
         TableItemRight,
         TableOfContents,
         Target,
-        UnhandledFormat,        // 80
+        UnhandledFormat,
         UnknownCommand,
         Last = UnknownCommand
     };
@@ -191,11 +194,12 @@ public:
     const QStringList& strings() const { return strs; }
 
     virtual bool isLinkAtom() const { return false; }
-    virtual Node::Genus genus() const { return Node::DontCare; }
-    virtual bool specifiesDomain() const { return false; }
-    virtual Tree* domain() const { return 0; }
-    virtual Node::Type goal() const { return Node::NoType; }
+    virtual Node::Genus genus() { return Node::DontCare; }
+    virtual bool specifiesDomain() { return false; }
+    virtual Tree* domain() { return 0; }
+    virtual Node::Type goal() { return Node::NoType; }
     virtual const QString& error() { return noError_; }
+    virtual void resolveSquareBracketParams() { }
 
  protected:
     static QString noError_;
@@ -212,18 +216,21 @@ class LinkAtom : public Atom
     LinkAtom(Atom* previous, const LinkAtom& t);
     virtual ~LinkAtom() { }
 
-    virtual bool isLinkAtom() const { return true; }
-    virtual Node::Genus genus() const { return genus_; }
-    virtual bool specifiesDomain() const { return (domain_ != 0); }
-    virtual Tree* domain() const { return domain_; }
-    virtual Node::Type goal() const { return goal_; }
-    virtual const QString& error() { return error_; }
+    virtual bool isLinkAtom() const Q_DECL_OVERRIDE { return true; }
+    virtual Node::Genus genus() Q_DECL_OVERRIDE { resolveSquareBracketParams(); return genus_; }
+    virtual bool specifiesDomain() Q_DECL_OVERRIDE { resolveSquareBracketParams(); return (domain_ != 0); }
+    virtual Tree* domain() Q_DECL_OVERRIDE { resolveSquareBracketParams(); return domain_; }
+    virtual Node::Type goal() Q_DECL_OVERRIDE { resolveSquareBracketParams(); return goal_; }
+    virtual const QString& error() Q_DECL_OVERRIDE { return error_; }
+    virtual void resolveSquareBracketParams() Q_DECL_OVERRIDE;
 
  protected:
+    bool        resolved_;
     Node::Genus genus_;
     Node::Type  goal_;
     Tree*       domain_;
     QString     error_;
+    QString     squareBracketParams_;
 };
 
 #define ATOM_FORMATTING_BOLD            "bold"

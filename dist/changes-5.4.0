@@ -240,6 +240,8 @@ QtGui
    * [QTBUG-25998] Added support for 10-bit per color channel image
      formats.
 
+ - QImageReader now automatically rotates JPEG images according to Exif orientation
+
  - QOpenGLBuffer:
    * [QTBUG-38168] Added QOpenGLBuffer::mapBufferRange().
 

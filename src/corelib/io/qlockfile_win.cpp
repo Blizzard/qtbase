@@ -1,7 +1,8 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure+bluesystems@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +47,12 @@ QT_BEGIN_NAMESPACE
 static inline QByteArray localHostName()
 {
     return qgetenv("COMPUTERNAME");
+}
+
+static inline bool fileExists(const wchar_t *fileName)
+{
+    WIN32_FILE_ATTRIBUTE_DATA  data;
+    return GetFileAttributesEx(fileName, GetFileExInfoStandard, &data);
 }
 
 QLockFile::LockError QLockFilePrivate::tryLock_sys()
@@ -79,8 +86,13 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
         case ERROR_SHARING_VIOLATION:
         case ERROR_ALREADY_EXISTS:
         case ERROR_FILE_EXISTS:
-        case ERROR_ACCESS_DENIED: // readonly file, or file still in use by another process. Assume the latter, since we don't create it readonly.
             return QLockFile::LockFailedError;
+        case ERROR_ACCESS_DENIED:
+            // readonly file, or file still in use by another process.
+            // Assume the latter if the file exists, since we don't create it readonly.
+            return fileExists((const wchar_t*)fileEntry.nativeFilePath().utf16())
+                ? QLockFile::LockFailedError
+                : QLockFile::PermissionError;
         default:
             qWarning() << "Got unexpected locking error" << lastError;
             return QLockFile::UnknownError;
@@ -94,7 +106,7 @@ QLockFile::LockError QLockFilePrivate::tryLock_sys()
     QByteArray fileData;
     fileData += QByteArray::number(QCoreApplication::applicationPid());
     fileData += '\n';
-    fileData += qAppName().toUtf8();
+    fileData += QCoreApplication::applicationName().toUtf8();
     fileData += '\n';
     fileData += localHostName();
     fileData += '\n';
@@ -115,25 +127,73 @@ bool QLockFilePrivate::isApparentlyStale() const
 {
     qint64 pid;
     QString hostname, appname;
-    if (!getLockInfo(&pid, &hostname, &appname))
-        return false;
 
     // On WinRT there seems to be no way of obtaining information about other
     // processes due to sandboxing
 #ifndef Q_OS_WINRT
-    if (hostname == QString::fromLocal8Bit(localHostName())) {
-        HANDLE procHandle = ::OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
-        if (!procHandle)
-            return true;
-        // We got a handle but check if process is still alive
-        DWORD dwR = ::WaitForSingleObject(procHandle, 0);
-        ::CloseHandle(procHandle);
-        if (dwR == WAIT_TIMEOUT)
-            return true;
+    if (getLockInfo(&pid, &hostname, &appname)) {
+        if (hostname.isEmpty() || hostname == QString::fromLocal8Bit(localHostName())) {
+            HANDLE procHandle = ::OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
+            if (!procHandle)
+                return true;
+            // We got a handle but check if process is still alive
+            DWORD dwR = ::WaitForSingleObject(procHandle, 0);
+            ::CloseHandle(procHandle);
+            if (dwR == WAIT_TIMEOUT)
+                return true;
+            const QString processName = processNameByPid(pid);
+            if (!processName.isEmpty() && processName != appname)
+                return true; // PID got reused by a different application.
+        }
     }
-#endif // !Q_OS_WINRT
+#else // !Q_OS_WINRT
+    Q_UNUSED(pid);
+    Q_UNUSED(hostname);
+    Q_UNUSED(appname);
+#endif // Q_OS_WINRT
     const qint64 age = QFileInfo(fileName).lastModified().msecsTo(QDateTime::currentDateTime());
     return staleLockTime > 0 && age > staleLockTime;
+}
+
+QString QLockFilePrivate::processNameByPid(qint64 pid)
+{
+#if !defined(Q_OS_WINRT) && !defined(Q_OS_WINCE)
+    typedef DWORD (WINAPI *GetModuleFileNameExFunc)(HANDLE, HMODULE, LPTSTR, DWORD);
+
+    HMODULE hPsapi = LoadLibraryA("psapi");
+    if (!hPsapi)
+        return QString();
+
+    GetModuleFileNameExFunc qGetModuleFileNameEx
+            = (GetModuleFileNameExFunc)GetProcAddress(hPsapi, "GetModuleFileNameExW");
+    if (!qGetModuleFileNameEx) {
+        FreeLibrary(hPsapi);
+        return QString();
+    }
+
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, DWORD(pid));
+    if (!hProcess) {
+        FreeLibrary(hPsapi);
+        return QString();
+    }
+    wchar_t buf[MAX_PATH];
+    const DWORD length = qGetModuleFileNameEx(hProcess, NULL, buf, sizeof(buf) / sizeof(wchar_t));
+    CloseHandle(hProcess);
+    FreeLibrary(hPsapi);
+    if (!length)
+        return QString();
+    QString name = QString::fromWCharArray(buf, length);
+    int i = name.lastIndexOf(QLatin1Char('\\'));
+    if (i >= 0)
+        name.remove(0, i + 1);
+    i = name.lastIndexOf(QLatin1Char('.'));
+    if (i >= 0)
+        name.truncate(i);
+    return name;
+#else
+    Q_UNUSED(pid);
+    return QString();
+#endif
 }
 
 void QLockFile::unlock()

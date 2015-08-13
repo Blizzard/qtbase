@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,7 +61,7 @@ class QVector
     Data *d;
 
 public:
-    inline QVector() : d(Data::sharedNull()) { }
+    inline QVector() Q_DECL_NOTHROW : d(Data::sharedNull()) { }
     explicit QVector(int size);
     QVector(int size, const T &t);
     inline QVector(const QVector<T> &v);
@@ -128,6 +128,7 @@ public:
     T &operator[](int i);
     const T &operator[](int i) const;
     void append(const T &t);
+    inline void append(const QVector<T> &l) { *this += l; }
     void prepend(const T &t);
     void insert(int i, const T &t);
     void insert(int i, int n, const T &t);
@@ -153,7 +154,9 @@ public:
         const const_iterator ce = this->cend(), cit = std::find(this->cbegin(), ce, t);
         if (cit == ce)
             return 0;
-        const iterator e = end(), it = std::remove(c2m(cit), e, t);
+        // next operation detaches, so ce, cit may become invalidated:
+        const int firstFoundIdx = std::distance(this->cbegin(), cit);
+        const iterator e = end(), it = std::remove(begin() + firstFoundIdx, e, t);
         const int result = std::distance(it, e);
         erase(it, e);
         return result;
@@ -327,9 +330,11 @@ inline QVector<T>::QVector(const QVector<T> &v)
     } else {
         if (v.d->capacityReserved) {
             d = Data::allocate(v.d->alloc);
+            Q_CHECK_PTR(d);
             d->capacityReserved = true;
         } else {
             d = Data::allocate(v.d->size);
+            Q_CHECK_PTR(d);
         }
         if (d->alloc) {
             copyConstruct(v.d->begin(), v.d->end(), d->begin());
@@ -439,6 +444,7 @@ QVector<T>::QVector(int asize)
     Q_ASSERT_X(asize >= 0, "QVector::QVector", "Size must be greater than or equal to 0.");
     if (Q_LIKELY(asize > 0)) {
         d = Data::allocate(asize);
+        Q_CHECK_PTR(d);
         d->size = asize;
         defaultConstruct(d->begin(), d->end());
     } else {
@@ -452,6 +458,7 @@ QVector<T>::QVector(int asize, const T &t)
     Q_ASSERT_X(asize >= 0, "QVector::QVector", "Size must be greater than or equal to 0.");
     if (asize > 0) {
         d = Data::allocate(asize);
+        Q_CHECK_PTR(d);
         d->size = asize;
         T* i = d->end();
         while (i != d->begin())
@@ -467,6 +474,7 @@ QVector<T>::QVector(std::initializer_list<T> args)
 {
     if (args.size() > 0) {
         d = Data::allocate(args.size());
+        Q_CHECK_PTR(d);
         // std::initializer_list<T>::iterator is guaranteed to be
         // const T* ([support.initlist]/1), so can be memcpy'ed away from by copyConstruct
         copyConstruct(args.begin(), args.end(), d->begin());
@@ -592,16 +600,23 @@ Q_OUTOFLINE_TEMPLATE T QVector<T>::value(int i, const T &defaultValue) const
 template <typename T>
 void QVector<T>::append(const T &t)
 {
-    const T copy(t);
     const bool isTooSmall = uint(d->size + 1) > d->alloc;
     if (!isDetached() || isTooSmall) {
+        const T copy(t);
         QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
         reallocData(d->size, isTooSmall ? d->size + 1 : d->alloc, opt);
+
+        if (QTypeInfo<T>::isComplex)
+            new (d->end()) T(copy);
+        else
+            *d->end() = copy;
+
+    } else {
+        if (QTypeInfo<T>::isComplex)
+            new (d->end()) T(t);
+        else
+            *d->end() = t;
     }
-    if (QTypeInfo<T>::isComplex)
-        new (d->end()) T(copy);
-    else
-        *d->end() = copy;
     ++d->size;
 }
 
@@ -707,13 +722,10 @@ bool QVector<T>::operator==(const QVector<T> &v) const
         return true;
     if (d->size != v.d->size)
         return false;
-    T* b = d->begin();
-    T* i = b + d->size;
-    T* j = v.d->end();
-    while (i != b)
-        if (!(*--i == *--j))
-            return false;
-    return true;
+    const T *vb = v.d->begin();
+    const T *b  = d->begin();
+    const T *e  = d->end();
+    return std::equal(b, e, vb);
 }
 
 template <typename T>
@@ -791,12 +803,9 @@ int QVector<T>::lastIndexOf(const T &t, int from) const
 template <typename T>
 bool QVector<T>::contains(const T &t) const
 {
-    T* b = d->begin();
-    T* i = d->end();
-    while (i != b)
-        if (*--i == t)
-            return true;
-    return false;
+    const T *b = d->begin();
+    const T *e = d->end();
+    return std::find(b, e, t) != e;
 }
 
 template <typename T>

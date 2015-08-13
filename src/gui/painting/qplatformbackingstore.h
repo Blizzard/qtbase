@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -62,6 +62,7 @@ class QPlatformWindow;
 class QPlatformTextureList;
 class QPlatformTextureListPrivate;
 class QOpenGLContext;
+class QPlatformGraphicsBuffer;
 
 #ifndef QT_NO_OPENGL
 class Q_GUI_EXPORT QPlatformTextureList : public QObject
@@ -69,6 +70,11 @@ class Q_GUI_EXPORT QPlatformTextureList : public QObject
     Q_OBJECT
     Q_DECLARE_PRIVATE(QPlatformTextureList)
 public:
+    enum Flag {
+        StacksOnTop = 0x01
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     explicit QPlatformTextureList(QObject *parent = 0);
     ~QPlatformTextureList();
 
@@ -76,16 +82,20 @@ public:
     bool isEmpty() const { return count() == 0; }
     GLuint textureId(int index) const;
     QRect geometry(int index) const;
-    bool stacksOnTop(int index) const;
+    QRect clipRect(int index) const;
+    void *source(int index);
+    Flags flags(int index) const;
     void lock(bool on);
     bool isLocked() const;
 
-    void appendTexture(GLuint textureId, const QRect &geometry, bool stacksOnTop = false);
+    void appendTexture(void *source, GLuint textureId, const QRect &geometry,
+                       const QRect &clipRect = QRect(), Flags flags = 0);
     void clear();
 
  Q_SIGNALS:
     void locked(bool);
 };
+Q_DECLARE_OPERATORS_FOR_FLAGS(QPlatformTextureList::Flags)
 #endif
 
 class Q_GUI_EXPORT QPlatformBackingStore
@@ -106,8 +116,15 @@ public:
                                  QPlatformTextureList *textures, QOpenGLContext *context,
                                  bool translucentBackground);
     virtual QImage toImage() const;
-    virtual GLuint toTexture(const QRegion &dirtyRegion, QSize *textureSize, bool *needsSwizzle) const;
+    enum TextureFlag {
+        TextureSwizzle = 0x01,
+        TextureFlip = 0x02
+    };
+    Q_DECLARE_FLAGS(TextureFlags, TextureFlag)
+    virtual GLuint toTexture(const QRegion &dirtyRegion, QSize *textureSize, TextureFlags *flags) const;
 #endif
+
+    virtual QPlatformGraphicsBuffer *graphicsBuffer() const;
 
     virtual void resize(const QSize &size, const QRegion &staticContents) = 0;
 
@@ -119,6 +136,10 @@ public:
 private:
     QPlatformBackingStorePrivate *d_ptr;
 };
+
+#ifndef QT_NO_OPENGL
+Q_DECLARE_OPERATORS_FOR_FLAGS(QPlatformBackingStore::TextureFlags)
+#endif
 
 QT_END_NAMESPACE
 

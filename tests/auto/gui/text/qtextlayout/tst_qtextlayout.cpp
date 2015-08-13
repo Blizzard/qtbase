@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -116,6 +116,7 @@ private slots:
     void boundingRectForSetLineWidth();
     void glyphLessItems();
     void justifyTrailingSpaces();
+    void layoutWithCustomTabStops();
 
     // QTextLine stuff
     void setNumColumnsWrapAtWordBoundaryOrAnywhere();
@@ -1279,6 +1280,13 @@ void tst_QTextLayout::smallTextLengthWrapAtWordBoundaryOrAnywhere()
 void tst_QTextLayout::testDefaultTabs()
 {
     QTextLayout layout("Foo\tBar\ta slightly longer text\tend.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
@@ -1321,6 +1329,13 @@ void tst_QTextLayout::testDefaultTabs()
 void tst_QTextLayout::testTabs()
 {
     QTextLayout layout("Foo\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     QTextOption option = layout.textOption();
     option.setTabStop(150);
@@ -1338,6 +1353,13 @@ void tst_QTextLayout::testTabs()
 void tst_QTextLayout::testMultilineTab()
 {
     QTextLayout layout("Lorem ipsum dolor sit\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // test if this works on the second line.
     layout.beginLayout();
@@ -1347,12 +1369,20 @@ void tst_QTextLayout::testMultilineTab()
     line.setLineWidth(220.);
     layout.endLayout();
 
+
     QCOMPARE(line.cursorToX(22), 80.);
 }
 
 void tst_QTextLayout::testMultiTab()
 {
     QTextLayout layout("Foo\t\t\tBar.", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     layout.beginLayout();
     QTextLine line = layout.createLine();
@@ -1366,6 +1396,13 @@ void tst_QTextLayout::testTabsInAlignedParag()
 {
     QTextLayout layout("Foo\tsome more words", testFont);
     layout.setCacheEnabled(true);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     QTextOption option = layout.textOption();
     // right
     option.setAlignment(Qt::AlignRight);
@@ -1425,6 +1462,12 @@ void tst_QTextLayout::testRightTab()
     */
     layout.setCacheEnabled(true);
 
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     QTextOption option = layout.textOption();
     QList<QTextOption::Tab> tabs;
     QTextOption::Tab tab;
@@ -1462,6 +1505,13 @@ void tst_QTextLayout::testRightTab()
 void tst_QTextLayout::testCenteredTab()
 {
     QTextLayout layout("Foo\tBar", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // test if centering the tab works.  We expect the center of 'Bar.' to be at the tab point.
     QTextOption option = layout.textOption();
@@ -1483,6 +1533,13 @@ void tst_QTextLayout::testCenteredTab()
 void tst_QTextLayout::testDelimiterTab()
 {
     QTextLayout layout("Foo\tBar. Barrabas", testFont);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
+
     layout.setCacheEnabled(true);
     // try the different delimiter characters to see if the alignment works there.
     QTextOption option = layout.textOption();
@@ -1535,6 +1592,12 @@ void tst_QTextLayout::tabsForRtl()
      d) center tab is still a centered tab.
     */
     layout.setCacheEnabled(true);
+
+    QFont font = layout.font();
+    QFontPrivate *fd = QFontPrivate::get(font);
+    qreal dpiScale = qreal(fd->dpi) / qreal(qt_defaultDpiY());
+    if (!qFuzzyCompare(dpiScale, 1.0))
+        QSKIP("Test logic does not work when tabs are scaled by dpi");
 
     QTextOption option = layout.textOption();
     QList<QTextOption::Tab> tabs;
@@ -2048,6 +2111,39 @@ void tst_QTextLayout::nbsp()
     }
 
     layout.endLayout();
+}
+
+void tst_QTextLayout::layoutWithCustomTabStops()
+{
+    QScopedPointer<QTextLayout> textLayout(new QTextLayout);
+    QList<QTextOption::Tab> tabStops;
+
+    const int tabWidth = 18;
+    const int maxTabPos = 2500;
+    for (int tabPos = tabWidth; tabPos < maxTabPos; tabPos += tabWidth)
+        tabStops << QTextOption::Tab(tabPos, QTextOption::LeftTab);
+
+    QTextOption textOption;
+    textOption.setTabs(tabStops);
+    textLayout->setTextOption(textOption);
+
+    textLayout->setText(QStringLiteral("\ta aa aa aa aa aa aa"));
+
+    textLayout->beginLayout();
+    textLayout->createLine();
+    textLayout->endLayout();
+
+    qreal shortWidth = textLayout->maximumWidth();
+
+    textLayout->setText(QStringLiteral("\ta aa aa aa aa aa aa aa aa aa aa aa aa a"));
+
+    textLayout->beginLayout();
+    textLayout->createLine();
+    textLayout->endLayout();
+
+    qreal longWidth = textLayout->maximumWidth();
+
+    QVERIFY(longWidth > shortWidth);
 }
 
 QTEST_MAIN(tst_QTextLayout)

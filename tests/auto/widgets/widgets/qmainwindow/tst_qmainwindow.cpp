@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,7 @@
 #include <qlabel.h>
 #include <qtextedit.h>
 #include <qstylehints.h>
+#include <qdesktopwidget.h>
 #include <private/qmainwindowlayout_p.h>
 #include <private/qdockarealayout_p.h>
 
@@ -104,6 +105,7 @@ public:
     tst_QMainWindow();
 
 private slots:
+    void cleanup();
     void getSetCheck();
     void constructor();
     void iconSize();
@@ -131,6 +133,8 @@ private slots:
     void saveRestore_data();
     void statusBar();
 #endif
+    void contentsMargins_data();
+    void contentsMargins();
     void isSeparator();
 #ifndef QTEST_NO_CURSOR
     void setCursor();
@@ -146,6 +150,12 @@ private slots:
 #endif
     void QTBUG21378_animationFinished();
 };
+
+
+void tst_QMainWindow::cleanup()
+{
+    QVERIFY(QApplication::topLevelWidgets().isEmpty());
+}
 
 // Testing get/set functions
 void tst_QMainWindow::getSetCheck()
@@ -742,7 +752,40 @@ void tst_QMainWindow::statusBar()
         QVERIFY(indexOfSb == -1);
     }
 }
+
 #endif
+
+void tst_QMainWindow::contentsMargins_data()
+{
+    QTest::addColumn<int>("contentsMargin");
+    QTest::newRow("0") << 0;
+    QTest::newRow("10") << 10;
+}
+
+void tst_QMainWindow::contentsMargins()
+{
+    QFETCH(int, contentsMargin);
+
+    QMainWindow mw;
+    const QRect availGeometry = QApplication::desktop()->availableGeometry();
+    mw.menuBar()->addMenu("File");
+    mw.setWindowTitle(QLatin1String(QTest::currentTestFunction())
+                      + QLatin1Char(' ') + QLatin1String(QTest::currentDataTag()));
+    mw.resize(availGeometry.size() / 4);
+    mw.move((availGeometry.width() - mw.width()) / 2,
+            (availGeometry.height() - mw.height()) / 2);
+    mw.setContentsMargins(contentsMargin, contentsMargin, contentsMargin, contentsMargin);
+    mw.statusBar()->showMessage("Hello");
+
+    mw.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mw));
+
+    QCOMPARE(mw.menuBar()->geometry().left(), contentsMargin);
+    QCOMPARE(mw.menuBar()->geometry().top(), contentsMargin);
+
+    QCOMPARE(mw.statusBar()->geometry().left(), contentsMargin);
+    QCOMPARE(mw.statusBar()->geometry().bottom() + 1, mw.height() - contentsMargin);
+}
 
 void tst_QMainWindow::centralWidget()
 {
@@ -854,6 +897,7 @@ void tst_QMainWindow::takeCentralWidget() {
 
     QVERIFY(!w2.isNull());
     QCOMPARE(w2.data(), hopefullyW2);
+    delete w2;
 }
 
 void tst_QMainWindow::corner()

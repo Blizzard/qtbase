@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -45,6 +45,7 @@
 // We mean it.
 //
 
+#include <QtGui/qscreen.h>
 #include <QtGui/qwindow.h>
 #include <qpa/qplatformwindow.h>
 
@@ -73,6 +74,7 @@ public:
         , parentWindow(0)
         , platformWindow(0)
         , visible(false)
+        , visibilityOnDestroy(false)
         , exposed(false)
         , windowState(Qt::WindowNoState)
         , visibility(QWindow::Hidden)
@@ -86,6 +88,8 @@ public:
         , maximumSize(QWINDOWSIZE_MAX, QWINDOWSIZE_MAX)
         , modality(Qt::NonModal)
         , blockedByModalWindow(false)
+        , updateRequestPending(false)
+        , updateTimer(0)
         , transientParent(0)
         , topLevelScreen(0)
 #ifndef QT_NO_CURSOR
@@ -108,6 +112,8 @@ public:
     void setCursor(const QCursor *c = 0);
     void applyCursor();
 #endif
+
+    void deliverUpdateRequest();
 
     QPoint globalPosition() const {
         Q_Q(const QWindow);
@@ -132,12 +138,18 @@ public:
     void emitScreenChangedRecursion(QScreen *newScreen);
 
     virtual void clearFocusObject();
+    virtual QRectF closestAcceptableGeometry(const QRectF &rect) const;
+
+    bool isPopup() const { return (windowFlags & Qt::WindowType_Mask) == Qt::Popup; }
+
+    static QWindowPrivate *get(QWindow *window) { return window->d_func(); }
 
     QWindow::SurfaceType surfaceType;
     Qt::WindowFlags windowFlags;
     QWindow *parentWindow;
     QPlatformWindow *platformWindow;
     bool visible;
+    bool visibilityOnDestroy;
     bool exposed;
     QSurfaceFormat requestedFormat;
     QString windowTitle;
@@ -162,8 +174,11 @@ public:
     Qt::WindowModality modality;
     bool blockedByModalWindow;
 
+    bool updateRequestPending;
+    int updateTimer;
+
     QPointer<QWindow> transientParent;
-    QScreen *topLevelScreen;
+    QPointer<QScreen> topLevelScreen;
 
 #ifndef QT_NO_CURSOR
     QCursor cursor;

@@ -1,8 +1,8 @@
 
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -18,8 +18,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -77,6 +77,7 @@ bool ImageWidget::event(QEvent *event)
 }
 //! [event handler]
 
+//! [paint method]
 void ImageWidget::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
@@ -93,6 +94,7 @@ void ImageWidget::paintEvent(QPaintEvent*)
     p.translate(-iw/2, -ih/2);
     p.drawImage(0, 0, currentImage);
 }
+//! [paint method]
 
 void ImageWidget::mouseDoubleClickEvent(QMouseEvent *)
 {
@@ -108,7 +110,7 @@ void ImageWidget::mouseDoubleClickEvent(QMouseEvent *)
 //! [gesture event handler]
 bool ImageWidget::gestureEvent(QGestureEvent *event)
 {
-    qCDebug(lcExample) << "gestureEvent():" << event->gestures().size();
+    qCDebug(lcExample) << "gestureEvent():" << event;
     if (QGesture *swipe = event->gesture(Qt::SwipeGesture))
         swipeTriggered(static_cast<QSwipeGesture *>(swipe));
     else if (QGesture *pan = event->gesture(Qt::PanGesture))
@@ -132,26 +134,26 @@ void ImageWidget::panTriggered(QPanGesture *gesture)
     }
 #endif
     QPointF delta = gesture->delta();
-    qCDebug(lcExample) << "panTriggered():" << delta;
+    qCDebug(lcExample) << "panTriggered():" << gesture;
     horizontalOffset += delta.x();
     verticalOffset += delta.y();
     update();
 }
 
+//! [pinch function]
 void ImageWidget::pinchTriggered(QPinchGesture *gesture)
 {
     QPinchGesture::ChangeFlags changeFlags = gesture->changeFlags();
     if (changeFlags & QPinchGesture::RotationAngleChanged) {
-        const qreal value = gesture->property("rotationAngle").toReal();
-        const qreal lastValue = gesture->property("lastRotationAngle").toReal();
-        const qreal rotationAngleDelta = value - lastValue;
-        rotationAngle += rotationAngleDelta;
-        qCDebug(lcExample) << "pinchTriggered(): rotation by" << rotationAngleDelta << rotationAngle;
+        qreal rotationDelta = gesture->rotationAngle() - gesture->lastRotationAngle();
+        rotationAngle += rotationDelta;
+        qCDebug(lcExample) << "pinchTriggered(): rotate by" <<
+            rotationDelta << "->" << rotationAngle;
     }
     if (changeFlags & QPinchGesture::ScaleFactorChanged) {
-        qreal value = gesture->property("scaleFactor").toReal();
-        currentStepScaleFactor = value;
-        qCDebug(lcExample) << "pinchTriggered(): " << currentStepScaleFactor;
+        currentStepScaleFactor = gesture->totalScaleFactor();
+        qCDebug(lcExample) << "pinchTriggered(): zoom by" <<
+            gesture->scaleFactor() << "->" << currentStepScaleFactor;
     }
     if (gesture->state() == Qt::GestureFinished) {
         scaleFactor *= currentStepScaleFactor;
@@ -159,6 +161,7 @@ void ImageWidget::pinchTriggered(QPinchGesture *gesture)
     }
     update();
 }
+//! [pinch function]
 
 //! [swipe function]
 void ImageWidget::swipeTriggered(QSwipeGesture *gesture)

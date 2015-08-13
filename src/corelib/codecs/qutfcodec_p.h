@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Intel Corporation
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -305,11 +305,11 @@ class QUtf8Codec : public QTextCodec {
 public:
     ~QUtf8Codec();
 
-    QByteArray name() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 
-    QString convertToUnicode(const char *, int, ConverterState *) const;
-    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const;
+    QString convertToUnicode(const char *, int, ConverterState *) const Q_DECL_OVERRIDE;
+    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const Q_DECL_OVERRIDE;
     void convertToUnicode(QString *target, const char *, int, ConverterState *) const;
 };
 
@@ -319,12 +319,12 @@ public:
     QUtf16Codec() { e = DetectEndianness; }
     ~QUtf16Codec();
 
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 
-    QString convertToUnicode(const char *, int, ConverterState *) const;
-    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const;
+    QString convertToUnicode(const char *, int, ConverterState *) const Q_DECL_OVERRIDE;
+    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const Q_DECL_OVERRIDE;
 
 protected:
     DataEndianness e;
@@ -333,17 +333,17 @@ protected:
 class QUtf16BECodec : public QUtf16Codec {
 public:
     QUtf16BECodec() : QUtf16Codec() { e = BigEndianness; }
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 };
 
 class QUtf16LECodec : public QUtf16Codec {
 public:
     QUtf16LECodec() : QUtf16Codec() { e = LittleEndianness; }
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 };
 
 class QUtf32Codec : public QTextCodec {
@@ -351,12 +351,12 @@ public:
     QUtf32Codec() { e = DetectEndianness; }
     ~QUtf32Codec();
 
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 
-    QString convertToUnicode(const char *, int, ConverterState *) const;
-    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const;
+    QString convertToUnicode(const char *, int, ConverterState *) const Q_DECL_OVERRIDE;
+    QByteArray convertFromUnicode(const QChar *, int, ConverterState *) const Q_DECL_OVERRIDE;
 
 protected:
     DataEndianness e;
@@ -365,17 +365,17 @@ protected:
 class QUtf32BECodec : public QUtf32Codec {
 public:
     QUtf32BECodec() : QUtf32Codec() { e = BigEndianness; }
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 };
 
 class QUtf32LECodec : public QUtf32Codec {
 public:
     QUtf32LECodec() : QUtf32Codec() { e = LittleEndianness; }
-    QByteArray name() const;
-    QList<QByteArray> aliases() const;
-    int mibEnum() const;
+    QByteArray name() const Q_DECL_OVERRIDE;
+    QList<QByteArray> aliases() const Q_DECL_OVERRIDE;
+    int mibEnum() const Q_DECL_OVERRIDE;
 };
 
 

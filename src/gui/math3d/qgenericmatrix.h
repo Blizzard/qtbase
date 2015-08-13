@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,7 +46,7 @@ class QGenericMatrix
 {
 public:
     QGenericMatrix();
-    QGenericMatrix(const QGenericMatrix<N, M, T>& other);
+    explicit QGenericMatrix(Qt::Initialization) {}
     explicit QGenericMatrix(const T *values);
 
     const T& operator()(int row, int column) const;
@@ -57,7 +57,7 @@ public:
 
     void fill(T value);
 
-    QGenericMatrix<M, N, T> transposed() const;
+    QGenericMatrix<M, N, T> transposed() const Q_REQUIRED_RESULT;
 
     QGenericMatrix<N, M, T>& operator+=(const QGenericMatrix<N, M, T>& other);
     QGenericMatrix<N, M, T>& operator-=(const QGenericMatrix<N, M, T>& other);
@@ -92,8 +92,6 @@ private:
 #endif
     T m[N][M];    // Column-major order to match OpenGL.
 
-    explicit QGenericMatrix(int) {}       // Construct without initializing identity matrix.
-
 #if !defined(Q_NO_TEMPLATE_FRIENDS)
     template <int NN, int MM, typename TT>
     friend class QGenericMatrix;
@@ -104,14 +102,6 @@ template <int N, int M, typename T>
 Q_INLINE_TEMPLATE QGenericMatrix<N, M, T>::QGenericMatrix()
 {
     setToIdentity();
-}
-
-template <int N, int M, typename T>
-Q_INLINE_TEMPLATE QGenericMatrix<N, M, T>::QGenericMatrix(const QGenericMatrix<N, M, T>& other)
-{
-    for (int col = 0; col < N; ++col)
-        for (int row = 0; row < M; ++row)
-            m[col][row] = other.m[col][row];
 }
 
 template <int N, int M, typename T>
@@ -177,7 +167,7 @@ Q_OUTOFLINE_TEMPLATE void QGenericMatrix<N, M, T>::fill(T value)
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<M, N, T> QGenericMatrix<N, M, T>::transposed() const
 {
-    QGenericMatrix<M, N, T> result(1);
+    QGenericMatrix<M, N, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[row][col] = m[col][row];
@@ -245,7 +235,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T>& QGenericMatrix<N, M, T>::operator/
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator+(const QGenericMatrix<N, M, T>& m1, const QGenericMatrix<N, M, T>& m2)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = m1.m[col][row] + m2.m[col][row];
@@ -255,7 +245,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator+(const QGenericMatrix<N, M
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator-(const QGenericMatrix<N, M, T>& m1, const QGenericMatrix<N, M, T>& m2)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = m1.m[col][row] - m2.m[col][row];
@@ -265,7 +255,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator-(const QGenericMatrix<N, M
 template <int N, int M1, int M2, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<M1, M2, T> operator*(const QGenericMatrix<N, M2, T>& m1, const QGenericMatrix<M1, N, T>& m2)
 {
-    QGenericMatrix<M1, M2, T> result(1);
+    QGenericMatrix<M1, M2, T> result(Qt::Uninitialized);
     for (int row = 0; row < M2; ++row) {
         for (int col = 0; col < M1; ++col) {
             T sum(0.0f);
@@ -280,7 +270,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<M1, M2, T> operator*(const QGenericMatrix<N,
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator-(const QGenericMatrix<N, M, T>& matrix)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = -matrix.m[col][row];
@@ -290,7 +280,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator-(const QGenericMatrix<N, M
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator*(T factor, const QGenericMatrix<N, M, T>& matrix)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = matrix.m[col][row] * factor;
@@ -300,7 +290,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator*(T factor, const QGenericM
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator*(const QGenericMatrix<N, M, T>& matrix, T factor)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = matrix.m[col][row] * factor;
@@ -310,7 +300,7 @@ Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator*(const QGenericMatrix<N, M
 template <int N, int M, typename T>
 Q_OUTOFLINE_TEMPLATE QGenericMatrix<N, M, T> operator/(const QGenericMatrix<N, M, T>& matrix, T divisor)
 {
-    QGenericMatrix<N, M, T> result(1);
+    QGenericMatrix<N, M, T> result(Qt::Uninitialized);
     for (int row = 0; row < M; ++row)
         for (int col = 0; col < N; ++col)
             result.m[col][row] = matrix.m[col][row] / divisor;
@@ -340,6 +330,7 @@ typedef QGenericMatrix<4, 3, float> QMatrix4x3;
 template <int N, int M, typename T>
 QDebug operator<<(QDebug dbg, const QGenericMatrix<N, M, T> &m)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QGenericMatrix<" << N << ", " << M
         << ", " << QTypeInfo<T>::name()
         << ">(" << endl << qSetFieldWidth(10);
@@ -349,7 +340,7 @@ QDebug operator<<(QDebug dbg, const QGenericMatrix<N, M, T> &m)
         dbg << endl;
     }
     dbg << qSetFieldWidth(0) << ')';
-    return dbg.space();
+    return dbg;
 }
 
 #endif

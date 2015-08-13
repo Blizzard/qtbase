@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -163,7 +163,7 @@ Q_GLOBAL_STATIC(QGLSignalProxy, theSignalProxy)
 QGLSignalProxy *QGLSignalProxy::instance()
 {
     QGLSignalProxy *proxy = theSignalProxy();
-    if (proxy && proxy->thread() != qApp->thread()) {
+    if (proxy && qApp && proxy->thread() != qApp->thread()) {
         if (proxy->thread() == QThread::currentThread())
             proxy->moveToThread(qApp->thread());
     }
@@ -509,6 +509,35 @@ void QGLContextPrivate::setupSharing() {
         QGLContextGroup::addShare(q, actualSharedContext);
     }
 }
+
+void QGLContextPrivate::refreshCurrentFbo()
+{
+    QOpenGLContextPrivate *guiGlContextPrivate =
+        guiGlContext ? QOpenGLContextPrivate::get(guiGlContext) : 0;
+
+    // if QOpenGLFramebufferObjects have been used in the mean-time, we've lost our cached value
+    if (guiGlContextPrivate && guiGlContextPrivate->qgl_current_fbo_invalid) {
+        GLint current;
+        QOpenGLFunctions *funcs = qgl_functions();
+        funcs->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current);
+
+        current_fbo = current;
+
+        guiGlContextPrivate->qgl_current_fbo_invalid = false;
+    }
+}
+
+void QGLContextPrivate::setCurrentFbo(GLuint fbo)
+{
+    current_fbo = fbo;
+
+    QOpenGLContextPrivate *guiGlContextPrivate =
+        guiGlContext ? QOpenGLContextPrivate::get(guiGlContext) : 0;
+
+    if (guiGlContextPrivate)
+        guiGlContextPrivate->qgl_current_fbo_invalid = false;
+}
+
 
 /*!
     \fn bool QGLFormat::doubleBuffer() const
@@ -1586,6 +1615,7 @@ QDebug operator<<(QDebug dbg, const QGLFormat &f)
 {
     const QGLFormatPrivate * const d = f.d;
 
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QGLFormat("
                   << "options " << d->opts
                   << ", plane " << d->pln
@@ -1603,7 +1633,7 @@ QDebug operator<<(QDebug dbg, const QGLFormat &f)
                   << ", profile " << d->profile
                   << ')';
 
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -2283,7 +2313,7 @@ static void convertToGLFormatHelper(QImage &dst, const QImage &img, GLenum textu
         qreal sy = target_height / qreal(img.height());
 
         quint32 *dest = (quint32 *) dst.scanLine(0); // NB! avoid detach here
-        uchar *srcPixels = (uchar *) img.scanLine(img.height() - 1);
+        const uchar *srcPixels = img.constScanLine(img.height() - 1);
         int sbpl = img.bytesPerLine();
         int dbpl = dst.bytesPerLine();
 
@@ -4877,6 +4907,9 @@ void QGLWidget::renderText(double x, double y, double z, const QString &str, con
         GLdouble win_x = 0, win_y = 0, win_z = 0;
         qgluProject(x, y, z, &model[0], &proj[0], &view[0],
                     &win_x, &win_y, &win_z);
+        const int dpr = d->glcx->device()->devicePixelRatio();
+        win_x /= dpr;
+        win_y /= dpr;
         win_y = height - win_y; // y is inverted
 
         QPaintEngine *engine = paintEngine();
@@ -4905,7 +4938,7 @@ void QGLWidget::renderText(double x, double y, double z, const QString &str, con
         } else if (use_scissor_testing) {
             funcs->glEnable(GL_SCISSOR_TEST);
         }
-        funcs->glViewport(0, 0, width, height);
+        funcs->glViewport(0, 0, width * dpr, height * dpr);
         gl1funcs->glAlphaFunc(GL_GREATER, 0.0);
         funcs->glEnable(GL_ALPHA_TEST);
         if (use_depth_testing)

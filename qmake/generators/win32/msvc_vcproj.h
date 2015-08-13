@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -49,7 +49,6 @@ class QUuid;
 struct VcsolutionDepend;
 class VcprojGenerator : public Win32MakefileGenerator
 {
-    bool init_flag;
     bool is64Bit;
     bool writeVcprojParts(QTextStream &);
 
@@ -77,18 +76,14 @@ protected:
     virtual VCProjectWriter *createProjectWriter();
     virtual bool doDepends() const { return false; } //never necesary
     virtual void processSources() { filterIncludedFiles("SOURCES"); filterIncludedFiles("GENERATED_SOURCES"); }
-    virtual QString replaceExtraCompilerVariables(const QString &, const QStringList &, const QStringList &);
-    inline QString replaceExtraCompilerVariables(const QString &val, const QString &in, const QString &out)
-    { return MakefileGenerator::replaceExtraCompilerVariables(val, in, out); }
+    using Win32MakefileGenerator::replaceExtraCompilerVariables;
+    virtual QString replaceExtraCompilerVariables(const QString &, const QStringList &, const QStringList &, ReplaceFor);
     virtual bool supportsMetaBuild() { return true; }
     virtual bool supportsMergedBuilds() { return true; }
     virtual bool mergeBuildProject(MakefileGenerator *other);
 
     virtual bool openOutput(QFile &file, const QString &build) const;
-    virtual void outputVariables();
-    QString fixFilename(QString ofile) const;
 
-    void initOld();
     virtual void initProject();
     void initConfiguration();
     void initCompilerTool();
@@ -111,9 +106,9 @@ protected:
     void initFormFiles();
     void initResourceFiles();
     void initDeploymentFiles();
+    void initDistributionFiles();
     void initLexYaccFiles();
     void initExtraCompilerOutputs();
-    void initWMAppManifest();
 
     void writeSubDirs(QTextStream &t); // Called from VCXProj backend
     QUuid getProjectUUID(const QString &filename=QString()); // Called from VCXProj backend
@@ -138,6 +133,8 @@ private:
     QUuid increaseUUID(const QUuid &id);
     QString retrievePlatformToolSet() const;
     bool isStandardSuffix(const QString &suffix) const;
+    ProString firstInputFileName(const ProString &extraCompilerName) const;
+    QString firstExpandedOutputFileName(const ProString &extraCompilerName);
     friend class VCFilter;
 };
 

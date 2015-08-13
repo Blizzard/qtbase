@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Intel Corporation.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -82,7 +82,7 @@
     For the convenience of generating encoded URL strings or query
     strings, there are two static functions called
     fromPercentEncoding() and toPercentEncoding() which deal with
-    percent encoding and decoding of QStrings.
+    percent encoding and decoding of QString objects.
 
     Calling isRelative() will tell whether or not the URL is
     relative. A relative URL can be resolved by passing it as argument
@@ -172,7 +172,7 @@
                        setters setting components of a URL; it is not permitted in
                        the QUrl constructor, in fromEncoded() or in setUrl().
                        For more information on this mode, see the documentation for
-                       QUrl::FullyDecoded.
+                       \l {QUrl::ComponentFormattingOption}{QUrl::FullyDecoded}.
 
     In TolerantMode, the parser has the following behaviour:
 
@@ -403,6 +403,7 @@
 #include "qdebug.h"
 #include "qhash.h"
 #include "qdir.h"         // for QDir::fromNativeSeparators
+#include "qdatastream.h"
 #include "qtldurl_p.h"
 #include "private/qipaddress_p.h"
 #include "qurlquery.h"
@@ -427,6 +428,16 @@ static inline QString ftpScheme()
 static inline QString fileScheme()
 {
     return QStringLiteral("file");
+}
+
+static inline QString webDavScheme()
+{
+    return QStringLiteral("webdavs");
+}
+
+static inline QString webDavSslTag()
+{
+    return QStringLiteral("@SSL");
 }
 
 #ifdef Q_COMPILER_CLASS_ENUM
@@ -992,10 +1003,15 @@ inline bool QUrlPrivate::setScheme(const QString &value, int len, bool doSetErro
     }
 
     // did we set to the file protocol?
-    if (scheme == fileScheme())
+    if (scheme == fileScheme()
+#ifdef Q_OS_WIN
+        || scheme == webDavScheme()
+#endif
+       ) {
         flags |= IsLocalFile;
-    else
+    } else {
         flags &= ~IsLocalFile;
+    }
     return true;
 }
 
@@ -3067,6 +3083,21 @@ bool QUrl::hasFragment() const
     URL does not contain a valid TLD, in which case the function returns
     an empty string.
 
+    Note that this function considers a TLD to be any domain that allows users
+    to register subdomains under, including many home, dynamic DNS websites and
+    blogging providers. This is useful for determining whether two websites
+    belong to the same infrastructure and communication should be allowed, such
+    as browser cookies: two domains should be considered part of the same
+    website if they share at least one label in addition to the value
+    returned by this function.
+
+    \list
+      \li \c{foo.co.uk} and \c{foo.com} do not share a top-level domain
+      \li \c{foo.co.uk} and \c{bar.co.uk} share the \c{.co.uk} domain, but the next label is different
+      \li \c{www.foo.co.uk} and \c{ftp.foo.co.uk} share the same top-level domain and one more label,
+          so they are considered part of the same site
+    \endlist
+
     If \a options includes EncodeUnicode, the returned string will be in
     ASCII Compatible Encoding.
 */
@@ -3739,7 +3770,7 @@ QUrl QUrl::fromLocalFile(const QString &localFile)
     QUrl url;
     if (localFile.isEmpty())
         return url;
-    url.setScheme(fileScheme());
+    QString scheme = fileScheme();
     QString deslashified = QDir::fromNativeSeparators(localFile);
 
     // magic for drives on windows
@@ -3748,13 +3779,21 @@ QUrl QUrl::fromLocalFile(const QString &localFile)
     } else if (deslashified.startsWith(QLatin1String("//"))) {
         // magic for shared drive on windows
         int indexOfPath = deslashified.indexOf(QLatin1Char('/'), 2);
-        url.setHost(deslashified.mid(2, indexOfPath - 2));
+        QString hostSpec = deslashified.mid(2, indexOfPath - 2);
+        // Check for Windows-specific WebDAV specification: "//host@SSL/path".
+        if (hostSpec.endsWith(webDavSslTag(), Qt::CaseInsensitive)) {
+            hostSpec.chop(4);
+            scheme = webDavScheme();
+        }
+        url.setHost(hostSpec);
+
         if (indexOfPath > 2)
             deslashified = deslashified.right(deslashified.length() - indexOfPath);
         else
             deslashified.clear();
     }
 
+    url.setScheme(scheme);
     url.setPath(deslashified, DecodedMode);
     return url;
 }
@@ -3784,8 +3823,14 @@ QString QUrl::toLocalFile() const
 
     // magic for shared drive on windows
     if (!d->host.isEmpty()) {
-        tmp = QStringLiteral("//") + host() + (ourPath.length() > 0 && ourPath.at(0) != QLatin1Char('/')
-                                               ? QLatin1Char('/') + ourPath :  ourPath);
+        tmp = QStringLiteral("//") + host();
+#ifdef Q_OS_WIN // QTBUG-42346, WebDAV is visible as local file on Windows only.
+        if (scheme() == webDavScheme())
+            tmp += webDavSslTag();
+#endif
+        if (!ourPath.isEmpty() && !ourPath.startsWith(QLatin1Char('/')))
+            tmp += QLatin1Char('/');
+        tmp += ourPath;
     } else {
         tmp = ourPath;
 #ifdef Q_OS_WIN
@@ -3874,8 +3919,9 @@ QDataStream &operator>>(QDataStream &in, QUrl &url)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug d, const QUrl &url)
 {
-    d.maybeSpace() << "QUrl(" << url.toDisplayString() << ')';
-    return d.space();
+    QDebugStateSaver saver(d);
+    d.nospace() << "QUrl(" << url.toDisplayString() << ')';
+    return d;
 }
 #endif
 
@@ -4010,7 +4056,7 @@ QString QUrl::errorString() const
 /*!
     \since 5.1
 
-    Converts a list of \a urls into a list of QStrings, using toString(\a options).
+    Converts a list of \a urls into a list of QString objects, using toString(\a options).
 */
 QStringList QUrl::toStringList(const QList<QUrl> &urls, FormattingOptions options)
 {
@@ -4098,7 +4144,7 @@ modification, are permitted provided that the following conditions are met:
       notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
     * Neither the name of Research In Motion Limited nor the
-      names of its contributors may be used to endorse or promote products
+      contributors may be used to endorse or promote products derived
       derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY Research In Motion Limited ''AS IS'' AND ANY

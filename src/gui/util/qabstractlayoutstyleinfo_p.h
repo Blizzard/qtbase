@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -53,13 +53,8 @@ QT_BEGIN_NAMESPACE
 
 class Q_GUI_EXPORT QAbstractLayoutStyleInfo {
 public:
-    typedef enum {
-        Unknown = 0,
-        Changed,
-        Unchanged
-    } ChangedState;
 
-    QAbstractLayoutStyleInfo() : m_isWindow(false), m_changed(Changed) {}
+    QAbstractLayoutStyleInfo() : m_isWindow(false) {}
     virtual ~QAbstractLayoutStyleInfo() {}
     virtual qreal combinedLayoutSpacing(QLayoutPolicy::ControlTypes /*controls1*/,
                                         QLayoutPolicy::ControlTypes /*controls2*/, Qt::Orientation /*orientation*/) const {
@@ -74,15 +69,9 @@ public:
 
     virtual qreal spacing(Qt::Orientation orientation) const = 0;
 
-    virtual bool hasChangedCore() const = 0;
+    virtual bool hasChangedCore() const { return false; }   // ### Remove when usage is gone from subclasses
 
-    void updateChanged(ChangedState change) {
-        m_changed = change;
-    }
-
-    bool hasChanged() const;
-
-    virtual void invalidate() { updateChanged(Changed);}
+    virtual void invalidate() { }
 
     virtual qreal windowMargin(Qt::Orientation orientation) const = 0;
 
@@ -92,7 +81,9 @@ public:
 
 protected:
     unsigned m_isWindow : 1;
-    mutable unsigned m_changed : 2;
+    mutable unsigned m_hSpacingState: 2;
+    mutable unsigned m_vSpacingState: 2;
+    mutable qreal m_spacing[2];
 };
 
 QT_END_NAMESPACE

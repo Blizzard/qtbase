@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -71,25 +71,25 @@ public:
     QGraphicsSceneBspTreeIndex(QGraphicsScene *scene = 0);
     ~QGraphicsSceneBspTreeIndex();
 
-    QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const;
-    QList<QGraphicsItem *> estimateTopLevelItems(const QRectF &rect, Qt::SortOrder order) const;
-    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const;
+    QList<QGraphicsItem *> estimateItems(const QRectF &rect, Qt::SortOrder order) const Q_DECL_OVERRIDE;
+    QList<QGraphicsItem *> estimateTopLevelItems(const QRectF &rect, Qt::SortOrder order) const Q_DECL_OVERRIDE;
+    QList<QGraphicsItem *> items(Qt::SortOrder order = Qt::DescendingOrder) const Q_DECL_OVERRIDE;
 
     int bspTreeDepth() const;
     void setBspTreeDepth(int depth);
 
 protected Q_SLOTS:
-    void updateSceneRect(const QRectF &rect);
+    void updateSceneRect(const QRectF &rect) Q_DECL_OVERRIDE;
 
 protected:
-    bool event(QEvent *event);
-    void clear();
+    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    void clear() Q_DECL_OVERRIDE;
 
-    void addItem(QGraphicsItem *item);
-    void removeItem(QGraphicsItem *item);
-    void prepareBoundingRectChange(const QGraphicsItem *item);
+    void addItem(QGraphicsItem *item) Q_DECL_OVERRIDE;
+    void removeItem(QGraphicsItem *item) Q_DECL_OVERRIDE;
+    void prepareBoundingRectChange(const QGraphicsItem *item) Q_DECL_OVERRIDE;
 
-    void itemChange(const QGraphicsItem *item, QGraphicsItem::GraphicsItemChange change, const void *const value);
+    void itemChange(const QGraphicsItem *item, QGraphicsItem::GraphicsItemChange change, const void *const value) Q_DECL_OVERRIDE;
 
 private :
     Q_DECLARE_PRIVATE(QGraphicsSceneBspTreeIndex)

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,7 +33,7 @@
 
 #include "qdbusservicewatcher.h"
 #include "qdbusconnection.h"
-#include "qdbus_symbols_p.h"
+#include "qdbusutil_p.h"
 
 #include <QStringList>
 
@@ -42,10 +42,6 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
-
-Q_GLOBAL_STATIC_WITH_ARGS(QString, busService, (QLatin1String(DBUS_SERVICE_DBUS)))
-Q_GLOBAL_STATIC_WITH_ARGS(QString, busInterface, (QLatin1String(DBUS_INTERFACE_DBUS)))
-Q_GLOBAL_STATIC_WITH_ARGS(QString, signalName, (QLatin1String("NameOwnerChanged")))
 
 class QDBusServiceWatcherPrivate: public QObjectPrivate
 {
@@ -120,7 +116,7 @@ QStringList QDBusServiceWatcherPrivate::matchArgsForService(const QString &servi
 void QDBusServiceWatcherPrivate::addService(const QString &service)
 {
     QStringList matchArgs = matchArgsForService(service);
-    connection.connect(*busService(), QString(), *busInterface(), *signalName(),
+    connection.connect(QDBusUtil::dbusService(), QString(), QDBusUtil::dbusInterface(), QDBusUtil::nameOwnerChanged(),
                        matchArgs, QString(), q_func(),
                        SLOT(_q_serviceOwnerChanged(QString,QString,QString)));
 }
@@ -128,7 +124,7 @@ void QDBusServiceWatcherPrivate::addService(const QString &service)
 void QDBusServiceWatcherPrivate::removeService(const QString &service)
 {
     QStringList matchArgs = matchArgsForService(service);
-    connection.disconnect(*busService(), QString(), *busInterface(), *signalName(),
+    connection.disconnect(QDBusUtil::dbusService(), QString(), QDBusUtil::dbusInterface(), QDBusUtil::nameOwnerChanged(),
                           matchArgs, QString(), q_func(),
                           SLOT(_q_serviceOwnerChanged(QString,QString,QString)));
 }

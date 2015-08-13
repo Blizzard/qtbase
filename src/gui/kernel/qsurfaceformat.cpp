@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -128,6 +128,10 @@ public:
     \value DeprecatedFunctions Used to request that deprecated functions be included
         in the OpenGL context profile. If not specified, you should get a forward compatible context
         without support functionality marked as deprecated. This requires OpenGL version 3.0 or higher.
+    \value ResetNotification Enables notifications about resets of the OpenGL context. The status is then
+        queryable via the context's \l{QOpenGLContext::isValid()}{isValid()} function. Note that not setting
+        this flag does not guarantee that context state loss never occurs. Additionally, some implementations
+        may choose to report context loss regardless of this flag.
 */
 
 /*!
@@ -181,7 +185,7 @@ public:
     in the set OpenGL version you can use the QSurfaceFormat format option
     QSurfaceFormat::DeprecatedFunctions.
 
-    \value NoProfile            OpenGL version is lower than 3.2.
+    \value NoProfile            OpenGL version is lower than 3.2. For 3.2 and newer this is same as CoreProfile.
     \value CoreProfile          Functionality deprecated in OpenGL version 3.0 is not available.
     \value CompatibilityProfile Functionality from earlier OpenGL versions is available.
 */
@@ -308,6 +312,7 @@ void QSurfaceFormat::setSamples(int numSamples)
     }
 }
 
+#if QT_DEPRECATED_SINCE(5, 2)
 /*!
     \obsolete
     \overload
@@ -343,6 +348,7 @@ bool QSurfaceFormat::testOption(QSurfaceFormat::FormatOptions opt) const
 {
     return d->opts & opt;
 }
+#endif // QT_DEPRECATED_SINCE(5, 2)
 
 /*!
     \since 5.3
@@ -741,6 +747,12 @@ Q_GLOBAL_STATIC(QSurfaceFormat, qt_default_surface_format)
     and surfaces, even the ones created internally by Qt, will use the same
     format.
 
+    \note When setting Qt::AA_ShareOpenGLContexts, it is strongly recommended to
+    place the call to this function before the construction of the
+    QGuiApplication or QApplication. Otherwise \a format will not be applied to
+    the global share context and therefore issues may arise with context sharing
+    afterwards.
+
     \since 5.4
     \sa defaultFormat()
  */
@@ -800,6 +812,7 @@ bool operator!=(const QSurfaceFormat& a, const QSurfaceFormat& b)
 QDebug operator<<(QDebug dbg, const QSurfaceFormat &f)
 {
     const QSurfaceFormatPrivate * const d = f.d;
+    QDebugStateSaver saver(dbg);
 
     dbg.nospace() << "QSurfaceFormat("
                   << "version " << d->major << '.' << d->minor
@@ -816,7 +829,7 @@ QDebug operator<<(QDebug dbg, const QSurfaceFormat &f)
                   << ", profile  " << d->profile
                   << ')';
 
-    return dbg.space();
+    return dbg;
 }
 #endif
 

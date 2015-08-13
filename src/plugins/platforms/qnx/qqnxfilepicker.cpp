@@ -1,7 +1,7 @@
 /***************************************************************************
 **
 ** Copyright (C) 2013 Research In Motion
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -54,6 +54,8 @@
 #else
 #define qFilePickerDebug QT_NO_QDEBUG_MACRO
 #endif
+
+QT_BEGIN_NAMESPACE
 
 static const char s_filePickerTarget[] = "sys.filepicker.target";
 
@@ -127,13 +129,7 @@ void QQnxFilePicker::open()
         map[QStringLiteral("Filter")] = m_filters.join(QLatin1Char(';'));
 
     QByteArray ppsData;
-#if defined(Q_OS_BLACKBERRY_TABLET)
-    QJsonDocument document;
-    document.setObject(QJsonObject::fromVariantMap(map));
-    ppsData = document.toJson(QJsonDocument::Compact);
-#else
     ppsData = QPpsObject::encode(map);
-#endif
 
     errorCode = navigator_invoke_invocation_set_data(m_invocationHandle, ppsData.constData(), ppsData.size());
     if (errorCode != BPS_SUCCESS) {
@@ -322,3 +318,5 @@ QString QQnxFilePicker::modeToString(QQnxFilePicker::Mode mode) const
 
     return QStringLiteral("Picker");
 }
+
+QT_END_NAMESPACE

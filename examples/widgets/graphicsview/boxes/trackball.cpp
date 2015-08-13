@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the demonstration applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,6 +33,7 @@
 
 #include "trackball.h"
 #include "scene.h"
+#include <cmath>
 
 //============================================================================//
 //                                  TrackBall                                 //
@@ -94,19 +95,19 @@ void TrackBall::move(const QPointF& p, const QQuaternion &transformation)
             QVector3D lastPos3D = QVector3D(m_lastPos.x(), m_lastPos.y(), 0.0f);
             float sqrZ = 1 - QVector3D::dotProduct(lastPos3D, lastPos3D);
             if (sqrZ > 0)
-                lastPos3D.setZ(sqrt(sqrZ));
+                lastPos3D.setZ(std::sqrt(sqrZ));
             else
                 lastPos3D.normalize();
 
             QVector3D currentPos3D = QVector3D(p.x(), p.y(), 0.0f);
             sqrZ = 1 - QVector3D::dotProduct(currentPos3D, currentPos3D);
             if (sqrZ > 0)
-                currentPos3D.setZ(sqrt(sqrZ));
+                currentPos3D.setZ(std::sqrt(sqrZ));
             else
                 currentPos3D.normalize();
 
             m_axis = QVector3D::crossProduct(lastPos3D, currentPos3D);
-            float angle = 180 / PI * asin(sqrt(QVector3D::dotProduct(m_axis, m_axis)));
+            float angle = 180 / PI * std::asin(std::sqrt(QVector3D::dotProduct(m_axis, m_axis)));
 
             m_angularVelocity = angle / msecs;
             m_axis.normalize();

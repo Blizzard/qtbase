@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -66,6 +66,7 @@ struct QDrawHelperGammaTables;
 #ifndef QT_NO_DRAGANDDROP
 class QDrag;
 #endif // QT_NO_DRAGANDDROP
+class QInputDeviceManager;
 
 class Q_GUI_EXPORT QGuiApplicationPrivate : public QCoreApplicationPrivate
 {
@@ -81,7 +82,7 @@ public:
     virtual void notifyLayoutDirectionChange();
     virtual void notifyActiveWindowChange(QWindow *previous);
 
-    virtual bool shouldQuit();
+    virtual bool shouldQuit() Q_DECL_OVERRIDE;
 
     bool shouldQuitInternal(const QWindowList &processedWindows);
     virtual bool tryCloseAllWindows();
@@ -189,8 +190,6 @@ public:
     static void updateBlockedStatus(QWindow *window);
     virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = 0) const;
 
-    static bool synthesizeMouseFromTouchEventsEnabled();
-
     static Qt::MouseButtons buttons;
     static ulong mousePressTime;
     static Qt::MouseButton mousePressButton;
@@ -201,6 +200,7 @@ public:
     static Qt::MouseButtons tabletState;
     static QWindow *tabletPressTarget;
     static QWindow *currentMouseWindow;
+    static QWindow *currentMousePressWindow;
     static Qt::ApplicationState applicationState;
 
 #ifndef QT_NO_CLIPBOARD
@@ -219,9 +219,8 @@ public:
 
     static QFont *app_font;
 
-    QStyleHints *styleHints;
+    static QStyleHints *styleHints;
     static bool obey_desktop_settings;
-    static bool noGrab;
     QInputMethod *inputMethod;
 
     QString firstWindowTitle;
@@ -271,6 +270,8 @@ public:
     static Qt::MouseEventFlags mouseEventFlags(const QMouseEvent *event);
     static void setMouseEventFlags(QMouseEvent *event, Qt::MouseEventFlags flags);
 
+    static QInputDeviceManager *inputDeviceManager();
+
     const QDrawHelperGammaTables *gammaTables();
 
     // hook reimplemented in QApplication to apply the QStyle function on the QIcon
@@ -278,7 +279,7 @@ public:
 
     virtual void notifyWindowIconChanged();
 
-    static QRect applyWindowGeometrySpecification(const QRect &windowGeometry, const QWindow *window);
+    static void applyWindowGeometrySpecificationTo(QWindow *window);
 
     static void setApplicationState(Qt::ApplicationState state, bool forcePropagate = false);
 
@@ -300,6 +301,8 @@ private:
     QAtomicPointer<QDrawHelperGammaTables> m_gammaTables;
 
     bool ownGlobalShareContext;
+
+    static QInputDeviceManager *m_inputDeviceManager;
 };
 
 Q_GUI_EXPORT uint qHash(const QGuiApplicationPrivate::ActiveTouchPointsKey &k);

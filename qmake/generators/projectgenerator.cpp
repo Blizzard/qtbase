@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -55,17 +55,14 @@ QString project_builtin_regx() //calculate the builtin regular expression..
     return ret;
 }
 
-ProjectGenerator::ProjectGenerator() : MakefileGenerator(), init_flag(false)
+ProjectGenerator::ProjectGenerator() : MakefileGenerator()
 {
 }
 
 void
 ProjectGenerator::init()
 {
-    if(init_flag)
-        return;
     int file_count = 0;
-    init_flag = true;
     verifyCompilers();
 
     project->loadSpec();
@@ -311,7 +308,7 @@ ProjectGenerator::init()
         for (ProStringList::ConstIterator it2 = tmp.begin(); it2 != tmp.end(); ++it2) {
             ProStringList &inputs = project->values((*it2).toKey());
             for (ProStringList::Iterator input = inputs.begin(); input != inputs.end(); ++input) {
-                QString path = replaceExtraCompilerVariables(tmp_out, (*input).toQString(), QString());
+                QString path = replaceExtraCompilerVariables(tmp_out, (*input).toQString(), QString(), NoShell);
                 path = fixPathToQmake(path).section('/', -1);
                 for(int i = 0; i < var_out.size(); ++i) {
                     ProString v = var_out.at(i);
@@ -382,7 +379,7 @@ ProjectGenerator::addConfig(const QString &cfg, bool add)
 bool
 ProjectGenerator::addFile(QString file)
 {
-    file = fileFixify(file, qmake_getpwd());
+    file = fileFixify(file, FileFixifyToIndir);
     QString dir;
     int s = file.lastIndexOf(Option::dir_sep);
     if(s != -1)
@@ -491,7 +488,7 @@ ProjectGenerator::fixPathToQmake(const QString &file)
 {
     QString ret = file;
     if(Option::dir_sep != QLatin1String("/"))
-        ret = ret.replace(Option::dir_sep, QLatin1String("/"));
+        ret.replace(Option::dir_sep, QLatin1String("/"));
     return ret;
 }
 

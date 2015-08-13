@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -40,7 +40,7 @@
 
 #include <QtWidgets>
 
-#include <math.h>
+#include <cmath>
 #include <stdlib.h>
 
 #include "basictoolsplugin.h"
@@ -139,8 +139,8 @@ QPainterPath BasicToolsPlugin::generateShape(const QString &shape,
     } else if (shape == tr("Star")) {
         path.moveTo(90, 50);
         for (int i = 1; i < 5; ++i) {
-            path.lineTo(50 + 40 * cos(0.8 * i * Pi),
-                        50 + 40 * sin(0.8 * i * Pi));
+            path.lineTo(50 + 40 * std::cos(0.8 * i * Pi),
+                        50 + 40 * std::sin(0.8 * i * Pi));
         }
         path.closeSubpath();
     } else if (shape == tr("Text...")) {

@@ -9,6 +9,7 @@ SUBDIRS=\
     qmetamethod \
     qmetaproperty \
     qmetatype \
+    qmetaenum \
     qmimedata \
     qobject \
     qpointer \
@@ -37,4 +38,4 @@ SUBDIRS=\
 # This test is only applicable on Windows
 !win32*|winrt: SUBDIRS -= qwineventnotifier
 
-android|qnx: SUBDIRS -= qsharedmemory qsystemsemaphore
+android|ios: SUBDIRS -= qsharedmemory qsystemsemaphore

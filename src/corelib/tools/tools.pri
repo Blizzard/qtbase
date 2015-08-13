@@ -57,6 +57,7 @@ HEADERS +=  \
         tools/qsize.h \
         tools/qstack.h \
         tools/qstring.h \
+        tools/qstringalgorithms_p.h \
         tools/qstringbuilder.h \
         tools/qstringiterator_p.h \
         tools/qstringlist.h \
@@ -66,6 +67,7 @@ HEADERS +=  \
         tools/qtimezone.h \
         tools/qtimezoneprivate_p.h \
         tools/qtimezoneprivate_data_p.h \
+        tools/qtools_p.h \
         tools/qelapsedtimer.h \
         tools/qunicodetables_p.h \
         tools/qunicodetools_p.h \
@@ -128,13 +130,19 @@ false: SOURCES += $$NO_PCH_SOURCES # Hack for QtCreator
     OBJECTIVE_SOURCES += tools/qlocale_mac.mm \
                          tools/qtimezoneprivate_mac.mm \
                          tools/qstring_mac.mm \
-                         tools/qbytearray_mac.mm
+                         tools/qbytearray_mac.mm \
+                         tools/qdatetime_mac.mm
 }
 else:blackberry {
     SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_blackberry.cpp tools/qtimezoneprivate_tz.cpp
     HEADERS += tools/qlocale_blackberry.h
 }
-else:unix:SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp tools/qtimezoneprivate_tz.cpp
+else:android {
+    SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp tools/qtimezoneprivate_android.cpp
+}
+else:unix {
+    SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp tools/qtimezoneprivate_tz.cpp
+}
 else:win32 {
     SOURCES += tools/qelapsedtimer_win.cpp tools/qlocale_win.cpp
     !winrt: SOURCES += tools/qtimezoneprivate_win.cpp
@@ -153,23 +161,12 @@ contains(QT_CONFIG, zlib) {
 }
 
 contains(QT_CONFIG,icu) {
+    include($$PWD/../../3rdparty/icu_dependency.pri)
+
     SOURCES += tools/qlocale_icu.cpp \
                tools/qcollator_icu.cpp \
                tools/qtimezoneprivate_icu.cpp
     DEFINES += QT_USE_ICU
-    win32 {
-        CONFIG(static, static|shared) {
-            CONFIG(debug, debug|release) {
-                LIBS_PRIVATE += -lsicuind -lsicuucd -lsicudtd
-            } else {
-                LIBS_PRIVATE += -lsicuin -lsicuuc -lsicudt
-            }
-        } else {
-            LIBS_PRIVATE += -licuin -licuuc -licudt
-        }
-    } else {
-        LIBS_PRIVATE += -licui18n -licuuc -licudata
-    }
 } else: win32 {
     SOURCES += tools/qcollator_win.cpp
 } else: macx {
@@ -179,14 +176,10 @@ contains(QT_CONFIG,icu) {
 }
 
 !contains(QT_DISABLED_FEATURES, regularexpression) {
+    include($$PWD/../../3rdparty/pcre_dependency.pri)
+
     HEADERS += tools/qregularexpression.h
     SOURCES += tools/qregularexpression.cpp
-
-    pcre {
-        include($$PWD/../../3rdparty/pcre.pri)
-    } else {
-        LIBS_PRIVATE += -lpcre16
-    }
 }
 
 INCLUDEPATH += ../3rdparty/harfbuzz/src
@@ -207,7 +200,7 @@ INCLUDEPATH += ../3rdparty/md5 \
                ../3rdparty/sha3
 
 # Note: libm should be present by default becaue this is C++
-!macx-icc:!vxworks:unix:LIBS_PRIVATE += -lm
+!macx-icc:!vxworks:!haiku:unix:LIBS_PRIVATE += -lm
 
 TR_EXCLUDE += ../3rdparty/*
 

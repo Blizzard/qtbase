@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,7 +38,7 @@
 
 #include <algorithm>
 
-#define EXAMPLE_URL "http://user:pass@www.example.com/#foo"
+#define EXAMPLE_URL "http://user:pass@localhost:4/#foo"
 //cached objects are organized into these many subdirs
 #define NUM_SUBDIRECTORIES 16
 
@@ -409,7 +409,7 @@ void tst_QNetworkDiskCache::accessAfterRemoveReadyReadSlot()
 void tst_QNetworkDiskCache::setCookieHeader() // QTBUG-41514
 {
     SubQNetworkDiskCache *cache = new SubQNetworkDiskCache();
-    url = QUrl("http://www.foo.com/cookieTest.html");
+    url = QUrl("http://localhost:4/cookieTest.html");   // hopefully no one is running an HTTP server on port 4
     QNetworkCacheMetaData metaData;
     metaData.setUrl(url);
 
@@ -518,7 +518,7 @@ void tst_QNetworkDiskCache::expire()
         if (i % 3 == 0)
             QTest::qWait(2000);
         QNetworkCacheMetaData m;
-        m.setUrl(QUrl("http://www.foo.com/" + QString::number(i)));
+        m.setUrl(QUrl("http://localhost:4/" + QString::number(i)));
         QIODevice *d = cache.prepare(m);
         QString bigString;
         bigString.fill(QLatin1Char('Z'), (1024 * 1024 / 4));
@@ -540,7 +540,7 @@ void tst_QNetworkDiskCache::expire()
     std::sort(cacheList.begin(), cacheList.end());
     for (int i = 0; i < cacheList.count(); ++i) {
         QString fileName = cacheList[i];
-        QCOMPARE(fileName, QString("http://www.foo.com/%1").arg(i + 6));
+        QCOMPARE(fileName, QString("http://localhost:4/%1").arg(i + 6));
     }
 }
 

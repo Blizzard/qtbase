@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -66,12 +66,9 @@ QT_BEGIN_NAMESPACE
 inline QPaintEngine::PaintEngineFeatures qt_pdf_decide_features()
 {
     QPaintEngine::PaintEngineFeatures f = QPaintEngine::AllFeatures;
-    f &= ~(QPaintEngine::PorterDuff | QPaintEngine::PerspectiveTransform
+    f &= ~(QPaintEngine::PorterDuff
+           | QPaintEngine::PerspectiveTransform
            | QPaintEngine::ObjectBoundingModeGradients
-#ifndef USE_NATIVE_GRADIENTS
-           | QPaintEngine::LinearGradientFill
-#endif
-           | QPaintEngine::RadialGradientFill
            | QPaintEngine::ConicalGradientFill);
     return f;
 }
@@ -387,7 +384,7 @@ QByteArray QPdf::generateDashes(const QPen &pen)
 
 
 
-static const char* pattern_for_brush[] = {
+static const char* const pattern_for_brush[] = {
     0, // NoBrush
     0, // SolidPattern
     "0 J\n"
@@ -548,189 +545,6 @@ QByteArray QPdf::patternForBrush(const QBrush &b)
     return pattern_for_brush[style];
 }
 
-#ifdef USE_NATIVE_GRADIENTS
-static void writeTriangleLine(uchar *&data, int xpos, int ypos, int xoff, int yoff, uint rgb, uchar flag, bool alpha)
-{
-    data[0] =  flag;
-    data[1] = (uchar)(xpos >> 16);
-    data[2] = (uchar)(xpos >> 8);
-    data[3] = (uchar)(xpos >> 0);
-    data[4] = (uchar)(ypos >> 16);
-    data[5] = (uchar)(ypos >> 8);
-    data[6] = (uchar)(ypos >> 0);
-    data += 7;
-    if (alpha) {
-        *data++ = (uchar)qAlpha(rgb);
-    } else {
-        *data++ = (uchar)qRed(rgb);
-        *data++ = (uchar)qGreen(rgb);
-        *data++ = (uchar)qBlue(rgb);
-    }
-    xpos += xoff;
-    ypos += yoff;
-    data[0] =  flag;
-    data[1] = (uchar)(xpos >> 16);
-    data[2] = (uchar)(xpos >> 8);
-    data[3] = (uchar)(xpos >> 0);
-    data[4] = (uchar)(ypos >> 16);
-    data[5] = (uchar)(ypos >> 8);
-    data[6] = (uchar)(ypos >> 0);
-    data += 7;
-    if (alpha) {
-        *data++ = (uchar)qAlpha(rgb);
-    } else {
-        *data++ = (uchar)qRed(rgb);
-        *data++ = (uchar)qGreen(rgb);
-        *data++ = (uchar)qBlue(rgb);
-    }
-}
-
-
-QByteArray QPdf::generateLinearGradientShader(const QLinearGradient *gradient, const QPointF *page_rect, bool alpha)
-{
-    // generate list of triangles with colors
-    QPointF start = gradient->start();
-    QPointF stop = gradient->finalStop();
-    QGradientStops stops = gradient->stops();
-    QPointF offset = stop - start;
-    QGradient::Spread spread = gradient->spread();
-
-    if (gradient->spread() == QGradient::ReflectSpread) {
-        offset *= 2;
-        for (int i = stops.size() - 2; i >= 0; --i) {
-            QGradientStop stop = stops.at(i);
-            stop.first = 2. - stop.first;
-            stops.append(stop);
-        }
-        for (int i = 0 ; i < stops.size(); ++i)
-            stops[i].first /= 2.;
-    }
-
-    QPointF orthogonal(offset.y(), -offset.x());
-    qreal length = offset.x()*offset.x() + offset.y()*offset.y();
-
-    // find the max and min values in offset and orth direction that are needed to cover
-    // the whole page
-    int off_min = INT_MAX;
-    int off_max = INT_MIN;
-    qreal ort_min = INT_MAX;
-    qreal ort_max = INT_MIN;
-    for (int i = 0; i < 4; ++i) {
-        qreal off = ((page_rect[i].x() - start.x()) * offset.x() + (page_rect[i].y() - start.y()) * offset.y())/length;
-        qreal ort = ((page_rect[i].x() - start.x()) * orthogonal.x() + (page_rect[i].y() - start.y()) * orthogonal.y())/length;
-        off_min = qMin(off_min, qFloor(off));
-        off_max = qMax(off_max, qCeil(off));
-        ort_min = qMin(ort_min, ort);
-        ort_max = qMax(ort_max, ort);
-    }
-    ort_min -= 1;
-    ort_max += 1;
-
-    start += off_min * offset + ort_min * orthogonal;
-    orthogonal *= (ort_max - ort_min);
-    int num = off_max - off_min;
-
-    QPointF gradient_rect[4] = { start,
-                                 start + orthogonal,
-                                 start + num*offset,
-                                 start + num*offset + orthogonal };
-    qreal xmin = gradient_rect[0].x();
-    qreal xmax = gradient_rect[0].x();
-    qreal ymin = gradient_rect[0].y();
-    qreal ymax = gradient_rect[0].y();
-    for (int i = 1; i < 4; ++i) {
-        xmin = qMin(xmin, gradient_rect[i].x());
-        xmax = qMax(xmax, gradient_rect[i].x());
-        ymin = qMin(ymin, gradient_rect[i].y());
-        ymax = qMax(ymax, gradient_rect[i].y());
-    }
-    xmin -= 1000;
-    xmax += 1000;
-    ymin -= 1000;
-    ymax += 1000;
-    start -= QPointF(xmin, ymin);
-    qreal factor_x = qreal(1<<24)/(xmax - xmin);
-    qreal factor_y = qreal(1<<24)/(ymax - ymin);
-    int xoff = (int)(orthogonal.x()*factor_x);
-    int yoff = (int)(orthogonal.y()*factor_y);
-
-    QByteArray triangles;
-    triangles.resize(spread == QGradient::PadSpread ? 20*(stops.size()+2) : 20*num*stops.size());
-    uchar *data = (uchar *) triangles.data();
-    if (spread == QGradient::PadSpread) {
-        if (off_min > 0 || off_max < 1) {
-            // linear gradient outside of page
-            const QGradientStop &current_stop = off_min > 0 ? stops.at(stops.size()-1) : stops.at(0);
-            uint rgb = current_stop.second.rgba();
-            int xpos = (int)(start.x()*factor_x);
-            int ypos = (int)(start.y()*factor_y);
-            writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, 0, alpha);
-            start += num*offset;
-            xpos = (int)(start.x()*factor_x);
-            ypos = (int)(start.y()*factor_y);
-            writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, 1, alpha);
-        } else {
-            int flag = 0;
-            if (off_min < 0) {
-                uint rgb = stops.at(0).second.rgba();
-                int xpos = (int)(start.x()*factor_x);
-                int ypos = (int)(start.y()*factor_y);
-                writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, flag, alpha);
-                start -= off_min*offset;
-                flag = 1;
-            }
-            for (int s = 0; s < stops.size(); ++s) {
-                const QGradientStop &current_stop = stops.at(s);
-                uint rgb = current_stop.second.rgba();
-                int xpos = (int)(start.x()*factor_x);
-                int ypos = (int)(start.y()*factor_y);
-                writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, flag, alpha);
-                if (s < stops.size()-1)
-                    start += offset*(stops.at(s+1).first - stops.at(s).first);
-                flag = 1;
-            }
-            if (off_max > 1) {
-                start += (off_max - 1)*offset;
-                uint rgb = stops.at(stops.size()-1).second.rgba();
-                int xpos = (int)(start.x()*factor_x);
-                int ypos = (int)(start.y()*factor_y);
-                writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, flag, alpha);
-            }
-        }
-    } else {
-        for (int i = 0; i < num; ++i) {
-            uchar flag = 0;
-            for (int s = 0; s < stops.size(); ++s) {
-                uint rgb = stops.at(s).second.rgba();
-                int xpos = (int)(start.x()*factor_x);
-                int ypos = (int)(start.y()*factor_y);
-                writeTriangleLine(data, xpos, ypos, xoff, yoff, rgb, flag, alpha);
-                if (s < stops.size()-1)
-                    start += offset*(stops.at(s+1).first - stops.at(s).first);
-                flag = 1;
-            }
-        }
-    }
-    triangles.resize((char *)data - triangles.constData());
-
-    QByteArray shader;
-    QPdf::ByteStream s(&shader);
-    s << "<<\n"
-        "/ShadingType 4\n"
-        "/ColorSpace " << (alpha ? "/DeviceGray\n" : "/DeviceRGB\n") <<
-        "/AntiAlias true\n"
-        "/BitsPerCoordinate 24\n"
-        "/BitsPerComponent 8\n"
-        "/BitsPerFlag 8\n"
-        "/Decode [" << xmin << xmax << ymin << ymax << (alpha ? "0 1]\n" : "0 1 0 1 0 1]\n") <<
-        "/AntiAlias true\n"
-        "/Length " << triangles.length() << "\n"
-        ">>\n"
-        "stream\n" << triangles << "endstream\n"
-        "endobj\n";
-    return shader;
-}
-#endif
 
 static void moveToHook(qfixed x, qfixed y, void *data)
 {
@@ -1051,7 +865,7 @@ void QPdfEngine::drawPath (const QPainterPath &p)
     if (!d->hasPen && !d->hasBrush)
         return;
 
-    if (d->simplePen && d->opacity == 1.0) {
+    if (d->simplePen) {
         // draw strokes natively in this case for better output
         *d->currentPage << QPdf::generatePath(p, QTransform(), d->hasBrush ? QPdf::FillAndStrokePath : QPdf::StrokePath);
     } else {
@@ -1198,7 +1012,7 @@ void QPdfEngine::updateState(const QPaintEngineState &state)
         d->stroker.setPen(d->pen, state.renderHints());
         QBrush penBrush = d->pen.brush();
         bool oldSimple = d->simplePen;
-        d->simplePen = (d->hasPen && (penBrush.style() == Qt::SolidPattern) && penBrush.isOpaque());
+        d->simplePen = (d->hasPen && (penBrush.style() == Qt::SolidPattern) && penBrush.isOpaque() && d->opacity == 1.0);
         if (oldSimple != d->simplePen)
             flags |= DirtyTransform;
     } else if (flags & DirtyHints) {
@@ -1214,8 +1028,13 @@ void QPdfEngine::updateState(const QPaintEngineState &state)
         d->brushOrigin = state.brushOrigin();
         flags |= DirtyBrush;
     }
-    if (flags & DirtyOpacity)
+    if (flags & DirtyOpacity) {
         d->opacity = state.opacity();
+        if (d->simplePen && d->opacity != 1.0) {
+            d->simplePen = false;
+            flags |= DirtyTransform;
+        }
+    }
 
     bool ce = d->clipEnabled;
     if (flags & DirtyClipPath) {
@@ -1376,6 +1195,8 @@ void QPdfEngine::setBrush()
     bool specifyColor;
     int gStateObject = 0;
     int patternObject = d->addBrushPattern(d->stroker.matrix, &specifyColor, &gStateObject);
+    if (!patternObject && !specifyColor)
+        return;
 
     *d->currentPage << (patternObject ? "/PCSp cs " : "/CSp cs ");
     if (specifyColor) {
@@ -2083,10 +1904,8 @@ int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height,
     }
     if (maskObject > 0)
         xprintf("/Mask %d 0 R\n", maskObject);
-    if (softMaskObject > 0) {
+    if (softMaskObject > 0)
         xprintf("/SMask %d 0 R\n", softMaskObject);
-        xprintf("/Decode [1 0 1 0 1 0]\n");
-    }
 
     int lenobj = requestObject();
     xprintf("/Length %d 0 R\n", lenobj);
@@ -2113,34 +1932,263 @@ int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height,
     return image;
 }
 
-#ifdef USE_NATIVE_GRADIENTS
-int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int *gStateObject)
+struct QGradientBound {
+    qreal start;
+    qreal stop;
+    int function;
+    bool reverse;
+};
+
+int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from, int to, bool reflect, bool alpha)
 {
-    const QGradient *gradient = b.gradient();
-    if (!gradient)
-        return 0;
+    QGradientStops stops = gradient->stops();
+    if (stops.isEmpty()) {
+        stops << QGradientStop(0, Qt::black);
+        stops << QGradientStop(1, Qt::white);
+    }
+    if (stops.at(0).first > 0)
+        stops.prepend(QGradientStop(0, stops.at(0).second));
+    if (stops.at(stops.size() - 1).first < 1)
+        stops.append(QGradientStop(1, stops.at(stops.size() - 1).second));
 
-    QTransform inv = matrix.inverted();
-    QPointF page_rect[4] = { inv.map(QPointF(0, 0)),
-                             inv.map(QPointF(width_, 0)),
-                             inv.map(QPointF(0, height_)),
-                             inv.map(QPointF(width_, height_)) };
+    QVector<int> functions;
+    for (int i = 0; i < stops.size() - 1; ++i) {
+        int f = addXrefEntry(-1);
+        QByteArray data;
+        QPdf::ByteStream s(&data);
+        s << "<<\n"
+             "/FunctionType 2\n"
+             "/Domain [0 1]\n"
+             "/N 1\n";
+        if (alpha) {
+            s << "/C0 [" << stops.at(i).second.alphaF() << "]\n"
+                 "/C1 [" << stops.at(i + 1).second.alphaF() << "]\n";
+        } else {
+            s << "/C0 [" << stops.at(i).second.redF() << stops.at(i).second.greenF() <<  stops.at(i).second.blueF() << "]\n"
+                 "/C1 [" << stops.at(i + 1).second.redF() << stops.at(i + 1).second.greenF() <<  stops.at(i + 1).second.blueF() << "]\n";
+        }
+        s << ">>\n"
+             "endobj\n";
+        write(data);
+        functions << f;
+    }
 
-    bool opaque = b.isOpaque();
+    QVector<QGradientBound> gradientBounds;
+
+    for (int step = from; step < to; ++step) {
+        if (reflect && step % 2) {
+            for (int i = stops.size() - 1; i > 0; --i) {
+                QGradientBound b;
+                b.start = step + 1 - qBound(0., stops.at(i).first, 1.);
+                b.stop = step + 1 - qBound(0., stops.at(i - 1).first, 1.);
+                b.function = functions.at(i - 1);
+                b.reverse = true;
+                gradientBounds << b;
+            }
+        } else {
+            for (int i = 0; i < stops.size() - 1; ++i) {
+                QGradientBound b;
+                b.start = step + qBound(0., stops.at(i).first, 1.);
+                b.stop = step + qBound(0., stops.at(i + 1).first, 1.);
+                b.function = functions.at(i);
+                b.reverse = false;
+                gradientBounds << b;
+            }
+        }
+    }
+
+    // normalize bounds to [0..1]
+    qreal bstart = gradientBounds.at(0).start;
+    qreal bend = gradientBounds.at(gradientBounds.size() - 1).stop;
+    qreal norm = 1./(bend - bstart);
+    for (int i = 0; i < gradientBounds.size(); ++i) {
+        gradientBounds[i].start = (gradientBounds[i].start - bstart)*norm;
+        gradientBounds[i].stop = (gradientBounds[i].stop - bstart)*norm;
+    }
+
+    int function;
+    if (gradientBounds.size() > 1) {
+        function = addXrefEntry(-1);
+        QByteArray data;
+        QPdf::ByteStream s(&data);
+        s << "<<\n"
+             "/FunctionType 3\n"
+             "/Domain [0 1]\n"
+             "/Bounds [";
+        for (int i = 1; i < gradientBounds.size(); ++i)
+            s << gradientBounds.at(i).start;
+        s << "]\n"
+             "/Encode [";
+        for (int i = 0; i < gradientBounds.size(); ++i)
+            s << (gradientBounds.at(i).reverse ? "1 0 " : "0 1 ");
+        s << "]\n"
+             "/Functions [";
+        for (int i = 0; i < gradientBounds.size(); ++i)
+            s << gradientBounds.at(i).function << "0 R ";
+        s << "]\n"
+             ">>\n";
+        write(data);
+    } else {
+        function = functions.at(0);
+    }
+    return function;
+}
+
+int QPdfEnginePrivate::generateLinearGradientShader(const QLinearGradient *gradient, const QTransform &matrix, bool alpha)
+{
+    QPointF start = gradient->start();
+    QPointF stop = gradient->finalStop();
+    QPointF offset = stop - start;
+    Q_ASSERT(gradient->coordinateMode() == QGradient::LogicalMode);
+
+    int from = 0;
+    int to = 1;
+    bool reflect = false;
+    switch (gradient->spread()) {
+    case QGradient::PadSpread:
+        break;
+    case QGradient::ReflectSpread:
+        reflect = true;
+        // fall through
+    case QGradient::RepeatSpread: {
+        // calculate required bounds
+        QRectF pageRect = m_pageLayout.fullRectPixels(resolution);
+        QTransform inv = matrix.inverted();
+        QPointF page_rect[4] = { inv.map(pageRect.topLeft()),
+                                 inv.map(pageRect.topRight()),
+                                 inv.map(pageRect.bottomLeft()),
+                                 inv.map(pageRect.bottomRight()) };
+
+        qreal length = offset.x()*offset.x() + offset.y()*offset.y();
+
+        // find the max and min values in offset and orth direction that are needed to cover
+        // the whole page
+        from = INT_MAX;
+        to = INT_MIN;
+        for (int i = 0; i < 4; ++i) {
+            qreal off = ((page_rect[i].x() - start.x()) * offset.x() + (page_rect[i].y() - start.y()) * offset.y())/length;
+            from = qMin(from, qFloor(off));
+            to = qMax(to, qCeil(off));
+        }
+
+        stop = start + to * offset;
+        start = start + from * offset;\
+        break;
+    }
+    }
+
+    int function = createShadingFunction(gradient, from, to, reflect, alpha);
 
     QByteArray shader;
-    QByteArray alphaShader;
-    if (gradient->type() == QGradient::LinearGradient) {
-        const QLinearGradient *lg = static_cast<const QLinearGradient *>(gradient);
-        shader = QPdf::generateLinearGradientShader(lg, page_rect);
-        if (!opaque)
-            alphaShader = QPdf::generateLinearGradientShader(lg, page_rect, true);
-    } else {
-        // #############
-        return 0;
-    }
+    QPdf::ByteStream s(&shader);
+    s << "<<\n"
+        "/ShadingType 2\n"
+        "/ColorSpace " << (alpha ? "/DeviceGray\n" : "/DeviceRGB\n") <<
+        "/AntiAlias true\n"
+        "/Coords [" << start.x() << start.y() << stop.x() << stop.y() << "]\n"
+        "/Extend [true true]\n"
+        "/Function " << function << "0 R\n"
+        ">>\n"
+        "endobj\n";
     int shaderObject = addXrefEntry(-1);
     write(shader);
+    return shaderObject;
+}
+
+int QPdfEnginePrivate::generateRadialGradientShader(const QRadialGradient *gradient, const QTransform &matrix, bool alpha)
+{
+    QPointF p1 = gradient->center();
+    double r1 = gradient->centerRadius();
+    QPointF p0 = gradient->focalPoint();
+    double r0 = gradient->focalRadius();
+
+    Q_ASSERT(gradient->coordinateMode() == QGradient::LogicalMode);
+
+    int from = 0;
+    int to = 1;
+    bool reflect = false;
+    switch (gradient->spread()) {
+    case QGradient::PadSpread:
+        break;
+    case QGradient::ReflectSpread:
+        reflect = true;
+        // fall through
+    case QGradient::RepeatSpread: {
+        Q_ASSERT(qFuzzyIsNull(r0)); // QPainter emulates if this is not 0
+
+        QRectF pageRect = m_pageLayout.fullRectPixels(resolution);
+        QTransform inv = matrix.inverted();
+        QPointF page_rect[4] = { inv.map(pageRect.topLeft()),
+                                 inv.map(pageRect.topRight()),
+                                 inv.map(pageRect.bottomLeft()),
+                                 inv.map(pageRect.bottomRight()) };
+
+        // increase to until the whole page fits into it
+        bool done = false;
+        while (!done) {
+            QPointF center = QPointF(p0.x() + to*(p1.x() - p0.x()), p0.y() + to*(p1.y() - p0.y()));
+            double radius = r0 + to*(r1 - r0);
+            double r2 = radius*radius;
+            done = true;
+            for (int i = 0; i < 4; ++i) {
+                QPointF off = page_rect[i] - center;
+                if (off.x()*off.x() + off.y()*off.y() > r2) {
+                    ++to;
+                    done = false;
+                    break;
+                }
+            }
+        }
+        p1 = QPointF(p0.x() + to*(p1.x() - p0.x()), p0.y() + to*(p1.y() - p0.y()));
+        r1 = r0 + to*(r1 - r0);
+        break;
+    }
+    }
+
+    int function = createShadingFunction(gradient, from, to, reflect, alpha);
+
+    QByteArray shader;
+    QPdf::ByteStream s(&shader);
+    s << "<<\n"
+        "/ShadingType 3\n"
+        "/ColorSpace " << (alpha ? "/DeviceGray\n" : "/DeviceRGB\n") <<
+        "/AntiAlias true\n"
+        "/Domain [0 1]\n"
+        "/Coords [" << p0.x() << p0.y() << r0 << p1.x() << p1.y() << r1 << "]\n"
+        "/Extend [true true]\n"
+        "/Function " << function << "0 R\n"
+        ">>\n"
+        "endobj\n";
+    int shaderObject = addXrefEntry(-1);
+    write(shader);
+    return shaderObject;
+}
+
+int QPdfEnginePrivate::generateGradientShader(const QGradient *gradient, const QTransform &matrix, bool alpha)
+{
+    switch (gradient->type()) {
+    case QGradient::LinearGradient:
+        return generateLinearGradientShader(static_cast<const QLinearGradient *>(gradient), matrix, alpha);
+    case QGradient::RadialGradient:
+        return generateRadialGradientShader(static_cast<const QRadialGradient *>(gradient), matrix, alpha);
+    case QGradient::ConicalGradient:
+    default:
+        qWarning() << "Implement me!";
+    }
+    return 0;
+}
+
+int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QTransform &matrix, int *gStateObject)
+{
+    const QGradient *gradient = b.gradient();
+
+    if (!gradient || gradient->coordinateMode() != QGradient::LogicalMode)
+        return 0;
+
+    QRectF pageRect = m_pageLayout.fullRectPixels(resolution);
+
+    QTransform m = b.transform() * matrix;
+    int shaderObject = generateGradientShader(gradient, m);
 
     QByteArray str;
     QPdf::ByteStream s(&str);
@@ -2149,12 +2197,12 @@ int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int
         "/PatternType 2\n"
         "/Shading " << shaderObject << "0 R\n"
         "/Matrix ["
-      << matrix.m11()
-      << matrix.m12()
-      << matrix.m21()
-      << matrix.m22()
-      << matrix.dx()
-      << matrix.dy() << "]\n";
+      << m.m11()
+      << m.m12()
+      << m.m21()
+      << m.m22()
+      << m.dx()
+      << m.dy() << "]\n";
     s << ">>\n"
         "endobj\n";
 
@@ -2162,7 +2210,7 @@ int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int
     write(str);
     currentPage->patterns.append(patternObj);
 
-    if (!opaque) {
+    if (!b.isOpaque()) {
         bool ca = true;
         QGradientStops stops = gradient->stops();
         int a = stops.at(0).second.alpha();
@@ -2175,8 +2223,7 @@ int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int
         if (ca) {
             *gStateObject = addConstantAlphaObject(stops.at(0).second.alpha());
         } else {
-            int alphaShaderObject = addXrefEntry(-1);
-            write(alphaShader);
+            int alphaShaderObject = generateGradientShader(gradient, m, true);
 
             QByteArray content;
             QPdf::ByteStream c(&content);
@@ -2187,7 +2234,7 @@ int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int
             f << "<<\n"
                 "/Type /XObject\n"
                 "/Subtype /Form\n"
-                "/BBox [0 0 " << width_ << height_ << "]\n"
+                "/BBox [0 0 " << pageRect.width() << pageRect.height() << "]\n"
                 "/Group <</S /Transparency >>\n"
                 "/Resources <<\n"
                 "/Shading << /Shader" << alphaShaderObject << alphaShaderObject << "0 R >>\n"
@@ -2211,7 +2258,6 @@ int QPdfEnginePrivate::gradientBrush(const QBrush &b, const QMatrix &matrix, int
 
     return patternObj;
 }
-#endif
 
 int QPdfEnginePrivate::addConstantAlphaObject(int brushAlpha, int penAlpha)
 {
@@ -2233,6 +2279,7 @@ int QPdfEnginePrivate::addConstantAlphaObject(int brushAlpha, int penAlpha)
     return object;
 }
 
+
 int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, int *gStateObject)
 {
     int paintType = 2; // Uncolored tiling
@@ -2248,13 +2295,9 @@ int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, 
     //qDebug() << brushOrigin << matrix;
 
     Qt::BrushStyle style = brush.style();
-    if (style == Qt::LinearGradientPattern) {// && style <= Qt::ConicalGradientPattern) {
-#ifdef USE_NATIVE_GRADIENTS
+    if (style == Qt::LinearGradientPattern || style == Qt::RadialGradientPattern) {// && style <= Qt::ConicalGradientPattern) {
         *specifyColor = false;
-        return gradientBrush(b, matrix, gStateObject);
-#else
-        return 0;
-#endif
+        return gradientBrush(brush, matrix, gStateObject);
     }
 
     if ((!brush.isOpaque() && brush.style() < Qt::LinearGradientPattern) || opacity != 1.0)
@@ -2266,9 +2309,9 @@ int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, 
     if (pattern.isEmpty()) {
         if (brush.style() != Qt::TexturePattern)
             return 0;
-        QImage image = brush.texture().toImage();
+        QImage image = brush.textureImage();
         bool bitmap = true;
-        imageObject = addImage(image, &bitmap, brush.texture().cacheKey());
+        imageObject = addImage(image, &bitmap, image.cacheKey());
         if (imageObject != -1) {
             QImage::Format f = image.format();
             if (f != QImage::Format_MonoLSB && f != QImage::Format_Mono) {
@@ -2319,6 +2362,14 @@ int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, 
     return patternObj;
 }
 
+static inline bool is_monochrome(const QVector<QRgb> &colorTable)
+{
+    return colorTable.size() == 2
+        && colorTable.at(0) == QColor(Qt::black).rgba()
+        && colorTable.at(1) == QColor(Qt::white).rgba()
+        ;
+}
+
 /*!
  * Adds an image to the pdf and return the pdf-object id. Returns -1 if adding the image failed.
  */
@@ -2333,10 +2384,7 @@ int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, qint64 serial_n
 
     QImage image = img;
     QImage::Format format = image.format();
-    if (image.depth() == 1 && *bitmap && img.colorTable().size() == 2
-        && img.colorTable().at(0) == QColor(Qt::black).rgba()
-        && img.colorTable().at(1) == QColor(Qt::white).rgba())
-    {
+    if (image.depth() == 1 && *bitmap && is_monochrome(img.colorTable())) {
         if (format == QImage::Format_MonoLSB)
             image = image.convertToFormat(QImage::Format_Mono);
         format = QImage::Format_Mono;

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -132,6 +132,12 @@ QT_BEGIN_NAMESPACE
     } } while (0)
 #define Q_CHECK_STATES(function, state1, state2, returnValue) do { \
     if (d->socketState != (state1) && d->socketState != (state2)) { \
+        qWarning(""#function" was called" \
+                 " not in "#state1" or "#state2); \
+        return (returnValue); \
+    } } while (0)
+#define Q_CHECK_STATES3(function, state1, state2, state3, returnValue) do { \
+    if (d->socketState != (state1) && d->socketState != (state2) && d->socketState != (state3)) { \
         qWarning(""#function" was called" \
                  " not in "#state1" or "#state2); \
         return (returnValue); \
@@ -275,6 +281,38 @@ void QNativeSocketEnginePrivate::setError(QAbstractSocket::SocketError error, Er
     }
 }
 
+/*!
+    \internal
+
+    Adjusts the incoming \a address family to match the currently bound address
+    (if any). This function will convert v4-mapped IPv6 addresses to IPv4 and
+    vice-versa. All other address types and values will be left unchanged.
+ */
+QHostAddress QNativeSocketEnginePrivate::adjustAddressProtocol(const QHostAddress &address) const
+{
+    QAbstractSocket::NetworkLayerProtocol targetProtocol = socketProtocol;
+    if (Q_LIKELY(targetProtocol == QAbstractSocket::UnknownNetworkLayerProtocol))
+        return address;
+
+    QAbstractSocket::NetworkLayerProtocol sourceProtocol = address.protocol();
+
+    if (targetProtocol == QAbstractSocket::AnyIPProtocol)
+        targetProtocol = QAbstractSocket::IPv6Protocol;
+    if (targetProtocol == QAbstractSocket::IPv6Protocol && sourceProtocol == QAbstractSocket::IPv4Protocol) {
+        // convert to IPv6 v4-mapped address. This always works
+        return QHostAddress(address.toIPv6Address());
+    }
+
+    if (targetProtocol == QAbstractSocket::IPv4Protocol && sourceProtocol == QAbstractSocket::IPv6Protocol) {
+        // convert to IPv4 if the source is a v4-mapped address
+        quint32 ip4 = address.toIPv4Address();
+        if (ip4)
+            return QHostAddress(ip4);
+    }
+
+    return address;
+}
+
 bool QNativeSocketEnginePrivate::checkProxy(const QHostAddress &address)
 {
     if (address.isLoopback())
@@ -354,14 +392,6 @@ bool QNativeSocketEngine::initialize(QAbstractSocket::SocketType socketType, QAb
         qDebug("QNativeSocketEngine::initialize(type == %s, protocol == %s) failed: %s",
                typeStr.toLatin1().constData(), protocolStr.toLatin1().constData(), d->socketErrorString.toLatin1().constData());
 #endif
-        return false;
-    }
-
-    // Make the socket nonblocking.
-    if (!setOption(NonBlockingSocketOption, 1)) {
-        d->setError(QAbstractSocket::UnsupportedSocketOperationError,
-                    QNativeSocketEnginePrivate::NonBlockingInitFailedErrorString);
-        close();
         return false;
     }
 
@@ -503,12 +533,12 @@ bool QNativeSocketEngine::connectToHost(const QHostAddress &address, quint16 por
     if (!d->checkProxy(address))
         return false;
 
-    Q_CHECK_STATES(QNativeSocketEngine::connectToHost(),
+    Q_CHECK_STATES3(QNativeSocketEngine::connectToHost(), QAbstractSocket::BoundState,
                    QAbstractSocket::UnconnectedState, QAbstractSocket::ConnectingState, false);
 
     d->peerAddress = address;
     d->peerPort = port;
-    bool connected = d->nativeConnect(address, port);
+    bool connected = d->nativeConnect(d->adjustAddressProtocol(address), port);
     if (connected)
         d->fetchConnectionParameters();
 
@@ -568,7 +598,7 @@ bool QNativeSocketEngine::bind(const QHostAddress &address, quint16 port)
 
     Q_CHECK_STATE(QNativeSocketEngine::bind(), QAbstractSocket::UnconnectedState, false);
 
-    if (!d->nativeBind(address, port))
+    if (!d->nativeBind(d->adjustAddressProtocol(address), port))
         return false;
 
     d->fetchConnectionParameters();
@@ -641,8 +671,8 @@ bool QNativeSocketEngine::joinMulticastGroup(const QHostAddress &groupAddress,
     if (groupAddress.protocol() == QAbstractSocket::IPv4Protocol &&
         (d->socketProtocol == QAbstractSocket::IPv6Protocol ||
          d->socketProtocol == QAbstractSocket::AnyIPProtocol)) {
-        qWarning("QAbstractSocket: cannot bind to QHostAddress::Any (or an IPv6 address) and join an IPv4 multicast group");
-        qWarning("QAbstractSocket: bind to QHostAddress::AnyIPv4 instead if you want to do this");
+        qWarning("QAbstractSocket: cannot bind to QHostAddress::Any (or an IPv6 address) and join an IPv4 multicast group;"
+                 " bind to QHostAddress::AnyIPv4 instead if you want to do this");
         return false;
     }
 
@@ -778,7 +808,7 @@ qint64 QNativeSocketEngine::writeDatagram(const char *data, qint64 size,
     Q_D(QNativeSocketEngine);
     Q_CHECK_VALID_SOCKETLAYER(QNativeSocketEngine::writeDatagram(), -1);
     Q_CHECK_TYPE(QNativeSocketEngine::writeDatagram(), QAbstractSocket::UdpSocket, -1);
-    return d->nativeSendDatagram(data, size, host, port);
+    return d->nativeSendDatagram(data, size, d->adjustAddressProtocol(host), port);
 }
 
 /*!
@@ -969,7 +999,7 @@ bool QNativeSocketEngine::waitForWrite(int msecs, bool *timedOut)
                     QNativeSocketEnginePrivate::TimeOutErrorString);
         d->hasSetSocketError = false; // A timeout error is temporary in waitFor functions
         return false;
-    } else if (state() == QAbstractSocket::ConnectingState) {
+    } else if (state() == QAbstractSocket::ConnectingState || (state() == QAbstractSocket::BoundState && d->socketDescriptor != -1)) {
         connectToHost(d->peerAddress, d->peerPort);
     }
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtXml module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -285,16 +285,16 @@ public:
     void init();
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNodePrivate* insertBefore(QDomNodePrivate* newChild, QDomNodePrivate* refChild);
-    QDomNodePrivate* insertAfter(QDomNodePrivate* newChild, QDomNodePrivate* refChild);
-    QDomNodePrivate* replaceChild(QDomNodePrivate* newChild, QDomNodePrivate* oldChild);
-    QDomNodePrivate* removeChild(QDomNodePrivate* oldChild);
-    QDomNodePrivate* appendChild(QDomNodePrivate* newChild);
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNodePrivate* insertBefore(QDomNodePrivate* newChild, QDomNodePrivate* refChild) Q_DECL_OVERRIDE;
+    QDomNodePrivate* insertAfter(QDomNodePrivate* newChild, QDomNodePrivate* refChild) Q_DECL_OVERRIDE;
+    QDomNodePrivate* replaceChild(QDomNodePrivate* newChild, QDomNodePrivate* oldChild) Q_DECL_OVERRIDE;
+    QDomNodePrivate* removeChild(QDomNodePrivate* oldChild) Q_DECL_OVERRIDE;
+    QDomNodePrivate* appendChild(QDomNodePrivate* newChild) Q_DECL_OVERRIDE;
 
-    QDomNode::NodeType nodeType() const { return QDomNode::DocumentTypeNode; }
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::DocumentTypeNode; }
 
-    void save(QTextStream& s, int, int) const;
+    void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 
     // Variables
     QDomNamedNodeMapPrivate* entities;
@@ -311,8 +311,8 @@ public:
     QDomDocumentFragmentPrivate(QDomNodePrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    virtual QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::DocumentFragmentNode; }
+    virtual QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::DocumentFragmentNode; }
 };
 
 class QDomCharacterDataPrivate : public QDomNodePrivate
@@ -329,8 +329,8 @@ public:
     void replaceData(unsigned long offset, unsigned long count, const QString& arg);
 
     // Reimplemented from QDomNodePrivate
-    QDomNode::NodeType nodeType() const { return QDomNode::CharacterDataNode; }
-    QDomNodePrivate* cloneNode(bool deep = true);
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::CharacterDataNode; }
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
 };
 
 class QDomTextPrivate : public QDomCharacterDataPrivate
@@ -342,9 +342,9 @@ public:
     QDomTextPrivate* splitText(int offset);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::TextNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::TextNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 };
 
 class QDomAttrPrivate : public QDomNodePrivate
@@ -357,10 +357,10 @@ public:
     bool specified() const;
 
     // Reimplemented from QDomNodePrivate
-    void setNodeValue(const QString& v);
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::AttributeNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    void setNodeValue(const QString& v) Q_DECL_OVERRIDE;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::AttributeNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 
     // Variables
     bool m_specified;
@@ -392,9 +392,9 @@ public:
     // Reimplemented from QDomNodePrivate
     QDomNamedNodeMapPrivate* attributes() { return m_attr; }
     bool hasAttributes() { return (m_attr->length() > 0); }
-    QDomNode::NodeType nodeType() const { return QDomNode::ElementNode; }
-    QDomNodePrivate* cloneNode(bool deep = true);
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::ElementNode; }
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 
     // Variables
     QDomNamedNodeMapPrivate* m_attr;
@@ -408,9 +408,9 @@ public:
     QDomCommentPrivate(QDomCommentPrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::CommentNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::CommentNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 };
 
 class QDomCDATASectionPrivate : public QDomTextPrivate
@@ -420,9 +420,9 @@ public:
     QDomCDATASectionPrivate(QDomCDATASectionPrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::CDATASectionNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::CDATASectionNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 };
 
 class QDomNotationPrivate : public QDomNodePrivate
@@ -433,9 +433,9 @@ public:
     QDomNotationPrivate(QDomNotationPrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::NotationNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::NotationNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 
     // Variables
     QString m_sys;
@@ -450,9 +450,9 @@ public:
     QDomEntityPrivate(QDomEntityPrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::EntityNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::EntityNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 
     // Variables
     QString m_sys;
@@ -467,9 +467,9 @@ public:
     QDomEntityReferencePrivate(QDomNodePrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::EntityReferenceNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::EntityReferenceNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 };
 
 class QDomProcessingInstructionPrivate : public QDomNodePrivate
@@ -480,9 +480,9 @@ public:
     QDomProcessingInstructionPrivate(QDomProcessingInstructionPrivate* n, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::ProcessingInstructionNode; }
-    virtual void save(QTextStream& s, int, int) const;
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::ProcessingInstructionNode; }
+    virtual void save(QTextStream& s, int, int) const Q_DECL_OVERRIDE;
 };
 
 class QDomDocumentPrivate : public QDomNodePrivate
@@ -514,12 +514,12 @@ public:
     QDomAttrPrivate* createAttributeNS(const QString& nsURI, const QString& qName);
     QDomEntityReferencePrivate* createEntityReference(const QString& name);
 
-    QDomNodePrivate* importNode(const QDomNodePrivate* importedNode, bool deep);
+    QDomNodePrivate* importNode(QDomNodePrivate* importedNode, bool deep);
 
     // Reimplemented from QDomNodePrivate
-    QDomNodePrivate* cloneNode(bool deep = true);
-    QDomNode::NodeType nodeType() const { return QDomNode::DocumentNode; }
-    void clear();
+    QDomNodePrivate* cloneNode(bool deep = true) Q_DECL_OVERRIDE;
+    QDomNode::NodeType nodeType() const Q_DECL_OVERRIDE { return QDomNode::DocumentNode; }
+    void clear() Q_DECL_OVERRIDE;
 
     // Variables
     QExplicitlySharedDataPointer<QDomImplementationPrivate> impl;
@@ -570,32 +570,32 @@ public:
     ~QDomHandler();
 
     // content handler
-    bool endDocument();
-    bool startElement(const QString& nsURI, const QString& localName, const QString& qName, const QXmlAttributes& atts);
-    bool endElement(const QString& nsURI, const QString& localName, const QString& qName);
-    bool characters(const QString& ch);
-    bool processingInstruction(const QString& target, const QString& data);
-    bool skippedEntity(const QString& name);
+    bool endDocument() Q_DECL_OVERRIDE;
+    bool startElement(const QString& nsURI, const QString& localName, const QString& qName, const QXmlAttributes& atts) Q_DECL_OVERRIDE;
+    bool endElement(const QString& nsURI, const QString& localName, const QString& qName) Q_DECL_OVERRIDE;
+    bool characters(const QString& ch) Q_DECL_OVERRIDE;
+    bool processingInstruction(const QString& target, const QString& data) Q_DECL_OVERRIDE;
+    bool skippedEntity(const QString& name) Q_DECL_OVERRIDE;
 
     // error handler
-    bool fatalError(const QXmlParseException& exception);
+    bool fatalError(const QXmlParseException& exception) Q_DECL_OVERRIDE;
 
     // lexical handler
-    bool startCDATA();
-    bool endCDATA();
-    bool startEntity(const QString &);
-    bool endEntity(const QString &);
-    bool startDTD(const QString& name, const QString& publicId, const QString& systemId);
-    bool comment(const QString& ch);
+    bool startCDATA() Q_DECL_OVERRIDE;
+    bool endCDATA() Q_DECL_OVERRIDE;
+    bool startEntity(const QString &) Q_DECL_OVERRIDE;
+    bool endEntity(const QString &) Q_DECL_OVERRIDE;
+    bool startDTD(const QString& name, const QString& publicId, const QString& systemId) Q_DECL_OVERRIDE;
+    bool comment(const QString& ch) Q_DECL_OVERRIDE;
 
     // decl handler
-    bool externalEntityDecl(const QString &name, const QString &publicId, const QString &systemId) ;
+    bool externalEntityDecl(const QString &name, const QString &publicId, const QString &systemId) Q_DECL_OVERRIDE ;
 
     // DTD handler
-    bool notationDecl(const QString & name, const QString & publicId, const QString & systemId);
-    bool unparsedEntityDecl(const QString &name, const QString &publicId, const QString &systemId, const QString &notationName) ;
+    bool notationDecl(const QString & name, const QString & publicId, const QString & systemId) Q_DECL_OVERRIDE;
+    bool unparsedEntityDecl(const QString &name, const QString &publicId, const QString &systemId, const QString &notationName) Q_DECL_OVERRIDE ;
 
-    void setDocumentLocator(QXmlLocator *locator);
+    void setDocumentLocator(QXmlLocator *locator) Q_DECL_OVERRIDE;
 
     QString errorMsg;
     int errorLine;
@@ -878,7 +878,7 @@ QDomImplementationPrivate* QDomImplementationPrivate::clone()
     You can create a new document type with createDocumentType() and a
     new document with createDocument().
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}. For a more
     general introduction of the DOM implementation see the QDomDocument
@@ -1282,7 +1282,7 @@ int QDomNodeListPrivate::length() const
     You can get a particular node from the list with item(). The
     number of items in the list is returned by length().
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -1988,7 +1988,7 @@ void QDomNodePrivate::setLocation(int lineNumber, int columnNumber)
 
     \snippet code/src_xml_dom_qdom.cpp 1
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{W3C DOM Level 1}{Level 1} and
     \l{W3C DOM Level 2}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -4263,7 +4263,7 @@ void QDomAttrPrivate::save(QTextStream& s, int, int) const
     true the value was set with setValue(). The node this
     attribute is attached to (if any) is returned by ownerElement().
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}.
     For a more general introduction of the DOM implementation see the
@@ -4686,7 +4686,7 @@ void QDomElementPrivate::save(QTextStream& s, int depth, int indent) const
 
     \snippet code/src_xml_dom_qdom.cpp 11
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{W3C DOM Level 1}{Level 1} and
     \l{W3C DOM Level 2}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -5210,7 +5210,7 @@ void QDomTextPrivate::save(QTextStream& s, int, int) const
     You can split the text in a QDomText object over two QDomText
     objecs with splitText().
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -5342,7 +5342,7 @@ void QDomCommentPrivate::save(QTextStream& s, int depth, int indent) const
 
     is represented by QDomComment objects in the parsed Dom tree.
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{W3C DOM Level 1}{Level 1} and
     \l{W3C DOM Level 2}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -5450,7 +5450,7 @@ void QDomCDATASectionPrivate::save(QTextStream& s, int, int) const
     Adjacent QDomCDATASection nodes are not merged by the
     QDomNode::normalize() function.
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}.
     For a more general introduction of the DOM implementation see the
@@ -5574,7 +5574,7 @@ void QDomNotationPrivate::save(QTextStream& s, int, int) const
     You can retrieve the publicId() and systemId() from a notation
     node.
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -5770,7 +5770,7 @@ void QDomEntityPrivate::save(QTextStream& s, int, int) const
     You can access the entity's publicId(), systemId() and
     notationName() when available.
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -5922,7 +5922,7 @@ void QDomEntityReferencePrivate::save(QTextStream& s, int, int) const
     entity  node. As with the entity node, all descendants of the
     entity reference are read-only.
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -6039,7 +6039,7 @@ void QDomProcessingInstructionPrivate::save(QTextStream& s, int, int) const
     and set with setData(). The processing instruction's target is
     retrieved with target().
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}.
     For a more general introduction of the DOM implementation see the
@@ -6371,7 +6371,7 @@ QDomEntityReferencePrivate* QDomDocumentPrivate::createEntityReference(const QSt
     return e;
 }
 
-QDomNodePrivate* QDomDocumentPrivate::importNode(const QDomNodePrivate *importedNode, bool deep)
+QDomNodePrivate* QDomDocumentPrivate::importNode(QDomNodePrivate *importedNode, bool deep)
 {
     QDomNodePrivate *node = 0;
     switch (importedNode->nodeType()) {
@@ -6568,7 +6568,7 @@ void QDomDocumentPrivate::saveDocument(QTextStream& s, const int indent, QDomNod
 
     \snippet code/src_xml_dom_qdom.cpp 17
 
-    For further information about the Document Object Model see
+   For further information about the Document Object Model see
     the Document Object Model (DOM)
     \l{http://www.w3.org/TR/REC-DOM-Level-1/}{Level 1} and
     \l{http://www.w3.org/TR/DOM-Level-2-Core/}{Level 2 Core}
@@ -7035,6 +7035,9 @@ QDomNodeList QDomDocument::elementsByTagName(const QString& tagname) const
     import QDomDocument and QDomDocumentType nodes. In those cases
     this function returns a \l{QDomNode::isNull()}{null node}.
 
+    If \a importedNode is a \l{QDomNode::isNull()}{null node},
+    a null node is returned.
+
     If \a deep is true, this function imports not only the node \a
     importedNode but its whole subtree; if it is false, only the \a
     importedNode is imported. The argument \a deep has no effect on
@@ -7093,6 +7096,8 @@ QDomNodeList QDomDocument::elementsByTagName(const QString& tagname) const
 */
 QDomNode QDomDocument::importNode(const QDomNode& importedNode, bool deep)
 {
+    if (importedNode.isNull())
+        return QDomNode();
     if (!impl)
         impl = new QDomDocumentPrivate();
     return QDomNode(IMPL->importNode(importedNode.impl, deep));

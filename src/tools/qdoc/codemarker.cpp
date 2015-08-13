@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -391,12 +391,11 @@ void CodeMarker::insert(FastSection &fastSection,
     bool inheritedMember = false;
     if (!node->relates()) {
         InnerNode* p = node->parent();
-        if (p->type() == Node::QmlPropertyGroup)
+        if (p->isQmlPropertyGroup())
             p = p->parent();
         if (p != fastSection.parent_) {
-            if (!p->isQmlType() || !p->isAbstract()) {
+            if ((!p->isQmlType() && !p->isJsType()) || !p->isAbstract())
                 inheritedMember = true;
-            }
         }
     }
 
@@ -438,7 +437,7 @@ void CodeMarker::insert(FastSection &fastSection,
             fastSection.memberMap.insertMulti(key, node);
         }
         else {
-            if (node->parent()->type() == Node::Class) {
+            if (node->parent()->isClass() || node->parent()->isNamespace()) {
                 if (fastSection.inherited.isEmpty()
                         || fastSection.inherited.last().first != node->parent()) {
                     QPair<InnerNode *, int> p(node->parent(), 0);
@@ -641,7 +640,7 @@ QString CodeMarker::macName(const Node *node, const QString &name)
 /*!
   Returns an empty list of documentation sections.
  */
-QList<Section> CodeMarker::qmlSections(QmlClassNode* , SynopsisStyle , Status )
+QList<Section> CodeMarker::qmlSections(QmlTypeNode* , SynopsisStyle , Status )
 {
     return QList<Section>();
 }

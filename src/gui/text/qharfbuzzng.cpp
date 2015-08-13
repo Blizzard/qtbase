@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Konstantin Ritt
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -94,6 +94,8 @@ static const hb_script_t _qtscript_to_hbscript[] = {
     HB_SCRIPT_BUHID,
     HB_SCRIPT_TAGBANWA,
     HB_SCRIPT_COPTIC,
+
+    // Unicode 4.0 additions
     HB_SCRIPT_LIMBU,
     HB_SCRIPT_TAI_LE,
     HB_SCRIPT_LINEAR_B,
@@ -102,6 +104,8 @@ static const hb_script_t _qtscript_to_hbscript[] = {
     HB_SCRIPT_OSMANYA,
     HB_SCRIPT_CYPRIOT,
     HB_SCRIPT_BRAILLE,
+
+    // Unicode 4.1 additions
     HB_SCRIPT_BUGINESE,
     HB_SCRIPT_NEW_TAI_LUE,
     HB_SCRIPT_GLAGOLITIC,
@@ -109,11 +113,15 @@ static const hb_script_t _qtscript_to_hbscript[] = {
     HB_SCRIPT_SYLOTI_NAGRI,
     HB_SCRIPT_OLD_PERSIAN,
     HB_SCRIPT_KHAROSHTHI,
+
+    // Unicode 5.0 additions
     HB_SCRIPT_BALINESE,
     HB_SCRIPT_CUNEIFORM,
     HB_SCRIPT_PHOENICIAN,
     HB_SCRIPT_PHAGS_PA,
     HB_SCRIPT_NKO,
+
+    // Unicode 5.1 additions
     HB_SCRIPT_SUNDANESE,
     HB_SCRIPT_LEPCHA,
     HB_SCRIPT_OL_CHIKI,
@@ -125,6 +133,8 @@ static const hb_script_t _qtscript_to_hbscript[] = {
     HB_SCRIPT_CARIAN,
     HB_SCRIPT_LYDIAN,
     HB_SCRIPT_CHAM,
+
+    // Unicode 5.2 additions
     HB_SCRIPT_TAI_THAM,
     HB_SCRIPT_TAI_VIET,
     HB_SCRIPT_AVESTAN,
@@ -140,16 +150,45 @@ static const hb_script_t _qtscript_to_hbscript[] = {
     HB_SCRIPT_INSCRIPTIONAL_PAHLAVI,
     HB_SCRIPT_OLD_TURKIC,
     HB_SCRIPT_KAITHI,
+
+    // Unicode 6.0 additions
     HB_SCRIPT_BATAK,
     HB_SCRIPT_BRAHMI,
     HB_SCRIPT_MANDAIC,
+
+    // Unicode 6.1 additions
     HB_SCRIPT_CHAKMA,
     HB_SCRIPT_MEROITIC_CURSIVE,
     HB_SCRIPT_MEROITIC_HIEROGLYPHS,
     HB_SCRIPT_MIAO,
     HB_SCRIPT_SHARADA,
     HB_SCRIPT_SORA_SOMPENG,
-    HB_SCRIPT_TAKRI
+    HB_SCRIPT_TAKRI,
+
+    // Unicode 7.0 additions
+    HB_SCRIPT_CAUCASIAN_ALBANIAN,
+    HB_SCRIPT_BASSA_VAH,
+    HB_SCRIPT_DUPLOYAN,
+    HB_SCRIPT_ELBASAN,
+    HB_SCRIPT_GRANTHA,
+    HB_SCRIPT_PAHAWH_HMONG,
+    HB_SCRIPT_KHOJKI,
+    HB_SCRIPT_LINEAR_A,
+    HB_SCRIPT_MAHAJANI,
+    HB_SCRIPT_MANICHAEAN,
+    HB_SCRIPT_MENDE_KIKAKUI,
+    HB_SCRIPT_MODI,
+    HB_SCRIPT_MRO,
+    HB_SCRIPT_OLD_NORTH_ARABIAN,
+    HB_SCRIPT_NABATAEAN,
+    HB_SCRIPT_PALMYRENE,
+    HB_SCRIPT_PAU_CIN_HAU,
+    HB_SCRIPT_OLD_PERMIC,
+    HB_SCRIPT_PSALTER_PAHLAVI,
+    HB_SCRIPT_SIDDHAM,
+    HB_SCRIPT_KHUDAWADI,
+    HB_SCRIPT_TIRHUTA,
+    HB_SCRIPT_WARANG_CITI
 };
 Q_STATIC_ASSERT(QChar::ScriptCount == sizeof(_qtscript_to_hbscript) / sizeof(_qtscript_to_hbscript[0]));
 
@@ -375,7 +414,7 @@ _hb_qt_font_get_glyph(hb_font_t * /*font*/, void *font_data,
                       hb_codepoint_t *glyph,
                       void * /*user_data*/)
 {
-    QFontEngine *fe = (QFontEngine *)font_data;
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     *glyph = fe->glyphIndex(unicode);
@@ -388,7 +427,7 @@ _hb_qt_font_get_glyph_h_advance(hb_font_t *font, void *font_data,
                                 hb_codepoint_t glyph,
                                 void * /*user_data*/)
 {
-    QFontEngine *fe = (QFontEngine *)font_data;
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     QFixed advance;
@@ -436,7 +475,7 @@ _hb_qt_font_get_glyph_h_kerning(hb_font_t *font, void *font_data,
                                 hb_codepoint_t first_glyph, hb_codepoint_t second_glyph,
                                 void * /*user_data*/)
 {
-    QFontEngine *fe = (QFontEngine *)font_data;
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     glyph_t glyphs[2] = { first_glyph, second_glyph };
@@ -467,7 +506,7 @@ _hb_qt_font_get_glyph_extents(hb_font_t * /*font*/, void *font_data,
                               hb_glyph_extents_t *extents,
                               void * /*user_data*/)
 {
-    QFontEngine *fe = (QFontEngine *)font_data;
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     glyph_metrics_t gm = fe->boundingBox(glyph);
@@ -486,7 +525,7 @@ _hb_qt_font_get_glyph_contour_point(hb_font_t * /*font*/, void *font_data,
                                     unsigned int point_index, hb_position_t *x, hb_position_t *y,
                                     void * /*user_data*/)
 {
-    QFontEngine *fe = (QFontEngine *)font_data;
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     QFixed xpos, ypos;
@@ -573,7 +612,7 @@ hb_font_funcs_t *hb_qt_get_font_funcs()
 static hb_blob_t *
 _hb_qt_reference_table(hb_face_t * /*face*/, hb_tag_t tag, void *user_data)
 {
-    QFontEngine::FaceData *data = (QFontEngine::FaceData *)user_data;
+    QFontEngine::FaceData *data = static_cast<QFontEngine::FaceData *>(user_data);
     Q_ASSERT(data);
 
     qt_get_font_table_func_t get_font_table = data->get_font_table;
@@ -583,21 +622,21 @@ _hb_qt_reference_table(hb_face_t * /*face*/, hb_tag_t tag, void *user_data)
     if (Q_UNLIKELY(!get_font_table(data->user_data, tag, 0, &length)))
         return hb_blob_get_empty();
 
-    char *buffer = (char *)malloc(length);
+    char *buffer = static_cast<char *>(malloc(length));
     Q_CHECK_PTR(buffer);
 
     if (Q_UNLIKELY(!get_font_table(data->user_data, tag, reinterpret_cast<uchar *>(buffer), &length)))
         length = 0;
 
     return hb_blob_create(const_cast<const char *>(buffer), length,
-                          HB_MEMORY_MODE_WRITABLE,
+                          HB_MEMORY_MODE_READONLY,
                           buffer, free);
 }
 
 static inline hb_face_t *
 _hb_qt_face_create(QFontEngine *fe)
 {
-    QFontEngine::FaceData *data = (QFontEngine::FaceData *)malloc(sizeof(QFontEngine::FaceData));
+    QFontEngine::FaceData *data = static_cast<QFontEngine::FaceData *>(malloc(sizeof(QFontEngine::FaceData)));
     Q_CHECK_PTR(data);
     data->user_data = fe->faceData.user_data;
     data->get_font_table = fe->faceData.get_font_table;
@@ -618,7 +657,7 @@ static void
 _hb_qt_face_release(void *user_data)
 {
     if (Q_LIKELY(user_data))
-        hb_face_destroy((hb_face_t *)user_data);
+        hb_face_destroy(static_cast<hb_face_t *>(user_data));
 }
 
 hb_face_t *hb_qt_face_get_for_engine(QFontEngine *fe)
@@ -632,7 +671,7 @@ hb_face_t *hb_qt_face_get_for_engine(QFontEngine *fe)
         fe->face_destroy_func = _hb_qt_face_release;
     }
 
-    return (hb_face_t *)fe->face_;
+    return static_cast<hb_face_t *>(fe->face_);
 }
 
 
@@ -668,7 +707,7 @@ static void
 _hb_qt_font_release(void *user_data)
 {
     if (Q_LIKELY(user_data))
-        hb_font_destroy((hb_font_t *)user_data);
+        hb_font_destroy(static_cast<hb_font_t *>(user_data));
 }
 
 hb_font_t *hb_qt_font_get_for_engine(QFontEngine *fe)
@@ -682,7 +721,7 @@ hb_font_t *hb_qt_font_get_for_engine(QFontEngine *fe)
         fe->font_destroy_func = _hb_qt_font_release;
     }
 
-    return (hb_font_t *)fe->font_;
+    return static_cast<hb_font_t *>(fe->font_);
 }
 
 QT_END_NAMESPACE

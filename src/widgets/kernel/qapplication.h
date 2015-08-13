@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,9 +41,6 @@
 #include <QtGui/qcursor.h>
 #ifdef QT_INCLUDE_COMPAT
 # include <QtWidgets/qdesktopwidget.h>
-#endif
-#ifdef Q_NO_USING_KEYWORD
-#include <QtGui/qpalette.h>
 #endif
 #include <QtGui/qguiapplication.h>
 
@@ -104,11 +101,7 @@ public:
     QT_DEPRECATED static inline void setGraphicsSystem(const QString &) {}
 #endif
 
-#if defined(Q_NO_USING_KEYWORD) && !defined(Q_QDOC)
-    static QPalette palette() { return QGuiApplication::palette(); }
-#else
     using QGuiApplication::palette;
-#endif
     static QPalette palette(const QWidget *);
     static QPalette palette(const char *className);
     static void setPalette(const QPalette &, const char* className = 0);
@@ -172,13 +165,13 @@ public:
 
 #if QT_DEPRECATED_SINCE(5, 0)
     QT_DEPRECATED static QLocale keyboardInputLocale()
-    { return qApp ? qApp->inputMethod()->locale() : QLocale::c(); }
+    { return qApp ? QGuiApplication::inputMethod()->locale() : QLocale::c(); }
     QT_DEPRECATED static Qt::LayoutDirection keyboardInputDirection()
-    { return qApp ? qApp->inputMethod()->inputDirection() : Qt::LeftToRight; }
+    { return qApp ? QGuiApplication::inputMethod()->inputDirection() : Qt::LeftToRight; }
 #endif
 
     static int exec();
-    bool notify(QObject *, QEvent *);
+    bool notify(QObject *, QEvent *) Q_DECL_OVERRIDE;
 
 #ifdef QT_KEYPAD_NAVIGATION
     static Q_DECL_DEPRECATED void setKeypadNavigationEnabled(bool);
@@ -206,8 +199,8 @@ public Q_SLOTS:
     static void aboutQt();
 
 protected:
-    bool event(QEvent *);
-    bool compressEvent(QEvent *, QObject *receiver, QPostEventList *);
+    bool event(QEvent *) Q_DECL_OVERRIDE;
+    bool compressEvent(QEvent *, QObject *receiver, QPostEventList *) Q_DECL_OVERRIDE;
 
 private:
     Q_DISABLE_COPY(QApplication)

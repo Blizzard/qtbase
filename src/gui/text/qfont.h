@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -49,7 +49,6 @@ class QVariant;
 class Q_GUI_EXPORT QFont
 {
     Q_GADGET
-    Q_ENUMS(StyleStrategy)
 public:
     enum StyleHint {
         Helvetica,  SansSerif = Helvetica,
@@ -78,6 +77,7 @@ public:
         NoSubpixelAntialias = 0x0800,
         NoFontMerging       = 0x8000
     };
+    Q_ENUM(StyleStrategy)
 
     enum HintingPreference {
         PreferDefaultHinting        = 0,
@@ -86,12 +86,17 @@ public:
         PreferFullHinting           = 3
     };
 
+    // Mapping OpenType weight value.
     enum Weight {
-        Light    = 25,
-        Normal   = 50,
-        DemiBold = 63,
-        Bold     = 75,
-        Black    = 87
+        Thin     = 0,    // 100
+        ExtraLight = 12, // 200
+        Light    = 25,   // 300
+        Normal   = 50,   // 400
+        Medium   = 57,   // 500
+        DemiBold = 63,   // 600
+        Bold     = 75,   // 700
+        ExtraBold = 81,  // 800
+        Black    = 87    // 900
     };
 
     enum Style {
@@ -217,9 +222,10 @@ public:
     void setHintingPreference(HintingPreference hintingPreference);
     HintingPreference hintingPreference() const;
 
-    // is raw mode still needed?
+#if QT_DEPRECATED_SINCE(5, 5)
     bool rawMode() const;
     void setRawMode(bool);
+#endif
 
     // dupicated from QFontInfo
     bool exactMatch() const;
@@ -231,7 +237,7 @@ public:
     operator QVariant() const;
     bool isCopyOf(const QFont &) const;
 #ifdef Q_COMPILER_RVALUE_REFS
-    inline QFont &operator=(QFont &&other)
+    inline QFont &operator=(QFont &&other) Q_DECL_NOEXCEPT
     { qSwap(d, other.d); qSwap(resolve_mask, other.resolve_mask);  return *this; }
 #endif
 
@@ -313,7 +319,7 @@ Q_DECLARE_SHARED(QFont)
 Q_GUI_EXPORT uint qHash(const QFont &font, uint seed = 0) Q_DECL_NOTHROW;
 
 inline bool QFont::bold() const
-{ return weight() > Normal; }
+{ return weight() > Medium; }
 
 
 inline void QFont::setBold(bool enable)

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -98,11 +98,20 @@ public:
 
     class WindowSystemEvent {
     public:
+        enum {
+            Synthetic = 0x1,
+            NullWindow = 0x2
+        };
+
         explicit WindowSystemEvent(EventType t)
-            : type(t), synthetic(false) { }
+            : type(t), flags(0) { }
         virtual ~WindowSystemEvent() { }
+
+        bool synthetic() const  { return flags & Synthetic; }
+        bool nullWindow() const { return flags & NullWindow; }
+
         EventType type;
-        bool synthetic;
+        int flags;
     };
 
     class CloseEvent : public WindowSystemEvent {
@@ -193,9 +202,12 @@ public:
     class UserEvent : public WindowSystemEvent {
     public:
         UserEvent(QWindow * w, ulong time, EventType t)
-            : WindowSystemEvent(t), window(w), nullWindow(w == 0), timestamp(time) { }
+            : WindowSystemEvent(t), window(w), timestamp(time)
+        {
+            if (!w)
+                flags |= NullWindow;
+        }
         QPointer<QWindow> window;
-        bool nullWindow;
         unsigned long timestamp;
     };
 
@@ -225,8 +237,8 @@ public:
     class WheelEvent : public InputEvent {
     public:
         WheelEvent(QWindow *w, ulong time, const QPointF & local, const QPointF & global, QPoint pixelD, QPoint angleD, int qt4D, Qt::Orientation qt4O,
-                   Qt::KeyboardModifiers mods, Qt::ScrollPhase phase = Qt::ScrollUpdate)
-            : InputEvent(w, time, Wheel, mods), pixelDelta(pixelD), angleDelta(angleD), qt4Delta(qt4D), qt4Orientation(qt4O), localPos(local), globalPos(global), phase(phase) { }
+                   Qt::KeyboardModifiers mods, Qt::ScrollPhase phase = Qt::ScrollUpdate, Qt::MouseEventSource src = Qt::MouseEventNotSynthesized)
+            : InputEvent(w, time, Wheel, mods), pixelDelta(pixelD), angleDelta(angleD), qt4Delta(qt4D), qt4Orientation(qt4O), localPos(local), globalPos(global), phase(phase), source(src) { }
         QPoint pixelDelta;
         QPoint angleDelta;
         int qt4Delta;
@@ -234,6 +246,7 @@ public:
         QPointF localPos;
         QPointF globalPos;
         Qt::ScrollPhase phase;
+        Qt::MouseEventSource source;
     };
 
     class KeyEvent : public InputEvent {

@@ -1,10 +1,8 @@
 TEMPLATE=subdirs
 SUBDIRS=\
    # atwrapper \ # QTBUG-19452
-   baselineexample \
    compiler \
    gestures \
-   headersclean \
    lancelot \
    languagechange \
    macgui \
@@ -13,7 +11,7 @@ SUBDIRS=\
    modeltest \
    networkselftest \
    qaccessibility \
-   qaccessibilitylinux \
+   # qaccessibilitylinux \ # QTBUG-44434
    qaccessibilitymac \
    qcomplextext \
    qfocusevent \
@@ -24,11 +22,10 @@ SUBDIRS=\
    qprocess_and_guieventloop \
    qtokenautomaton \
    windowsmobile \
+   toolsupport \
 
 !qtHaveModule(widgets): SUBDIRS -= \
-   baselineexample \
    gestures \
-   headersclean \
    lancelot \
    languagechange \
    modeltest \
@@ -42,14 +39,10 @@ SUBDIRS=\
    qaccessibilitymac \
 
 !qtHaveModule(network): SUBDIRS -= \
-   baselineexample \
-   headersclean \
    lancelot \
    networkselftest \
    qnetworkaccessmanager_and_qprogressdialog \
    qobjectperformance
-
-testcocoon: SUBDIRS -= headersclean
 
 cross_compile: SUBDIRS -= \
    atwrapper \
@@ -70,3 +63,6 @@ wince*|!contains(QT_CONFIG, accessibility): SUBDIRS -= qaccessibility
 
 winrt: SUBDIRS -= \
    qprocess_and_guieventloop
+
+android: SUBDIRS += \
+    android

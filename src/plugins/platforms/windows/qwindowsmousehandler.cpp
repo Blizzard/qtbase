@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 #include <QtGui/QWindow>
+#include <QtGui/QCursor>
 
 #include <QtCore/QDebug>
 #include <QtCore/QScopedArrayPointer>
@@ -128,7 +129,10 @@ static inline QTouchDevice *createTouchDevice()
     QTouchDevice *result = new QTouchDevice;
     result->setType(digitizers & QT_NID_INTEGRATED_TOUCH
                     ? QTouchDevice::TouchScreen : QTouchDevice::TouchPad);
-    result->setCapabilities(QTouchDevice::Position | QTouchDevice::Area | QTouchDevice::NormalizedPosition);
+    QTouchDevice::Capabilities capabilities = QTouchDevice::Position | QTouchDevice::Area | QTouchDevice::NormalizedPosition;
+    if (result->type() == QTouchDevice::TouchPad)
+        capabilities |= QTouchDevice::MouseEmulation;
+    result->setCapabilities(capabilities);
     result->setMaximumTouchPoints(maxTouchPoints);
     return result;
 }
@@ -150,8 +154,6 @@ QWindowsMouseHandler::QWindowsMouseHandler() :
     m_leftButtonDown(false),
     m_previousCaptureWindow(0)
 {
-    if (m_touchDevice)
-        QWindowSystemInterface::registerTouchDevice(m_touchDevice);
 }
 
 Qt::MouseButtons QWindowsMouseHandler::queryMouseButtons()
@@ -275,6 +277,16 @@ bool QWindowsMouseHandler::translateMouseEvent(QWindow *window, HWND hwnd,
     QWindow *currentWindowUnderMouse = platformWindow->hasMouseCapture() ?
         QWindowsScreen::windowAt(globalPosition, CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT) : window;
 
+    // QTBUG-44332: When Qt is running at low integrity level and
+    // a Qt Window is parented on a Window of a higher integrity process
+    // using QWindow::fromWinId() (for example, Qt running in a browser plugin)
+    // ChildWindowFromPointEx() may not find the Qt window (failing with ERROR_ACCESS_DENIED)
+    if (!currentWindowUnderMouse) {
+        const QRect clientRect(QPoint(0, 0), window->size());
+        if (clientRect.contains(winEventPosition / QWindowsScaling::factor()))
+            currentWindowUnderMouse = window;
+    }
+
     compressMouseMove(&msg);
     // Qt expects the platform plugin to capture the mouse on
     // any button press until release.
@@ -379,6 +391,31 @@ static bool isValidWheelReceiver(QWindow *candidate)
     return false;
 }
 
+static void redirectWheelEvent(QWindow *window, const QPoint &globalPos, int delta,
+                               Qt::Orientation orientation, Qt::KeyboardModifiers mods)
+{
+    // Redirect wheel event to one of the following, in order of preference:
+    // 1) The window under mouse
+    // 2) The window receiving the event
+    // If a window is blocked by modality, it can't get the event.
+
+    QWindow *receiver = QWindowsScreen::windowAt(globalPos, CWP_SKIPINVISIBLE);
+    bool handleEvent = true;
+    if (!isValidWheelReceiver(receiver)) {
+        receiver = window;
+        if (!isValidWheelReceiver(receiver))
+            handleEvent = false;
+    }
+
+    if (handleEvent) {
+        const QPoint posDip = QWindowsGeometryHint::mapFromGlobal(receiver, globalPos) / QWindowsScaling::factor();
+        QWindowSystemInterface::handleWheelEvent(receiver,
+                                                 posDip, globalPos / QWindowsScaling::factor(),
+                                                 delta / QWindowsScaling::factor(),
+                                                 orientation, mods);
+    }
+}
+
 bool QWindowsMouseHandler::translateMouseWheelEvent(QWindow *window, HWND,
                                                     MSG msg, LRESULT *)
 {
@@ -401,36 +438,50 @@ bool QWindowsMouseHandler::translateMouseWheelEvent(QWindow *window, HWND,
     if (msg.message == WM_MOUSEHWHEEL)
         delta = -delta;
 
-    // Redirect wheel event to one of the following, in order of preference:
-    // 1) The window under mouse
-    // 2) The window receiving the event
-    // If a window is blocked by modality, it can't get the event.
     const QPoint globalPos(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
-    QWindow *receiver = QWindowsScreen::windowAt(globalPos, CWP_SKIPINVISIBLE);
-    bool handleEvent = true;
-    if (!isValidWheelReceiver(receiver)) {
-        receiver = window;
-        if (!isValidWheelReceiver(receiver))
-            handleEvent = false;
+    redirectWheelEvent(window, globalPos, delta, orientation, mods);
+
+    return true;
+}
+
+bool QWindowsMouseHandler::translateScrollEvent(QWindow *window, HWND,
+                                                MSG msg, LRESULT *)
+{
+    // This is a workaround against some touchpads that send WM_HSCROLL instead of WM_MOUSEHWHEEL.
+    // We could also handle vertical scroll here but there's no reason to, there's no bug for vertical
+    // (broken vertical scroll would have been noticed long time ago), so lets keep the change small
+    // and minimize the chance for regressions.
+
+    int delta = 0;
+    switch (LOWORD(msg.wParam)) {
+    case SB_LINELEFT:
+        delta = 120;
+        break;
+    case SB_LINERIGHT:
+        delta = -120;
+        break;
+    case SB_PAGELEFT:
+        delta = 240;
+        break;
+    case SB_PAGERIGHT:
+        delta = -240;
+        break;
+    default:
+        return false;
     }
 
-    if (handleEvent) {
-        const QPoint posDip = QWindowsGeometryHint::mapFromGlobal(receiver, globalPos) / QWindowsScaling::factor();
-        QWindowSystemInterface::handleWheelEvent(receiver,
-                                                 posDip, globalPos / QWindowsScaling::factor(),
-                                                 delta / QWindowsScaling::factor(),
-                                                 orientation, mods);
-    }
+    redirectWheelEvent(window, QCursor::pos(), delta, Qt::Horizontal, Qt::NoModifier);
 
     return true;
 }
 
 // from bool QApplicationPrivate::translateTouchEvent()
-bool QWindowsMouseHandler::translateTouchEvent(QWindow *window, HWND,
+bool QWindowsMouseHandler::translateTouchEvent(QWindow *window, HWND hwnd,
                                                QtWindows::WindowsEventType,
                                                MSG msg, LRESULT *)
 {
 #ifndef Q_OS_WINCE
+    Q_UNUSED(hwnd);
     typedef QWindowSystemInterface::TouchPoint QTouchPoint;
     typedef QList<QWindowSystemInterface::TouchPoint> QTouchPointList;
 
@@ -499,8 +550,87 @@ bool QWindowsMouseHandler::translateTouchEvent(QWindow *window, HWND,
                                              m_touchDevice,
                                              touchPoints);
     return true;
-#else
-    return false;
+#else //Q_OS_WINCE
+    GESTUREINFO gi;
+    memset(&gi, 0, sizeof(GESTUREINFO));
+    gi.cbSize = sizeof(GESTUREINFO);
+
+    if (!GetGestureInfo((HGESTUREINFO)msg.lParam, &gi))
+        return false;
+
+    const QPoint position = QPoint(gi.ptsLocation.x, gi.ptsLocation.y);
+
+    if (gi.dwID != GID_DIRECTMANIPULATION)
+        return true;
+    static QPoint lastTouchPos;
+    const QRect screenGeometry = window->screen()->geometry();
+    QWindowSystemInterface::TouchPoint touchPoint;
+    static QWindowSystemInterface::TouchPoint touchPoint2;
+    touchPoint.id = 0;//gi.dwInstanceID;
+    touchPoint.pressure = 1.0;
+
+    if (gi.dwFlags & GF_BEGIN)
+        touchPoint.state = Qt::TouchPointPressed;
+    else if (gi.dwFlags & GF_END)
+        touchPoint.state = Qt::TouchPointReleased;
+    else if (gi.dwFlags == 0)
+        touchPoint.state = Qt::TouchPointMoved;
+    else
+        return true;
+    touchPoint2.pressure = 1.0;
+    touchPoint2.id = 1;
+    const QPoint winEventPosition = position;
+    const int deltaX = GID_DIRECTMANIPULATION_DELTA_X(gi.ullArguments);
+    const int deltaY = GID_DIRECTMANIPULATION_DELTA_Y(gi.ullArguments);
+    //Touch points are taken from the whole screen so map the position to the screen
+    const QPoint globalPosition = QWindowsGeometryHint::mapToGlobal(hwnd, winEventPosition);
+    const QPoint globalPosition2 = QWindowsGeometryHint::mapToGlobal(hwnd, QPoint(position.x() + deltaX, position.y() + deltaY));
+
+    touchPoint.normalPosition =
+        QPointF( (qreal)globalPosition.x() / screenGeometry.width(), (qreal)globalPosition.y() / screenGeometry.height() );
+
+    touchPoint.area.moveCenter(globalPosition);
+
+    QList<QWindowSystemInterface::TouchPoint> pointList;
+    pointList.append(touchPoint);
+    if (deltaX != 0 && deltaY != 0) {
+        touchPoint2.state = m_had2ndTouchPoint ? Qt::TouchPointMoved : Qt::TouchPointPressed;
+        m_had2ndTouchPoint = true;
+        touchPoint2.normalPosition =
+            QPointF( (qreal)globalPosition2.x() / screenGeometry.width(), (qreal)globalPosition2.y() / screenGeometry.height() );
+
+        touchPoint2.area.moveCenter(globalPosition2);
+        lastTouchPos = globalPosition2;
+        pointList.append(touchPoint2);
+    } else if (m_had2ndTouchPoint) {
+        touchPoint2.normalPosition =
+            QPointF( (qreal)lastTouchPos.x() / screenGeometry.width(), (qreal)lastTouchPos.y() / screenGeometry.height() );
+
+        touchPoint2.area.moveCenter(lastTouchPos);
+        touchPoint2.state = Qt::TouchPointReleased;
+        pointList.append(touchPoint2);
+        m_had2ndTouchPoint = false;
+    }
+
+    if (!m_touchDevice) {
+        m_touchDevice = new QTouchDevice;
+        // TODO: Device used to be hardcoded to screen in previous code.
+        m_touchDevice->setType(QTouchDevice::TouchScreen);
+        m_touchDevice->setCapabilities(QTouchDevice::Position | QTouchDevice::Area | QTouchDevice::NormalizedPosition);
+        QWindowSystemInterface::registerTouchDevice(m_touchDevice);
+    }
+
+    QWindowSystemInterface::handleTouchEvent(window, m_touchDevice, pointList);
+    // handle window focusing in/out
+    if (window != m_windowUnderMouse) {
+        if (m_windowUnderMouse)
+            QWindowSystemInterface::handleLeaveEvent(m_windowUnderMouse);
+        if (window)
+            QWindowSystemInterface::handleEnterEvent(window);
+        m_windowUnderMouse = window;
+    }
+
+    return true;
 #endif
 }
 

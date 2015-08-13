@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -50,9 +50,6 @@ class Q_WIDGETS_EXPORT QCalendarWidget : public QWidget
 {
     Q_OBJECT
     Q_ENUMS(Qt::DayOfWeek)
-    Q_ENUMS(HorizontalHeaderFormat)
-    Q_ENUMS(VerticalHeaderFormat)
-    Q_ENUMS(SelectionMode)
     Q_PROPERTY(QDate selectedDate READ selectedDate WRITE setSelectedDate)
     Q_PROPERTY(QDate minimumDate READ minimumDate WRITE setMinimumDate)
     Q_PROPERTY(QDate maximumDate READ maximumDate WRITE setMaximumDate)
@@ -72,22 +69,25 @@ public:
         ShortDayNames,
         LongDayNames
     };
+    Q_ENUM(HorizontalHeaderFormat)
 
     enum VerticalHeaderFormat {
         NoVerticalHeader,
         ISOWeekNumbers
     };
+    Q_ENUM(VerticalHeaderFormat)
 
     enum SelectionMode {
         NoSelection,
         SingleSelection
     };
+    Q_ENUM(SelectionMode)
 
     explicit QCalendarWidget(QWidget *parent = 0);
     ~QCalendarWidget();
 
-    virtual QSize sizeHint() const;
-    virtual QSize minimumSizeHint() const;
+    virtual QSize sizeHint() const Q_DECL_OVERRIDE;
+    virtual QSize minimumSizeHint() const Q_DECL_OVERRIDE;
 
     QDate selectedDate() const;
 
@@ -132,11 +132,11 @@ public:
     void setDateEditAcceptDelay(int delay);
 
 protected:
-    bool event(QEvent *event);
-    bool eventFilter(QObject *watched, QEvent *event);
-    void mousePressEvent(QMouseEvent *event);
-    void resizeEvent(QResizeEvent * event);
-    void keyPressEvent(QKeyEvent * event);
+    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *watched, QEvent *event) Q_DECL_OVERRIDE;
+    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void resizeEvent(QResizeEvent * event) Q_DECL_OVERRIDE;
+    void keyPressEvent(QKeyEvent * event) Q_DECL_OVERRIDE;
 
     virtual void paintCell(QPainter *painter, const QRect &rect, const QDate &date) const;
     void updateCell(const QDate &date);

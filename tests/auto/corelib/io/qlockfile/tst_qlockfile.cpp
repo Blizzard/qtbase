@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure+bluesystems@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,8 +36,11 @@
 #include <QtConcurrentRun>
 #include <qlockfile.h>
 #include <qtemporarydir.h>
+#include <qsysinfo.h>
 #if defined(Q_OS_UNIX) && !defined(Q_OS_VXWORKS)
 #include <unistd.h>
+#elif defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#  include <qt_windows.h>
 #endif
 
 class tst_QLockFile : public QObject
@@ -54,10 +57,16 @@ private slots:
     void waitForLock();
     void staleLockFromCrashedProcess_data();
     void staleLockFromCrashedProcess();
+    void staleLockFromCrashedProcessReusedPid();
     void staleShortLockFromBusyProcess();
     void staleLongLockFromBusyProcess();
     void staleLockRace();
     void noPermissions();
+    void noPermissionsWindows();
+    void corruptedLockFile();
+
+private:
+    static bool overwritePidInLockFile(const QString &filePath, qint64 pid);
 
 public:
     QString m_helperApp;
@@ -66,7 +75,9 @@ public:
 
 void tst_QLockFile::initTestCase()
 {
-#ifdef QT_NO_PROCESS
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QSKIP("This test requires deploying and running external console applications");
+#elif defined(QT_NO_PROCESS)
     QSKIP("This test requires QProcess support");
 #else
     // chdir to our testdata path and execute helper apps relative to that.
@@ -270,6 +281,30 @@ void tst_QLockFile::staleLockFromCrashedProcess()
 #endif // !QT_NO_PROCESS
 }
 
+void tst_QLockFile::staleLockFromCrashedProcessReusedPid()
+{
+#if defined(QT_NO_PROCESS)
+    QSKIP("This test requires QProcess support");
+#elif defined(Q_OS_WINRT) || defined(Q_OS_WINCE) || defined(Q_OS_IOS)
+    QSKIP("We cannot retrieve information about other processes on this platform.");
+#else
+    const QString fileName = dir.path() + "/staleLockFromCrashedProcessReusedPid";
+
+    int ret = QProcess::execute(m_helperApp, QStringList() << fileName << "-crash");
+    QCOMPARE(ret, int(QLockFile::NoError));
+    QVERIFY(QFile::exists(fileName));
+    QVERIFY(overwritePidInLockFile(fileName, QCoreApplication::applicationPid()));
+
+    QLockFile secondLock(fileName);
+    qint64 pid = 0;
+    secondLock.getLockInfo(&pid, 0, 0);
+    QCOMPARE(pid, QCoreApplication::applicationPid());
+    secondLock.setStaleLockTime(0);
+    QVERIFY(secondLock.tryLock());
+    QCOMPARE(int(secondLock.error()), int(QLockFile::NoError));
+#endif // !QT_NO_PROCESS
+}
+
 void tst_QLockFile::staleShortLockFromBusyProcess()
 {
 #ifdef QT_NO_PROCESS
@@ -411,6 +446,103 @@ void tst_QLockFile::noPermissions()
     QLockFile lockFile(fileName);
     QVERIFY(!lockFile.lock());
     QCOMPARE(int(lockFile.error()), int(QLockFile::PermissionError));
+}
+
+enum ProcessProperty {
+    ElevatedProcess = 0x1,
+    VirtualStore = 0x2
+};
+
+Q_DECLARE_FLAGS(ProcessProperties, ProcessProperty)
+Q_DECLARE_OPERATORS_FOR_FLAGS(ProcessProperties)
+
+static inline ProcessProperties processProperties()
+{
+    ProcessProperties result;
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    HANDLE processToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &processToken)) {
+        DWORD elevation; // struct containing a DWORD, not present in some MinGW headers.
+        DWORD cbSize = sizeof(elevation);
+        if (GetTokenInformation(processToken, TokenElevation, &elevation, cbSize, &cbSize)
+            && elevation) {
+            result |= ElevatedProcess;
+        }
+        // Check for UAC virtualization (compatibility mode for old software
+        // allowing it to write to system folders by mirroring them under
+        // "\Users\...\AppData\Local\VirtualStore\", which is typically the case
+        // for MinGW).
+        DWORD virtualStoreEnabled = 0;
+        cbSize = sizeof(virtualStoreEnabled);
+        if (GetTokenInformation(processToken, TokenVirtualizationEnabled, &virtualStoreEnabled, cbSize, &cbSize)
+            && virtualStoreEnabled) {
+            result |= VirtualStore;
+        }
+        CloseHandle(processToken);
+    }
+#endif
+    return result;
+}
+
+void tst_QLockFile::noPermissionsWindows()
+{
+    // Windows: Do the permissions test in a system directory in which
+    // files cannot be created.
+#if !defined(Q_OS_WIN) || defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+    QSKIP("This test is for desktop Windows only");
+#endif
+#ifdef Q_OS_WIN
+    if (QSysInfo::windowsVersion() < QSysInfo::WV_WINDOWS7)
+        QSKIP("This test requires at least Windows 7");
+#endif
+    if (const int p = processProperties()) {
+        const QByteArray message = "This test cannot be run (properties=0x"
+            + QByteArray::number(p, 16) + ')';
+        QSKIP(message.constData());
+    }
+
+    const QString fileName = QFile::decodeName(qgetenv("ProgramFiles"))
+        + QLatin1Char('/') + QCoreApplication::applicationName()
+        + QDateTime::currentDateTime().toString(QStringLiteral("yyMMddhhmm"));
+    QLockFile lockFile(fileName);
+    QVERIFY(!lockFile.lock());
+    QCOMPARE(int(lockFile.error()), int(QLockFile::PermissionError));
+}
+
+void tst_QLockFile::corruptedLockFile()
+{
+    const QString fileName = dir.path() + "/corruptedLockFile";
+
+    {
+        // Create a empty file. Typically the result of a computer crash or hard disk full.
+        QFile file(fileName);
+        QVERIFY(file.open(QFile::WriteOnly));
+    }
+
+    QLockFile secondLock(fileName);
+    secondLock.setStaleLockTime(100);
+    QVERIFY(secondLock.tryLock(10000));
+    QCOMPARE(int(secondLock.error()), int(QLockFile::NoError));
+}
+
+bool tst_QLockFile::overwritePidInLockFile(const QString &filePath, qint64 pid)
+{
+    QFile f(filePath);
+    if (!f.open(QFile::ReadWrite)) {
+        qWarning("Cannot open %s.", qPrintable(filePath));
+        return false;
+    }
+    QByteArray buf = f.readAll();
+    int i = buf.indexOf('\n');
+    if (i < 0) {
+        qWarning("Unexpected lockfile content.");
+        return false;
+    }
+    buf.remove(0, i);
+    buf.prepend(QByteArray::number(pid));
+    f.seek(0);
+    f.resize(buf.size());
+    return f.write(buf) == buf.size();
 }
 
 QTEST_MAIN(tst_QLockFile)

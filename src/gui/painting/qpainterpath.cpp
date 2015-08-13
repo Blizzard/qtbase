@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -521,7 +521,7 @@ void QPainterPath::setElementPositionAt(int i, qreal x, qreal y)
 /*!
     Constructs an empty QPainterPath object.
 */
-QPainterPath::QPainterPath()
+QPainterPath::QPainterPath() Q_DECL_NOEXCEPT
     : d_ptr(0)
 {
 }
@@ -3057,20 +3057,19 @@ qreal QPainterPath::slopeAtPercent(qreal t) const
     //tangent line
     qreal slope = 0;
 
-#define SIGN(x) ((x < 0)?-1:1)
     if (m1)
         slope = m2/m1;
     else {
-        //windows doesn't define INFINITY :(
-#ifdef INFINITY
-        slope = INFINITY*SIGN(m2);
-#else
-        if (sizeof(qreal) == sizeof(double)) {
-            return 1.79769313486231570e+308;
+        if (std::numeric_limits<qreal>::has_infinity) {
+            slope = (m2  < 0) ? -std::numeric_limits<qreal>::infinity()
+                              : std::numeric_limits<qreal>::infinity();
         } else {
-            return ((qreal)3.40282346638528860e+38);
+            if (sizeof(qreal) == sizeof(double)) {
+                return 1.79769313486231570e+308;
+            } else {
+                return ((qreal)3.40282346638528860e+38);
+            }
         }
-#endif
     }
 
     return slope;

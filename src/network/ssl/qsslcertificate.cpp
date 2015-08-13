@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -105,13 +105,18 @@
     \value EmailAddress The email address associated with the certificate
 */
 
+#include <QtCore/qglobal.h>
 #ifndef QT_NO_OPENSSL
 #include "qsslsocket_openssl_symbols_p.h"
 #endif
 #ifdef Q_OS_WINRT
 #include "qsslsocket_winrt_p.h"
 #endif
+#ifdef QT_SECURETRANSPORT
+#include "qsslsocket_mac_p.h"
+#endif
 
+#include "qssl_p.h"
 #include "qsslcertificate.h"
 #include "qsslcertificate_p.h"
 #include "qsslkey_p.h"
@@ -524,7 +529,7 @@ QList<QSslCertificate> QSslCertificate::fromPath(const QString &path,
 QList<QSslCertificate> QSslCertificate::fromDevice(QIODevice *device, QSsl::EncodingFormat format)
 {
     if (!device) {
-        qWarning("QSslCertificate::fromDevice: cannot read from a null device");
+        qCWarning(lcSsl, "QSslCertificate::fromDevice: cannot read from a null device");
         return QList<QSslCertificate>();
     }
     return fromData(device->readAll(), format);
@@ -558,7 +563,11 @@ QList<QSslCertificate> QSslCertificate::fromData(const QByteArray &data, QSsl::E
 
     \since 5.0
  */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+QList<QSslError> QSslCertificate::verify(const QList<QSslCertificate> &certificateChain, const QString &hostName)
+#else
 QList<QSslError> QSslCertificate::verify(QList<QSslCertificate> certificateChain, const QString &hostName)
+#endif
 {
     return QSslSocketBackendPrivate::verify(certificateChain, hostName);
 }
@@ -585,7 +594,7 @@ bool QSslCertificate::importPkcs12(QIODevice *device,
 
 // These certificates are known to be fraudulent and were created during the comodo
 // compromise. See http://www.comodo.com/Comodo-Fraud-Incident-2011-03-23.html
-static const char *certificate_blacklist[] = {
+static const char *const certificate_blacklist[] = {
     "04:7e:cb:e9:fc:a5:5f:7b:d0:9e:ae:36:e1:0c:ae:1e", "mail.google.com", // Comodo
     "f5:c8:6a:f3:61:62:f1:3a:64:f5:4f:6d:c9:58:7c:06", "www.google.com", // Comodo
     "d7:55:8f:da:f5:f1:10:5b:b2:13:28:2b:70:77:29:a3", "login.yahoo.com", // Comodo
@@ -673,16 +682,18 @@ QByteArray QSslCertificatePrivate::subjectInfoToString(QSslCertificate::SubjectI
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, const QSslCertificate &certificate)
 {
+    QDebugStateSaver saver(debug);
+    debug.resetFormat().nospace();
     debug << "QSslCertificate("
           << certificate.version()
-          << ',' << certificate.serialNumber()
-          << ',' << certificate.digest().toBase64()
-          << ',' << certificate.issuerInfo(QSslCertificate::Organization)
-          << ',' << certificate.subjectInfo(QSslCertificate::Organization)
-          << ',' << certificate.subjectAlternativeNames()
+          << ", " << certificate.serialNumber()
+          << ", " << certificate.digest().toBase64()
+          << ", " << certificate.issuerInfo(QSslCertificate::Organization)
+          << ", " << certificate.subjectInfo(QSslCertificate::Organization)
+          << ", " << certificate.subjectAlternativeNames()
 #ifndef QT_NO_DATESTRING
-          << ',' << certificate.effectiveDate()
-          << ',' << certificate.expiryDate()
+          << ", " << certificate.effectiveDate()
+          << ", " << certificate.expiryDate()
 #endif
           << ')';
     return debug;

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -53,8 +53,6 @@
 #include <QtWidgets/qformlayout.h>
 #include <QtCore/QCoreApplication>
 
-#include <math.h>
-
 #ifndef QT_NO_PRINTPREVIEWDIALOG
 
 static void initResources()
@@ -73,7 +71,7 @@ class QPrintPreviewMainWindow : public QMainWindow
 {
 public:
     QPrintPreviewMainWindow(QWidget *parent) : QMainWindow(parent) {}
-    QMenu *createPopupMenu() { return 0; }
+    QMenu *createPopupMenu() Q_DECL_OVERRIDE { return 0; }
 };
 
 class ZoomFactorValidator : public QDoubleValidator
@@ -84,7 +82,7 @@ public:
     ZoomFactorValidator(qreal bottom, qreal top, int decimals, QObject *parent)
         : QDoubleValidator(bottom, top, decimals, parent) {}
 
-    State validate(QString &input, int &pos) const
+    State validate(QString &input, int &pos) const Q_DECL_OVERRIDE
     {
         bool replacePercent = false;
         if (input.endsWith(QLatin1Char('%'))) {
@@ -117,13 +115,13 @@ public:
     }
 
 protected:
-    void focusInEvent(QFocusEvent *e)
+    void focusInEvent(QFocusEvent *e) Q_DECL_OVERRIDE
     {
         origText = text();
         QLineEdit::focusInEvent(e);
     }
 
-    void focusOutEvent(QFocusEvent *e)
+    void focusOutEvent(QFocusEvent *e) Q_DECL_OVERRIDE
     {
         if (isModified() && !hasAcceptableInput())
             setText(origText);

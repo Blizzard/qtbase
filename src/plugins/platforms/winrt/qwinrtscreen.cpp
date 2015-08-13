@@ -1,31 +1,34 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL3$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or later as published by the Free
+** Software Foundation and appearing in the file LICENSE.GPL included in
+** the packaging of this file. Please review the following information to
+** ensure the GNU General Public License version 2.0 requirements will be
+** met: http://www.gnu.org/licenses/gpl-2.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -497,9 +500,9 @@ QWinRTScreen::QWinRTScreen()
     Q_ASSERT_SUCCEEDED(hr);
 
 #ifdef Q_OS_WINPHONE
-    d->inputContext.reset(new QWinRTInputContext(d->coreWindow.Get()));
+    d->inputContext.reset(new QWinRTInputContext(this));
 #else
-    d->inputContext = Make<QWinRTInputContext>(d->coreWindow.Get());
+    d->inputContext = Make<QWinRTInputContext>(this);
 #endif
 
     Rect rect;
@@ -580,7 +583,7 @@ QWinRTScreen::QWinRTScreen()
     d->orientation = d->nativeOrientation;
     onOrientationChanged(Q_NULLPTR, Q_NULLPTR);
 
-    d->eglDisplay = eglGetDisplay(d->displayInformation.Get());
+    d->eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (d->eglDisplay == EGL_NO_DISPLAY)
         qCritical("Failed to initialize EGL display: 0x%x", eglGetError());
 
@@ -616,14 +619,7 @@ QWinRTScreen::QWinRTScreen()
 
     d->eglConfig = q_configFromGLFormat(d->eglDisplay, d->surfaceFormat);
     d->surfaceFormat = q_glFormatFromConfig(d->eglDisplay, d->eglConfig, d->surfaceFormat);
-    const QRect bounds = geometry();
-    EGLint windowAttributes[] = {
-        EGL_FIXED_SIZE_ANGLE, EGL_TRUE,
-        EGL_WIDTH, bounds.width(),
-        EGL_HEIGHT, bounds.height(),
-        EGL_NONE
-    };
-    d->eglSurface = eglCreateWindowSurface(d->eglDisplay, d->eglConfig, d->coreWindow.Get(), windowAttributes);
+    d->eglSurface = eglCreateWindowSurface(d->eglDisplay, d->eglConfig, d->coreWindow.Get(), NULL);
     if (d->eglSurface == EGL_NO_SURFACE)
         qCritical("Failed to create EGL window surface: 0x%x", eglGetError());
 }
@@ -678,6 +674,12 @@ QDpi QWinRTScreen::logicalDpi() const
 {
     Q_D(const QWinRTScreen);
     return QDpi(d->logicalDpi, d->logicalDpi);
+}
+
+qreal QWinRTScreen::scaleFactor() const
+{
+    Q_D(const QWinRTScreen);
+    return d->scaleFactor;
 }
 
 QWinRTInputContext *QWinRTScreen::inputContext() const
@@ -1081,14 +1083,6 @@ HRESULT QWinRTScreen::onSizeChanged(ICoreWindow *, IWindowSizeChangedEventArgs *
     d->logicalSize = logicalSize;
     if (d->eglDisplay) {
         const QRect newGeometry = geometry();
-        int width = newGeometry.width();
-        int height = newGeometry.height();
-#ifdef Q_OS_WINPHONE // Windows Phone can pass in a negative size to provide orientation information
-        width *= (d->orientation == Qt::InvertedPortraitOrientation || d->orientation == Qt::LandscapeOrientation) ? -1 : 1;
-        height *= (d->orientation == Qt::InvertedPortraitOrientation || d->orientation == Qt::InvertedLandscapeOrientation) ? -1 : 1;
-#endif
-        eglSurfaceAttrib(d->eglDisplay, d->eglSurface, EGL_WIDTH, width);
-        eglSurfaceAttrib(d->eglDisplay, d->eglSurface, EGL_HEIGHT, height);
         QWindowSystemInterface::handleScreenGeometryChange(screen(), newGeometry, newGeometry);
         QPlatformScreen::resizeMaximizedWindows();
         handleExpose();

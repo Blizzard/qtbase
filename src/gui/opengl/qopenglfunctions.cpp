@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,6 +38,10 @@
 #include <QtGui/private/qopengl_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
+
+#ifdef Q_OS_IOS
+#include <dlfcn.h>
+#endif
 
 #ifndef GL_FRAMEBUFFER_SRGB_CAPABLE_EXT
 #define GL_FRAMEBUFFER_SRGB_CAPABLE_EXT   0x8DBA
@@ -173,6 +177,7 @@ QT_BEGIN_NAMESPACE
     \value NPOTTextures Non power of two textures are available.
     \value NPOTTextureRepeat Non power of two textures can use GL_REPEAT as wrap parameter.
     \value FixedFunctionPipeline The fixed function pipeline is available.
+    \value TextureRGFormats The GL_RED and GL_RG texture formats are available.
 */
 
 // Hidden private fields for additional extension data.
@@ -185,13 +190,13 @@ struct QOpenGLFunctionsPrivateEx : public QOpenGLExtensionsPrivate, public QOpen
         , m_extensions(-1)
     {}
 
-    void invalidateResource()
+    void invalidateResource() Q_DECL_OVERRIDE
     {
         m_features = -1;
         m_extensions = -1;
     }
 
-    void freeResource(QOpenGLContext *)
+    void freeResource(QOpenGLContext *) Q_DECL_OVERRIDE
     {
         // no gl resources to free
     }
@@ -284,10 +289,12 @@ static int qt_gl_resolve_features()
         if (extensions.match("GL_OES_texture_npot"))
             features |= QOpenGLFunctions::NPOTTextures |
                 QOpenGLFunctions::NPOTTextureRepeat;
+        if (ctx->format().majorVersion() >= 3 || extensions.match("GL_EXT_texture_rg"))
+            features |= QOpenGLFunctions::TextureRGFormats;
         return features;
     } else {
         // OpenGL
-        int features = 0;
+        int features = QOpenGLFunctions::TextureRGFormats;
         QSurfaceFormat format = QOpenGLContext::currentContext()->format();
         QOpenGLExtensionMatcher extensions;
 
@@ -412,6 +419,9 @@ static int qt_gl_resolve_extensions()
         // We don't match GL_APPLE_texture_format_BGRA8888 here because it has different semantics.
         if (extensionMatcher.match("GL_IMG_texture_format_BGRA8888") || extensionMatcher.match("GL_EXT_texture_format_BGRA8888"))
             extensions |= QOpenGLExtensions::BGRATextureFormat;
+
+        if (extensionMatcher.match("GL_EXT_discard_framebuffer"))
+            extensions |= QOpenGLExtensions::DiscardFramebuffer;
     } else {
         extensions |= QOpenGLExtensions::ElementIndexUint | QOpenGLExtensions::MapBuffer;
 
@@ -3187,71 +3197,137 @@ static void QOPENGLF_APIENTRY qopenglfResolveVertexAttribPointer(GLuint indx, GL
 
 #endif // !QT_OPENGL_ES_2
 
+// Functions part of the OpenGL ES 3.0+ standard need special handling. These,
+// just like the 2.0 functions, are not guaranteed to be resolvable via
+// eglGetProcAddress or similar. Calling them directly is, unlike the 2.0
+// functions, not feasible because one may build the binaries on a GLES3-capable
+// system and then deploy on a GLES2-only system that does not have these
+// symbols. Until ES3 gets universally available, they have to be dlsym'ed.
+
+Q_GLOBAL_STATIC(QOpenGLES3Helper, qgles3Helper)
+
+bool QOpenGLES3Helper::init()
+{
+#ifndef Q_OS_IOS
+# ifdef Q_OS_WIN
+#  ifndef QT_DEBUG
+    m_gl.setFileName(QStringLiteral("libGLESv2"));
+#  else
+    m_gl.setFileName(QStringLiteral("libGLESv2d"));
+#  endif
+# else
+    m_gl.setFileName(QStringLiteral("GLESv2"));
+# endif // Q_OS_WIN
+    return m_gl.load();
+#else
+    return true;
+#endif // Q_OS_IOS
+}
+
+QFunctionPointer QOpenGLES3Helper::resolve(const char *name)
+{
+#ifdef Q_OS_IOS
+    return QFunctionPointer(dlsym(RTLD_DEFAULT, name));
+#else
+    return m_gl.resolve(name);
+#endif
+}
+
+QOpenGLES3Helper::QOpenGLES3Helper()
+{
+    if (init()) {
+        MapBufferRange = (GLvoid* (QOPENGLF_APIENTRYP)(GLenum, qopengl_GLintptr, qopengl_GLsizeiptr, GLbitfield)) resolve("glMapBufferRange");
+        UnmapBuffer = (GLboolean (QOPENGLF_APIENTRYP)(GLenum)) resolve("glUnmapBuffer");
+        BlitFramebuffer = (void (QOPENGLF_APIENTRYP)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum)) resolve("glBlitFramebuffer");
+        RenderbufferStorageMultisample = (void (QOPENGLF_APIENTRYP)(GLenum, GLsizei, GLenum, GLsizei, GLsizei)) resolve("glRenderbufferStorageMultisample");
+
+        GenVertexArrays = (void (QOPENGLF_APIENTRYP)(GLsizei, GLuint *)) resolve("glGenVertexArrays");
+        DeleteVertexArrays = (void (QOPENGLF_APIENTRYP)(GLsizei, const GLuint *)) resolve("glDeleteVertexArrays");
+        BindVertexArray = (void (QOPENGLF_APIENTRYP)(GLuint)) resolve("glBindVertexArray");
+        IsVertexArray = (GLboolean (QOPENGLF_APIENTRYP)(GLuint)) resolve("glIsVertexArray");
+
+        TexImage3D = (void (QOPENGLF_APIENTRYP)(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const GLvoid *)) resolve("glTexImage3D");
+        TexSubImage3D = (void (QOPENGLF_APIENTRYP)(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, const GLvoid *)) resolve("glTexSubImage3D");
+        CompressedTexImage3D = (void (QOPENGLF_APIENTRYP)(GLenum, GLint, GLenum, GLsizei, GLsizei, GLsizei, GLint, GLsizei, const GLvoid *)) resolve("glCompressedTexImage3D");
+        CompressedTexSubImage3D = (void (QOPENGLF_APIENTRYP)(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLsizei, const GLvoid *)) resolve("glCompressedTexSubImage3D");
+
+        TexStorage3D = (void (QOPENGLF_APIENTRYP)(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei)) resolve("glTexStorage3D");
+        TexStorage2D = (void (QOPENGLF_APIENTRYP)(GLenum, GLsizei, GLenum, GLsizei, GLsizei)) resolve("glTexStorage2D");
+
+        if (!MapBufferRange || !GenVertexArrays || !TexImage3D || !TexStorage3D)
+            qFatal("OpenGL ES 3.0 entry points not found");
+    } else {
+        qFatal("Failed to load libGLESv2");
+    }
+}
+
+static inline bool isES3()
+{
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    return ctx->isOpenGLES() && ctx->format().majorVersion() >= 3;
+}
+
 static GLvoid *QOPENGLF_APIENTRY qopenglfResolveMapBuffer(GLenum target, GLenum access)
 {
-#ifdef QT_OPENGL_ES_3
     // It is possible that GL_OES_map_buffer is present, but then having to
     // differentiate between glUnmapBufferOES and glUnmapBuffer causes extra
     // headache. QOpenGLBuffer::map() will handle this automatically, while direct
     // calls are better off with migrating to the standard glMapBufferRange.
-    if (QOpenGLContext::currentContext()->format().majorVersion() >= 3) {
+    if (isES3()) {
         qWarning("QOpenGLFunctions: glMapBuffer is not available in OpenGL ES 3.0 and up. Use glMapBufferRange instead.");
         return 0;
-    } else
-#endif
-    RESOLVE_FUNC(GLvoid *, ResolveOES, MapBuffer)(target, access);
+    } else {
+        RESOLVE_FUNC(GLvoid *, ResolveOES, MapBuffer)(target, access);
+    }
 }
 
 static GLvoid *QOPENGLF_APIENTRY qopenglfResolveMapBufferRange(GLenum target, qopengl_GLintptr offset, qopengl_GLsizeiptr length, GLbitfield access)
 {
-#ifdef QT_OPENGL_ES_3
-    if (QOpenGLContext::currentContext()->format().majorVersion() >= 3)
-        return ::glMapBufferRange(target, offset, length, access);
+    if (isES3())
+        return qgles3Helper()->MapBufferRange(target, offset, length, access);
     else
-#endif
-    RESOLVE_FUNC(GLvoid *, 0, MapBufferRange)(target, offset, length, access);
+        RESOLVE_FUNC(GLvoid *, 0, MapBufferRange)(target, offset, length, access);
 }
 
 static GLboolean QOPENGLF_APIENTRY qopenglfResolveUnmapBuffer(GLenum target)
 {
-#ifdef QT_OPENGL_ES_3
-    if (QOpenGLContext::currentContext()->format().majorVersion() >= 3)
-        return ::glUnmapBuffer(target);
+    if (isES3())
+        return qgles3Helper()->UnmapBuffer(target);
     else
-#endif
-    RESOLVE_FUNC(GLboolean, ResolveOES, UnmapBuffer)(target);
+        RESOLVE_FUNC(GLboolean, ResolveOES, UnmapBuffer)(target);
 }
 
 static void QOPENGLF_APIENTRY qopenglfResolveBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                        GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                        GLbitfield mask, GLenum filter)
 {
-#ifdef QT_OPENGL_ES_3
-    if (QOpenGLContext::currentContext()->format().majorVersion() >= 3)
-        ::glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
+    if (isES3())
+        qgles3Helper()->BlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
     else
-#endif
-    RESOLVE_FUNC_VOID(ResolveEXT | ResolveANGLE | ResolveNV, BlitFramebuffer)
-        (srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
+        RESOLVE_FUNC_VOID(ResolveEXT | ResolveANGLE | ResolveNV, BlitFramebuffer)
+            (srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
 }
 
 static void QOPENGLF_APIENTRY qopenglfResolveRenderbufferStorageMultisample(GLenum target, GLsizei samples,
                                       GLenum internalFormat,
                                       GLsizei width, GLsizei height)
 {
-#ifdef QT_OPENGL_ES_3
-    if (QOpenGLContext::currentContext()->format().majorVersion() >= 3)
-        ::glRenderbufferStorageMultisample(target, samples, internalFormat, width, height);
+    if (isES3())
+        qgles3Helper()->RenderbufferStorageMultisample(target, samples, internalFormat, width, height);
     else
-#endif
-    RESOLVE_FUNC_VOID(ResolveEXT | ResolveANGLE | ResolveNV, RenderbufferStorageMultisample)
-        (target, samples, internalFormat, width, height);
+        RESOLVE_FUNC_VOID(ResolveEXT | ResolveANGLE | ResolveNV, RenderbufferStorageMultisample)
+            (target, samples, internalFormat, width, height);
 }
 
 static void QOPENGLF_APIENTRY qopenglfResolveGetBufferSubData(GLenum target, qopengl_GLintptr offset, qopengl_GLsizeiptr size, GLvoid *data)
 {
     RESOLVE_FUNC_VOID(ResolveEXT, GetBufferSubData)
         (target, offset, size, data);
+}
+
+static void QOPENGLF_APIENTRY qopenglfResolveDiscardFramebuffer(GLenum target, GLsizei numAttachments, const GLenum *attachments)
+{
+    RESOLVE_FUNC_VOID(ResolveEXT, DiscardFramebuffer)(target, numAttachments, attachments);
 }
 
 #if !defined(QT_OPENGL_ES_2) && !defined(QT_OPENGL_DYNAMIC)
@@ -3484,7 +3560,8 @@ QOpenGLFunctionsPrivate::QOpenGLFunctionsPrivate(QOpenGLContext *)
 }
 
 QOpenGLExtensionsPrivate::QOpenGLExtensionsPrivate(QOpenGLContext *ctx)
-    : QOpenGLFunctionsPrivate(ctx)
+    : QOpenGLFunctionsPrivate(ctx),
+      flushVendorChecked(false)
 {
     MapBuffer = qopenglfResolveMapBuffer;
     MapBufferRange = qopenglfResolveMapBufferRange;
@@ -3492,6 +3569,41 @@ QOpenGLExtensionsPrivate::QOpenGLExtensionsPrivate(QOpenGLContext *ctx)
     BlitFramebuffer = qopenglfResolveBlitFramebuffer;
     RenderbufferStorageMultisample = qopenglfResolveRenderbufferStorageMultisample;
     GetBufferSubData = qopenglfResolveGetBufferSubData;
+    DiscardFramebuffer = qopenglfResolveDiscardFramebuffer;
+}
+
+QOpenGLES3Helper *QOpenGLExtensions::gles3Helper()
+{
+    return qgles3Helper();
+}
+
+void QOpenGLExtensions::flushShared()
+{
+    Q_D(QOpenGLExtensions);
+
+    if (!d->flushVendorChecked) {
+        d->flushVendorChecked = true;
+        // It is not quite clear if glFlush() is sufficient to synchronize access to
+        // resources between sharing contexts in the same thread. On most platforms this
+        // is enough (e.g. iOS explicitly documents it), while certain drivers only work
+        // properly when doing glFinish().
+        d->flushIsSufficientToSyncContexts = false; // default to false, not guaranteed by the spec
+        const char *vendor = (const char *) glGetString(GL_VENDOR);
+        if (vendor) {
+            static const char *const flushEnough[] = { "Apple", "ATI", "Intel", "NVIDIA" };
+            for (size_t i = 0; i < sizeof(flushEnough) / sizeof(const char *); ++i) {
+                if (strstr(vendor, flushEnough[i])) {
+                    d->flushIsSufficientToSyncContexts = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (d->flushIsSufficientToSyncContexts)
+        glFlush();
+    else
+        glFinish();
 }
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Sean Harmer <sean.harmer@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -35,12 +35,12 @@
 
 #include <QtCore/private/qobject_p.h>
 #include <QtGui/qopenglcontext.h>
-#include <QtGui/qopenglfunctions.h>
 #include <QtGui/qoffscreensurface.h>
 
 #include <QtGui/qopenglfunctions_3_0.h>
 #include <QtGui/qopenglfunctions_3_2_core.h>
 
+#include <private/qopenglextensions_p.h>
 #include <private/qopenglvertexarrayobject_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -56,16 +56,14 @@ void qtInitializeVertexArrayObjectHelper(QOpenGLVertexArrayObjectHelper *helper,
     bool tryARB = true;
 
     if (context->isOpenGLES()) {
-#ifdef QT_OPENGL_ES_3
         if (context->format().majorVersion() >= 3) {
-            helper->GenVertexArrays = ::glGenVertexArrays;
-            helper->DeleteVertexArrays = ::glDeleteVertexArrays;
-            helper->BindVertexArray = ::glBindVertexArray;
-            helper->IsVertexArray = ::glIsVertexArray;
+            QOpenGLES3Helper *es3 = static_cast<QOpenGLExtensions *>(context->functions())->gles3Helper();
+            helper->GenVertexArrays = es3->GenVertexArrays;
+            helper->DeleteVertexArrays = es3->DeleteVertexArrays;
+            helper->BindVertexArray = es3->BindVertexArray;
+            helper->IsVertexArray = es3->IsVertexArray;
             tryARB = false;
-        } else
-#endif
-        if (context->hasExtension(QByteArrayLiteral("GL_OES_vertex_array_object"))) {
+        } else if (context->hasExtension(QByteArrayLiteral("GL_OES_vertex_array_object"))) {
             helper->GenVertexArrays = reinterpret_cast<QOpenGLVertexArrayObjectHelper::qt_GenVertexArrays_t>(context->getProcAddress(QByteArrayLiteral("glGenVertexArraysOES")));
             helper->DeleteVertexArrays = reinterpret_cast<QOpenGLVertexArrayObjectHelper::qt_DeleteVertexArrays_t>(context->getProcAddress(QByteArrayLiteral("glDeleteVertexArraysOES")));
             helper->BindVertexArray = reinterpret_cast<QOpenGLVertexArrayObjectHelper::qt_BindVertexArray_t>(context->getProcAddress(QByteArrayLiteral("glBindVertexArrayOES")));
@@ -146,6 +144,11 @@ bool QOpenGLVertexArrayObjectPrivate::create()
         qWarning("QOpenGLVertexArrayObject::create() requires a valid current OpenGL context");
         return false;
     }
+
+    //Fail early, if context is the same as ctx, it means we have tried to initialize for this context and failed
+    if (ctx == context)
+        return false;
+
     context = ctx;
     QObject::connect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
 
@@ -163,12 +166,10 @@ bool QOpenGLVertexArrayObjectPrivate::create()
         if (format.version() >= qMakePair<int, int>(3,2)) {
             vaoFuncs.core_3_2 = ctx->versionFunctions<QOpenGLFunctions_3_2_Core>();
             vaoFuncsType = Core_3_2;
-            vaoFuncs.core_3_2->initializeOpenGLFunctions();
             vaoFuncs.core_3_2->glGenVertexArrays(1, &vao);
         } else if (format.majorVersion() >= 3) {
             vaoFuncs.core_3_0 = ctx->versionFunctions<QOpenGLFunctions_3_0>();
             vaoFuncsType = Core_3_0;
-            vaoFuncs.core_3_0->initializeOpenGLFunctions();
             vaoFuncs.core_3_0->glGenVertexArrays(1, &vao);
         } else
 #endif
@@ -188,10 +189,15 @@ bool QOpenGLVertexArrayObjectPrivate::create()
 
 void QOpenGLVertexArrayObjectPrivate::destroy()
 {
+    Q_Q(QOpenGLVertexArrayObject);
+
+    if (context) {
+        QObject::disconnect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
+        context = 0;
+    }
+
     if (!vao)
         return;
-
-    Q_Q(QOpenGLVertexArrayObject);
 
     switch (vaoFuncsType) {
 #ifndef QT_OPENGL_ES_2
@@ -210,10 +216,6 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
     default:
         break;
     }
-
-    Q_ASSERT(context);
-    QObject::disconnect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
-    context = 0;
 
     vao = 0;
 }

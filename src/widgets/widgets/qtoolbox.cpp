@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -65,12 +65,12 @@ public:
     inline void setSelected(bool b) { selected = b; update(); }
     inline void setIndex(int newIndex) { indexInPage = newIndex; }
 
-    QSize sizeHint() const;
-    QSize minimumSizeHint() const;
+    QSize sizeHint() const Q_DECL_OVERRIDE;
+    QSize minimumSizeHint() const Q_DECL_OVERRIDE;
 
 protected:
     void initStyleOption(QStyleOptionToolBox *opt) const;
-    void paintEvent(QPaintEvent *);
+    void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
 
 private:
     bool selected;
@@ -111,7 +111,7 @@ public:
     void _q_buttonClicked();
     void _q_widgetDestroyed(QObject*);
 
-    Page *page(QWidget *widget) const;
+    const Page *page(QWidget *widget) const;
     const Page *page(int index) const;
     Page *page(int index);
 
@@ -123,14 +123,14 @@ public:
     Page *currentPage;
 };
 
-QToolBoxPrivate::Page *QToolBoxPrivate::page(QWidget *widget) const
+const QToolBoxPrivate::Page *QToolBoxPrivate::page(QWidget *widget) const
 {
     if (!widget)
         return 0;
 
     for (PageList::ConstIterator i = pageList.constBegin(); i != pageList.constEnd(); ++i)
         if ((*i).widget == widget)
-            return (Page*) &(*i);
+            return (const Page*) &(*i);
     return 0;
 }
 
@@ -232,7 +232,6 @@ void QToolBoxButton::initStyleOption(QStyleOptionToolBox *option) const
 void QToolBoxButton::paintEvent(QPaintEvent *)
 {
     QPainter paint(this);
-    QString text = QAbstractButton::text();
     QPainter *p = &paint;
     QStyleOptionToolBoxV2 opt;
     initStyleOption(&opt);
@@ -449,7 +448,7 @@ void QToolBoxPrivate::_q_widgetDestroyed(QObject *object)
     // no verification - vtbl corrupted already
     QWidget *p = (QWidget*)object;
 
-    QToolBoxPrivate::Page *c = page(p);
+    const QToolBoxPrivate::Page *c = page(p);
     if (!p || !c)
         return;
 
@@ -551,7 +550,7 @@ QWidget *QToolBox::widget(int index) const
 int QToolBox::indexOf(QWidget *widget) const
 {
     Q_D(const QToolBox);
-    QToolBoxPrivate::Page *c = (widget ? d->page(widget) : 0);
+    const QToolBoxPrivate::Page *c = (widget ? d->page(widget) : 0);
     return c ? d->pageList.indexOf(*c) : -1;
 }
 

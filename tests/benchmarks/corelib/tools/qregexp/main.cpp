@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -75,17 +75,13 @@ private slots:
     void rangeReplace2();
     void matchReplace2();
 
-#ifdef HAVE_JSC
     void simpleFindJSC();
     void rangeReplaceJSC();
     void matchReplaceJSC();
-#endif
 
-#ifdef HAVE_BOOST
     void simpleFindBoost();
     void rangeReplaceBoost();
     void matchReplaceBoost();
-#endif
 
 /* those apply an (incorrect) regexp on entire source
    (this main.cpp). JSC appears to handle this
@@ -95,14 +91,10 @@ private slots:
     void horribleReplace1();
     void horribleReplace2();
     void horribleWrongReplace2();
-#ifdef HAVE_JSC
     void horribleWrongReplaceJSC();
     void horribleReplaceJSC();
-#endif
-#ifdef HAVE_BOOST
     void horribleWrongReplaceBoost();
     void horribleReplaceBoost();
-#endif
 private:
     QString str1;
     QString str2;
@@ -451,9 +443,9 @@ void tst_qregexp::horribleReplace2()
     }
     QCOMPARE(r, QString("1.2.3"));
 }
-#ifdef HAVE_JSC
 void tst_qregexp::simpleFindJSC()
 {
+#ifdef HAVE_JSC
     int numr;
     const char * errmsg="  ";
     QString rxs("happy");
@@ -467,10 +459,14 @@ void tst_qregexp::simpleFindJSC()
     jsRegExpFree(rx);
     QCOMPARE(numr, 1);
     QCOMPARE(offsetVector[0], 11);
+#else
+    QSKIP("JSC is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::rangeReplaceJSC()
 {
+#ifdef HAVE_JSC
     QScriptValue r;
     QScriptEngine engine;
     engine.globalObject().setProperty("s", str1);
@@ -480,10 +476,14 @@ void tst_qregexp::rangeReplaceJSC()
         r = replaceFunc.call(QScriptValue());
     }
     QCOMPARE(r.toString(), QString("W- -r- -ll h-ppy monk-ys"));
+#else
+    QSKIP("JSC is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::matchReplaceJSC()
 {
+#ifdef HAVE_JSC
     QScriptValue r;
     QScriptEngine engine;
     engine.globalObject().setProperty("s", str1);
@@ -493,10 +493,14 @@ void tst_qregexp::matchReplaceJSC()
         r = replaceFunc.call(QScriptValue());
     }
     QCOMPARE(r.toString(), QString("eaeaae"));
+#else
+    QSKIP("JSC is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::horribleWrongReplaceJSC()
 {
+#ifdef HAVE_JSC
     QScriptValue r;
     QScriptEngine engine;
     engine.globalObject().setProperty("s", str2);
@@ -506,10 +510,14 @@ void tst_qregexp::horribleWrongReplaceJSC()
         r = replaceFunc.call(QScriptValue());
     }
     QCOMPARE(r.toString(), str2);
+#else
+    QSKIP("JSC is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::horribleReplaceJSC()
 {
+#ifdef HAVE_JSC
     QScriptValue r;
     QScriptEngine engine;
     // the m flag doesn't actually work here; dunno
@@ -520,11 +528,14 @@ void tst_qregexp::horribleReplaceJSC()
         r = replaceFunc.call(QScriptValue());
     }
     QCOMPARE(r.toString(), QString("1.2.3"));
-}
+#else
+    QSKIP("JSC is not enabled for this platform");
 #endif
+}
 
+void tst_qregexp::simpleFindBoost()
+{
 #ifdef HAVE_BOOST
-void tst_qregexp::simpleFindBoost(){
     int roff;
     boost::regex rx ("happy", boost::regex_constants::perl);
     std::string s = str1.toStdString();
@@ -538,10 +549,15 @@ void tst_qregexp::simpleFindBoost(){
         roff = (what[0].first)-start;
     }
     QCOMPARE(roff, 11);
+#else
+    QSKIP("Boost is not enabled for this platform");
+#endif
+
 }
 
 void tst_qregexp::rangeReplaceBoost()
 {
+#ifdef HAVE_BOOST
     boost::regex pattern ("[a-f]", boost::regex_constants::perl);
     std::string s = str1.toStdString();
     std::string r;
@@ -549,10 +565,14 @@ void tst_qregexp::rangeReplaceBoost()
         r = boost::regex_replace (s, pattern, "-");
     }
     QCOMPARE(r, std::string("W- -r- -ll h-ppy monk-ys"));
+#else
+    QSKIP("Boost is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::matchReplaceBoost()
 {
+#ifdef HAVE_BOOST
     boost::regex pattern ("[^a-f]*([a-f]+)[^a-f]*",boost::regex_constants::perl);
     std::string s = str1.toStdString();
     std::string r;
@@ -560,10 +580,14 @@ void tst_qregexp::matchReplaceBoost()
         r = boost::regex_replace (s, pattern, "$1");
     }
     QCOMPARE(r, std::string("eaeaae"));
+#else
+    QSKIP("Boost is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::horribleWrongReplaceBoost()
 {
+#ifdef HAVE_BOOST
     boost::regex pattern (".*#""define ZLIB_VERSION \"([0-9]+)\\.([0-9]+)\\.([0-9]+)\".*", boost::regex_constants::perl);
     std::string s = str2.toStdString();
     std::string r;
@@ -571,10 +595,14 @@ void tst_qregexp::horribleWrongReplaceBoost()
         r = boost::regex_replace (s, pattern, "$1.$2.$3");
     }
     QCOMPARE(r, s);
+#else
+    QSKIP("Boost is not enabled for this platform");
+#endif
 }
 
 void tst_qregexp::horribleReplaceBoost()
 {
+#ifdef HAVE_BOOST
     boost::regex pattern (".*#""define ZLIB_VERSION \"([0-9]+)\\.([0-9]+)\\.([0-9]+).*", boost::regex_constants::perl);
     std::string s = str2.toStdString();
     std::string r;
@@ -582,8 +610,10 @@ void tst_qregexp::horribleReplaceBoost()
         r = boost::regex_replace (s, pattern, "$1.$2.$3");
     }
     QCOMPARE(r, std::string("1.2.3"));
+#else
+    QSKIP("Boost is not enabled for this platform");
+#endif
 }
-#endif //HAVE_BOOST
 
 QTEST_MAIN(tst_qregexp)
 

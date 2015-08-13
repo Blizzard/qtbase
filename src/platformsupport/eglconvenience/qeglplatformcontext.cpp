@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -177,17 +177,17 @@ void QEGLPlatformContext::init(const QSurfaceFormat &format, QPlatformOpenGLCont
     }
 
     if (m_eglContext == EGL_NO_CONTEXT) {
-        qWarning("QEGLPlatformContext::init: eglError: %x, this: %p \n", eglGetError(), this);
+        qWarning("QEGLPlatformContext: Failed to create context: %x", eglGetError());
         return;
     }
 
-    static const bool printConfig = qgetenv("QT_QPA_EGLFS_DEBUG").toInt();
+    static const bool printConfig = qEnvironmentVariableIntValue("QT_QPA_EGLFS_DEBUG");
     if (printConfig) {
         qDebug() << "Created context for format" << format << "with config:";
         q_printEglConfig(m_eglDisplay, m_eglConfig);
     }
 
-    updateFormatFromGL();
+    // Cannot just call updateFormatFromGL() since it relies on virtuals. Defer it to initialize().
 }
 
 void QEGLPlatformContext::adopt(const QVariant &nativeHandle, QPlatformOpenGLContext *share)
@@ -238,6 +238,34 @@ void QEGLPlatformContext::adopt(const QVariant &nativeHandle, QPlatformOpenGLCon
     updateFormatFromGL();
 }
 
+void QEGLPlatformContext::initialize()
+{
+    updateFormatFromGL();
+}
+
+EGLSurface QEGLPlatformContext::createTemporaryOffscreenSurface()
+{
+    // Make the context current to ensure the GL version query works. This needs a surface too.
+    const EGLint pbufferAttributes[] = {
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
+        EGL_LARGEST_PBUFFER, EGL_FALSE,
+        EGL_NONE
+    };
+
+    // Cannot just pass m_eglConfig because it may not be suitable for pbuffers. Instead,
+    // do what QEGLPbuffer would do: request a config with the same attributes but with
+    // PBUFFER_BIT set.
+    EGLConfig config = q_configFromGLFormat(m_eglDisplay, m_format, false, EGL_PBUFFER_BIT);
+
+    return eglCreatePbufferSurface(m_eglDisplay, config, pbufferAttributes);
+}
+
+void QEGLPlatformContext::destroyTemporaryOffscreenSurface(EGLSurface surface)
+{
+    eglDestroySurface(m_eglDisplay, surface);
+}
+
 void QEGLPlatformContext::updateFormatFromGL()
 {
 #ifndef QT_NO_OPENGL
@@ -250,22 +278,14 @@ void QEGLPlatformContext::updateFormatFromGL()
     EGLSurface prevSurfaceDraw = eglGetCurrentSurface(EGL_DRAW);
     EGLSurface prevSurfaceRead = eglGetCurrentSurface(EGL_READ);
 
-    // Make the context current to ensure the GL version query works. This needs a surface too.
-    const EGLint pbufferAttributes[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_LARGEST_PBUFFER, EGL_FALSE,
-        EGL_NONE
-    };
-    // Cannot just pass m_eglConfig because it may not be suitable for pbuffers. Instead,
-    // do what QEGLPbuffer would do: request a config with the same attributes but with
-    // PBUFFER_BIT set.
-    EGLConfig config = q_configFromGLFormat(m_eglDisplay, m_format, false, EGL_PBUFFER_BIT);
-    EGLSurface pbuffer = eglCreatePbufferSurface(m_eglDisplay, config, pbufferAttributes);
-    if (pbuffer == EGL_NO_SURFACE)
-        return;
+    // Rely on the surfaceless extension, if available. This is beneficial since we can
+    // avoid creating an extra pbuffer surface which is apparently troublesome with some
+    // drivers (Mesa) when certain attributes are present (multisampling).
+    EGLSurface tempSurface = EGL_NO_SURFACE;
+    if (!q_hasEglExtension(m_eglDisplay, "EGL_KHR_surfaceless_context"))
+        tempSurface = createTemporaryOffscreenSurface();
 
-    if (eglMakeCurrent(m_eglDisplay, pbuffer, pbuffer, m_eglContext)) {
+    if (eglMakeCurrent(m_eglDisplay, tempSurface, tempSurface, m_eglContext)) {
         if (m_format.renderableType() == QSurfaceFormat::OpenGL
             || m_format.renderableType() == QSurfaceFormat::OpenGLES) {
             const GLubyte *s = glGetString(GL_VERSION);
@@ -302,8 +322,11 @@ void QEGLPlatformContext::updateFormatFromGL()
             }
         }
         eglMakeCurrent(prevDisplay, prevSurfaceDraw, prevSurfaceRead, prevContext);
+    } else {
+        qWarning("QEGLPlatformContext: Failed to make temporary surface current, format not updated");
     }
-    eglDestroySurface(m_eglDisplay, pbuffer);
+    if (tempSurface != EGL_NO_SURFACE)
+        destroyTemporaryOffscreenSurface(tempSurface);
 #endif // QT_NO_OPENGL
 }
 
@@ -340,10 +363,11 @@ bool QEGLPlatformContext::makeCurrent(QPlatformSurface *surface)
             : surface->format().swapInterval();
         if (requestedSwapInterval >= 0 && m_swapInterval != requestedSwapInterval) {
             m_swapInterval = requestedSwapInterval;
-            eglSwapInterval(eglDisplay(), m_swapInterval);
+            if (eglSurface != EGL_NO_SURFACE) // skip if using surfaceless context
+                eglSwapInterval(eglDisplay(), m_swapInterval);
         }
     } else {
-        qWarning("QEGLPlatformContext::makeCurrent: eglError: %x, this: %p \n", eglGetError(), this);
+        qWarning("QEGLPlatformContext: eglMakeCurrent failed: %x", eglGetError());
     }
 
     return ok;
@@ -362,16 +386,18 @@ void QEGLPlatformContext::doneCurrent()
     eglBindAPI(m_api);
     bool ok = eglMakeCurrent(m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     if (!ok)
-        qWarning("QEGLPlatformContext::doneCurrent(): eglError: %d, this: %p \n", eglGetError(), this);
+        qWarning("QEGLPlatformContext: eglMakeCurrent failed: %x", eglGetError());
 }
 
 void QEGLPlatformContext::swapBuffers(QPlatformSurface *surface)
 {
     eglBindAPI(m_api);
     EGLSurface eglSurface = eglSurfaceForPlatformSurface(surface);
-    bool ok = eglSwapBuffers(m_eglDisplay, eglSurface);
-    if (!ok)
-        qWarning("QEGLPlatformContext::swapBuffers(): eglError: %d, this: %p \n", eglGetError(), this);
+    if (eglSurface != EGL_NO_SURFACE) { // skip if using surfaceless context
+        bool ok = eglSwapBuffers(m_eglDisplay, eglSurface);
+        if (!ok)
+            qWarning("QEGLPlatformContext: eglSwapBuffers failed: %x", eglGetError());
+    }
 }
 
 void (*QEGLPlatformContext::getProcAddress(const QByteArray &procName)) ()

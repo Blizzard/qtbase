@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -102,7 +102,7 @@ public:
     int getPointInOutline(glyph_t glyph, int flags, quint32 point, QFixed *xpos, QFixed *ypos, quint32 *nPoints);
 
     static void addGlyphToPath(FT_Face face, FT_GlyphSlot g, const QFixedPoint &point, QPainterPath *path, FT_Fixed x_scale, FT_Fixed y_scale);
-    static void addBitmapToPath(FT_GlyphSlot slot, const QFixedPoint &point, QPainterPath *path, bool = false);
+    static void addBitmapToPath(FT_GlyphSlot slot, const QFixedPoint &point, QPainterPath *path);
 
 private:
     friend class QFontEngineFT;
@@ -143,6 +143,7 @@ public:
     };
 
     struct GlyphInfo {
+        int             linearAdvance;
         unsigned short  width;
         unsigned short  height;
         short           x;
@@ -188,66 +189,67 @@ private:
         mutable int fast_glyph_count;
     };
 
-    virtual QFontEngine::FaceId faceId() const;
-    virtual QFontEngine::Properties properties() const;
-    virtual QFixed emSquareSize() const;
-    virtual bool supportsSubPixelPositions() const
+    virtual QFontEngine::FaceId faceId() const Q_DECL_OVERRIDE;
+    virtual QFontEngine::Properties properties() const Q_DECL_OVERRIDE;
+    virtual QFixed emSquareSize() const Q_DECL_OVERRIDE;
+    virtual bool supportsSubPixelPositions() const Q_DECL_OVERRIDE
     {
         return default_hint_style == HintLight ||
                default_hint_style == HintNone;
     }
 
-    virtual bool getSfntTableData(uint tag, uchar *buffer, uint *length) const;
-    virtual int synthesized() const;
+    virtual bool getSfntTableData(uint tag, uchar *buffer, uint *length) const Q_DECL_OVERRIDE;
+    virtual int synthesized() const Q_DECL_OVERRIDE;
 
-    virtual QFixed ascent() const;
-    virtual QFixed descent() const;
-    virtual QFixed leading() const;
-    virtual QFixed xHeight() const;
-    virtual QFixed averageCharWidth() const;
+    virtual QFixed ascent() const Q_DECL_OVERRIDE;
+    virtual QFixed descent() const Q_DECL_OVERRIDE;
+    virtual QFixed leading() const Q_DECL_OVERRIDE;
+    virtual QFixed xHeight() const Q_DECL_OVERRIDE;
+    virtual QFixed averageCharWidth() const Q_DECL_OVERRIDE;
 
-    virtual qreal maxCharWidth() const;
-    virtual qreal minLeftBearing() const;
-    virtual qreal minRightBearing() const;
-    virtual QFixed lineThickness() const;
-    virtual QFixed underlinePosition() const;
+    virtual qreal maxCharWidth() const Q_DECL_OVERRIDE;
+    virtual qreal minLeftBearing() const Q_DECL_OVERRIDE;
+    virtual qreal minRightBearing() const Q_DECL_OVERRIDE;
+    virtual QFixed lineThickness() const Q_DECL_OVERRIDE;
+    virtual QFixed underlinePosition() const Q_DECL_OVERRIDE;
 
-    virtual glyph_t glyphIndex(uint ucs4) const;
-    void doKerning(QGlyphLayout *, ShaperFlags) const;
+    virtual glyph_t glyphIndex(uint ucs4) const Q_DECL_OVERRIDE;
+    void doKerning(QGlyphLayout *, ShaperFlags) const Q_DECL_OVERRIDE;
 
-    virtual void getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_metrics_t *metrics);
+    virtual void getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_metrics_t *metrics) Q_DECL_OVERRIDE;
 
-    virtual bool supportsTransformation(const QTransform &transform) const;
+    virtual bool supportsTransformation(const QTransform &transform) const Q_DECL_OVERRIDE;
 
     virtual void addGlyphsToPath(glyph_t *glyphs, QFixedPoint *positions, int nglyphs,
-                         QPainterPath *path, QTextItem::RenderFlags flags);
+                         QPainterPath *path, QTextItem::RenderFlags flags) Q_DECL_OVERRIDE;
     virtual void addOutlineToPath(qreal x, qreal y, const QGlyphLayout &glyphs,
-                          QPainterPath *path, QTextItem::RenderFlags flags);
+                          QPainterPath *path, QTextItem::RenderFlags flags) Q_DECL_OVERRIDE;
 
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const;
+    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const Q_DECL_OVERRIDE;
 
-    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs);
-    virtual glyph_metrics_t boundingBox(glyph_t glyph);
-    virtual glyph_metrics_t boundingBox(glyph_t glyph, const QTransform &matrix);
+    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs) Q_DECL_OVERRIDE;
+    virtual glyph_metrics_t boundingBox(glyph_t glyph) Q_DECL_OVERRIDE;
+    virtual glyph_metrics_t boundingBox(glyph_t glyph, const QTransform &matrix) Q_DECL_OVERRIDE;
 
-    virtual void recalcAdvances(QGlyphLayout *glyphs, ShaperFlags flags) const;
-    virtual QImage alphaMapForGlyph(glyph_t g) { return alphaMapForGlyph(g, 0); }
-    virtual QImage alphaMapForGlyph(glyph_t, QFixed);
-    virtual QImage alphaRGBMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t);
+    virtual void recalcAdvances(QGlyphLayout *glyphs, ShaperFlags flags) const Q_DECL_OVERRIDE;
+    virtual QImage alphaMapForGlyph(glyph_t g) Q_DECL_OVERRIDE { return alphaMapForGlyph(g, 0); }
+    virtual QImage alphaMapForGlyph(glyph_t, QFixed) Q_DECL_OVERRIDE;
+    QImage alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition, const QTransform &t) Q_DECL_OVERRIDE;
+    virtual QImage alphaRGBMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t) Q_DECL_OVERRIDE;
     virtual glyph_metrics_t alphaMapBoundingBox(glyph_t glyph,
                                                 QFixed subPixelPosition,
                                                 const QTransform &matrix,
-                                                QFontEngine::GlyphFormat format);
+                                                QFontEngine::GlyphFormat format) Q_DECL_OVERRIDE;
     virtual QImage *lockedAlphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition,
                                            GlyphFormat neededFormat, const QTransform &t,
-                                           QPoint *offset);
-    virtual bool hasInternalCaching() const { return cacheEnabled; }
-    virtual void unlockAlphaMapForGlyph();
+                                           QPoint *offset) Q_DECL_OVERRIDE;
+    virtual bool hasInternalCaching() const Q_DECL_OVERRIDE { return cacheEnabled; }
+    virtual void unlockAlphaMapForGlyph() Q_DECL_OVERRIDE;
 
-    virtual void removeGlyphFromCache(glyph_t glyph);
-    virtual int glyphMargin(QFontEngine::GlyphFormat /* format */) { return 0; }
+    virtual void removeGlyphFromCache(glyph_t glyph) Q_DECL_OVERRIDE;
+    virtual int glyphMargin(QFontEngine::GlyphFormat /* format */) Q_DECL_OVERRIDE { return 0; }
 
-    virtual int glyphCount() const;
+    virtual int glyphCount() const Q_DECL_OVERRIDE;
 
     enum Scaling {
         Scaled,
@@ -265,12 +267,9 @@ private:
     inline Glyph *loadGlyph(uint glyph, QFixed subPixelPosition, GlyphFormat format = Format_None, bool fetchMetricsOnly = false) const
     { return loadGlyph(cacheEnabled ? &defaultGlyphSet : 0, glyph, subPixelPosition, format, fetchMetricsOnly); }
     Glyph *loadGlyph(QGlyphSet *set, uint glyph, QFixed subPixelPosition, GlyphFormat = Format_None, bool fetchMetricsOnly = false) const;
-    Glyph *loadGlyphFor(glyph_t g, QFixed subPixelPosition, GlyphFormat format);
+    Glyph *loadGlyphFor(glyph_t g, QFixed subPixelPosition, GlyphFormat format, const QTransform &t, bool fetchBoundingBox = false);
 
-    QGlyphSet *loadTransformedGlyphSet(const QTransform &matrix);
-    bool loadGlyphs(QGlyphSet *gs, const glyph_t *glyphs, int num_glyphs,
-                    const QFixedPoint *positions,
-                    GlyphFormat format = Format_Render);
+    QGlyphSet *loadGlyphSet(const QTransform &matrix);
 
     QFontEngineFT(const QFontDef &fd);
     virtual ~QFontEngineFT();
@@ -280,19 +279,19 @@ private:
     bool init(FaceId faceId, bool antialias, GlyphFormat format,
               QFreetypeFace *freetypeFace);
 
-    virtual int getPointInOutline(glyph_t glyph, int flags, quint32 point, QFixed *xpos, QFixed *ypos, quint32 *nPoints);
+    virtual int getPointInOutline(glyph_t glyph, int flags, quint32 point, QFixed *xpos, QFixed *ypos, quint32 *nPoints) Q_DECL_OVERRIDE;
 
 
-    virtual void setDefaultHintStyle(HintStyle style);
+    virtual void setDefaultHintStyle(HintStyle style) Q_DECL_OVERRIDE;
 
-    virtual QFontEngine *cloneWithSize(qreal pixelSize) const;
+    virtual QFontEngine *cloneWithSize(qreal pixelSize) const Q_DECL_OVERRIDE;
     bool initFromFontEngine(const QFontEngineFT *fontEngine);
 
     HintStyle defaultHintStyle() const { return default_hint_style; }
 protected:
 
     QFreetypeFace *freetype;
-    int default_load_flags;
+    mutable int default_load_flags;
     HintStyle default_hint_style;
     bool antialias;
     bool transform;
@@ -307,6 +306,7 @@ protected:
 private:
     friend class QFontEngineFTRawFont;
     friend class QFontconfigDatabase;
+    friend class QBasicFontDatabase;
     friend class QFontEngineMultiFontConfig;
 
     int loadFlags(QGlyphSet *set, GlyphFormat format, int flags, bool &hsubpixel, int &vfactor) const;

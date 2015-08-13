@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -81,6 +73,20 @@
             self.hidden = YES;
 
         self.multipleTouchEnabled = YES;
+
+        if (QIOSIntegration::instance()->debugWindowManagement()) {
+            static CGFloat hue = 0.0;
+            CGFloat lastHue = hue;
+            for (CGFloat diff = 0; diff < 0.1 || diff > 0.9; diff = fabs(hue - lastHue))
+                hue = drand48();
+
+            #define colorWithBrightness(br) \
+                [UIColor colorWithHue:hue saturation:0.5 brightness:br alpha:1.0].CGColor
+
+            self.layer.backgroundColor = colorWithBrightness(0.5);
+            self.layer.borderColor = colorWithBrightness(1.0);
+            self.layer.borderWidth = 1.0;
+        }
     }
 
     return self;
@@ -146,8 +152,9 @@
     QRect previousGeometry = requestedGeometry != actualGeometry ?
             requestedGeometry : qt_window_private(m_qioswindow->window())->geometry;
 
-    QWindowSystemInterface::handleGeometryChange(m_qioswindow->window(), actualGeometry, previousGeometry);
-    QWindowSystemInterface::flushWindowSystemEvents();
+    QWindow *window = m_qioswindow->window();
+    QWindowSystemInterface::handleGeometryChange(window, actualGeometry, previousGeometry);
+    QWindowSystemInterface::flushWindowSystemEvents(window->inherits("QWidgetWindow") ? QEventLoop::ExcludeUserInputEvents : QEventLoop::AllEvents);
 
     if (actualGeometry.size() != previousGeometry.size()) {
         // Trigger expose event on resize
@@ -187,7 +194,7 @@
 
 - (BOOL)canBecomeFirstResponder
 {
-    return YES;
+    return !(m_qioswindow->window()->flags() & Qt::WindowDoesNotAcceptFocus);
 }
 
 - (BOOL)becomeFirstResponder
@@ -254,8 +261,31 @@
     return YES;
 }
 
+- (BOOL)isActiveWindow
+{
+    // Normally this is determined exclusivly by being firstResponder, but
+    // since we employ a separate first responder for text input we need to
+    // handle both cases as this view being the active Qt window.
+
+    if ([self isFirstResponder])
+        return YES;
+
+    UIResponder *firstResponder = [UIResponder currentFirstResponder];
+    if ([firstResponder isKindOfClass:[QIOSTextInputResponder class]]
+        && [firstResponder nextResponder] == self)
+        return YES;
+
+    return NO;
+}
+
 // -------------------------------------------------------------------------
 
+-(BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
+{
+    if (m_qioswindow->window()->flags() & Qt::WindowTransparentForInput)
+        return NO;
+    return [super pointInside:point withEvent:event];
+}
 
 - (void)updateTouchList:(NSSet *)touches withState:(Qt::TouchPointState)state
 {

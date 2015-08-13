@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -881,16 +881,22 @@ static inline void qt_getJustificationOpportunities(const ushort *string, int le
     int spaceAs;
 
     switch (si.analysis.script) {
+    case QChar::Script_Arabic:
+    case QChar::Script_Syriac:
     case QChar::Script_Nko:
     case QChar::Script_Mandaic:
     case QChar::Script_Mongolian:
     case QChar::Script_PhagsPa:
+    case QChar::Script_Manichaean:
+    case QChar::Script_PsalterPahlavi:
         // same as default but inter character justification takes precedence
         spaceAs = Justification_Arabic_Space;
         break;
 
+    case QChar::Script_Tibetan:
     case QChar::Script_Hiragana:
     case QChar::Script_Katakana:
+    case QChar::Script_Bopomofo:
     case QChar::Script_Han:
         // same as default but inter character justification is the only option
         spaceAs = Justification_Character;
@@ -938,7 +944,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
 }
 
 #ifdef QT_ENABLE_HARFBUZZ_NG
-extern bool useHarfbuzzNG; // defined in qfontengine.cpp
+extern bool qt_useHarfbuzzNG(); // defined in qfontengine.cpp
 #endif
 
 void QTextEngine::shapeText(int item) const
@@ -979,7 +985,7 @@ void QTextEngine::shapeText(int item) const
         string = reinterpret_cast<const ushort *>(casedString.constData());
     }
 
-    if (!ensureSpace(itemLength)) {
+    if (Q_UNLIKELY(!ensureSpace(itemLength))) {
         Q_UNREACHABLE(); // ### report OOM error somehow
         return;
     }
@@ -1051,12 +1057,12 @@ void QTextEngine::shapeText(int item) const
     }
 
 #ifdef QT_ENABLE_HARFBUZZ_NG
-    if (useHarfbuzzNG)
+    if (Q_LIKELY(qt_useHarfbuzzNG()))
         si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled);
     else
 #endif
     si.num_glyphs = shapeTextWithHarfbuzz(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled);
-    if (si.num_glyphs == 0) {
+    if (Q_UNLIKELY(si.num_glyphs == 0)) {
         Q_UNREACHABLE(); // ### report shaping errors somehow
         return;
     }
@@ -1067,7 +1073,7 @@ void QTextEngine::shapeText(int item) const
     QGlyphLayout glyphs = shapedGlyphs(&si);
 
 #ifdef QT_ENABLE_HARFBUZZ_NG
-    if (useHarfbuzzNG)
+    if (Q_LIKELY(qt_useHarfbuzzNG()))
         qt_getJustificationOpportunities(string, itemLength, si, glyphs, logClusters(&si));
 #endif
 
@@ -1116,10 +1122,12 @@ QT_END_INCLUDE_NAMESPACE
 
 int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *string, int itemLength, QFontEngine *fontEngine, const QVector<uint> &itemBoundaries, bool kerningEnabled) const
 {
+    uint glyphs_shaped = 0;
+
     hb_buffer_t *buffer = hb_buffer_create();
     hb_buffer_set_unicode_funcs(buffer, hb_qt_get_unicode_funcs());
     hb_buffer_pre_allocate(buffer, itemLength);
-    if (!hb_buffer_allocation_successful(buffer)) {
+    if (Q_UNLIKELY(!hb_buffer_allocation_successful(buffer))) {
         hb_buffer_destroy(buffer);
         return 0;
     }
@@ -1129,18 +1137,13 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
     props.script = hb_qt_script_to_script(QChar::Script(si.analysis.script));
     // ### props.language = hb_language_get_default_for_script(props.script);
 
-    uint glyphs_shaped = 0;
-    int remaining_glyphs = itemLength;
-
     for (int k = 0; k < itemBoundaries.size(); k += 3) {
-        uint item_pos = itemBoundaries[k];
-        uint item_length = (k + 4 < itemBoundaries.size() ? itemBoundaries[k + 3] : itemLength) - item_pos;
-        uint item_glyph_pos = itemBoundaries[k + 1];
-        uint engineIdx = itemBoundaries[k + 2];
+        const uint item_pos = itemBoundaries[k];
+        const uint item_length = (k + 4 < itemBoundaries.size() ? itemBoundaries[k + 3] : itemLength) - item_pos;
+        const uint engineIdx = itemBoundaries[k + 2];
 
-        QFontEngine *actualFontEngine = fontEngine;
-        if (fontEngine->type() == QFontEngine::Multi)
-            actualFontEngine = static_cast<QFontEngineMulti *>(fontEngine)->engine(engineIdx);
+        QFontEngine *actualFontEngine = fontEngine->type() != QFontEngine::Multi ? fontEngine
+                                                                                 : static_cast<QFontEngineMulti *>(fontEngine)->engine(engineIdx);
 
 
         // prepare buffer
@@ -1153,35 +1156,35 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
         uint buffer_flags = HB_BUFFER_FLAG_DEFAULT;
         // Symbol encoding used to encode various crap in the 32..255 character code range,
         // and thus might override U+00AD [SHY]; avoid hiding default ignorables
-        if (actualFontEngine->symbol)
+        if (Q_UNLIKELY(actualFontEngine->symbol))
             buffer_flags |= HB_BUFFER_FLAG_PRESERVE_DEFAULT_IGNORABLES;
         hb_buffer_set_flags(buffer, hb_buffer_flags_t(buffer_flags));
 
 
         // shape
-        bool shapedOk = false;
-        if (hb_font_t *hb_font = hb_qt_font_get_for_engine(actualFontEngine)) {
+        {
+            hb_font_t *hb_font = hb_qt_font_get_for_engine(actualFontEngine);
+            Q_ASSERT(hb_font);
             hb_qt_font_set_use_design_metrics(hb_font, option.useDesignMetrics() ? uint(QFontEngine::DesignMetrics) : 0); // ###
 
             const hb_feature_t features[1] = {
                 { HB_TAG('k','e','r','n'), !!kerningEnabled, 0, uint(-1) }
             };
             const int num_features = 1;
-            shapedOk = hb_shape_full(hb_font, buffer, features, num_features, 0);
+
+            bool shapedOk = hb_shape_full(hb_font, buffer, features, num_features, 0);
+            if (Q_UNLIKELY(!shapedOk)) {
+                hb_buffer_destroy(buffer);
+                return 0;
+            }
+
+            if (Q_UNLIKELY(HB_DIRECTION_IS_BACKWARD(props.direction)))
+                hb_buffer_reverse(buffer);
         }
-        if (!shapedOk) {
-            hb_buffer_destroy(buffer);
-            return 0;
-        }
 
-        if (si.analysis.bidiLevel % 2)
-            hb_buffer_reverse(buffer);
-
-        remaining_glyphs -= item_glyph_pos;
-
-        // ensure we have enough space for shaped glyphs and metrics
         const uint num_glyphs = hb_buffer_get_length(buffer);
-        if (num_glyphs == 0 || !ensureSpace(glyphs_shaped + num_glyphs + remaining_glyphs)) {
+        // ensure we have enough space for shaped glyphs and metrics
+        if (Q_UNLIKELY(num_glyphs == 0 || !ensureSpace(glyphs_shaped + num_glyphs))) {
             hb_buffer_destroy(buffer);
             return 0;
         }
@@ -1195,29 +1198,16 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
         uint str_pos = 0;
         uint last_cluster = ~0u;
         uint last_glyph_pos = glyphs_shaped;
-        for (uint i = 0; i < num_glyphs; ++i) {
-            g.glyphs[i] = infos[i].codepoint;
+        for (uint i = 0; i < num_glyphs; ++i, ++infos, ++positions) {
+            g.glyphs[i] = infos->codepoint;
 
-            g.advances[i] = QFixed::fromFixed(positions[i].x_advance);
-            g.offsets[i].x = QFixed::fromFixed(positions[i].x_offset);
-            g.offsets[i].y = QFixed::fromFixed(positions[i].y_offset);
+            g.advances[i] = QFixed::fromFixed(positions->x_advance);
+            g.offsets[i].x = QFixed::fromFixed(positions->x_offset);
+            g.offsets[i].y = QFixed::fromFixed(positions->y_offset);
 
-            uint cluster = infos[i].cluster;
-            if (last_cluster != cluster) {
-                if (Q_UNLIKELY(g.glyphs[i] == 0)) {
-                    // hide characters that should normally be invisible
-                    switch (string[item_pos + str_pos]) {
-                    case QChar::LineFeed:
-                    case 0x000c: // FormFeed
-                    case QChar::CarriageReturn:
-                    case QChar::LineSeparator:
-                    case QChar::ParagraphSeparator:
-                        g.attributes[i].dontPrint = true;
-                        break;
-                    default:
-                        break;
-                    }
-                }
+            uint cluster = infos->cluster;
+            if (Q_LIKELY(last_cluster != cluster)) {
+                g.attributes[i].clusterStart = true;
 
                 // fix up clusters so that the cluster indices will be monotonic
                 // and thus we never return out-of-order indices
@@ -1225,18 +1215,52 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
                     log_clusters[str_pos++] = last_glyph_pos;
                 last_glyph_pos = i + glyphs_shaped;
                 last_cluster = cluster;
-                g.attributes[i].clusterStart = true;
+
+                // hide characters that should normally be invisible
+                switch (string[item_pos + str_pos]) {
+                case QChar::LineFeed:
+                case 0x000c: // FormFeed
+                case QChar::CarriageReturn:
+                case QChar::LineSeparator:
+                case QChar::ParagraphSeparator:
+                    g.attributes[i].dontPrint = true;
+                    break;
+                case QChar::SoftHyphen:
+                    if (!actualFontEngine->symbol) {
+                        // U+00AD [SOFT HYPHEN] is a default ignorable codepoint,
+                        // so we replace its glyph and metrics with ones for
+                        // U+002D [HYPHEN-MINUS] and make it visible if it appears at line-break
+                        g.glyphs[i] = actualFontEngine->glyphIndex('-');
+                        if (Q_LIKELY(g.glyphs[i] != 0)) {
+                            QGlyphLayout tmp = g.mid(i, 1);
+                            actualFontEngine->recalcAdvances(&tmp, 0);
+                        }
+                        g.attributes[i].dontPrint = true;
+                    }
+                    break;
+                default:
+                    break;
+                }
             }
         }
         while (str_pos < item_length)
             log_clusters[str_pos++] = last_glyph_pos;
 
-        if (engineIdx != 0) {
+        if (Q_UNLIKELY(engineIdx != 0)) {
             for (quint32 i = 0; i < num_glyphs; ++i)
                 g.glyphs[i] |= (engineIdx << 24);
         }
 
 #ifdef Q_OS_MAC
+        // CTRunGetPosition has a bug which applies matrix on 10.6, so we disable
+        // scaling the advances for this particular version
+        if (actualFontEngine->fontDef.stretch != 100
+                && QSysInfo::MacintoshVersion != QSysInfo::MV_10_6) {
+            QFixed stretch = QFixed(actualFontEngine->fontDef.stretch) / QFixed(100);
+            for (uint i = 0; i < num_glyphs; ++i)
+                g.advances[i] *= stretch;
+        }
+
         if (actualFontEngine->fontDef.styleStrategy & QFont::ForceIntegerMetrics) {
             for (uint i = 0; i < num_glyphs; ++i)
                 g.advances[i] = g.advances[i].round();
@@ -1607,15 +1631,15 @@ void QTextEngine::itemize() const
     }
 #ifdef QT_ENABLE_HARFBUZZ_NG
     analysis = scriptAnalysis.data();
-    if (useHarfbuzzNG) {
+    if (qt_useHarfbuzzNG()) {
         // ### pretend HB-old behavior for now
         for (int i = 0; i < length; ++i) {
             switch (analysis[i].script) {
             case QChar::Script_Latin:
-            case QChar::Script_Han:
             case QChar::Script_Hiragana:
             case QChar::Script_Katakana:
             case QChar::Script_Bopomofo:
+            case QChar::Script_Han:
                 analysis[i].script = QChar::Script_Common;
                 break;
             default:
@@ -1701,7 +1725,7 @@ bool QTextEngine::isRightToLeft() const
         itemize();
     // this places the cursor in the right position depending on the keyboard layout
     if (layoutData->string.isEmpty())
-        return qApp ? qApp->inputMethod()->inputDirection() == Qt::RightToLeft : false;
+        return QGuiApplication::inputMethod()->inputDirection() == Qt::RightToLeft;
     return layoutData->string.isRightToLeft();
 }
 
@@ -1950,7 +1974,7 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
         if (feCache.prevFontEngine && feCache.prevFontEngine->type() == QFontEngine::Multi && feCache.prevScript == script) {
             engine = feCache.prevFontEngine;
         } else {
-            engine = QFontEngineMultiBasicImpl::createMultiFontEngine(rawFont.d->fontEngine, script);
+            engine = QFontEngineMulti::createMultiFontEngine(rawFont.d->fontEngine, script);
             feCache.prevFontEngine = engine;
             feCache.prevScript = script;
             engine->ref.ref();
@@ -1965,7 +1989,7 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
             } else {
                 QFontEngine *scEngine = rawFont.d->fontEngine->cloneWithSize(smallCapsFraction * rawFont.pixelSize());
                 scEngine->ref.ref();
-                scaledEngine = QFontEngineMultiBasicImpl::createMultiFontEngine(scEngine, script);
+                scaledEngine = QFontEngineMulti::createMultiFontEngine(scEngine, script);
                 scaledEngine->ref.ref();
                 feCache.prevScaledFontEngine = scaledEngine;
                 // If scEngine is not ref'ed by scaledEngine, make sure it is deallocated and not leaked.
@@ -2518,21 +2542,6 @@ bool QTextEngine::atWordSeparator(int position) const
     case '~':
     case '|':
     case '\\':
-        return true;
-    default:
-        break;
-    }
-    return false;
-}
-
-bool QTextEngine::atSpace(int position) const
-{
-    const QChar c = layoutData->string.at(position);
-    switch (c.unicode()) {
-    case QChar::Tabulation:
-    case QChar::Space:
-    case QChar::Nbsp:
-    case QChar::LineSeparator:
         return true;
     default:
         break;

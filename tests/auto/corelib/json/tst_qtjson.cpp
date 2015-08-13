@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -90,7 +90,9 @@ private Q_SLOTS:
 
     void fromVariant();
     void fromVariantMap();
+    void fromVariantHash();
     void toVariantMap();
+    void toVariantHash();
     void toVariantList();
 
     void toJson();
@@ -143,6 +145,8 @@ private Q_SLOTS:
 
     void unicodeKeys();
     void garbageAtEnd();
+
+    void removeNonLatinKey();
 private:
     QString testDataDir;
 };
@@ -1051,6 +1055,8 @@ void tst_QtJson::keySorting()
     QCOMPARE(it.key(), QLatin1String("A"));
     ++it;
     QCOMPARE(it.key(), QLatin1String("B"));
+
+    QCOMPARE(o.keys(), QStringList() << QLatin1String("A") << QLatin1String("B"));
 }
 
 void tst_QtJson::undefinedValues()
@@ -1165,6 +1171,17 @@ void tst_QtJson::fromVariantMap()
     QCOMPARE(array.at(3).toString(), QLatin1String("foo"));
 }
 
+void tst_QtJson::fromVariantHash()
+{
+    QVariantHash map;
+    map.insert(QLatin1String("key1"), QLatin1String("value1"));
+    map.insert(QLatin1String("key2"), QLatin1String("value2"));
+    QJsonObject object = QJsonObject::fromVariantHash(map);
+    QCOMPARE(object.size(), 2);
+    QCOMPARE(object.value(QLatin1String("key1")), QJsonValue(QLatin1String("value1")));
+    QCOMPARE(object.value(QLatin1String("key2")), QJsonValue(QLatin1String("value2")));
+}
+
 void tst_QtJson::toVariantMap()
 {
     QCOMPARE(QMetaType::Type(QJsonValue(QJsonObject()).toVariant().type()), QMetaType::QVariantMap); // QTBUG-32524
@@ -1189,6 +1206,35 @@ void tst_QtJson::toVariantMap()
     QCOMPARE(map.value("null"), QVariant());
     QCOMPARE(map.value("Array").type(), QVariant::List);
     QVariantList list = map.value("Array").toList();
+    QCOMPARE(list.size(), 4);
+    QCOMPARE(list.at(0), QVariant(true));
+    QCOMPARE(list.at(1), QVariant(999.));
+    QCOMPARE(list.at(2), QVariant(QLatin1String("string")));
+    QCOMPARE(list.at(3), QVariant());
+}
+
+void tst_QtJson::toVariantHash()
+{
+    QJsonObject object;
+    QVariantHash hash = object.toVariantHash();
+    QVERIFY(hash.isEmpty());
+
+    object.insert("Key", QString("Value"));
+    object.insert("null", QJsonValue());
+    QJsonArray array;
+    array.append(true);
+    array.append(999.);
+    array.append(QLatin1String("string"));
+    array.append(QJsonValue());
+    object.insert("Array", array);
+
+    hash = object.toVariantHash();
+
+    QCOMPARE(hash.size(), 3);
+    QCOMPARE(hash.value("Key"), QVariant(QString("Value")));
+    QCOMPARE(hash.value("null"), QVariant());
+    QCOMPARE(hash.value("Array").type(), QVariant::List);
+    QVariantList list = hash.value("Array").toList();
     QCOMPARE(list.size(), 4);
     QCOMPARE(list.at(0), QVariant(true));
     QCOMPARE(list.at(1), QVariant(999.));
@@ -2162,13 +2208,13 @@ void tst_QtJson::testDebugStream()
         array.append(1);
         array.append(QLatin1String("foo"));
         value = QJsonValue(array); // array
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(array, QJsonArray([1,\"foo\"]) )");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(array, QJsonArray([1,\"foo\"]))");
         qDebug() << value;
 
         QJsonObject object;
         object.insert(QLatin1String("foo"), QLatin1String("bar"));
         value = QJsonValue(object); // object
-        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(object, QJsonObject({\"foo\":\"bar\"}) )");
+        QTest::ignoreMessage(QtDebugMsg, "QJsonValue(object, QJsonObject({\"foo\":\"bar\"}))");
         qDebug() << value;
     }
 }
@@ -2730,6 +2776,25 @@ void tst_QtJson::garbageAtEnd()
     doc = QJsonDocument::fromJson("{}    ", &error);
     QVERIFY(error.error == QJsonParseError::NoError);
     QVERIFY(!doc.isEmpty());
+}
+
+void tst_QtJson::removeNonLatinKey()
+{
+    const QString nonLatinKeyName = QString::fromUtf8("Атрибут100500");
+
+    QJsonObject sourceObject;
+
+    sourceObject.insert("code", 1);
+    sourceObject.remove("code");
+
+    sourceObject.insert(nonLatinKeyName, 1);
+
+    const QByteArray json = QJsonDocument(sourceObject).toJson();
+    const QJsonObject restoredObject = QJsonDocument::fromJson(json).object();
+
+    QCOMPARE(sourceObject.keys(), restoredObject.keys());
+    QVERIFY(sourceObject.contains(nonLatinKeyName));
+    QVERIFY(restoredObject.contains(nonLatinKeyName));
 }
 
 QTEST_MAIN(tst_QtJson)

@@ -7,3 +7,9 @@ contains(QT_CONFIG, evdev) {
 contains(QT_CONFIG, tslib) {
     SUBDIRS += tslib
 }
+
+SUBDIRS += tuiotouch
+
+contains(QT_CONFIG, libinput) {
+    SUBDIRS += libinput
+}

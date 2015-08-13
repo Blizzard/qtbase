@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -52,34 +52,24 @@ QT_BEGIN_NAMESPACE
 #define QT_PCLOSE pclose
 #endif
 
-struct ReplaceExtraCompilerCacheKey
-{
-    mutable uint hash;
-    QString var, in, out, pwd;
-    ReplaceExtraCompilerCacheKey(const QString &v, const QStringList &i, const QStringList &o);
-    bool operator==(const ReplaceExtraCompilerCacheKey &f) const;
-    inline uint hashCode() const {
-        if(!hash)
-            hash = qHash(var) ^ qHash(in) ^ qHash(out) /*^ qHash(pwd)*/;
-        return hash;
-    }
-};
-inline uint qHash(const ReplaceExtraCompilerCacheKey &f) { return f.hashCode(); }
-
 struct ReplaceExtraCompilerCacheKey;
 
 class MakefileGenerator : protected QMakeSourceFileInfo
 {
     QString spec;
-    bool init_opath_already, init_already, no_io;
+    bool no_io;
     QHash<QString, bool> init_compiler_already;
     QString makedir, chkexists;
-    QString build_args(const QString &outdir=QString());
+    QString build_args();
 
     //internal caches
     mutable QHash<QString, QMakeLocalFileName> depHeuristicsCache;
     mutable QHash<QString, QStringList> dependsCache;
     mutable QHash<ReplaceExtraCompilerCacheKey, QString> extraCompilerVariablesCache;
+
+public:
+    // We can't make it visible to VCFilter in VS2008 except by making it public or directly friending it.
+    enum ReplaceFor { NoShell, LocalShell, TargetShell };
 
 protected:
     enum TARG_MODE { TARG_UNIX_MODE, TARG_MAC_MODE, TARG_WIN_MODE } target_mode;
@@ -132,9 +122,9 @@ protected:
 
     //extra compiler interface
     bool verifyExtraCompiler(const ProString &c, const QString &f);
-    virtual QString replaceExtraCompilerVariables(const QString &, const QStringList &, const QStringList &);
-    inline QString replaceExtraCompilerVariables(const QString &val, const QString &in, const QString &out)
-    { return replaceExtraCompilerVariables(val, QStringList(in), QStringList(out)); }
+    virtual QString replaceExtraCompilerVariables(const QString &, const QStringList &, const QStringList &, ReplaceFor forShell);
+    inline QString replaceExtraCompilerVariables(const QString &val, const QString &in, const QString &out, ReplaceFor forShell)
+    { return replaceExtraCompilerVariables(val, QStringList(in), QStringList(out), forShell); }
 
     //interface to the source file info
     QMakeLocalFileName fixPathForFile(const QMakeLocalFileName &, bool);
@@ -143,15 +133,12 @@ protected:
     QMakeProject *project;
 
     //escape
-    virtual QString unescapeFilePath(const QString &path) const;
-    ProString unescapeFilePath(const ProString &path) const;
-    virtual QStringList unescapeFilePaths(const QStringList &path) const;
-    ProStringList unescapeFilePaths(const ProStringList &path) const;
     virtual QString escapeFilePath(const QString &path) const { return path; }
     ProString escapeFilePath(const ProString &path) const;
     QStringList escapeFilePaths(const QStringList &paths) const;
     ProStringList escapeFilePaths(const ProStringList &paths) const;
     virtual QString escapeDependencyPath(const QString &path) const { return escapeFilePath(path); }
+    ProString escapeDependencyPath(const ProString &path) const;
     QStringList escapeDependencyPaths(const QStringList &paths) const;
     ProStringList escapeDependencyPaths(const ProStringList &paths) const;
 
@@ -193,7 +180,6 @@ protected:
 
     //subclasses can use these to query information about how the generator was "run"
     QString buildArgs();
-    QString fixifySpecdir(const QString &spec, const QString &outdir);
 
     virtual QStringList &findDependencies(const QString &file);
     virtual bool doDepends() const { return Option::mkfile::do_deps; }
@@ -220,8 +206,12 @@ protected:
     //for retrieving values and lists of values
     virtual QString var(const ProKey &var) const;
     QString varGlue(const ProKey &var, const QString &before, const QString &glue, const QString &after) const;
-    QString fileVarGlue(const ProKey &var, const QString &before, const QString &glue, const QString &after) const;
     QString varList(const ProKey &var) const;
+    QString fixFileVarGlue(const ProKey &var, const QString &before, const QString &glue, const QString &after) const;
+    QString fileVarList(const ProKey &var) const;
+    QString fileVarGlue(const ProKey &var, const QString &before, const QString &glue, const QString &after) const;
+    QString fileVar(const ProKey &var) const;
+    QString depVar(const ProKey &var) const;
     QString val(const ProStringList &varList) const;
     QString val(const QStringList &varList) const;
     QString valGlue(const QStringList &varList, const QString &before, const QString &glue, const QString &after) const;
@@ -231,16 +221,25 @@ protected:
 
     QString filePrefixRoot(const QString &, const QString &);
 
+    ProStringList fixLibFlags(const ProKey &var);
+    virtual ProString fixLibFlag(const ProString &lib);
+
+public:
     //file fixification to unify all file names into a single pattern
-    enum FileFixifyType { FileFixifyAbsolute, FileFixifyRelative, FileFixifyDefault };
-    QString fileFixify(const QString& file, const QString &out_dir=QString(),
-                       const QString &in_dir=QString(), FileFixifyType fix=FileFixifyDefault, bool canon=true) const;
-    inline QString fileFixify(const QString& file, FileFixifyType fix, bool canon=true) const
-    { return fileFixify(file, QString(), QString(), fix, canon); }
-    QStringList fileFixify(const QStringList& files, const QString &out_dir=QString(),
-                           const QString &in_dir=QString(), FileFixifyType fix=FileFixifyDefault, bool canon=true) const;
-    inline QStringList fileFixify(const QStringList& files, FileFixifyType fix, bool canon=true) const
-    { return fileFixify(files, QString(), QString(), fix, canon); }
+    enum FileFixifyType {
+        FileFixifyFromIndir = 0,
+        FileFixifyFromOutdir = 1,
+        FileFixifyToOutDir = 0,
+        FileFixifyToIndir = 2,
+        FileFixifyBackwards = FileFixifyFromOutdir | FileFixifyToIndir,
+        FileFixifyDefault = 0,
+        FileFixifyAbsolute = 4,
+        FileFixifyRelative = 8
+    };
+    Q_DECLARE_FLAGS(FileFixifyTypes, FileFixifyType)
+protected:
+    QString fileFixify(const QString &file, FileFixifyTypes fix = FileFixifyDefault, bool canon = true) const;
+    QStringList fileFixify(const QStringList &files, FileFixifyTypes fix = FileFixifyDefault, bool canon = true) const;
 
     QString installMetaFile(const ProKey &replace_rule, const QString &src, const QString &dst);
 
@@ -266,6 +265,7 @@ public:
     bool isWindowsShell() const { return Option::dir_sep == QLatin1String("\\"); }
     QString shellQuote(const QString &str);
 };
+Q_DECLARE_OPERATORS_FOR_FLAGS(MakefileGenerator::FileFixifyTypes)
 
 inline void MakefileGenerator::setNoIO(bool o)
 { no_io = o; }
@@ -281,6 +281,21 @@ inline bool MakefileGenerator::findLibraries()
 
 inline MakefileGenerator::~MakefileGenerator()
 { }
+
+struct ReplaceExtraCompilerCacheKey
+{
+    mutable uint hash;
+    QString var, in, out, pwd;
+    MakefileGenerator::ReplaceFor forShell;
+    ReplaceExtraCompilerCacheKey(const QString &v, const QStringList &i, const QStringList &o, MakefileGenerator::ReplaceFor s);
+    bool operator==(const ReplaceExtraCompilerCacheKey &f) const;
+    inline uint hashCode() const {
+        if (!hash)
+            hash = (uint)forShell ^ qHash(var) ^ qHash(in) ^ qHash(out) /*^ qHash(pwd)*/;
+        return hash;
+    }
+};
+inline uint qHash(const ReplaceExtraCompilerCacheKey &f) { return f.hashCode(); }
 
 QT_END_NAMESPACE
 

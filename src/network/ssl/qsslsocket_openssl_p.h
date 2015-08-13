@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -89,9 +89,7 @@
 #include <openssl/dsa.h>
 #include <openssl/rsa.h>
 #include <openssl/crypto.h>
-#if OPENSSL_VERSION_NUMBER >= 0x0090806fL && !defined(OPENSSL_NO_TLSEXT)
 #include <openssl/tls1.h>
-#endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 typedef _STACK STACK;
@@ -114,18 +112,23 @@ public:
     BIO *writeBio;
     SSL_SESSION *session;
     QList<QPair<int, int> > errorList;
+#if OPENSSL_VERSION_NUMBER >= 0x10001000L
+    static int s_indexForSSLExtraData; // index used in SSL_get_ex_data to get the matching QSslSocketBackendPrivate
+#endif
 
     // Platform specific functions
-    void startClientEncryption();
-    void startServerEncryption();
-    void transmit();
+    void startClientEncryption() Q_DECL_OVERRIDE;
+    void startServerEncryption() Q_DECL_OVERRIDE;
+    void transmit() Q_DECL_OVERRIDE;
     bool startHandshake();
-    void disconnectFromHost();
-    void disconnected();
-    QSslCipher sessionCipher() const;
-    QSsl::SslProtocol sessionProtocol() const;
-    void continueHandshake();
+    void disconnectFromHost() Q_DECL_OVERRIDE;
+    void disconnected() Q_DECL_OVERRIDE;
+    QSslCipher sessionCipher() const Q_DECL_OVERRIDE;
+    QSsl::SslProtocol sessionProtocol() const Q_DECL_OVERRIDE;
+    void continueHandshake() Q_DECL_OVERRIDE;
     bool checkSslErrors();
+    void storePeerCertificates();
+    unsigned int tlsPskClientCallback(const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len);
 #ifdef Q_OS_WIN
     void fetchCaRootForCert(const QSslCertificate &cert);
     void _q_caRootLoaded(QSslCertificate,QSslCertificate);
@@ -134,7 +137,7 @@ public:
     Q_AUTOTEST_EXPORT static long setupOpenSslOptions(QSsl::SslProtocol protocol, QSsl::SslOptions sslOptions);
     static QSslCipher QSslCipher_from_SSL_CIPHER(SSL_CIPHER *cipher);
     static QList<QSslCertificate> STACKOFX509_to_QSslCertificates(STACK_OF(X509) *x509);
-    static QList<QSslError> verify(QList<QSslCertificate> certificateChain, const QString &hostName);
+    static QList<QSslError> verify(const QList<QSslCertificate> &certificateChain, const QString &hostName);
     static QString getErrorsFromOpenSsl();
     static bool importPkcs12(QIODevice *device,
                              QSslKey *key, QSslCertificate *cert,

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -37,9 +37,7 @@
 #include <qfile.h>
 #include <qpainterpath.h>
 #include <qpen.h>
-
-#define _USE_MATH_DEFINES
-#include <math.h>
+#include <qmath.h>
 
 class tst_QPainterPath : public QObject
 {
@@ -897,12 +895,6 @@ void tst_QPainterPath::operators()
     QCOMPARE(test, expected);
 }
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-#define ANGLE(t) ((t) * 2 * M_PI / 360.0)
-
-
 static inline bool pathFuzzyCompare(double p1, double p2)
 {
     return qAbs(p1 - p2) < 0.001;
@@ -933,7 +925,7 @@ void tst_QPainterPath::testArcMoveTo()
     qreal y_radius = rect.height() / 2.0;
 
     QPointF shouldBe = rect.center()
-                       + QPointF(x_radius * cos(ANGLE(angle)), -y_radius * sin(ANGLE(angle)));
+                       + QPointF(x_radius * qCos(qDegreesToRadians(angle)), -y_radius * qSin(qDegreesToRadians(angle)));
 
     qreal iw = 1 / rect.width();
     qreal ih = 1 / rect.height();

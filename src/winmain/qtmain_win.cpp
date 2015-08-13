@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Windows main function of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -105,12 +105,13 @@ extern "C" int APIENTRY WinMain(HINSTANCE, HINSTANCE, LPSTR /*cmdParamarg*/, int
     wchar_t **argvW = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argvW)
         return -1;
-    char **argv = new char *[argc];
+    char **argv = new char *[argc + 1];
     for (int i = 0; i < argc; ++i)
         argv[i] = wideToMulti(CP_ACP, argvW[i]);
+    argv[argc] = Q_NULLPTR;
     LocalFree(argvW);
     const int exitCode = main(argc, argv);
-    for (int i = 0; i < argc; ++i)
+    for (int i = 0; i < argc && argv[i]; ++i)
         delete [] argv[i];
     delete [] argv;
     return exitCode;

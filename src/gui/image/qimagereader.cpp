@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -533,6 +533,11 @@ public:
     int quality;
     QMap<QString, QString> text;
     void getText();
+    enum {
+        UsePluginDefault,
+        ApplyTransform,
+        DoNotApplyTransform
+    } autoTransform;
 
     // error
     QImageReader::ImageReaderError imageReaderError;
@@ -552,6 +557,7 @@ QImageReaderPrivate::QImageReaderPrivate(QImageReader *qq)
     handler = 0;
     quality = -1;
     imageReaderError = QImageReader::UnknownError;
+    autoTransform = UsePluginDefault;
 
     q = qq;
 }
@@ -1144,6 +1150,59 @@ QList<QByteArray> QImageReader::supportedSubTypes() const
 }
 
 /*!
+    \since 5.5
+
+    Returns the transformation metadata of the image, including image orientation. If the format
+    does not support transformation metadata \c QImageIOHandler::Transformation_None is returned.
+
+    \sa setAutoTransform(), autoTransform()
+*/
+QImageIOHandler::Transformations QImageReader::transformation() const
+{
+    int option = QImageIOHandler::TransformationNone;
+    if (d->initHandler() && d->handler->supportsOption(QImageIOHandler::ImageTransformation))
+        option = d->handler->option(QImageIOHandler::ImageTransformation).toInt();
+    return QImageIOHandler::Transformations(option);
+}
+
+/*!
+    \since 5.5
+
+    Sets if images returned by read() should have transformation metadata automatically applied.
+
+    \sa autoTransform(), transform(), read()
+*/
+void QImageReader::setAutoTransform(bool enabled)
+{
+    d->autoTransform = enabled ? QImageReaderPrivate::ApplyTransform
+                               : QImageReaderPrivate::DoNotApplyTransform;
+}
+
+/*!
+    \since 5.5
+
+    Returns \c true if the image handler will apply transformation metadata on read().
+
+    \sa setAutoTransform(), transformation(), read()
+*/
+bool QImageReader::autoTransform() const
+{
+    switch (d->autoTransform) {
+    case QImageReaderPrivate::ApplyTransform:
+        return true;
+    case QImageReaderPrivate::DoNotApplyTransform:
+        return false;
+    case QImageReaderPrivate::UsePluginDefault:
+        if (d->initHandler())
+            return d->handler->supportsOption(QImageIOHandler::TransformedByDefault);
+        // no break
+    default:
+        break;
+    }
+    return false;
+}
+
+/*!
     Returns \c true if an image can be read for the device (i.e., the
     image format is supported, and the device seems to contain valid
     data); otherwise returns \c false.
@@ -1184,6 +1243,8 @@ QImage QImageReader::read()
     QImage image;
     return read(&image) ? image : QImage();
 }
+
+extern void qt_imageTransform(QImage &src, QImageIOHandler::Transformations orient);
 
 /*!
     \overload
@@ -1290,10 +1351,12 @@ bool QImageReader::read(QImage *image)
     }
 
     // successful read; check for "@2x" file name suffix and set device pixel ratio.
-    static bool disable2xImageLoading = !qgetenv("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING").isEmpty();
+    static bool disable2xImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
     if (!disable2xImageLoading && QFileInfo(fileName()).baseName().endsWith(QLatin1String("@2x"))) {
            image->setDevicePixelRatio(2.0);
     }
+    if (autoTransform())
+        qt_imageTransform(*image, transformation());
 
     return true;
 }

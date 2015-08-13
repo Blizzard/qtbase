@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,6 +33,7 @@
 
 #include "qlinuxfbscreen.h"
 #include <QtPlatformSupport/private/qfbcursor_p.h>
+#include <QtPlatformSupport/private/qfbwindow_p.h>
 #include <QtCore/QRegularExpression>
 #include <QtGui/QPainter>
 
@@ -54,10 +55,6 @@
 #include <signal.h>
 
 #include <linux/fb.h>
-
-#if !defined(QT_NO_EVDEV) && (!defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_NO_SDK))
-#include <QtPlatformSupport/private/qdevicediscovery_p.h>
-#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -267,19 +264,12 @@ static bool switchToGraphicsMode(int ttyfd, int *oldMode)
             return false;
     }
 
-    // No blankin' screen, no blinkin' cursor!, no cursor!
-    const char termctl[] = "\033[9;0]\033[?33l\033[?25l\033[?1c";
-    QT_WRITE(ttyfd, termctl, sizeof(termctl));
     return true;
 }
 
 static void resetTty(int ttyfd, int oldMode)
 {
     ioctl(ttyfd, KDSETMODE, oldMode);
-
-    // Blankin' screen, blinkin' cursor!
-    const char termctl[] = "\033[9;15]\033[?33h\033[?25h\033[?0c";
-    QT_WRITE(ttyfd, termctl, sizeof(termctl));
 
     QT_CLOSE(ttyfd);
 }
@@ -393,22 +383,7 @@ bool QLinuxFbScreen::initialize()
     QFbScreen::initializeCompositor();
     mFbScreenImage = QImage(mMmap.data, geometry.width(), geometry.height(), mBytesPerLine, mFormat);
 
-    QByteArray hideCursorVal = qgetenv("QT_QPA_FB_HIDECURSOR");
-#if !defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_NO_SDK)
-    bool hideCursor = false;
-#else
-    bool hideCursor = true; // default to true to prevent the cursor showing up with the subclass on Android
-#endif
-    if (hideCursorVal.isEmpty()) {
-#if !defined(QT_NO_EVDEV) && (!defined(Q_OS_ANDROID) || defined(Q_OS_ANDROID_NO_SDK))
-        QScopedPointer<QDeviceDiscovery> dis(QDeviceDiscovery::create(QDeviceDiscovery::Device_Mouse));
-        hideCursor = dis->scanConnectedDevices().isEmpty();
-#endif
-    } else {
-        hideCursor = hideCursorVal.toInt() != 0;
-    }
-    if (!hideCursor)
-        mCursor = new QFbCursor(this);
+    mCursor = new QFbCursor(this);
 
     mTtyFd = openTtyDevice(ttyDevice);
     if (mTtyFd == -1)
@@ -438,6 +413,33 @@ QRegion QLinuxFbScreen::doRedraw()
     for (int i = 0; i < rects.size(); i++)
         mBlitter->drawImage(rects[i], *mScreenImage, rects[i]);
     return touched;
+}
+
+// grabWindow() grabs "from the screen" not from the backingstores.
+// In linuxfb's case it will also include the mouse cursor.
+QPixmap QLinuxFbScreen::grabWindow(WId wid, int x, int y, int width, int height) const
+{
+    if (!wid) {
+        if (width < 0)
+            width = mFbScreenImage.width() - x;
+        if (height < 0)
+            height = mFbScreenImage.height() - y;
+        return QPixmap::fromImage(mFbScreenImage).copy(x, y, width, height);
+    }
+
+    QFbWindow *window = windowForId(wid);
+    if (window) {
+        const QRect geom = window->geometry();
+        if (width < 0)
+            width = geom.width() - x;
+        if (height < 0)
+            height = geom.height() - y;
+        QRect rect(geom.topLeft() + QPoint(x, y), QSize(width, height));
+        rect &= window->geometry();
+        return QPixmap::fromImage(mFbScreenImage).copy(rect);
+    }
+
+    return QPixmap();
 }
 
 QT_END_NAMESPACE

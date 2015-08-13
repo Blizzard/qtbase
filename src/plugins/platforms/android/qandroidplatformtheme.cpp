@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -176,7 +176,7 @@ static void setPaletteColor(const QVariantMap &object,
     }
 }
 
-static std::shared_ptr<AndroidStyle> loadAndroidStyle(QPalette *defaultPalette)
+QJsonObject AndroidStyle::loadStyleData()
 {
     QString stylePath(QLatin1String(qgetenv("MINISTRO_ANDROID_STYLE_PATH")));
     const QLatin1Char slashChar('/');
@@ -198,21 +198,29 @@ static std::shared_ptr<AndroidStyle> loadAndroidStyle(QPalette *defaultPalette)
 
     QFile f(stylePath + QLatin1String("style.json"));
     if (!f.open(QIODevice::ReadOnly))
-        return std::shared_ptr<AndroidStyle>();
+        return QJsonObject();
 
     QJsonParseError error;
     QJsonDocument document = QJsonDocument::fromJson(f.readAll(), &error);
     if (document.isNull()) {
         qCritical() << error.errorString();
-        return std::shared_ptr<AndroidStyle>();
+        return QJsonObject();
     }
 
     if (!document.isObject()) {
         qCritical() << "Style.json does not contain a valid style.";
-        return std::shared_ptr<AndroidStyle>();
+        return QJsonObject();
     }
+    return document.object();
+}
+
+static std::shared_ptr<AndroidStyle> loadAndroidStyle(QPalette *defaultPalette)
+{
     std::shared_ptr<AndroidStyle> style(new AndroidStyle);
-    style->m_styleData = document.object();
+    style->m_styleData = AndroidStyle::loadStyleData();
+    if (style->m_styleData.isEmpty())
+        return std::shared_ptr<AndroidStyle>();
+
     for (QJsonObject::const_iterator objectIterator = style->m_styleData.constBegin();
          objectIterator != style->m_styleData.constEnd();
          ++objectIterator) {
@@ -348,6 +356,9 @@ QAndroidPlatformTheme::QAndroidPlatformTheme(QAndroidPlatformNativeInterface *an
     m_androidStyleData = loadAndroidStyle(&m_defaultPalette);
     QGuiApplication::setPalette(m_defaultPalette);
     androidPlatformNativeInterface->m_androidStyle = m_androidStyleData;
+
+    // default in case the style has not set a font
+    m_systemFont = QFont(QLatin1String("Roboto"), 14.0 * 100 / 72); // keep default size the same after changing from 100 dpi to 72 dpi
 }
 
 QPlatformMenuBar *QAndroidPlatformTheme::createPlatformMenuBar() const
@@ -430,10 +441,8 @@ const QFont *QAndroidPlatformTheme::font(Font type) const
             return &(it.value());
     }
 
-    // default in case the style has not set a font
-    static QFont systemFont("Roboto", 14.0 * 100 / 72); // keep default size the same after changing from 100 dpi to 72 dpi
     if (type == QPlatformTheme::SystemFont)
-        return &systemFont;
+        return &m_systemFont;
     return 0;
 }
 
@@ -441,7 +450,7 @@ QVariant QAndroidPlatformTheme::themeHint(ThemeHint hint) const
 {
     switch (hint) {
     case StyleNames:
-        if (qgetenv("QT_USE_ANDROID_NATIVE_STYLE").toInt()
+        if (qEnvironmentVariableIntValue("QT_USE_ANDROID_NATIVE_STYLE")
                 && m_androidStyleData) {
             return QStringList("android");
         }
@@ -449,7 +458,7 @@ QVariant QAndroidPlatformTheme::themeHint(ThemeHint hint) const
 
     case MouseDoubleClickDistance:
     {
-            int minimumDistance = qgetenv("QT_ANDROID_MINIMUM_MOUSE_DOUBLE_CLICK_DISTANCE").toInt();
+            int minimumDistance = qEnvironmentVariableIntValue("QT_ANDROID_MINIMUM_MOUSE_DOUBLE_CLICK_DISTANCE");
             int ret = minimumDistance;
 
             QAndroidPlatformIntegration *platformIntegration
@@ -493,7 +502,7 @@ QString QAndroidPlatformTheme::standardButtonText(int button) const
 bool QAndroidPlatformTheme::usePlatformNativeDialog(QPlatformTheme::DialogType type) const
 {
     if (type == MessageDialog)
-        return qgetenv("QT_USE_ANDROID_NATIVE_DIALOGS").toInt() == 1;
+        return qEnvironmentVariableIntValue("QT_USE_ANDROID_NATIVE_DIALOGS") == 1;
     return false;
 }
 

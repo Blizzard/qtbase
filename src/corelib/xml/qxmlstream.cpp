@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -63,6 +63,8 @@ private:
 QT_BEGIN_NAMESPACE
 
 #include "qxmlstream_p.h"
+
+enum { StreamEOF = ~0U };
 
 /*!
     \enum QXmlStreamReader::TokenType
@@ -726,7 +728,7 @@ static const short QXmlStreamReader_tokenTypeString_indices[] = {
 
 /*!
     \property  QXmlStreamReader::namespaceProcessing
-    the namespace-processing flag of the stream reader
+    The namespace-processing flag of the stream reader
 
     This property controls whether or not the stream reader processes
     namespaces. If enabled, the reader processes namespaces, otherwise
@@ -903,7 +905,7 @@ inline uint QXmlStreamReaderPrivate::filterCarriageReturn()
             ++readBufferPos;
         return peekc;
     }
-    if (peekc == 0) {
+    if (peekc == StreamEOF) {
         putChar('\r');
         return 0;
     }
@@ -912,13 +914,13 @@ inline uint QXmlStreamReaderPrivate::filterCarriageReturn()
 
 /*!
  \internal
- If the end of the file is encountered, 0 is returned.
+ If the end of the file is encountered, ~0 is returned.
  */
 inline uint QXmlStreamReaderPrivate::getChar()
 {
     uint c;
     if (putStack.size()) {
-        c = atEnd ? 0 : putStack.pop();
+        c = atEnd ? StreamEOF : putStack.pop();
     } else {
         if (readBufferPos < readBuffer.size())
             c = readBuffer.at(readBufferPos++).unicode();
@@ -937,7 +939,7 @@ inline uint QXmlStreamReaderPrivate::peekChar()
     } else if (readBufferPos < readBuffer.size()) {
         c = readBuffer.at(readBufferPos).unicode();
     } else {
-        if ((c = getChar_helper()))
+        if ((c = getChar_helper()) != StreamEOF)
             --readBufferPos;
     }
 
@@ -961,7 +963,8 @@ bool QXmlStreamReaderPrivate::scanUntil(const char *str, short tokenToInject)
     int pos = textBuffer.size();
     int oldLineNumber = lineNumber;
 
-    while (uint c = getChar()) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         /* First, we do the validation & normalization. */
         switch (c) {
         case '\r':
@@ -1007,9 +1010,9 @@ bool QXmlStreamReaderPrivate::scanString(const char *str, short tokenToInject, b
 {
     int n = 0;
     while (str[n]) {
-        ushort c = getChar();
+        uint c = getChar();
         if (c != ushort(str[n])) {
-            if (c)
+            if (c != StreamEOF)
                 putChar(c);
             while (n--) {
                 putChar(ushort(str[n]));
@@ -1137,7 +1140,7 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
         case 0xfffe:
         case 0xffff:
@@ -1182,8 +1185,8 @@ inline int QXmlStreamReaderPrivate::fastScanLiteralContent()
 inline int QXmlStreamReaderPrivate::fastScanSpace()
 {
     int n = 0;
-    ushort c;
-    while ((c = getChar())) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         switch (c) {
         case '\r':
             if ((c = filterCarriageReturn()) == 0)
@@ -1216,7 +1219,7 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         switch (ushort(c)) {
         case 0xfffe:
         case 0xffff:
@@ -1279,8 +1282,8 @@ inline int QXmlStreamReaderPrivate::fastScanContentCharList()
 inline int QXmlStreamReaderPrivate::fastScanName(int *prefix)
 {
     int n = 0;
-    ushort c;
-    while ((c = getChar())) {
+    uint c;
+    while ((c = getChar()) != StreamEOF) {
         switch (c) {
         case '\n':
         case ' ':
@@ -1396,7 +1399,7 @@ inline int QXmlStreamReaderPrivate::fastScanNMTOKEN()
 {
     int n = 0;
     uint c;
-    while ((c = getChar())) {
+    while ((c = getChar()) != StreamEOF) {
         if (fastDetermineNameChar(c) == NotName) {
             putChar(c);
             return n;
@@ -1452,7 +1455,7 @@ void QXmlStreamReaderPrivate::putReplacementInAttributeValue(const QString &s)
     }
 }
 
-ushort QXmlStreamReaderPrivate::getChar_helper()
+uint QXmlStreamReaderPrivate::getChar_helper()
 {
     const int BUFFER_SIZE = 8192;
     characterOffset += readBufferPos;
@@ -1476,7 +1479,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     }
     if (!nbytesread) {
         atEnd = true;
-        return 0;
+        return StreamEOF;
     }
 
 #ifndef QT_NO_TEXTCODEC
@@ -1484,7 +1487,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
         if (nbytesread < 4) { // the 4 is to cover 0xef 0xbb 0xbf plus
                               // one extra for the utf8 codec
             atEnd = true;
-            return 0;
+            return StreamEOF;
         }
         int mib = 106; // UTF-8
 
@@ -1517,7 +1520,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     if(lockEncoding && decoder->hasFailure()) {
         raiseWellFormedError(QXmlStream::tr("Encountered incorrectly encoded content."));
         readBuffer.clear();
-        return 0;
+        return StreamEOF;
     }
 #else
     readBuffer = QString::fromLatin1(rawReadBuffer.data(), nbytesread);
@@ -1531,7 +1534,7 @@ ushort QXmlStreamReaderPrivate::getChar_helper()
     }
 
     atEnd = true;
-    return 0;
+    return StreamEOF;
 }
 
 QStringRef QXmlStreamReaderPrivate::namespaceForPrefix(const QStringRef &prefix)
@@ -2391,15 +2394,6 @@ QXmlStreamAttribute& QXmlStreamAttribute::operator=(const QXmlStreamAttribute &o
 
     \ingroup xml-tools
 */
-
-/*!
-    \fn void QXmlStreamAttributes::append(const QXmlStreamAttribute &attribute)
-
-    Appends the given \a attribute to the end of the vector.
-
-    \sa QVector::append()
-*/
-
 
 /*!
     \typedef QXmlStreamNotationDeclarations
@@ -3315,7 +3309,7 @@ QTextCodec *QXmlStreamWriter::codec() const
 /*!
     \property  QXmlStreamWriter::autoFormatting
     \since 4.4
-    the auto-formatting flag of the stream writer
+    The auto-formatting flag of the stream writer
 
     This property controls whether or not the stream writer
     automatically formats the generated XML data. If enabled, the

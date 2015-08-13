@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -85,9 +85,10 @@ public:
                                      "}");
         prog.bind();
 
-        glClearColor(0, 0, 0, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glViewport(0, 0, width(), height());
+        QOpenGLFunctions *functions = gl->functions();
+        functions->glClearColor(0, 0, 0, 0);
+        functions->glClear(GL_COLOR_BUFFER_BIT);
+        functions->glViewport(0, 0, width(), height());
 
         prog.enableAttributeArray("a_Pos");
         prog.enableAttributeArray("a_Color");
@@ -104,7 +105,7 @@ public:
         prog.setAttributeArray("a_Pos", GL_FLOAT, coords, 2, 0);
         prog.setAttributeArray("a_Color", GL_FLOAT, colors, 4, 0);
 
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        functions->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
         prog.disableAttributeArray("a_Pos");
         prog.disableAttributeArray("a_Color");

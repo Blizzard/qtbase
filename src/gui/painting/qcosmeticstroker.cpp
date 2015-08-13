@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,7 +34,6 @@
 #include "qcosmeticstroker_p.h"
 #include "private/qpainterpath_p.h"
 #include <qdebug.h>
-#include <math.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -438,8 +437,9 @@ void QCosmeticStroker::calculateLastPoint(qreal rx1, qreal ry1, qreal rx2, qreal
         int y = (y1 + 32) >> 6;
         int ys = (y2 + 32) >> 6;
 
+        int round = (xinc > 0) ? 32 : 0;
         if (y != ys) {
-            x += ( ((((y << 6) + 32 - y1)))  * xinc ) >> 6;
+            x += ( ((((y << 6) + round - y1)))  * xinc ) >> 6;
 
             if (swapped) {
                 lastPixel.x = x >> 16;
@@ -469,8 +469,9 @@ void QCosmeticStroker::calculateLastPoint(qreal rx1, qreal ry1, qreal rx2, qreal
         int x = (x1 + 32) >> 6;
         int xs = (x2 + 32) >> 6;
 
+        int round = (yinc > 0) ? 32 : 0;
         if (x != xs) {
-            y += ( ((((x << 6) + 32 - x1)))  * yinc ) >> 6;
+            y += ( ((((x << 6) + round - x1)))  * yinc ) >> 6;
 
             if (swapped) {
                 lastPixel.x = x;
@@ -601,8 +602,7 @@ void QCosmeticStroker::drawPath(const QVectorPath &path)
             if (!closed && drawCaps && points == end - 2)
                 caps |= CapEnd;
 
-            QCosmeticStroker::Point last = this->lastPixel;
-            bool unclipped = stroke(this, p.x(), p.y(), p2.x(), p2.y(), caps);
+            bool moveNextStart = stroke(this, p.x(), p.y(), p2.x(), p2.y(), caps);
 
             /* fix for gaps in polylines with fastpen and aliased in a sequence
                of points with small distances: if current point p2 has been dropped
@@ -612,14 +612,8 @@ void QCosmeticStroker::drawPath(const QVectorPath &path)
                still need to update p to avoid drawing the line after this one from
                a bad starting position.
             */
-            if (fastPenAliased && unclipped) {
-                if (last.x != lastPixel.x || last.y != lastPixel.y
-                    || points == begin + 2 || points == end - 2) {
-                    p = p2;
-                }
-            } else {
+            if (!fastPenAliased || moveNextStart || points == begin + 2 || points == end - 2)
                 p = p2;
-            }
             points += 2;
             caps = NoCaps;
         }
@@ -726,8 +720,9 @@ template<DrawPixel drawPixel, class Dasher>
 static bool drawLine(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2, qreal ry2, int caps)
 {
     if (stroker->clipLine(rx1, ry1, rx2, ry2))
-        return false;
+        return true;
 
+    bool didDraw = false;
     const int half = stroker->legacyRounding ? 31 : 0;
     int x1 = toF26Dot6(rx1) + half;
     int y1 = toF26Dot6(ry1) + half;
@@ -763,9 +758,10 @@ static bool drawLine(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2,
 
         int y = (y1 + 32) >> 6;
         int ys = (y2 + 32) >> 6;
+        int round = (xinc > 0) ? 32 : 0;
 
         if (y != ys) {
-            x += ( ((((y << 6) + 32 - y1)))  * xinc ) >> 6;
+            x += ( ((((y << 6) + round - y1)))  * xinc ) >> 6;
 
             // calculate first and last pixel and perform dropout control
             QCosmeticStroker::Point first;
@@ -812,6 +808,7 @@ static bool drawLine(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2,
                 dasher.adjust();
                 x += xinc;
             } while (++y < ys);
+            didDraw = true;
         }
     } else {
         // horizontal
@@ -838,9 +835,10 @@ static bool drawLine(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2,
 
         int x = (x1 + 32) >> 6;
         int xs = (x2 + 32) >> 6;
+        int round = (yinc > 0) ? 32 : 0;
 
         if (x != xs) {
-            y += ( ((((x << 6) + 32 - x1)))  * yinc ) >> 6;
+            y += ( ((((x << 6) + round - x1)))  * yinc ) >> 6;
 
             // calculate first and last pixel to perform dropout control
             QCosmeticStroker::Point first;
@@ -886,10 +884,11 @@ static bool drawLine(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2,
                 dasher.adjust();
                 y += yinc;
             } while (++x < xs);
+            didDraw = true;
         }
     }
     stroker->lastPixel = last;
-    return true;
+    return didDraw;
 }
 
 
@@ -897,7 +896,7 @@ template<DrawPixel drawPixel, class Dasher>
 static bool drawLineAA(QCosmeticStroker *stroker, qreal rx1, qreal ry1, qreal rx2, qreal ry2, int caps)
 {
     if (stroker->clipLine(rx1, ry1, rx2, ry2))
-        return false;
+        return true;
 
     int x1 = toF26Dot6(rx1);
     int y1 = toF26Dot6(ry1);

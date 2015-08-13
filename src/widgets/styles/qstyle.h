@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -58,9 +58,6 @@ class Q_WIDGETS_EXPORT QStyle : public QObject
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QStyle)
-    Q_ENUMS(StateFlag PrimitiveElement ControlElement SubElement ComplexControl)
-    Q_ENUMS(SubControl PixelMetric ContentsType RequestSoftwareInputPanel StyleHint)
-    Q_ENUMS(StandardPixmap)
 
 protected:
     QStyle(QStylePrivate &dd);
@@ -125,6 +122,7 @@ public:
         State_Small =               0x04000000,
         State_Mini =                0x08000000
     };
+    Q_ENUM(StateFlag)
     Q_DECLARE_FLAGS(State, StateFlag)
 
 
@@ -191,6 +189,7 @@ public:
         // do not add any values below/greater this
         PE_CustomBase = 0xf000000
     };
+    Q_ENUM(PrimitiveElement)
 
     virtual void drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPainter *p,
                                const QWidget *w = 0) const = 0;
@@ -261,6 +260,7 @@ public:
         // do not add any values below/greater than this
         CE_CustomBase = 0xf0000000
     };
+    Q_ENUM(ControlElement)
 
     virtual void drawControl(ControlElement element, const QStyleOption *opt, QPainter *p,
                              const QWidget *w = 0) const = 0;
@@ -344,6 +344,7 @@ public:
         // do not add any values below/greater than this
         SE_CustomBase = 0xf0000000
     };
+    Q_ENUM(SubElement)
 
     virtual QRect subElementRect(SubElement subElement, const QStyleOption *option,
                                  const QWidget *widget = 0) const = 0;
@@ -363,6 +364,7 @@ public:
         // do not add any values below/greater than this
         CC_CustomBase = 0xf0000000
     };
+    Q_ENUM(ComplexControl)
 
     enum SubControl {
         SC_None =                  0x00000000,
@@ -419,6 +421,7 @@ public:
         SC_CustomBase =            0xf0000000,
         SC_All =                   0xffffffff
     };
+    Q_ENUM(SubControl)
     Q_DECLARE_FLAGS(SubControls, SubControl)
 
 
@@ -550,9 +553,13 @@ public:
         PM_SubMenuOverlap,
         PM_TreeViewIndentation,
 
+        PM_HeaderDefaultSectionSizeHorizontal,
+        PM_HeaderDefaultSectionSizeVertical,
+
         // do not add any values below/greater than this
         PM_CustomBase = 0xf0000000
     };
+    Q_ENUM(PixelMetric)
 
     virtual int pixelMetric(PixelMetric metric, const QStyleOption *option = 0,
                             const QWidget *widget = 0) const = 0;
@@ -584,6 +591,7 @@ public:
         // do not add any values below/greater than this
         CT_CustomBase = 0xf0000000
     };
+    Q_ENUM(ContentsType)
 
     virtual QSize sizeFromContents(ContentsType ct, const QStyleOption *opt,
                                    const QSize &contentsSize, const QWidget *w = 0) const = 0;
@@ -592,6 +600,7 @@ public:
         RSIP_OnMouseClickAndAlreadyFocused,
         RSIP_OnMouseClick
     };
+    Q_ENUM(RequestSoftwareInputPanel)
 
     enum StyleHint {
         SH_EtchDisabledText,
@@ -703,10 +712,17 @@ public:
         SH_ComboBox_UseNativePopup,
         SH_LineEdit_PasswordMaskDelay,
         SH_TabBar_ChangeCurrentDelay,
+        SH_Menu_SubMenuUniDirection,
+        SH_Menu_SubMenuUniDirectionFailCount,
+        SH_Menu_SubMenuSloppySelectOtherActions,
+        SH_Menu_SubMenuSloppyCloseTimeout,
+        SH_Menu_SubMenuResetWhenReenteringParent,
+        SH_Menu_SubMenuDontStartSloppyOnLeave,
         // Add new style hint values here
 
         SH_CustomBase = 0xf0000000
     };
+    Q_ENUM(StyleHint)
 
     virtual int styleHint(StyleHint stylehint, const QStyleOption *opt = 0,
                           const QWidget *widget = 0, QStyleHintReturn* returnData = 0) const = 0;
@@ -786,6 +802,7 @@ public:
         // do not add any values below/greater than this
         SP_CustomBase = 0xf0000000
     };
+    Q_ENUM(StandardPixmap)
 
     virtual QPixmap standardPixmap(StandardPixmap standardPixmap, const QStyleOption *opt = 0,
                                    const QWidget *widget = 0) const = 0;
@@ -831,7 +848,10 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QStyle::State)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QStyle::SubControls)
 
 #if !defined(QT_NO_DEBUG_STREAM)
+// ### Qt 6: Remove in favor of template<class T> QDebug operator<<(QDebug, const QFlags<T> &).
+#  if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 Q_WIDGETS_EXPORT QDebug operator<<(QDebug debug, QStyle::State state);
+#  endif
 #endif
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -68,18 +68,19 @@ struct CompilerInfo{
     {CC_BORLAND, "Borland C++",                                                    0, "bcc32.exe"},
     {CC_MINGW,   "MinGW (Minimalist GNU for Windows)",                             0, "g++.exe"},
     {CC_INTEL,   "Intel(R) C++ Compiler for 32-bit applications",                  0, "icl.exe"}, // xilink.exe, xilink5.exe, xilink6.exe, xilib.exe
-    {CC_NET2003, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2003 (7.1)",  "Software\\Microsoft\\VisualStudio\\7.1\\Setup\\VC\\ProductDir", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2003, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2003 (7.1)",  "Software\\Wow6432Node\\Microsoft\\VisualStudio\\7.1\\Setup\\VC\\ProductDir", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2005, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2005 (8.0)",  "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\8.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2005, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2005 (8.0)",  "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\8.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2008, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2008 (9.0)",  "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\9.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2008, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2008 (9.0)",  "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\9.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2010, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2010 (10.0)", "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\10.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2010, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2010 (10.0)", "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\10.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2012, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2012 (11.0)", "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\11.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2012, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2012 (11.0)", "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\11.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2013, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2013 (12.0)", "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\12.0", "cl.exe"}, // link.exe, lib.exe
-    {CC_NET2013, "Microsoft (R) 32-bit C/C++ Optimizing Compiler.NET 2013 (12.0)", "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\12.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2005, "Microsoft (R) Visual Studio 2005 C/C++ Compiler (8.0)",         "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\8.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2005, "Microsoft (R) Visual Studio 2005 C/C++ Compiler (8.0)",         "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\8.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2008, "Microsoft (R) Visual Studio 2008 C/C++ Compiler (9.0)",         "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\9.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2008, "Microsoft (R) Visual Studio 2008 C/C++ Compiler (9.0)",         "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\9.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2010, "Microsoft (R) Visual Studio 2010 C/C++ Compiler (10.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\10.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2010, "Microsoft (R) Visual Studio 2010 C/C++ Compiler (10.0)",        "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\10.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2012, "Microsoft (R) Visual Studio 2012 C/C++ Compiler (11.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\11.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2012, "Microsoft (R) Visual Studio 2012 C/C++ Compiler (11.0)",        "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\11.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2013, "Microsoft (R) Visual Studio 2013 C/C++ Compiler (12.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VC7\\12.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2013, "Microsoft (R) Visual Studio 2013 C/C++ Compiler (12.0)",        "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VC7\\12.0", "cl.exe"}, // link.exe, lib.exe
+    // Microsoft skipped version 13
+    {CC_MSVC2015, "Microsoft (R) Visual Studio 2015 C/C++ Compiler (14.0)",        "Software\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VS7\\14.0", "cl.exe"}, // link.exe, lib.exe
+    {CC_MSVC2015, "Microsoft (R) Visual Studio 2015 C/C++ Compiler (14.0)",        "Software\\Microsoft\\VisualStudio\\SxS\\VS7\\14.0", "cl.exe"}, // link.exe, lib.exe
     {CC_UNKNOWN, "Unknown", 0, 0},
 };
 
@@ -105,23 +106,23 @@ QString Environment::detectQMakeSpec()
 {
     QString spec;
     switch (detectCompiler()) {
-    case CC_NET2013:
+    case CC_MSVC2015:
+        spec = "win32-msvc2015";
+        break;
+    case CC_MSVC2013:
         spec = "win32-msvc2013";
         break;
-    case CC_NET2012:
+    case CC_MSVC2012:
         spec = "win32-msvc2012";
         break;
-    case CC_NET2010:
+    case CC_MSVC2010:
         spec = "win32-msvc2010";
         break;
-    case CC_NET2008:
+    case CC_MSVC2008:
         spec = "win32-msvc2008";
         break;
-    case CC_NET2005:
+    case CC_MSVC2005:
         spec = "win32-msvc2005";
-        break;
-    case CC_NET2003:
-        spec = "win32-msvc2003";
         break;
     case CC_INTEL:
         spec = "win32-icc";
@@ -141,18 +142,18 @@ QString Environment::detectQMakeSpec()
 
 Compiler Environment::compilerFromQMakeSpec(const QString &qmakeSpec)
 {
+    if (qmakeSpec == QLatin1String("win32-msvc2015"))
+        return CC_MSVC2015;
     if (qmakeSpec == QLatin1String("win32-msvc2013"))
-        return CC_NET2013;
+        return CC_MSVC2013;
     if (qmakeSpec == QLatin1String("win32-msvc2012"))
-        return CC_NET2012;
+        return CC_MSVC2012;
     if (qmakeSpec == QLatin1String("win32-msvc2010"))
-        return CC_NET2010;
+        return CC_MSVC2010;
     if (qmakeSpec == QLatin1String("win32-msvc2008"))
-        return CC_NET2008;
+        return CC_MSVC2008;
     if (qmakeSpec == QLatin1String("win32-msvc2005"))
-        return CC_NET2005;
-    if (qmakeSpec == QLatin1String("win32-msvc2003"))
-        return CC_NET2003;
+        return CC_MSVC2005;
     if (qmakeSpec == QLatin1String("win32-icc"))
         return CC_INTEL;
     if (qmakeSpec == QLatin1String("win32-g++"))
@@ -160,6 +161,18 @@ Compiler Environment::compilerFromQMakeSpec(const QString &qmakeSpec)
     if (qmakeSpec == QLatin1String("win32-borland"))
         return CC_BORLAND;
     return CC_UNKNOWN;
+}
+
+QString Environment::gccVersion()
+{
+    CompilerInfo *info = compilerInfo(CC_MINGW);
+    int returnValue = 0;
+    QString version = execute(QStringLiteral("%1 -dumpversion").arg(info->executable), &returnValue);
+    if (returnValue != 0) {
+        cout << "Could not get mingw version" << returnValue << qPrintable(version);
+        version.resize(0);
+    }
+    return version;
 }
 
 /*!
@@ -598,9 +611,9 @@ QStringList Environment::headerPaths(Compiler compiler)
             foreach (const QFileInfo &version, mingwLibDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
                 headerPaths += version.absoluteFilePath() + QLatin1String("/include");
         }
+    } else {
+        headerPaths = splitPathList(QString::fromLocal8Bit(getenv("INCLUDE")));
     }
-    // MinGW: Although gcc doesn't care about INCLUDE, qmake automatically adds it via -I
-    headerPaths += splitPathList(QString::fromLocal8Bit(getenv("INCLUDE")));
 
     // Add Direct X SDK for ANGLE
     const QString directXSdk = detectDirectXSdk();
@@ -614,9 +627,9 @@ QStringList Environment::libraryPaths(Compiler compiler)
     QStringList libraryPaths;
     if (compiler == CC_MINGW) {
         libraryPaths = mingwPaths(detectMinGW(), "lib");
+    } else {
+        libraryPaths = splitPathList(QString::fromLocal8Bit(qgetenv("LIB")));
     }
-    // MinGW: Although gcc doesn't care about LIB, qmake automatically adds it via -L
-    libraryPaths += splitPathList(QString::fromLocal8Bit(qgetenv("LIB")));
 
     // Add Direct X SDK for ANGLE
     const QString directXSdk = detectDirectXSdk();

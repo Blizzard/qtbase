@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -642,18 +642,25 @@ struct CountedStruct
     QThread *thread;
 };
 
-static QEventLoop _e;
+static QScopedPointer<QEventLoop> _e;
 static QThread *_t = Q_NULLPTR;
 
 class StaticEventLoop
 {
 public:
-    static void quitEventLoop() { _e.quit(); if (_t) QCOMPARE(QThread::currentThread(), _t); }
+    static void quitEventLoop()
+    {
+        QVERIFY(!_e.isNull());
+        _e->quit();
+        if (_t)
+            QCOMPARE(QThread::currentThread(), _t);
+    }
 };
 
 void tst_QTimer::singleShotToFunctors()
 {
     int count = 0;
+    _e.reset(new QEventLoop);
     QEventLoop e;
 
     QTimer::singleShot(0, CountedStruct(&count));
@@ -661,7 +668,7 @@ void tst_QTimer::singleShotToFunctors()
     QCOMPARE(count, 1);
 
     QTimer::singleShot(0, &StaticEventLoop::quitEventLoop);
-    QCOMPARE(_e.exec(), 0);
+    QCOMPARE(_e->exec(), 0);
 
     QThread t1;
     QObject c1;
@@ -687,7 +694,7 @@ void tst_QTimer::singleShotToFunctors()
     QCOMPARE(e.exec(), 0);
 
     QTimer::singleShot(0, &c2, &StaticEventLoop::quitEventLoop);
-    QCOMPARE(_e.exec(), 0);
+    QCOMPARE(_e->exec(), 0);
 
     _t->quit();
     _t->wait();
@@ -721,8 +728,10 @@ void tst_QTimer::singleShotToFunctors()
     thread.quit();
     thread.wait();
 #endif
-}
 
+    _e.reset();
+    _t = Q_NULLPTR;
+}
 
 class DontBlockEvents : public QObject
 {

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -166,11 +166,6 @@ static bool qt_write_dibv5(QDataStream &s, QImage image)
     if (s.status() != QDataStream::Ok)
         return false;
 
-    DWORD colorSpace[3] = {0x00ff0000,0x0000ff00,0x000000ff};
-    d->write(reinterpret_cast<const char*>(colorSpace), sizeof(colorSpace));
-    if (s.status() != QDataStream::Ok)
-        return false;
-
     if (image.format() != QImage::Format_ARGB32)
         image = image.convertToFormat(QImage::Format_ARGB32);
 
@@ -255,10 +250,6 @@ static bool qt_read_dibv5(QDataStream &s, QImage &image)
     }
     image.setDotsPerMeterX(bi.bV5XPelsPerMeter);
     image.setDotsPerMeterY(bi.bV5YPelsPerMeter);
-    // read color table
-    DWORD colorSpace[3];
-    if (d->read((char *)colorSpace, sizeof(colorSpace)) != sizeof(colorSpace))
-        return false;
 
     red_shift = calc_shift(red_mask);
     green_shift = calc_shift(green_mask);
@@ -343,10 +334,11 @@ static bool setData(const QByteArray &data, STGMEDIUM *pmedium)
     return true;
 }
 
-static QByteArray getData(int cf, IDataObject *pDataObj)
+static QByteArray getData(int cf, IDataObject *pDataObj, int lindex = -1)
 {
     QByteArray data;
     FORMATETC formatetc = setCf(cf);
+    formatetc.lindex = lindex;
     STGMEDIUM s;
     if (pDataObj->GetData(&formatetc, &s) == S_OK) {
         DWORD * val = (DWORD*)GlobalLock(s.hGlobal);
@@ -791,7 +783,6 @@ QVariant QWindowsMimeURI::convertToMime(const QString &mimeType, LPDATAOBJECT pD
 {
     if (mimeType == QLatin1String("text/uri-list")) {
         if (canGetData(CF_HDROP, pDataObj)) {
-            QByteArray texturi;
             QList<QVariant> urls;
 
             QByteArray data = getData(CF_HDROP, pDataObj);
@@ -1340,21 +1331,34 @@ static bool isCustomMimeType(const QString &mimeType)
     return mimeType.startsWith(QLatin1String(x_qt_windows_mime), Qt::CaseInsensitive);
 }
 
-static QString customMimeType(const QString &mimeType)
+static QString customMimeType(const QString &mimeType, int *lindex = 0)
 {
     int len = sizeof(x_qt_windows_mime) - 1;
-    int n = mimeType.lastIndexOf(QLatin1Char('\"'))-len;
-    return mimeType.mid(len, n);
+    int n = mimeType.lastIndexOf(QLatin1Char('\"')) - len;
+    QString ret = mimeType.mid(len, n);
+
+    const int beginPos = mimeType.indexOf(QLatin1String(";index="));
+    if (beginPos > -1) {
+        const int endPos = mimeType.indexOf(QLatin1Char(';'), beginPos + 1);
+        const int indexStartPos = beginPos + 7;
+        if (lindex)
+            *lindex = mimeType.midRef(indexStartPos, endPos == -1 ? endPos : endPos - indexStartPos).toInt();
+    } else {
+        if (lindex)
+            *lindex = -1;
+    }
+    return ret;
 }
 
 bool QLastResortMimes::canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const
 {
     if (isCustomMimeType(mimeType)) {
+        // MSDN documentation for QueryGetData says only -1 is supported, so ignore lindex here.
         QString clipFormat = customMimeType(mimeType);
         int cf = RegisterClipboardFormat(reinterpret_cast<const wchar_t *> (clipFormat.utf16()));
         return canGetData(cf, pDataObj);
     } else if (formats.keys(mimeType).isEmpty()) {
-        // if it is not in there then register it an see if we can get it
+        // if it is not in there then register it and see if we can get it
         int cf = QWindowsMime::registerMimeType(mimeType);
         return canGetData(cf, pDataObj);
     } else {
@@ -1370,9 +1374,10 @@ QVariant QLastResortMimes::convertToMime(const QString &mimeType, IDataObject *p
     if (canConvertToMime(mimeType, pDataObj)) {
         QByteArray data;
         if (isCustomMimeType(mimeType)) {
-            QString clipFormat = customMimeType(mimeType);
+            int lindex;
+            QString clipFormat = customMimeType(mimeType, &lindex);
             int cf = RegisterClipboardFormat(reinterpret_cast<const wchar_t *> (clipFormat.utf16()));
-            data = getData(cf, pDataObj);
+            data = getData(cf, pDataObj, lindex);
         } else if (formats.keys(mimeType).isEmpty()) {
             int cf = QWindowsMime::registerMimeType(mimeType);
             data = getData(cf, pDataObj);
@@ -1452,6 +1457,7 @@ QWindowsMime * QWindowsMimeConverter::converterToMime(const QString &mimeType, I
 
 QStringList QWindowsMimeConverter::allMimesForFormats(IDataObject *pDataObj) const
 {
+    qCDebug(lcQpaMime) << "QWindowsMime::allMimesForFormats()";
     ensureInitialized();
     QStringList formats;
     LPENUMFORMATETC FAR fmtenum;
@@ -1461,10 +1467,9 @@ QStringList QWindowsMimeConverter::allMimesForFormats(IDataObject *pDataObj) con
         FORMATETC fmtetc;
         while (S_OK == fmtenum->Next(1, &fmtetc, 0)) {
 #if defined(QMIME_DEBUG)
-            qDebug("QWindowsMime::allMimesForFormats()");
             wchar_t buf[256] = {0};
             GetClipboardFormatName(fmtetc.cfFormat, buf, 255);
-            qDebug("CF = %d : %s", fmtetc.cfFormat, QString::fromWCharArray(buf));
+            qDebug("CF = %d : %s", fmtetc.cfFormat, qPrintable(QString::fromWCharArray(buf)));
 #endif
             for (int i= m_mimes.size() - 1; i >= 0; --i) {
                 QString format = m_mimes.at(i)->mimeForFormat(fmtetc);
@@ -1478,7 +1483,7 @@ QStringList QWindowsMimeConverter::allMimesForFormats(IDataObject *pDataObj) con
         }
         fmtenum->Release();
     }
-    qCDebug(lcQpaMime) << __FUNCTION__ << pDataObj << formats;
+    qCDebug(lcQpaMime) << pDataObj << formats;
     return formats;
 }
 

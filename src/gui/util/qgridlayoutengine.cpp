@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -32,10 +32,6 @@
 ****************************************************************************/
 
 #include "qglobal.h"
-
-#ifndef QT_NO_GRAPHICSVIEW
-
-#include <math.h>
 
 #include "qgridlayoutengine_p.h"
 #include "qvarlengtharray.h"
@@ -156,7 +152,7 @@ void QGridLayoutRowData::reset(int count)
     hasIgnoreFlag = false;
 }
 
-void QGridLayoutRowData::distributeMultiCells(const QGridLayoutRowInfo &rowInfo)
+void QGridLayoutRowData::distributeMultiCells(const QGridLayoutRowInfo &rowInfo, bool snapToPixelGrid)
 {
     MultiCellMap::const_iterator i = multiCellMap.constBegin();
     for (; i != multiCellMap.constEnd(); ++i) {
@@ -175,7 +171,7 @@ void QGridLayoutRowData::distributeMultiCells(const QGridLayoutRowInfo &rowInfo)
             qreal extra = compare(box, totalBox, j);
             if (extra > 0.0) {
                 calculateGeometries(start, end, box.q_sizes(j), dummy.data(), newSizes.data(),
-                                    0, totalBox, rowInfo);
+                                    0, totalBox, rowInfo, snapToPixelGrid);
 
                 for (int k = 0; k < span; ++k)
                     extras[k].q_sizes(j) = newSizes[k];
@@ -190,11 +186,19 @@ void QGridLayoutRowData::distributeMultiCells(const QGridLayoutRowInfo &rowInfo)
     }
     multiCellMap.clear();
 }
+namespace {
 
+// does not return int
+static inline qreal qround(qreal f)
+{
+    return std::floor(f + qreal(0.5));
+}
+
+}
 void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSize, qreal *positions,
                                              qreal *sizes, qreal *descents,
                                              const QGridLayoutBox &totalBox,
-                                             const QGridLayoutRowInfo &rowInfo)
+                                             const QGridLayoutRowInfo &rowInfo, bool snapToPixelGrid)
 {
     Q_ASSERT(end > start);
 
@@ -337,17 +341,19 @@ void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSiz
 
             bool keepGoing = somethingHasAMaximumSize;
             while (keepGoing) {
+                //sumCurrentAvailable is so large that something *might* reach its maximum size
                 keepGoing = false;
 
                 for (int i = 0; i < n; ++i) {
                     if (newSizes[i] >= 0.0)
                         continue;
 
-                    qreal maxBoxSize;
-                    if (isLargerThanMaximum)
-                        maxBoxSize = rowInfo.boxes.value(start + i).q_maximumSize;
-                    else
-                        maxBoxSize = boxes.at(start + i).q_maximumSize;
+                    const QVector<QGridLayoutBox> &rBoxes = isLargerThanMaximum ? rowInfo.boxes : boxes;
+                    const QGridLayoutBox &box = rBoxes.value(start + i);
+                    qreal maxBoxSize = box.q_maximumSize;
+
+                    if (snapToPixelGrid)
+                        maxBoxSize = qMax(box.q_minimumSize, std::floor(maxBoxSize));
 
                     qreal avail = sumCurrentAvailable * factors[i] / sumFactors;
                     if (sizes[i] + avail >= maxBoxSize) {
@@ -360,7 +366,6 @@ void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSiz
                     }
                 }
             }
-
             for (int i = 0; i < n; ++i) {
                 if (newSizes[i] < 0.0) {
                     qreal delta = (sumFactors == 0.0) ? 0.0
@@ -403,6 +408,10 @@ void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSiz
         }
         Q_ASSERT(surplus == 0);
 #endif
+    }
+    if (snapToPixelGrid) {
+        for (int i = 0; i < n; ++i)
+            positions[i] = qround(positions[i]);
     }
 
     if (descents) {
@@ -755,10 +764,11 @@ void QGridLayoutRowInfo::dump(int indent) const
 }
 #endif
 
-QGridLayoutEngine::QGridLayoutEngine(Qt::Alignment defaultAlignment)
+QGridLayoutEngine::QGridLayoutEngine(Qt::Alignment defaultAlignment, bool snapToPixelGrid)
 {
     m_visualDirection = Qt::LeftToRight;
     m_defaultAlignment = defaultAlignment;
+    m_snapToPixelGrid = snapToPixelGrid;
     invalidate();
 }
 
@@ -1009,8 +1019,17 @@ void QGridLayoutEngine::setGeometries(const QRectF &contentsGeometry, const QAbs
         if (item->rowSpan() != 1)
             height += q_yy[item->lastRow()] - y;
 
+        const Qt::Alignment align = effectiveAlignment(item);
         QRectF geom = item->geometryWithin(contentsGeometry.x() + x, contentsGeometry.y() + y,
-                                               width, height, q_descents[item->lastRow()], effectiveAlignment(item));
+                                               width, height, q_descents[item->lastRow()], align);
+        if (m_snapToPixelGrid) {
+            // x and y should already be rounded, but the call to geometryWithin() above might
+            // result in a geom with x,y at half-pixels (due to centering within the cell)
+            geom.setX(qround(geom.x()));
+            // Do not snap baseline aligned items, since that might cause the baselines to not be aligned.
+            if (align != Qt::AlignBaseline)
+                geom.setY(qround(geom.y()));
+        }
         visualRect(&geom, visualDirection(), contentsGeometry);
         item->setGeometry(geom);
     }
@@ -1063,7 +1082,7 @@ QSizeF QGridLayoutEngine::sizeHint(Qt::SizeHint which, const QSizeF &constraint,
                 //Calculate column widths and positions, and put results in q_xx.data() and q_widths.data() so that we can use this information as
                 //constraints to find the row heights
                 q_columnData.calculateGeometries(0, columnCount(), width, sizehint_xx.data(), sizehint_widths.data(),
-                        0, sizehint_totalBoxes[Hor], q_infos[Hor]);
+                        0, sizehint_totalBoxes[Hor], q_infos[Hor], m_snapToPixelGrid);
                 ensureColumnAndRowData(&q_rowData, &sizehint_totalBoxes[Ver], sizehint_xx.data(), sizehint_widths.data(), Qt::Vertical, styleInfo);
                 sizeHintCalculated = true;
             }
@@ -1080,7 +1099,7 @@ QSizeF QGridLayoutEngine::sizeHint(Qt::SizeHint which, const QSizeF &constraint,
                 //Calculate row heights and positions, and put results in q_yy.data() and q_heights.data() so that we can use this information as
                 //constraints to find the column widths
                 q_rowData.calculateGeometries(0, rowCount(), height, sizehint_yy.data(), sizehint_heights.data(),
-                        0, sizehint_totalBoxes[Ver], q_infos[Ver]);
+                        0, sizehint_totalBoxes[Ver], q_infos[Ver], m_snapToPixelGrid);
                 ensureColumnAndRowData(&q_columnData, &sizehint_totalBoxes[Hor], sizehint_yy.data(), sizehint_heights.data(), Qt::Horizontal, styleInfo);
                 sizeHintCalculated = true;
             }
@@ -1367,7 +1386,7 @@ void QGridLayoutEngine::fillRowData(QGridLayoutRowData *rowData,
                             rowStretch = qMax(rowStretch, itemStretch);
                     } else {
                         QGridLayoutMultiCellData &multiCell =
-                                rowData->multiCellMap[qMakePair(row, effectiveRowSpan)];
+                                rowData->multiCellMap[qMakePair(row, itemRowSpan)];
                         box = &multiCell.q_box;
                         multiCell.q_stretch = itemStretch;
                     }
@@ -1535,7 +1554,7 @@ void QGridLayoutEngine::ensureColumnAndRowData(QGridLayoutRowData *rowData, QGri
     rowData->reset(rowCount(orientation));
     fillRowData(rowData, colPositions, colSizes, orientation, styleInfo);
     const QGridLayoutRowInfo &rowInfo = q_infos[orientation == Qt::Vertical];
-    rowData->distributeMultiCells(rowInfo);
+    rowData->distributeMultiCells(rowInfo, m_snapToPixelGrid);
     *totalBox = rowData->totalBox(0, rowCount(orientation));
 
     if (totalBox != &q_totalBoxes[o])
@@ -1590,7 +1609,7 @@ Qt::Orientation QGridLayoutEngine::constraintOrientation() const
 void QGridLayoutEngine::ensureGeometries(const QSizeF &size,
                                          const QAbstractLayoutStyleInfo *styleInfo) const
 {
-    if (!styleInfo->hasChanged() && q_cachedSize == size)
+    if (q_cachedSize == size)
         return;
 
     q_cachedSize = size;
@@ -1607,25 +1626,23 @@ void QGridLayoutEngine::ensureGeometries(const QSizeF &size,
         //Calculate column widths and positions, and put results in q_xx.data() and q_widths.data() so that we can use this information as
         //constraints to find the row heights
         q_columnData.calculateGeometries(0, columnCount(), size.width(), q_xx.data(), q_widths.data(),
-                0, q_totalBoxes[Hor], q_infos[Hor] );
+                0, q_totalBoxes[Hor], q_infos[Hor], m_snapToPixelGrid);
         ensureColumnAndRowData(&q_rowData, &q_totalBoxes[Ver], q_xx.data(), q_widths.data(), Qt::Vertical, styleInfo);
         //Calculate row heights and positions, and put results in q_yy.data() and q_heights.data()
         q_rowData.calculateGeometries(0, rowCount(), size.height(), q_yy.data(), q_heights.data(),
-                q_descents.data(), q_totalBoxes[Ver], q_infos[Ver]);
+                q_descents.data(), q_totalBoxes[Ver], q_infos[Ver], m_snapToPixelGrid);
     } else {
         //We have items whose width depends on their height (WFH)
         ensureColumnAndRowData(&q_rowData, &q_totalBoxes[Ver], NULL, NULL, Qt::Vertical, styleInfo);
         //Calculate row heights and positions, and put results in q_yy.data() and q_heights.data() so that we can use this information as
         //constraints to find the column widths
         q_rowData.calculateGeometries(0, rowCount(), size.height(), q_yy.data(), q_heights.data(),
-                q_descents.data(), q_totalBoxes[Ver], q_infos[Ver]);
+                q_descents.data(), q_totalBoxes[Ver], q_infos[Ver], m_snapToPixelGrid);
         ensureColumnAndRowData(&q_columnData, &q_totalBoxes[Hor], q_yy.data(), q_heights.data(), Qt::Horizontal, styleInfo);
         //Calculate row heights and positions, and put results in q_yy.data() and q_heights.data()
         q_columnData.calculateGeometries(0, columnCount(), size.width(), q_xx.data(), q_widths.data(),
-                0, q_totalBoxes[Hor], q_infos[Hor]);
+                0, q_totalBoxes[Hor], q_infos[Hor], m_snapToPixelGrid);
     }
 }
 
 QT_END_NAMESPACE
-
-#endif //QT_NO_GRAPHICSVIEW

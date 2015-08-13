@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -84,7 +84,7 @@ public:
     }
 
 protected:
-    QStringList formats_sys() const
+    QStringList formats_sys() const Q_DECL_OVERRIDE
     {
         if (isEmpty())
             return QStringList();
@@ -97,7 +97,7 @@ protected:
             that->format_atoms = m_clipboard->getDataInFormat(modeAtom, m_clipboard->atom(QXcbAtom::TARGETS));
 
             if (format_atoms.size() > 0) {
-                xcb_atom_t *targets = (xcb_atom_t *) format_atoms.data();
+                const xcb_atom_t *targets = (const xcb_atom_t *) format_atoms.data();
                 int size = format_atoms.size() / sizeof(xcb_atom_t);
 
                 for (int i = 0; i < size; ++i) {
@@ -114,13 +114,13 @@ protected:
         return formatList;
     }
 
-    bool hasFormat_sys(const QString &format) const
+    bool hasFormat_sys(const QString &format) const Q_DECL_OVERRIDE
     {
         QStringList list = formats();
         return list.contains(format);
     }
 
-    QVariant retrieveData_sys(const QString &fmt, QVariant::Type requestedType) const
+    QVariant retrieveData_sys(const QString &fmt, QVariant::Type requestedType) const Q_DECL_OVERRIDE
     {
         if (fmt.isEmpty() || isEmpty())
             return QByteArray();
@@ -128,7 +128,7 @@ protected:
         (void)formats(); // trigger update of format list
 
         QVector<xcb_atom_t> atoms;
-        xcb_atom_t *targets = (xcb_atom_t *) format_atoms.data();
+        const xcb_atom_t *targets = (const xcb_atom_t *) format_atoms.data();
         int size = format_atoms.size() / sizeof(xcb_atom_t);
         atoms.reserve(size);
         for (int i = 0; i < size; ++i)
@@ -232,7 +232,7 @@ public:
     }
 
 protected:
-    void timerEvent(QTimerEvent *ev)
+    void timerEvent(QTimerEvent *ev) Q_DECL_OVERRIDE
     {
         if (ev->timerId() == abort_timer) {
             // this can happen when the X client we are sending data
@@ -276,7 +276,7 @@ QXcbClipboard::QXcbClipboard(QXcbConnection *c)
     m_timestamp[QClipboard::Clipboard] = XCB_CURRENT_TIME;
     m_timestamp[QClipboard::Selection] = XCB_CURRENT_TIME;
 
-    m_screen = connection()->primaryScreen();
+    QXcbScreen *platformScreen = screen();
 
     int x = 0, y = 0, w = 3, h = 3;
 
@@ -284,11 +284,11 @@ QXcbClipboard::QXcbClipboard(QXcbConnection *c)
     Q_XCB_CALL(xcb_create_window(xcb_connection(),
                                  XCB_COPY_FROM_PARENT,            // depth -- same as root
                                  m_owner,                        // window id
-                                 m_screen->screen()->root,                   // parent window id
+                                 platformScreen->screen()->root,                   // parent window id
                                  x, y, w, h,
                                  0,                               // border width
                                  XCB_WINDOW_CLASS_INPUT_OUTPUT,   // window class
-                                 m_screen->screen()->root_visual, // visual
+                                 platformScreen->screen()->root_visual, // visual
                                  0,                               // value mask
                                  0));                             // value list
 #ifndef QT_NO_DEBUG
@@ -462,9 +462,16 @@ bool QXcbClipboard::ownsMode(QClipboard::Mode mode) const
     return m_timestamp[mode] != XCB_CURRENT_TIME;
 }
 
+QXcbScreen *QXcbClipboard::screen() const
+{
+    return connection()->primaryScreen();
+}
+
 xcb_window_t QXcbClipboard::requestor() const
 {
-    if (!m_requestor) {
+     QXcbScreen *platformScreen = screen();
+
+    if (!m_requestor && platformScreen) {
         const int x = 0, y = 0, w = 3, h = 3;
         QXcbClipboard *that = const_cast<QXcbClipboard *>(this);
 
@@ -472,11 +479,11 @@ xcb_window_t QXcbClipboard::requestor() const
         Q_XCB_CALL(xcb_create_window(xcb_connection(),
                                      XCB_COPY_FROM_PARENT,            // depth -- same as root
                                      window,                        // window id
-                                     m_screen->screen()->root,                   // parent window id
+                                     platformScreen->screen()->root,                   // parent window id
                                      x, y, w, h,
                                      0,                               // border width
                                      XCB_WINDOW_CLASS_INPUT_OUTPUT,   // window class
-                                     m_screen->screen()->root_visual, // visual
+                                     platformScreen->screen()->root_visual, // visual
                                      0,                               // value mask
                                      0));                             // value list
 #ifndef QT_NO_DEBUG
@@ -742,7 +749,9 @@ void QXcbClipboard::handleXFixesSelectionRequest(xcb_xfixes_selection_notify_eve
             m_xClipboard[mode]->reset();
         }
         emitChanged(mode);
-    }
+    } else if (event->subtype == XCB_XFIXES_SELECTION_EVENT_SELECTION_CLIENT_CLOSE ||
+               event->subtype == XCB_XFIXES_SELECTION_EVENT_SELECTION_WINDOW_DESTROY)
+        emitChanged(mode);
 }
 
 

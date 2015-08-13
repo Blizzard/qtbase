@@ -1,40 +1,32 @@
 #!/usr/bin/env perl
 #############################################################################
 ##
-## Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-## Contact: http://www.qt-project.org/legal
+## Copyright (C) 2015 The Qt Company Ltd.
+## Contact: http://www.qt.io/licensing/
 ##
 ## This file is part of the porting tools of the Qt Toolkit.
 ##
-## $QT_BEGIN_LICENSE:LGPL$
+## $QT_BEGIN_LICENSE:LGPL21$
 ## Commercial License Usage
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and Digia.  For licensing terms and
-## conditions see http://qt.digia.com/licensing.  For further information
-## use the contact form at http://qt.digia.com/contact-us.
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see http://www.qt.io/terms-conditions. For further
+## information use the contact form at http://www.qt.io/contact-us.
 ##
 ## GNU Lesser General Public License Usage
 ## Alternatively, this file may be used under the terms of the GNU Lesser
-## General Public License version 2.1 as published by the Free Software
-## Foundation and appearing in the file LICENSE.LGPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU Lesser General Public License version 2.1 requirements
-## will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+## General Public License version 2.1 or version 3 as published by the Free
+## Software Foundation and appearing in the file LICENSE.LGPLv21 and
+## LICENSE.LGPLv3 included in the packaging of this file. Please review the
+## following information to ensure the GNU Lesser General Public License
+## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 ##
-## In addition, as a special exception, Digia gives you certain additional
-## rights.  These rights are described in the Digia Qt LGPL Exception
+## As a special exception, The Qt Company gives you certain additional
+## rights. These rights are described in The Qt Company LGPL Exception
 ## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3.0 as published by the Free Software
-## Foundation and appearing in the file LICENSE.GPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU General Public License version 3.0 requirements will be
-## met: http://www.gnu.org/copyleft/gpl.html.
-##
 ##
 ## $QT_END_LICENSE$
 ##
@@ -55,7 +47,8 @@ my $stripModule = 0;
 my $fixedFileCount = 0;
 my $fileCount = 0;
 my $verbose = 0;
-my $qtdir = $ENV{'QTDIR'};
+my $qtdir;
+my $qtIncludeDir;
 
 my $USAGE=<<EOF;
 This script replaces all Qt 4 style includes with Qt 5 includes.
@@ -122,44 +115,54 @@ sub fixHeaders
 
 sub findQtHeaders
 {
-    my ($dirName,$baseDir) = @_;
+    my ($dirName,$includeDir) = @_;
 
     local (*DIR);
 
-    opendir(DIR, $baseDir . '/include/' . $dirName) || die ('Unable to open ' .$baseDir . '/include/' . $dirName . ': ' . $!);
+    my $moduleIncludeDir = $includeDir . '/' . $dirName;
+    opendir(DIR, $moduleIncludeDir) || die ('Unable to open ' . $moduleIncludeDir . ': ' . $!);
     my @headers = readdir(DIR);
     closedir(DIR);
 
     foreach my $header (@headers) {
-        next if (-d ($baseDir . '/include/' . $dirName . '/' . $header) || $header =~ /\.pri$/);
+        next if (-d ($moduleIncludeDir . '/' . $header) || $header =~ /\.pri$/);
         $headerSubst{$header} = $stripModule ?  $header : ($dirName . '/' . $header);
     }
 }
 
 # -------- MAIN
 
-die "This script requires the QTDIR environment variable pointing to Qt 5\n" unless $qtdir;
+if ($qtdir) {
+    $qtIncludeDir = $qtdir . '/include';
+} else {
+    $qtIncludeDir = `qmake -query QT_INSTALL_HEADERS`;
+    chop($qtIncludeDir);
+}
 
-findQtHeaders('QtCore', $qtdir);
-findQtHeaders('QtConcurrent', $qtdir);
-findQtHeaders('QtWidgets', $qtdir);
-findQtHeaders('QtPrintSupport', $qtdir);
+die "The location of the Qt 5 include files could not be determined.\n"
+        ."Please ensure qmake can be found in PATH or pass the command line option --qtdir.\n"
+    unless -d $qtIncludeDir;
 
-if (-d $qtdir . '/include/QtMultimedia') {
-    findQtHeaders('QtMultimedia', $qtdir);
-    findQtHeaders('QtMultimediaWidgets', $qtdir);
-} elsif (-d $qtdir . '/../qtmultimedia' ) {
+findQtHeaders('QtCore', $qtIncludeDir);
+findQtHeaders('QtConcurrent', $qtIncludeDir);
+findQtHeaders('QtWidgets', $qtIncludeDir);
+findQtHeaders('QtPrintSupport', $qtIncludeDir);
+
+if (-d $qtIncludeDir . '/include/QtMultimedia') {
+    findQtHeaders('QtMultimedia', $qtIncludeDir);
+    findQtHeaders('QtMultimediaWidgets', $qtIncludeDir);
+} elsif (-d $qtIncludeDir . '/../qtmultimedia' ) {
     # This is the case if QTDIR points to a source tree instead of an installed Qt
-    findQtHeaders('QtMultimedia', $qtdir . '/../qtmultimedia');
-    findQtHeaders('QtMultimediaWidgets', $qtdir . '/../qtmultimedia');
+    findQtHeaders('QtMultimedia', $qtIncludeDir . '/../qtmultimedia');
+    findQtHeaders('QtMultimediaWidgets', $qtIncludeDir . '/../qtmultimedia');
 }
 
 # Support porting from "Qt 4.99" QtDeclarative to QtQuick (QQuickItem et al)
-if (-d $qtdir . '/include/QtQuick') {
-    findQtHeaders('QtQuick', $qtdir);
-} elsif (-d $qtdir . '/../qtdeclarative' ) {
+if (-d $qtIncludeDir . '/include/QtQuick') {
+    findQtHeaders('QtQuick', $qtIncludeDir);
+} elsif (-d $qtIncludeDir . '/../qtdeclarative' ) {
     # This is the case if QTDIR points to a source tree instead of an installed Qt
-    findQtHeaders('QtQuick', $qtdir . '/../qtdeclarative');
+    findQtHeaders('QtQuick', $qtIncludeDir . '/../qtdeclarative');
 }
 
 # special case

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -54,6 +54,12 @@ private slots:
     void indexOf();
     void lastIndexOf();
     void contains();
+    void initializeListInt();
+    void initializeListMovable();
+    void initializeListComplex();
+private:
+    template<typename T>
+    void initializeList();
 };
 
 int fooCtor = 0;
@@ -333,11 +339,23 @@ struct MyPrimitive
 struct MyMovable
     : MyBase
 {
+    MyMovable(char input = 'j') : i(input) {}
+    bool operator==(const MyMovable &other) const
+    {
+        return i == other.i;
+    }
+    char i;
 };
 
 struct MyComplex
     : MyBase
 {
+    MyComplex(char input = 'j') : i(input) {}
+    bool operator==(const MyComplex &other) const
+    {
+        return i == other.i;
+    }
+    char i;
 };
 
 QT_BEGIN_NAMESPACE
@@ -732,6 +750,70 @@ void tst_QVarLengthArray::contains()
     // add it and make sure it does :)
     myvec.append(QLatin1String("I don't exist"));
     QVERIFY(myvec.contains(QLatin1String("I don't exist")));
+}
+
+void tst_QVarLengthArray::initializeListInt()
+{
+    initializeList<int>();
+}
+
+void tst_QVarLengthArray::initializeListMovable()
+{
+    const int instancesCount = MyMovable::liveCount;
+    initializeList<MyMovable>();
+    QCOMPARE(MyMovable::liveCount, instancesCount);
+}
+
+void tst_QVarLengthArray::initializeListComplex()
+{
+    const int instancesCount = MyComplex::liveCount;
+    initializeList<MyComplex>();
+    QCOMPARE(MyComplex::liveCount, instancesCount);
+}
+
+template<typename T>
+void tst_QVarLengthArray::initializeList()
+{
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+    T val1(110);
+    T val2(105);
+    T val3(101);
+    T val4(114);
+
+    // QVarLengthArray(std::initializer_list<>)
+    QVarLengthArray<T> v1 {val1, val2, val3};
+    QCOMPARE(v1, QVarLengthArray<T>() << val1 << val2 << val3);
+    QCOMPARE(v1, (QVarLengthArray<T> {val1, val2, val3}));
+
+    QVarLengthArray<QVarLengthArray<T>, 4> v2{ v1, {val4}, QVarLengthArray<T>(), {val1, val2, val3} };
+    QVarLengthArray<QVarLengthArray<T>, 4> v3;
+    v3 << v1 << (QVarLengthArray<T>() << val4) << QVarLengthArray<T>() << v1;
+    QCOMPARE(v3, v2);
+
+    QVarLengthArray<T> v4({});
+    QCOMPARE(v4.size(), 0);
+
+    // operator=(std::initializer_list<>)
+
+    QVarLengthArray<T> v5({val2, val1});
+    v1 = { val1, val2 }; // make array smaller
+    v4 = { val1, val2 }; // make array bigger
+    v5 = { val1, val2 }; // same size
+    QCOMPARE(v1, QVarLengthArray<T>() << val1 << val2);
+    QCOMPARE(v4, v1);
+    QCOMPARE(v5, v1);
+
+    QVarLengthArray<T, 1> v6 = { val1 };
+    v6 = { val1, val2 }; // force allocation on heap
+    QCOMPARE(v6.size(), 2);
+    QCOMPARE(v6.first(), val1);
+    QCOMPARE(v6.last(), val2);
+
+    v6 = {}; // assign empty
+    QCOMPARE(v6.size(), 0);
+#else
+    QSKIP("This tests requires a compiler that supports initializer lists.");
+#endif
 }
 
 QTEST_APPLESS_MAIN(tst_QVarLengthArray)

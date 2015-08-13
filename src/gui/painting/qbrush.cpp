@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -35,6 +35,7 @@
 #include "qpixmap.h"
 #include "qbitmap.h"
 #include "qpixmapcache.h"
+#include "qplatformpixmap.h"
 #include "qdatastream.h"
 #include "qvariant.h"
 #include "qline.h"
@@ -708,6 +709,9 @@ void QBrush::setStyle(Qt::BrushStyle style)
 
 void QBrush::setColor(const QColor &c)
 {
+    if (d->color == c)
+        return;
+
     detach(d->style);
     d->color = c;
 }
@@ -947,9 +951,34 @@ bool QBrush::operator==(const QBrush &b) const
     switch (d->style) {
     case Qt::TexturePattern:
         {
-            const QPixmap &us = (static_cast<QTexturedBrushData *>(d.data()))->pixmap();
-            const QPixmap &them = (static_cast<QTexturedBrushData *>(b.d.data()))->pixmap();
-            return ((us.isNull() && them.isNull()) || us.cacheKey() == them.cacheKey());
+            // Note this produces false negatives if the textures have identical data,
+            // but does not share the same data in memory. Since equality is likely to
+            // be used to avoid iterating over the data for a texture update, this should
+            // still be better than doing an accurate comparison.
+            const QPixmap *us = 0, *them = 0;
+            qint64 cacheKey1, cacheKey2;
+            if (qHasPixmapTexture(*this)) {
+                us = (static_cast<QTexturedBrushData *>(d.data()))->m_pixmap;
+                cacheKey1 = us->cacheKey();
+            } else
+                cacheKey1 = (static_cast<QTexturedBrushData *>(d.data()))->image().cacheKey();
+
+            if (qHasPixmapTexture(b)) {
+                them = (static_cast<QTexturedBrushData *>(b.d.data()))->m_pixmap;
+                cacheKey2 = them->cacheKey();
+            } else
+                cacheKey2 = (static_cast<QTexturedBrushData *>(b.d.data()))->image().cacheKey();
+
+            if (cacheKey1 != cacheKey2)
+                return false;
+            if (!us == !them) // both images or both pixmaps
+                return true;
+            // Only raster QPixmaps use the same cachekeys as QImages.
+            if (us && us->handle()->classId() == QPlatformPixmap::RasterClass)
+                return true;
+            if (them && them->handle()->classId() == QPlatformPixmap::RasterClass)
+                return true;
+            return false;
         }
     case Qt::LinearGradientPattern:
     case Qt::RadialGradientPattern:
@@ -970,7 +999,7 @@ bool QBrush::operator==(const QBrush &b) const
 */
 QDebug operator<<(QDebug dbg, const QBrush &b)
 {
-    static const char *BRUSH_STYLES[] = {
+    static const char *const BRUSH_STYLES[] = {
      "NoBrush",
      "SolidPattern",
      "Dense1Pattern",
@@ -993,8 +1022,9 @@ QDebug operator<<(QDebug dbg, const QBrush &b)
      "TexturePattern" // 24
     };
 
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QBrush(" << b.color() << ',' << BRUSH_STYLES[b.style()] << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -1026,7 +1056,10 @@ QDataStream &operator<<(QDataStream &s, const QBrush &b)
 
     s << style << b.color();
     if (b.style() == Qt::TexturePattern) {
-        s << b.texture();
+        if (s.version() >= QDataStream::Qt_5_5)
+            s << b.textureImage();
+        else
+            s << b.texture();
     } else if (s.version() >= QDataStream::Qt_4_0 && gradient_style) {
         const QGradient *gradient = b.gradient();
         int type_as_int = int(gradient->type());
@@ -1086,10 +1119,17 @@ QDataStream &operator>>(QDataStream &s, QBrush &b)
     QColor color;
     s >> style;
     s >> color;
+    b = QBrush(color);
     if (style == Qt::TexturePattern) {
-        QPixmap pm;
-        s >> pm;
-        b = QBrush(color, pm);
+        if (s.version() >= QDataStream::Qt_5_5) {
+            QImage img;
+            s >> img;
+            b.setTextureImage(qMove(img));
+        } else {
+            QPixmap pm;
+            s >> pm;
+            b.setTexture(qMove(pm));
+        }
     } else if (style == Qt::LinearGradientPattern
                || style == Qt::RadialGradientPattern
                || style == Qt::ConicalGradientPattern) {

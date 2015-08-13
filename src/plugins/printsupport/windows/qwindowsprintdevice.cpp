@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 John Layt <jlayt@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,8 @@
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_PRINTER
+
+QT_WARNING_DISABLE_GCC("-Wsign-compare")
 
 extern qreal qt_pointMultiplier(QPageLayout::Unit unit);
 
@@ -111,26 +113,9 @@ QWindowsPrintDevice::QWindowsPrintDevice(const QString &id)
     }
 }
 
-QWindowsPrintDevice::QWindowsPrintDevice(const QWindowsPrintDevice &other)
-    : QPlatformPrintDevice(other)
-{
-    OpenPrinter((LPWSTR)other.m_id.utf16(), &m_hPrinter, NULL);
-}
-
 QWindowsPrintDevice::~QWindowsPrintDevice()
 {
     ClosePrinter(m_hPrinter);
-}
-
-QWindowsPrintDevice &QWindowsPrintDevice::operator=(const QWindowsPrintDevice &other)
-{
-    OpenPrinter((LPWSTR)other.m_id.utf16(), &m_hPrinter, NULL);
-    return *this;
-}
-
-bool QWindowsPrintDevice::operator==(const QWindowsPrintDevice &other) const
-{
-    return (m_id == other.m_id);
 }
 
 bool QWindowsPrintDevice::isValid() const
@@ -244,8 +229,20 @@ QMarginsF QWindowsPrintDevice::printableMargins(const QPageSize &pageSize,
     if (GetPrinter(m_hPrinter, 2, buffer.data(), needed, &needed)) {
         PPRINTER_INFO_2 info = reinterpret_cast<PPRINTER_INFO_2>(buffer.data());
         DEVMODE *devMode = info->pDevMode;
-        if (!devMode)
-            return margins;
+        bool separateDevMode = false;
+        if (!devMode) {
+            // GetPrinter() didn't include the DEVMODE. Get it a different way.
+            LONG result = DocumentProperties(NULL, m_hPrinter, (LPWSTR)m_id.utf16(),
+                                             NULL, NULL, 0);
+            devMode = (DEVMODE *)malloc(result);
+            separateDevMode = true;
+            result = DocumentProperties(NULL, m_hPrinter, (LPWSTR)m_id.utf16(),
+                                        devMode, NULL, DM_OUT_BUFFER);
+            if (result != IDOK) {
+                free(devMode);
+                return margins;
+            }
+        }
 
         HDC pDC = CreateDC(NULL, (LPWSTR)m_id.utf16(), NULL, devMode);
         if (pageSize.id() == QPageSize::Custom || pageSize.windowsId() <= 0 || pageSize.windowsId() > DMPAPER_LAST) {
@@ -271,6 +268,8 @@ QMarginsF QWindowsPrintDevice::printableMargins(const QPageSize &pageSize,
         const qreal rightMargin = physicalWidth - leftMargin - printableWidth;
         const qreal bottomMargin = physicalHeight - topMargin - printableHeight;
         margins = QMarginsF(leftMargin, topMargin, rightMargin, bottomMargin);
+        if (separateDevMode)
+            free(devMode);
         DeleteDC(pDC);
     }
     return margins;

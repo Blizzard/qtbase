@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -72,8 +72,35 @@ QScreen::QScreen(QPlatformScreen *screen)
  */
 QScreen::~QScreen()
 {
-    if (qApp)
-        Q_EMIT qApp->screenRemoved(this);
+    if (!qApp)
+        return;
+
+    // Allow clients to manage windows that are affected by the screen going
+    // away, before we fall back to moving them to the primary screen.
+    emit qApp->screenRemoved(this);
+
+    if (QGuiApplication::closingDown())
+        return;
+
+    QScreen *primaryScreen = QGuiApplication::primaryScreen();
+    if (this == primaryScreen)
+        return;
+
+    bool movingFromVirtualSibling = primaryScreen && primaryScreen->handle()->virtualSiblings().contains(handle());
+
+    // Move any leftover windows to the primary screen
+    foreach (QWindow *window, QGuiApplication::topLevelWindows()) {
+        if (window->screen() != this)
+            continue;
+
+        const bool wasVisible = window->isVisible();
+        window->setScreen(primaryScreen);
+
+        // Re-show window if moved from a virtual sibling screen. Otherwise
+        // leave it up to the application developer to show the window.
+        if (movingFromVirtualSibling)
+            window->setVisible(wasVisible);
+    }
 }
 
 /*!
@@ -217,9 +244,14 @@ qreal QScreen::logicalDotsPerInch() const
 }
 
 /*!
+    \property QScreen::devicePixelRatio
+    \brief the screen's ratio between physical pixels and device-independent pixels
+    \since 5.5
+
     Returns the ratio between physical pixels and device-independent pixels for the screen.
 
-    Common values are 1.0 on normal displays and 2.0 on Apple "retina" displays.
+    Common values are 1.0 on normal displays and 2.0 on "retina" displays.
+    Higher values are also possible.
 
     \sa QWindow::devicePixelRatio(), QGuiApplication::devicePixelRatio()
 */
@@ -467,20 +499,6 @@ Qt::ScreenOrientation QScreen::nativeOrientation() const
     return d->platformScreen->nativeOrientation();
 }
 
-// i must be power of two
-static int log2(uint i)
-{
-    if (i == 0)
-        return -1;
-
-    int result = 0;
-    while (!(i & 1)) {
-        ++result;
-        i >>= 1;
-    }
-    return result;
-}
-
 /*!
     Convenience function to compute the angle of rotation to get from
     rotation \a a to rotation \a b.
@@ -497,19 +515,7 @@ int QScreen::angleBetween(Qt::ScreenOrientation a, Qt::ScreenOrientation b) cons
     if (b == Qt::PrimaryOrientation)
         b = primaryOrientation();
 
-    if (a == b)
-        return 0;
-
-    int ia = log2(uint(a));
-    int ib = log2(uint(b));
-
-    int delta = ia - ib;
-
-    if (delta < 0)
-        delta = delta + 4;
-
-    int angles[] = { 0, 90, 180, 270 };
-    return angles[delta];
+    return QPlatformScreen::angleBetween(a, b);
 }
 
 /*!
@@ -532,28 +538,7 @@ QTransform QScreen::transformBetween(Qt::ScreenOrientation a, Qt::ScreenOrientat
     if (b == Qt::PrimaryOrientation)
         b = primaryOrientation();
 
-    if (a == b)
-        return QTransform();
-
-    int angle = angleBetween(a, b);
-
-    QTransform result;
-    switch (angle) {
-    case 90:
-        result.translate(target.width(), 0);
-        break;
-    case 180:
-        result.translate(target.width(), target.height());
-        break;
-    case 270:
-        result.translate(0, target.height());
-        break;
-    default:
-        Q_ASSERT(false);
-    }
-    result.rotate(angle);
-
-    return result;
+    return QPlatformScreen::transformBetween(a, b, target);
 }
 
 /*!
@@ -573,16 +558,7 @@ QRect QScreen::mapBetween(Qt::ScreenOrientation a, Qt::ScreenOrientation b, cons
     if (b == Qt::PrimaryOrientation)
         b = primaryOrientation();
 
-    if (a == b)
-        return rect;
-
-    if ((a == Qt::PortraitOrientation || a == Qt::InvertedPortraitOrientation)
-        != (b == Qt::PortraitOrientation || b == Qt::InvertedPortraitOrientation))
-    {
-        return QRect(rect.y(), rect.x(), rect.height(), rect.width());
-    }
-
-    return rect;
+    return QPlatformScreen::mapBetween(a, b, rect);
 }
 
 /*!

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -44,9 +44,10 @@
 
 QT_BEGIN_NAMESPACE
 
-QPanGestureRecognizer::QPanGestureRecognizer()
-{
-}
+// If the change in scale for a single touch event is out of this range,
+// we consider it to be spurious.
+static const qreal kSingleStepScaleMax = 2.0;
+static const qreal kSingleStepScaleMin = 0.1;
 
 QGesture *QPanGestureRecognizer::create(QObject *target)
 {
@@ -60,6 +61,15 @@ QGesture *QPanGestureRecognizer::create(QObject *target)
 #endif
     }
     return new QPanGesture;
+}
+
+static QPointF panOffset(const QList<QTouchEvent::TouchPoint> &touchPoints, int maxCount)
+{
+    QPointF result;
+    const int count = qMin(touchPoints.size(), maxCount);
+    for (int p = 0; p < count; ++p)
+        result += touchPoints.at(p).pos() - touchPoints.at(p).startPos();
+    return result / qreal(count);
 }
 
 QGestureRecognizer::Result QPanGestureRecognizer::recognize(QGesture *state,
@@ -76,18 +86,15 @@ QGestureRecognizer::Result QPanGestureRecognizer::recognize(QGesture *state,
         result = QGestureRecognizer::MayBeGesture;
         QTouchEvent::TouchPoint p = ev->touchPoints().at(0);
         d->lastOffset = d->offset = QPointF();
+        d->pointCount = m_pointCount;
         break;
     }
     case QEvent::TouchEnd: {
         if (q->state() != Qt::NoGesture) {
             const QTouchEvent *ev = static_cast<const QTouchEvent *>(event);
-            if (ev->touchPoints().size() == 2) {
-                QTouchEvent::TouchPoint p1 = ev->touchPoints().at(0);
-                QTouchEvent::TouchPoint p2 = ev->touchPoints().at(1);
+            if (ev->touchPoints().size() == d->pointCount) {
                 d->lastOffset = d->offset;
-                d->offset =
-                        QPointF(p1.pos().x() - p1.startPos().x() + p2.pos().x() - p2.startPos().x(),
-                              p1.pos().y() - p1.startPos().y() + p2.pos().y() - p2.startPos().y()) / 2;
+                d->offset = panOffset(ev->touchPoints(), d->pointCount);
             }
             result = QGestureRecognizer::FinishGesture;
         } else {
@@ -97,16 +104,12 @@ QGestureRecognizer::Result QPanGestureRecognizer::recognize(QGesture *state,
     }
     case QEvent::TouchUpdate: {
         const QTouchEvent *ev = static_cast<const QTouchEvent *>(event);
-        if (ev->touchPoints().size() >= 2) {
-            QTouchEvent::TouchPoint p1 = ev->touchPoints().at(0);
-            QTouchEvent::TouchPoint p2 = ev->touchPoints().at(1);
+        if (ev->touchPoints().size() >= d->pointCount) {
             d->lastOffset = d->offset;
-            d->offset =
-                    QPointF(p1.pos().x() - p1.startPos().x() + p2.pos().x() - p2.startPos().x(),
-                          p1.pos().y() - p1.startPos().y() + p2.pos().y() - p2.startPos().y()) / 2;
+            d->offset = panOffset(ev->touchPoints(), d->pointCount);
             if (d->offset.x() > 10  || d->offset.y() > 10 ||
                 d->offset.x() < -10 || d->offset.y() < -10) {
-                q->setHotSpot(p1.startScreenPos());
+                q->setHotSpot(ev->touchPoints().first().startScreenPos());
                 result = QGestureRecognizer::TriggerGesture;
             } else {
                 result = QGestureRecognizer::MayBeGesture;
@@ -199,7 +202,10 @@ QGestureRecognizer::Result QPinchGestureRecognizer::recognize(QGesture *state,
                 d->lastScaleFactor = d->scaleFactor;
                 QLineF line(p1.screenPos(), p2.screenPos());
                 QLineF lastLine(p1.lastScreenPos(),  p2.lastScreenPos());
-                d->scaleFactor = line.length() / lastLine.length();
+                qreal newScaleFactor = line.length() / lastLine.length();
+                if (newScaleFactor > kSingleStepScaleMax || newScaleFactor < kSingleStepScaleMin)
+                    return QGestureRecognizer::Ignore;
+                d->scaleFactor = newScaleFactor;
             }
             d->totalScaleFactor = d->totalScaleFactor * d->scaleFactor;
             d->changeFlags |= QPinchGesture::ScaleFactorChanged;

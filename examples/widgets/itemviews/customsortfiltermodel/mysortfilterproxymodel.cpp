@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -91,15 +91,15 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
     if (leftData.type() == QVariant::DateTime) {
         return leftData.toDateTime() < rightData.toDateTime();
     } else {
-        QRegExp *emailPattern = new QRegExp("([\\w\\.]*@[\\w\\.]*)");
+        static QRegExp emailPattern("[\\w\\.]*@[\\w\\.]*)");
 
         QString leftString = leftData.toString();
-        if(left.column() == 1 && emailPattern->indexIn(leftString) != -1)
-            leftString = emailPattern->cap(1);
+        if(left.column() == 1 && emailPattern.indexIn(leftString) != -1)
+            leftString = emailPattern.cap(1);
 
         QString rightString = rightData.toString();
-        if(right.column() == 1 && emailPattern->indexIn(rightString) != -1)
-            rightString = emailPattern->cap(1);
+        if(right.column() == 1 && emailPattern.indexIn(rightString) != -1)
+            rightString = emailPattern.cap(1);
 
         return QString::localeAwareCompare(leftString, rightString) < 0;
     }

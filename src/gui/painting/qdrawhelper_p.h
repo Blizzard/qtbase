@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,7 @@
 //
 
 #include "QtCore/qglobal.h"
+#include "QtCore/qmath.h"
 #include "QtGui/qcolor.h"
 #include "QtGui/qpainter.h"
 #include "QtGui/qimage.h"
@@ -55,16 +56,10 @@
 #endif
 #include "private/qrasterdefs_p.h"
 #include <private/qsimd_p.h>
-#include <private/qmath_p.h>
 
 QT_BEGIN_NAMESPACE
 
-#if defined(Q_CC_RVCT)
-// RVCT doesn't like static template functions
-#  define Q_STATIC_TEMPLATE_FUNCTION
-#  define Q_ALWAYS_INLINE __forceinline
-#  define Q_DECL_RESTRICT
-#elif defined(Q_CC_GNU)
+#if defined(Q_CC_GNU)
 #  define Q_STATIC_TEMPLATE_FUNCTION static
 #  define Q_ALWAYS_INLINE inline __attribute__((always_inline))
 #  define Q_DECL_RESTRICT __restrict__
@@ -555,10 +550,6 @@ public:
     }
 };
 
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
 static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_255(uint x, uint a, uint y, uint b) {
     uint t = (x & 0xff00ff) * a + (y & 0xff00ff) * b;
     t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
@@ -570,9 +561,6 @@ static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_255(uint x, uint a, uint y, uint b
     x |= t;
     return x;
 }
-#if defined(Q_CC_RVCT)
-#  pragma pop
-#endif
 
 #if QT_POINTER_SIZE == 8 // 64-bit versions
 
@@ -604,10 +592,6 @@ static Q_ALWAYS_INLINE uint INTERPOLATE_PIXEL_256(uint x, uint a, uint y, uint b
     return x;
 }
 
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
 static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
     uint t = (x & 0xff00ff) * a;
     t = (t + ((t >> 8) & 0xff00ff) + 0x800080) >> 8;
@@ -619,12 +603,44 @@ static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
     x |= t;
     return x;
 }
-#if defined(Q_CC_RVCT)
-#  pragma pop
 #endif
 
-#endif
+#ifdef __SSE2__
+static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
+{
+    // First interpolate right and left pixels in parallel.
+    __m128i vl = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tl), _mm_cvtsi32_si128(bl));
+    __m128i vr = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tr), _mm_cvtsi32_si128(br));
+    vl = _mm_unpacklo_epi8(vl, _mm_setzero_si128());
+    vr = _mm_unpacklo_epi8(vr, _mm_setzero_si128());
+    vl = _mm_mullo_epi16(vl, _mm_set1_epi16(256 - distx));
+    vr = _mm_mullo_epi16(vr, _mm_set1_epi16(distx));
+    __m128i vtb = _mm_add_epi16(vl, vr);
+    vtb = _mm_srli_epi16(vtb, 8);
+    // vtb now contains the result of the first two interpolate calls vtb = unpacked((xbot << 64) | xtop)
 
+    // Now the last interpolate between top and bottom interpolations.
+    const __m128i vidisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(256 - disty), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vdisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(disty), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vmuly = _mm_unpacklo_epi16(vidisty, vdisty);
+    vtb = _mm_unpacklo_epi16(vtb, _mm_srli_si128(vtb, 8));
+    // vtb now contains the colors of top and bottom interleaved { ta, ba, tr, br, tg, bg, tb, bb }
+    vtb = _mm_madd_epi16(vtb, vmuly); // Multiply and horizontal add.
+    vtb = _mm_srli_epi32(vtb, 8);
+    vtb = _mm_packs_epi32(vtb, _mm_setzero_si128());
+    vtb = _mm_packus_epi16(vtb, _mm_setzero_si128());
+    return _mm_cvtsi128_si32(vtb);
+}
+#else
+static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
+{
+    uint idistx = 256 - distx;
+    uint idisty = 256 - disty;
+    uint xtop = INTERPOLATE_PIXEL_256(tl, idistx, tr, distx);
+    uint xbot = INTERPOLATE_PIXEL_256(bl, idistx, br, distx);
+    return INTERPOLATE_PIXEL_256(xtop, idisty, xbot, disty);
+}
+#endif
 
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
 static Q_ALWAYS_INLINE quint32 RGBA2ARGB(quint32 x) {
@@ -664,14 +680,7 @@ static Q_ALWAYS_INLINE uint BYTE_MUL_RGB16_32(uint x, uint a) {
     return t;
 }
 
-#if defined(Q_CC_RVCT)
-#  pragma push
-#  pragma arm
-#endif
 static Q_ALWAYS_INLINE int qt_div_255(int x) { return (x + (x>>8) + 0x80) >> 8; }
-#if defined(Q_CC_RVCT)
-#  pragma pop
-#endif
 
 static Q_ALWAYS_INLINE uint BYTE_MUL_RGB30(uint x, uint a) {
     uint xa = x >> 30;
@@ -692,11 +701,6 @@ static Q_ALWAYS_INLINE uint qAlphaRgb30(uint c)
     a |= a << 4;
     return a;
 }
-
-
-// FIXME: Remove when all Qt modules have stopped using PREMUL and INV_PREMUL
-#define PREMUL(x) qPremultiply(x)
-#define INV_PREMUL(p) qUnpremultiply(p)
 
 struct quint24 {
     quint24(uint value);
@@ -801,7 +805,7 @@ do {                                          \
 do {                                          \
     /* Duff's device */                       \
     ushort *_d = (ushort*)(dest);         \
-    const ushort *_s = (ushort*)(src);    \
+    const ushort *_s = (const ushort*)(src);    \
     int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
@@ -924,6 +928,22 @@ inline int qBlue565(quint16 rgb) {
     const int b = (rgb & 0x001f);
     return (b << 3) | (b >> 2);
 }
+
+
+static Q_ALWAYS_INLINE const uint *qt_convertARGB32ToARGB32PM(uint *buffer, const uint *src, int count)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = qPremultiply(src[i]);
+    return buffer;
+}
+
+static Q_ALWAYS_INLINE const uint *qt_convertRGBA8888ToARGB32PM(uint *buffer, const uint *src, int count)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = qPremultiply(RGBA2ARGB(src[i]));
+    return buffer;
+}
+
 
 const uint qt_bayer_matrix[16][16] = {
     { 0x1, 0xc0, 0x30, 0xf0, 0xc, 0xcc, 0x3c, 0xfc,
@@ -1106,8 +1126,8 @@ typedef const uint *(QT_FASTCALL *FetchPixelsFunc)(uint *buffer, const uchar *sr
 typedef void (QT_FASTCALL *StorePixelsFunc)(uchar *dest, const uint *src, int index, int count);
 
 extern QPixelLayout qPixelLayouts[QImage::NImageFormats];
-extern FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
-extern StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
+extern const FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
+extern const StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
 
 
 

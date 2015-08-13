@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -58,6 +58,7 @@ private slots:
 #ifndef QT_NO_WHEELEVENT
     void QTBUG_27308();
 #endif
+    void QTBUG_42871();
 };
 
 class SingleStepTestScrollBar : public QScrollBar {
@@ -151,7 +152,7 @@ void tst_QScrollBar::task_209492()
 #define WHEEL_DELTA 120 // copied from tst_QAbstractSlider / tst_QComboBox
 void tst_QScrollBar::QTBUG_27308()
 {
-    // https://bugreports.qt-project.org/browse/QTBUG-27308
+    // QTBUG-27308
     // Check that a disabled scrollbar doesn't react on wheel events anymore
 
     QScrollBar testWidget(Qt::Horizontal);
@@ -168,6 +169,45 @@ void tst_QScrollBar::QTBUG_27308()
     QCOMPARE(testWidget.value(), testWidget.minimum());
 }
 #endif
+
+class QTBUG_42871_Handler : public QObject {
+    Q_OBJECT
+public:
+    int updatesCount;
+    QTBUG_42871_Handler() : QObject(), updatesCount(0) {}
+public slots:
+    void valueUpdated(int) { ++updatesCount; QTest::qSleep(600); }
+};
+
+void tst_QScrollBar::QTBUG_42871()
+{
+    QTBUG_42871_Handler myHandler;
+    QScrollBar scrollBarWidget(Qt::Vertical);
+    bool connection = connect(&scrollBarWidget, SIGNAL(valueChanged(int)), &myHandler, SLOT(valueUpdated(int)));
+    QVERIFY(connection);
+    scrollBarWidget.resize(100, scrollBarWidget.height());
+    centerOnScreen(&scrollBarWidget);
+    scrollBarWidget.show();
+    QTest::qWaitForWindowExposed(&scrollBarWidget);
+    QSignalSpy spy(&scrollBarWidget, SIGNAL(actionTriggered(int)));
+    QVERIFY(spy.isValid());
+    QCOMPARE(myHandler.updatesCount, 0);
+    QCOMPARE(spy.count(), 0);
+
+    // Simulate a mouse click on the "scroll down button".
+    const QPoint pressPoint(scrollBarWidget.width() / 2, scrollBarWidget.height() - 10);
+    const QPoint globalPressPoint = scrollBarWidget.mapToGlobal(pressPoint);
+    QMouseEvent mousePressEvent(QEvent::MouseButtonPress, pressPoint, globalPressPoint,
+                                Qt::LeftButton, Qt::LeftButton, 0);
+    QApplication::sendEvent(&scrollBarWidget, &mousePressEvent);
+    QTest::qWait(1);
+    QMouseEvent mouseReleaseEvent(QEvent::MouseButtonRelease, pressPoint, globalPressPoint,
+                                  Qt::LeftButton, Qt::LeftButton, 0);
+    QApplication::sendEvent(&scrollBarWidget, &mouseReleaseEvent);
+    // Check that the action was triggered once.
+    QCOMPARE(myHandler.updatesCount, 1);
+    QCOMPARE(spy.count(), 1);
+}
 
 QTEST_MAIN(tst_QScrollBar)
 #include "tst_qscrollbar.moc"

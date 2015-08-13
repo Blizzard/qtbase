@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,17 +46,6 @@
 
 #ifdef truncate
 #error qbytearray.h must be included before any header file that defines truncate
-#endif
-
-#if defined(Q_CC_GNU) && (__GNUC__ == 4 && __GNUC_MINOR__ == 0)
-//There is a bug in GCC 4.0 that tries to instantiate template of annonymous enum
-#  ifdef QT_USE_FAST_OPERATOR_PLUS
-#    undef QT_USE_FAST_OPERATOR_PLUS
-#  endif
-#  ifdef QT_USE_QSTRINGBUILDER
-#    undef QT_USE_QSTRINGBUILDER
-#  endif
-
 #endif
 
 #ifdef Q_OS_MAC
@@ -173,6 +162,9 @@ private:
     typedef QTypedArrayData<char> Data;
 
 public:
+    // undocumented:
+    static const quint64 MaxSize = (1 << 30) - sizeof(Data);
+
     enum Base64Option {
         Base64Encoding = 0,
         Base64UrlEncoding = 1,
@@ -182,22 +174,23 @@ public:
     };
     Q_DECLARE_FLAGS(Base64Options, Base64Option)
 
-    inline QByteArray();
+    inline QByteArray() Q_DECL_NOTHROW;
     QByteArray(const char *, int size = -1);
     QByteArray(int size, char c);
     QByteArray(int size, Qt::Initialization);
-    inline QByteArray(const QByteArray &);
+    inline QByteArray(const QByteArray &) Q_DECL_NOTHROW;
     inline ~QByteArray();
 
-    QByteArray &operator=(const QByteArray &);
+    QByteArray &operator=(const QByteArray &) Q_DECL_NOTHROW;
     QByteArray &operator=(const char *str);
 #ifdef Q_COMPILER_RVALUE_REFS
-    inline QByteArray(QByteArray && other) : d(other.d) { other.d = Data::sharedNull(); }
-    inline QByteArray &operator=(QByteArray &&other)
+    inline QByteArray(QByteArray && other) Q_DECL_NOTHROW : d(other.d) { other.d = Data::sharedNull(); }
+    inline QByteArray &operator=(QByteArray &&other) Q_DECL_NOTHROW
     { qSwap(d, other.d); return *this; }
 #endif
 
-    inline void swap(QByteArray &other) { qSwap(d, other.d); }
+    inline void swap(QByteArray &other) Q_DECL_NOTHROW
+    { qSwap(d, other.d); }
 
     inline int size() const;
     bool isEmpty() const;
@@ -256,11 +249,40 @@ public:
     void truncate(int pos);
     void chop(int n);
 
+#if defined(Q_COMPILER_REF_QUALIFIERS) && !defined(QT_COMPILING_QSTRING_COMPAT_CPP)
+#  if defined(Q_CC_GNU)
+    // required due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61941
+#    pragma push_macro("Q_REQUIRED_RESULT")
+#    undef Q_REQUIRED_RESULT
+#    define Q_REQUIRED_RESULT
+#    define Q_REQUIRED_RESULT_pushed
+#  endif
+    QByteArray toLower() const & Q_REQUIRED_RESULT
+    { return toLower_helper(*this); }
+    QByteArray toLower() && Q_REQUIRED_RESULT
+    { return toLower_helper(*this); }
+    QByteArray toUpper() const & Q_REQUIRED_RESULT
+    { return toUpper_helper(*this); }
+    QByteArray toUpper() && Q_REQUIRED_RESULT
+    { return toUpper_helper(*this); }
+    QByteArray trimmed() const & Q_REQUIRED_RESULT
+    { return trimmed_helper(*this); }
+    QByteArray trimmed() && Q_REQUIRED_RESULT
+    { return trimmed_helper(*this); }
+    QByteArray simplified() const & Q_REQUIRED_RESULT
+    { return simplified_helper(*this); }
+    QByteArray simplified() && Q_REQUIRED_RESULT
+    { return simplified_helper(*this); }
+#  ifdef Q_REQUIRED_RESULT_pushed
+#    pragma pop_macro("Q_REQUIRED_RESULT")
+#  endif
+#else
     QByteArray toLower() const Q_REQUIRED_RESULT;
     QByteArray toUpper() const Q_REQUIRED_RESULT;
-
     QByteArray trimmed() const Q_REQUIRED_RESULT;
     QByteArray simplified() const Q_REQUIRED_RESULT;
+#endif
+
     QByteArray leftJustified(int width, char fill = ' ', bool truncate = false) const Q_REQUIRED_RESULT;
     QByteArray rightJustified(int width, char fill = ' ', bool truncate = false) const Q_REQUIRED_RESULT;
 
@@ -414,6 +436,15 @@ private:
     void expand(int i);
     QByteArray nulTerminated() const;
 
+    static QByteArray toLower_helper(const QByteArray &a);
+    static QByteArray toLower_helper(QByteArray &a);
+    static QByteArray toUpper_helper(const QByteArray &a);
+    static QByteArray toUpper_helper(QByteArray &a);
+    static QByteArray trimmed_helper(const QByteArray &a);
+    static QByteArray trimmed_helper(QByteArray &a);
+    static QByteArray simplified_helper(const QByteArray &a);
+    static QByteArray simplified_helper(QByteArray &a);
+
     friend class QByteRef;
     friend class QString;
     friend Q_CORE_EXPORT QByteArray qUncompress(const uchar *data, int nbytes);
@@ -424,7 +455,7 @@ public:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QByteArray::Base64Options)
 
-inline QByteArray::QByteArray(): d(Data::sharedNull()) { }
+inline QByteArray::QByteArray() Q_DECL_NOTHROW : d(Data::sharedNull()) { }
 inline QByteArray::~QByteArray() { if (!d->ref.deref()) Data::deallocate(d); }
 inline int QByteArray::size() const
 { return d->size; }
@@ -454,7 +485,7 @@ inline void QByteArray::detach()
 { if (d->ref.isShared() || (d->offset != sizeof(QByteArrayData))) reallocData(uint(d->size) + 1u, d->detachFlags()); }
 inline bool QByteArray::isDetached() const
 { return !d->ref.isShared(); }
-inline QByteArray::QByteArray(const QByteArray &a) : d(a.d)
+inline QByteArray::QByteArray(const QByteArray &a) Q_DECL_NOTHROW : d(a.d)
 { d->ref.ref(); }
 
 inline int QByteArray::capacity() const

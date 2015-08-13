@@ -71,7 +71,11 @@ HEADERS += \
         kernel/qpixelformat.h \
         kernel/qpaintdevicewindow.h \
         kernel/qpaintdevicewindow_p.h \
-        kernel/qrasterwindow.h
+        kernel/qrasterwindow.h \
+        kernel/qplatformgraphicsbuffer.h \
+        kernel/qplatformgraphicsbufferhelper.h \
+        kernel/qinputdevicemanager_p.h \
+        kernel/qinputdevicemanager_p_p.h
 
 SOURCES += \
         kernel/qgenericpluginfactory.cpp \
@@ -124,7 +128,10 @@ SOURCES += \
         kernel/qplatformmenu.cpp \
         kernel/qpixelformat.cpp \
         kernel/qpaintdevicewindow.cpp \
-        kernel/qrasterwindow.cpp
+        kernel/qrasterwindow.cpp \
+        kernel/qplatformgraphicsbuffer.cpp \
+        kernel/qplatformgraphicsbufferhelper.cpp \
+        kernel/qinputdevicemanager.cpp
 
 mac {
     OBJECTIVE_SOURCES += \

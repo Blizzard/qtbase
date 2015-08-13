@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,7 @@ class tst_QDirModel : public QObject
 {
     Q_OBJECT
 public slots:
+    void initTestCase();
     void cleanupTestCase();
     void init();
 private slots:
@@ -111,6 +112,29 @@ void tst_QDirModel::getSetCheck()
     QCOMPARE(false, obj1.lazyChildCount());
     obj1.setLazyChildCount(true);
     QCOMPARE(true, obj1.lazyChildCount());
+}
+
+void tst_QDirModel::initTestCase()
+{
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QString dataPath = SRCDIR;
+    QString resourceSourcePath = QStringLiteral(":/android_testdata");
+    QDirIterator it(resourceSourcePath, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+
+        QFileInfo fileInfo = it.fileInfo();
+        if (!fileInfo.isDir()) {
+            QString destination = dataPath + QLatin1Char('/') + fileInfo.filePath().mid(resourceSourcePath.length());
+            QFileInfo destinationFileInfo(destination);
+            if (!destinationFileInfo.exists()) {
+                QDir().mkpath(destinationFileInfo.path());
+                if (!QFile::copy(fileInfo.filePath(), destination))
+                    qWarning("Failed to copy %s", qPrintable(fileInfo.filePath()));
+            }
+        }
+    }
+#endif
 }
 
 void tst_QDirModel::cleanupTestCase()
@@ -556,10 +580,12 @@ void tst_QDirModel::filePath()
     model.setResolveSymlinks(false);
     QModelIndex index = model.index(SRCDIR "test.lnk");
     QVERIFY(index.isValid());
-#ifndef Q_OS_WINCE
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_ANDROID)
     QString path = SRCDIR;
 #else
-    QString path = QFileInfo(SRCDIR).absoluteFilePath() + "/";
+    QString path = QFileInfo(SRCDIR).absoluteFilePath();
+    if (!path.endsWith("/"))
+        path += "/";
 #endif
     QCOMPARE(model.filePath(index), path + QString( "test.lnk"));
     model.setResolveSymlinks(true);
@@ -591,6 +617,10 @@ void tst_QDirModel::task196768_sorting()
     QCOMPARE(index.data(), index2.data());
     view.setSortingEnabled(true);
     index2 = model.index(path);
+
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QEXPECT_FAIL("", "QTBUG-43818", Continue);
+#endif
 
     QCOMPARE(index.data(), index2.data());
 }

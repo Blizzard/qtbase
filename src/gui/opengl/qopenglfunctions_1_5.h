@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB)
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -832,12 +832,12 @@ inline void QOpenGLFunctions_1_5::glCullFace(GLenum mode)
 // OpenGL 1.1 core functions
 inline void QOpenGLFunctions_1_5::glIndexubv(const GLubyte *c)
 {
-    d_1_1_Core->Indexubv(c);
+    d_1_1_Deprecated->Indexubv(c);
 }
 
 inline void QOpenGLFunctions_1_5::glIndexub(GLubyte c)
 {
-    d_1_1_Core->Indexub(c);
+    d_1_1_Deprecated->Indexub(c);
 }
 
 inline GLboolean QOpenGLFunctions_1_5::glIsTexture(GLuint texture)
@@ -897,7 +897,7 @@ inline void QOpenGLFunctions_1_5::glPolygonOffset(GLfloat factor, GLfloat units)
 
 inline void QOpenGLFunctions_1_5::glGetPointerv(GLenum pname, GLvoid* *params)
 {
-    d_1_1_Core->GetPointerv(pname, params);
+    d_1_1_Deprecated->GetPointerv(pname, params);
 }
 
 inline void QOpenGLFunctions_1_5::glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices)

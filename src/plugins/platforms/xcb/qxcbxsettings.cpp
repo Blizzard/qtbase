@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,7 +36,9 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QtEndian>
 
+#ifdef XCB_USE_XLIB
 #include <X11/extensions/XIproto.h>
+#endif //XCB_USE_XLIB
 
 QT_BEGIN_NAMESPACE
 /* Implementation of http://standards.freedesktop.org/xsettings-spec/xsettings-0.5.html */
@@ -61,7 +63,7 @@ public:
         : last_change_serial(-1)
     {}
 
-    void updateValue(QXcbScreen *screen, const QByteArray &name, const QVariant &value, int last_change_serial)
+    void updateValue(QXcbVirtualDesktop *screen, const QByteArray &name, const QVariant &value, int last_change_serial)
     {
         if (last_change_serial <= this->last_change_serial)
             return;
@@ -90,7 +92,7 @@ public:
 class QXcbXSettingsPrivate
 {
 public:
-    QXcbXSettingsPrivate(QXcbScreen *screen)
+    QXcbXSettingsPrivate(QXcbVirtualDesktop *screen)
         : screen(screen)
         , initialized(false)
     {
@@ -138,6 +140,7 @@ public:
         return value + 4 - remainder;
     }
 
+#ifdef XCB_USE_XLIB
     void populateSettings(const QByteArray &xSettings)
     {
         if (xSettings.length() < 12)
@@ -212,19 +215,20 @@ public:
         }
 
     }
+#endif //XCB_USE_XLIB
 
-    QXcbScreen *screen;
+    QXcbVirtualDesktop *screen;
     xcb_window_t x_settings_window;
     QMap<QByteArray, QXcbXSettingsPropertyValue> settings;
     bool initialized;
 };
 
 
-QXcbXSettings::QXcbXSettings(QXcbScreen *screen)
+QXcbXSettings::QXcbXSettings(QXcbVirtualDesktop *screen)
     : d_ptr(new QXcbXSettingsPrivate(screen))
 {
     QByteArray settings_atom_for_screen("_XSETTINGS_S");
-    settings_atom_for_screen.append(QByteArray::number(screen->screenNumber()));
+    settings_atom_for_screen.append(QByteArray::number(screen->number()));
     xcb_intern_atom_cookie_t atom_cookie = xcb_intern_atom(screen->xcb_connection(),
                                                            true,
                                                            settings_atom_for_screen.length(),
@@ -258,8 +262,10 @@ QXcbXSettings::QXcbXSettings(QXcbScreen *screen)
     const uint32_t event_mask[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY|XCB_EVENT_MASK_PROPERTY_CHANGE };
     xcb_change_window_attributes(screen->xcb_connection(),d_ptr->x_settings_window,event,event_mask);
 
+#ifdef XCB_USE_XLIB
     d_ptr->populateSettings(d_ptr->getSettings());
     d_ptr->initialized = true;
+#endif //XCB_USE_XLIB
 }
 
 QXcbXSettings::~QXcbXSettings()
@@ -279,7 +285,9 @@ void QXcbXSettings::handlePropertyNotifyEvent(const xcb_property_notify_event_t 
     Q_D(QXcbXSettings);
     if (event->window != d->x_settings_window)
         return;
+#ifdef XCB_USE_XLIB
     d->populateSettings(d->getSettings());
+#endif //XCB_USE_XLIB
 }
 
 void QXcbXSettings::registerCallbackForProperty(const QByteArray &property, QXcbXSettings::PropertyChangeFunc func, void *handle)

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -361,6 +361,36 @@ bool QVistaHelper::setDWMTitleBar(TitleBarChangeType type)
 
 Q_GUI_EXPORT HICON qt_pixmapToWinHICON(const QPixmap &);
 
+static LOGFONT getCaptionLogFont(HANDLE hTheme)
+{
+    LOGFONT result = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, { 0 } };
+
+    if (!hTheme || FAILED(pGetThemeSysFont(hTheme, WIZ_TMT_CAPTIONFONT, &result))) {
+        NONCLIENTMETRICS ncm;
+        ncm.cbSize = sizeof(NONCLIENTMETRICS);
+        SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, false);
+        result = ncm.lfMessageFont;
+    }
+    return result;
+}
+
+static bool getCaptionQFont(int dpi, QFont *result)
+{
+    if (!pOpenThemeData)
+        return false;
+    const HANDLE hTheme =
+        pOpenThemeData(QApplicationPrivate::getHWNDForWidget(QApplication::desktop()), L"WINDOW");
+    if (!hTheme)
+        return false;
+    // Call into QWindowsNativeInterface to convert the LOGFONT into a QFont.
+    const LOGFONT logFont = getCaptionLogFont(hTheme);
+    QPlatformNativeInterface *ni = QGuiApplication::platformNativeInterface();
+    return ni && QMetaObject::invokeMethod(ni, "logFontToQFont", Qt::DirectConnection,
+                                           Q_RETURN_ARG(QFont, *result),
+                                           Q_ARG(const void *, &logFont),
+                                           Q_ARG(int, dpi));
+}
+
 void QVistaHelper::drawTitleBar(QPainter *painter)
 {
     Q_ASSERT(backButton_);
@@ -378,7 +408,9 @@ void QVistaHelper::drawTitleBar(QPainter *painter)
     const int verticalCenter = (btnTop + btnHeight / 2) - 1;
 
     const QString text = wizard->window()->windowTitle();
-    const QFont font = QApplication::font("QMdiSubWindowTitleBar");
+    QFont font;
+    if (!isWindow || !getCaptionQFont(wizard->logicalDpiY() * wizard->devicePixelRatio(), &font))
+        font = QApplication::font("QMdiSubWindowTitleBar");
     const QFontMetrics fontMetrics(font);
     const QRect brect = fontMetrics.boundingRect(text);
     int textHeight = brect.height();
@@ -649,19 +681,6 @@ bool QVistaHelper::eventFilter(QObject *obj, QEvent *event)
      return false;
 }
 
-HFONT QVistaHelper::getCaptionFont(HANDLE hTheme)
-{
-    LOGFONT lf = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, { 0 } };
-
-    if (!hTheme || FAILED(pGetThemeSysFont(hTheme, WIZ_TMT_CAPTIONFONT, &lf))) {
-        NONCLIENTMETRICS ncm;
-        ncm.cbSize = sizeof(NONCLIENTMETRICS);
-        SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, false);
-        lf = ncm.lfMessageFont;
-    }
-    return CreateFontIndirect(&lf);
-}
-
 // Return a HDC for the wizard along with the transformation if the
 // wizard is a child window.
 HDC QVistaHelper::backingStoreDC(const QWidget *wizard, QPoint *offset)
@@ -713,7 +732,8 @@ bool QVistaHelper::drawTitleText(QPainter *painter, const QString &text, const Q
         bmp = CreateDIBSection(hdc, &dib, DIB_RGB_COLORS, NULL, NULL, 0);
 
         // Set up the DC
-        HFONT hCaptionFont = getCaptionFont(hTheme);
+        const LOGFONT captionLogFont = getCaptionLogFont(hTheme);
+        const HFONT hCaptionFont = CreateFontIndirect(&captionLogFont);
         HBITMAP hOldBmp = (HBITMAP)SelectObject(dcMem, (HGDIOBJ) bmp);
         HFONT hOldFont = (HFONT)SelectObject(dcMem, (HGDIOBJ) hCaptionFont);
 

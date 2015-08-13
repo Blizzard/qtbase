@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -41,8 +41,7 @@
 #include "renderthread.h"
 
 #include <QtWidgets>
-
-#include <math.h>
+#include <cmath>
 
 //! [0]
 RenderThread::RenderThread(QObject *parent)
@@ -207,9 +206,9 @@ uint RenderThread::rgbFromWaveLength(double wave)
     else if (wave <  420.0)
         s = 0.3 + 0.7 * (wave - 380.0) / (420.0 - 380.0);
 
-    r = pow(r * s, 0.8);
-    g = pow(g * s, 0.8);
-    b = pow(b * s, 0.8);
+    r = std::pow(r * s, 0.8);
+    g = std::pow(g * s, 0.8);
+    b = std::pow(b * s, 0.8);
     return qRgb(int(r * 255), int(g * 255), int(b * 255));
 }
 //! [10]

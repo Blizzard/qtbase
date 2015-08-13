@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -167,6 +167,8 @@ void QGLTextureGlyphCache::resizeTextureData(int width, int height)
     // ### the QTextureGlyphCache API needs to be reworked to allow
     // ### resizeTextureData to fail
 
+    ctx->d_ptr->refreshCurrentFbo();
+
     funcs->glBindFramebuffer(GL_FRAMEBUFFER, m_textureResource->m_fbo);
 
     GLuint tmp_texture;
@@ -302,19 +304,23 @@ void QGLTextureGlyphCache::fillTexture(const Coord &c, glyph_t glyph, QFixed sub
             for (int x = 0; x < maskWidth; ++x)
                 src[x] = -src[x]; // convert 0 and 1 into 0 and 255
         }
-    } else if (mask.format() == QImage::Format_RGB32) {
+    } else if (mask.depth() == 32) {
         // Make the alpha component equal to the average of the RGB values.
         // This is needed when drawing sub-pixel antialiased text on translucent targets.
         for (int y = 0; y < maskHeight; ++y) {
             quint32 *src = (quint32 *) mask.scanLine(y);
             for (int x = 0; x < maskWidth; ++x) {
-                uchar r = src[x] >> 16;
-                uchar g = src[x] >> 8;
-                uchar b = src[x];
-                quint32 avg = (quint32(r) + quint32(g) + quint32(b) + 1) / 3; // "+1" for rounding.
+                int r = qRed(src[x]);
+                int g = qGreen(src[x]);
+                int b = qBlue(src[x]);
+                int avg;
+                if (mask.format() == QImage::Format_RGB32)
+                    avg = (r + g + b + 1) / 3; // "+1" for rounding.
+                else // Format_ARGB_Premultiplied
+                    avg = qAlpha(src[x]);
                 if (ctx->contextHandle()->isOpenGLES()) {
                     // swizzle the bits to accommodate for the GL_RGBA upload.
-                    src[x] = (avg << 24) | (quint32(r) << 0) | (quint32(g) << 8) | (quint32(b) << 16);
+                    src[x] = (avg << 24) | (r << 0) | (g << 8) | (b << 16);
                 } else {
                     src[x] = (src[x] & 0x00ffffff) | (avg << 24);
                 }
@@ -323,7 +329,7 @@ void QGLTextureGlyphCache::fillTexture(const Coord &c, glyph_t glyph, QFixed sub
     }
 
     funcs->glBindTexture(GL_TEXTURE_2D, m_textureResource->m_texture);
-    if (mask.format() == QImage::Format_RGB32) {
+    if (mask.depth() == 32) {
         GLenum format = GL_RGBA;
 #if !defined(QT_OPENGL_ES_2)
         if (!ctx->contextHandle()->isOpenGLES())

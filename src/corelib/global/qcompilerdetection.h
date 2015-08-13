@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Copyright (C) 2012 Intel Corporation
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Intel Corporation
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -75,7 +75,6 @@
 #  if defined(__SC__) && __SC__ < 0x750
 #    error "Compiler not supported"
 #  endif
-#  define Q_NO_USING_KEYWORD
 
 #elif defined(_MSC_VER)
 #  define Q_CC_MSVC (_MSC_VER)
@@ -113,7 +112,6 @@
 #  if __BORLANDC__ < 0x502
 #    error "Compiler not supported"
 #  endif
-#  define Q_NO_USING_KEYWORD
 
 #elif defined(__WATCOMC__)
 #  define Q_CC_WAT
@@ -138,13 +136,16 @@
 
 #elif defined(__GNUC__)
 #  define Q_CC_GNU          (__GNUC__ * 100 + __GNUC_MINOR__)
-#  define Q_C_CALLBACKS
 #  if defined(__MINGW32__)
 #    define Q_CC_MINGW
 #  endif
 #  if defined(__INTEL_COMPILER)
 /* Intel C++ also masquerades as GCC */
 #    define Q_CC_INTEL      (__INTEL_COMPILER)
+#    ifdef __clang__
+/* Intel C++ masquerades as Clang masquerading as GCC */
+#      define Q_CC_CLANG    305
+#    endif
 #    define Q_ASSUME_IMPL(expr)  __assume(expr)
 #    define Q_UNREACHABLE_IMPL() __builtin_unreachable()
 #    if __INTEL_COMPILER >= 1300 && !defined(__APPLE__)
@@ -154,17 +155,19 @@
 /* Clang also masquerades as GCC */
 #    if defined(__apple_build_version__)
 #      /* http://en.wikipedia.org/wiki/Xcode#Toolchain_Versions */
-#      if __apple_build_version__ >= 600051
+#      if __apple_build_version__ >= 6020049
+#        define Q_CC_CLANG 306
+#      elif __apple_build_version__ >= 6000051
 #        define Q_CC_CLANG 305
-#      elif __apple_build_version__ >= 503038
+#      elif __apple_build_version__ >= 5030038
 #        define Q_CC_CLANG 304
-#      elif __apple_build_version__ >= 500275
+#      elif __apple_build_version__ >= 5000275
 #        define Q_CC_CLANG 303
-#      elif __apple_build_version__ >= 425024
+#      elif __apple_build_version__ >= 4250024
 #        define Q_CC_CLANG 302
-#      elif __apple_build_version__ >= 318045
+#      elif __apple_build_version__ >= 3180045
 #        define Q_CC_CLANG 301
-#      elif __apple_build_version__ >= 211101
+#      elif __apple_build_version__ >= 2111001
 #        define Q_CC_CLANG 300
 #      else
 #        error "Unknown Apple Clang version"
@@ -172,7 +175,11 @@
 #    else
 #      define Q_CC_CLANG ((__clang_major__ * 100) + __clang_minor__)
 #    endif
-#    define Q_ASSUME_IMPL(expr)  if (expr){} else __builtin_unreachable()
+#    if __has_builtin(__builtin_assume)
+#      define Q_ASSUME_IMPL(expr)   __builtin_assume(expr)
+#    else
+#      define Q_ASSUME_IMPL(expr)  if (expr){} else __builtin_unreachable()
+#    endif
 #    define Q_UNREACHABLE_IMPL() __builtin_unreachable()
 #    if !defined(__has_extension)
 #      /* Compatibility with older Clang versions */
@@ -278,7 +285,6 @@
 #    error "Compiler not supported"
 #  endif
 /* Spurious (?) error messages observed on Compaq C++ V6.5-014. */
-#  define Q_NO_USING_KEYWORD
 /* Apply to all versions prior to Compaq C++ V6.0-000 - observed on
    DEC C++ V5.5-004. */
 #  if __DECCXX_VER < 60060000
@@ -315,7 +321,6 @@
 /* The Comeau compiler is based on EDG and does define __EDG__ */
 #  if defined(__COMO__)
 #    define Q_CC_COMEAU
-#    define Q_C_CALLBACKS
 
 /* The `using' keyword was introduced to avoid KAI C++ warnings
    but it's now causing KAI C++ errors instead. The standard is
@@ -323,7 +328,6 @@
    compiler is using its own set of rules. Forget it. */
 #  elif defined(__KCC)
 #    define Q_CC_KAI
-#    define Q_NO_USING_KEYWORD
 
 /* Using the `using' keyword avoids Intel C++ for Linux warnings */
 #  elif defined(__INTEL_COMPILER)
@@ -346,23 +350,19 @@
 #    if !defined(__SCO_VERSION__) || (__SCO_VERSION__ < 302200010)
 #      define Q_OUTOFLINE_TEMPLATE inline
 #    endif
-#    define Q_NO_USING_KEYWORD /* ### check "using" status */
 
 /* Never tested! */
 #  elif defined(CENTERLINE_CLPP) || defined(OBJECTCENTER)
 #    define Q_CC_OC
-#    define Q_NO_USING_KEYWORD
 
 /* CDS++ defines __EDG__ although this is not documented in the Reliant
    documentation. It also follows conventions like _BOOL and this documented */
 #  elif defined(sinix)
 #    define Q_CC_CDS
-#    define Q_NO_USING_KEYWORD
 
 /* The MIPSpro compiler defines __EDG */
 #  elif defined(__sgi)
 #    define Q_CC_MIPS
-#    define Q_NO_USING_KEYWORD /* ### check "using" status */
 #    define Q_NO_TEMPLATE_FRIENDS
 #    if defined(_COMPILER_VERSION) && (_COMPILER_VERSION >= 740)
 #      define Q_OUTOFLINE_TEMPLATE inline
@@ -404,10 +404,6 @@
 #    if !defined(_BOOL)
 #      error "Compiler not supported"
 #    endif
-#    if defined(__SUNPRO_CC_COMPAT) && (__SUNPRO_CC_COMPAT <= 4)
-#      define Q_NO_USING_KEYWORD
-#    endif
-#    define Q_C_CALLBACKS
 /* 4.2 compiler or older */
 #  else
 #    error "Compiler not supported"
@@ -445,7 +441,6 @@
 #  else
 #    error "Compiler not supported"
 #  endif
-#  define Q_NO_USING_KEYWORD /* ### check "using" status */
 
 #else
 #  error "Qt has not been tested with this compiler - see http://www.qt-project.org/"
@@ -511,7 +506,7 @@
 //    at least since 13.1, but I can't test further back
 #     define Q_COMPILER_BINARY_LITERALS
 #  endif
-#  if __cplusplus >= 201103L
+#  if __cplusplus >= 201103L || defined(__INTEL_CXX11_MODE__)
 #    if __INTEL_COMPILER >= 1200
 #      define Q_COMPILER_AUTO_TYPE
 #      define Q_COMPILER_CLASS_ENUM
@@ -529,7 +524,9 @@
 #      define Q_COMPILER_AUTO_FUNCTION
 #      define Q_COMPILER_NULLPTR
 #      define Q_COMPILER_TEMPLATE_ALIAS
-#      define Q_COMPILER_UNICODE_STRINGS
+#      ifndef _CHAR16T      // MSVC headers
+#        define Q_COMPILER_UNICODE_STRINGS
+#      endif
 #      define Q_COMPILER_VARIADIC_TEMPLATES
 #    endif
 #    if __INTEL_COMPILER >= 1300
@@ -550,9 +547,14 @@
 #      define Q_COMPILER_RANGE_FOR
 #      define Q_COMPILER_RAW_STRINGS
 #      define Q_COMPILER_REF_QUALIFIERS
+#      define Q_COMPILER_UNICODE_STRINGS
 #      define Q_COMPILER_UNRESTRICTED_UNIONS
 #    endif
 #    if __INTEL_COMPILER >= 1500
+#      if __INTEL_COMPILER * 100 + __INTEL_COMPILER_UPDATE >= 150001
+//       the bug mentioned above is fixed in 15.0.1
+#        define Q_COMPILER_CONSTEXPR
+#      endif
 #      define Q_COMPILER_ALIGNAS
 #      define Q_COMPILER_ALIGNOF
 #      define Q_COMPILER_INHERITING_CONSTRUCTORS
@@ -613,7 +615,7 @@
 #    if __has_feature(cxx_strong_enums)
 #      define Q_COMPILER_CLASS_ENUM
 #    endif
-#    if __has_feature(cxx_constexpr)
+#    if __has_feature(cxx_constexpr) && Q_CC_CLANG > 302 /* CLANG 3.2 has bad/partial support */
 #      define Q_COMPILER_CONSTEXPR
 #    endif
 #    if __has_feature(cxx_decltype) /* && __has_feature(cxx_decltype_incomplete_return_types) */
@@ -874,27 +876,54 @@
 #    if _MSC_FULL_VER >= 180030324 // VC 12 SP 2 RC
 #      define Q_COMPILER_INITIALIZER_LISTS
 #    endif /* VC 12 SP 2 RC */
-
+#    if _MSC_VER >= 1900
+       /* C++11 features in VC14 = VC2015 */
+#      define Q_COMPILER_ALIGNAS
+#      define Q_COMPILER_ALIGNOF
+// Partial support, insufficient for Qt
+//#      define Q_COMPILER_CONSTEXPR
+#      define Q_COMPILER_INHERITING_CONSTRUCTORS
+#      define Q_COMPILER_NOEXCEPT
+#      define Q_COMPILER_RANGE_FOR
+#      define Q_COMPILER_REF_QUALIFIERS
+#      define Q_COMPILER_THREAD_LOCAL
+#      define Q_COMPILER_THREADSAFE_STATICS
+#      define Q_COMPILER_UDL
+#      define Q_COMPILER_UNICODE_STRINGS
+// Uniform initialization is not working yet -- build errors with QUuid
+//#      define Q_COMPILER_UNIFORM_INIT
+#      define Q_COMPILER_UNRESTRICTED_UNIONS
+#    endif
 #  endif /* __cplusplus */
 #endif /* Q_CC_MSVC */
 
 #ifdef __cplusplus
 # include <utility>
 # if defined(Q_OS_QNX)
-#  if defined(_YVALS) || defined(_LIBCPP_VER)
-// QNX: libcpp (Dinkumware-based) doesn't have the <initializer_list>
-// header, so the feature is useless, even if the compiler supports
-// it. Disable.
+// QNX: test if we are using libcpp (Dinkumware-based).
+// Older versions (QNX 650) do not support C++11 features
+// _HAS_CPP0X is defined by toolchains that actually include
+// Dinkum C++11 libcpp.
+#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_CPP0X)
+// Disable C++11 features that depend on library support
 #    undef Q_COMPILER_INITIALIZER_LISTS
-// That libcpp doesn't have std::move either, so disable everything
-// related to rvalue refs.
 #    undef Q_COMPILER_RVALUE_REFS
 #    undef Q_COMPILER_REF_QUALIFIERS
+#    undef Q_COMPILER_UNICODE_STRINGS
+#    undef Q_COMPILER_NOEXCEPT
+#  endif
+#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_NULLPTR_T)
+#    undef Q_COMPILER_NULLPTR
+#  endif
+#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_CONSTEXPR)
+// The libcpp is missing constexpr keywords on important functions like std::numeric_limits<>::min()
+// Disable constexpr support on QNX even if the compiler supports it
+#    undef Q_COMPILER_CONSTEXPR
 #  endif
 # endif // Q_OS_QNX
 # if (defined(Q_CC_CLANG) || defined(Q_CC_INTEL)) && defined(Q_OS_MAC) && defined(__GNUC_LIBSTD__) \
     && ((__GNUC_LIBSTD__-0) * 100 + __GNUC_LIBSTD_MINOR__-0 <= 402)
-// Mac OS X: Apple has not updated libstdc++ since 2007, which means it does not have
+// Apple has not updated libstdc++ since 2007, which means it does not have
 // <initializer_list> or std::move. Let's disable these features
 #  undef Q_COMPILER_INITIALIZER_LISTS
 #  undef Q_COMPILER_RVALUE_REFS
@@ -910,7 +939,7 @@
 #  endif
 # endif
 # if defined(Q_COMPILER_THREADSAFE_STATICS) && defined(Q_OS_MAC)
-// Mac OS X: Apple's low-level implementation of the C++ support library
+// Apple's low-level implementation of the C++ support library
 // (libc++abi.dylib, shared between libstdc++ and libc++) has deadlocks. The
 // C++11 standard requires the deadlocks to be removed, so this will eventually
 // be fixed; for now, let's disable this.
@@ -944,12 +973,21 @@
 #  define Q_COMPILER_DEFAULT_DELETE_MEMBERS
 #endif
 
-#ifdef Q_COMPILER_CONSTEXPR
+#if defined(__cpp_constexpr) && __cpp_constexpr-0 >= 201304
 # define Q_DECL_CONSTEXPR constexpr
+# define Q_DECL_RELAXED_CONSTEXPR constexpr
 # define Q_CONSTEXPR constexpr
+# define Q_RELAXED_CONSTEXPR constexpr
+#elif defined Q_COMPILER_CONSTEXPR
+# define Q_DECL_CONSTEXPR constexpr
+# define Q_DECL_RELAXED_CONSTEXPR
+# define Q_CONSTEXPR constexpr
+# define Q_RELAXED_CONSTEXPR const
 #else
 # define Q_DECL_CONSTEXPR
+# define Q_DECL_RELAXED_CONSTEXPR
 # define Q_CONSTEXPR const
+# define Q_RELAXED_CONSTEXPR const
 #endif
 
 #ifdef Q_COMPILER_EXPLICIT_OVERRIDES
@@ -1052,6 +1090,60 @@
 #endif
 
 /*
+ * Warning/diagnostic handling
+ */
+
+#define QT_DO_PRAGMA(text)                      _Pragma(#text)
+#if defined(Q_CC_INTEL) && defined(Q_CC_MSVC)
+/* icl.exe: Intel compiler on Windows */
+#  undef QT_DO_PRAGMA                           /* not needed */
+#  define QT_WARNING_PUSH                       __pragma(warning(push))
+#  define QT_WARNING_POP                        __pragma(warning(pop))
+#  define QT_WARNING_DISABLE_MSVC(number)
+#  define QT_WARNING_DISABLE_INTEL(number)      __pragma(warning(disable: number))
+#  define QT_WARNING_DISABLE_CLANG(text)
+#  define QT_WARNING_DISABLE_GCC(text)
+#elif defined(Q_CC_INTEL)
+/* icc: Intel compiler on Linux or OS X */
+#  define QT_WARNING_PUSH                       QT_DO_PRAGMA(warning(push))
+#  define QT_WARNING_POP                        QT_DO_PRAGMA(warning(pop))
+#  define QT_WARNING_DISABLE_INTEL(number)      QT_DO_PRAGMA(warning(disable: number))
+#  define QT_WARNING_DISABLE_MSVC(number)
+#  define QT_WARNING_DISABLE_CLANG(text)
+#  define QT_WARNING_DISABLE_GCC(text)
+#elif defined(Q_CC_MSVC) && _MSC_VER >= 1500
+#  undef QT_DO_PRAGMA                           /* not needed */
+#  define QT_WARNING_PUSH                       __pragma(warning(push))
+#  define QT_WARNING_POP                        __pragma(warning(pop))
+#  define QT_WARNING_DISABLE_MSVC(number)       __pragma(warning(disable: number))
+#  define QT_WARNING_DISABLE_INTEL(number)
+#  define QT_WARNING_DISABLE_CLANG(text)
+#  define QT_WARNING_DISABLE_GCC(text)
+#elif defined(Q_CC_CLANG)
+#  define QT_WARNING_PUSH                       QT_DO_PRAGMA(clang diagnostic push)
+#  define QT_WARNING_POP                        QT_DO_PRAGMA(clang diagnostic pop)
+#  define QT_WARNING_DISABLE_CLANG(text)        QT_DO_PRAGMA(clang diagnostic ignored text)
+#  define QT_WARNING_DISABLE_GCC(text)          QT_DO_PRAGMA(GCC diagnostic ignored text)   // GCC directives work in Clang too
+#  define QT_WARNING_DISABLE_INTEL(number)
+#  define QT_WARNING_DISABLE_MSVC(number)
+#elif defined(Q_CC_GNU) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 405)
+#  define QT_WARNING_PUSH                       QT_DO_PRAGMA(GCC diagnostic push)
+#  define QT_WARNING_POP                        QT_DO_PRAGMA(GCC diagnostic pop)
+#  define QT_WARNING_DISABLE_GCC(text)          QT_DO_PRAGMA(GCC diagnostic ignored text)
+#  define QT_WARNING_DISABLE_CLANG(text)
+#  define QT_WARNING_DISABLE_INTEL(number)
+#  define QT_WARNING_DISABLE_MSVC(number)
+#else       // All other compilers, GCC < 4.6 and MSVC < 2008
+#  define QT_WARNING_DISABLE_GCC(text)
+#  define QT_WARNING_PUSH
+#  define QT_WARNING_POP
+#  define QT_WARNING_DISABLE_INTEL(number)
+#  define QT_WARNING_DISABLE_MSVC(number)
+#  define QT_WARNING_DISABLE_CLANG(text)
+#  define QT_WARNING_DISABLE_GCC(text)
+#endif
+
+/*
    Proper for-scoping in MIPSpro CC
 */
 #ifndef QT_NO_KEYWORDS
@@ -1077,7 +1169,6 @@
         const bool valueOfExpression = Expr;\
         Q_ASSERT_X(valueOfExpression, "Q_ASSUME()", "Assumption in Q_ASSUME(\"" #Expr "\") was not correct");\
         Q_ASSUME_IMPL(valueOfExpression);\
-        Q_UNUSED(valueOfExpression); /* the value may not be used if Q_ASSERT_X and Q_ASSUME_IMPL are noop */\
     } while (0)
 
 

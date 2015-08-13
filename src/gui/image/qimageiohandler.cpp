@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -153,6 +153,49 @@
     \value SupportedSubTypes Image formats that support different saving
     variants should return a list of supported variant names
     (QList<QByteArray>) in this option.
+
+    \value OptimizedWrite. A handler which supports this option
+    is expected to turn on optimization flags when writing.
+
+    \value ProgressiveScanWrite. A handler which supports
+    this option is expected to write the image as a progressive scan image.
+
+    \value ImageTransformation. A handler which supports this option can read
+    the transformation metadata of an image. A handler that supports this option
+    should not apply the transformation itself.
+
+    \value TransformedByDefault. A handler that reports support for this feature
+    will have image transformation metadata applied by default on read.
+*/
+
+/*! \enum QImageIOHandler::Transformation
+    \since 5.5
+
+    This enum describes the different transformations or orientations
+    supported by some image formats, usually through EXIF.
+
+    \value TransformationNone No transformation should be applied.
+
+    \value TransformationMirror Mirror the image horizontally.
+
+    \value TransformationFlip Mirror the image vertically.
+
+    \value TransformationRotate180 Rotate the image 180 degrees.
+    This is the same as mirroring it both horizontally and vertically.
+
+    \value TransformationRotate90 Rotate the image 90 degrees.
+
+    \value TransformationMirrorAndRotate90 Mirror the image horizontally
+    and then rotate it 90 degrees.
+
+    \value TransformationFlipAndRotate90 Mirror the image vertically
+    and then rotate it 90 degrees.
+
+    \value TransformationRotate270 Rotate the image 270 degrees.
+    This is the same as mirroring it both horizontally, vertically and
+    then rotating it 90 degrees.
+
+    \sa QImageReader::transformation(), QImageReader::setAutoTransform(), QImageWriter::setTransformation()
 */
 
 /*!

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -586,7 +586,7 @@ public:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-static const char *knownStyleHints[] = {
+static const char *const knownStyleHints[] = {
     "activate-on-singleclick",
     "alignment",
     "arrow-keys-navigate-into-children",
@@ -1413,7 +1413,7 @@ class QStyleSheetStyleSelector : public StyleSelector
 public:
     QStyleSheetStyleSelector() { }
 
-    QStringList nodeNames(NodePtr node) const
+    QStringList nodeNames(NodePtr node) const Q_DECL_OVERRIDE
     {
         if (isNullNode(node))
             return QStringList();
@@ -1429,7 +1429,7 @@ public:
         } while (metaObject != 0);
         return result;
     }
-    QString attribute(NodePtr node, const QString& name) const
+    QString attribute(NodePtr node, const QString& name) const Q_DECL_OVERRIDE
     {
         if (isNullNode(node))
             return QString();
@@ -1466,7 +1466,7 @@ public:
         cache[name] = valueStr;
         return valueStr;
     }
-    bool nodeNameEquals(NodePtr node, const QString& nodeName) const
+    bool nodeNameEquals(NodePtr node, const QString& nodeName) const Q_DECL_OVERRIDE
     {
         if (isNullNode(node))
             return false;
@@ -1478,7 +1478,7 @@ public:
         do {
             const ushort *uc = (const ushort *)nodeName.constData();
             const ushort *e = uc + nodeName.length();
-            const uchar *c = (uchar *)metaObject->className();
+            const uchar *c = (const uchar *)metaObject->className();
             while (*c && uc != e && (*uc == *c || (*c == ':' && *uc == '-'))) {
                 ++uc;
                 ++c;
@@ -1489,19 +1489,19 @@ public:
         } while (metaObject != 0);
         return false;
     }
-    bool hasAttributes(NodePtr) const
+    bool hasAttributes(NodePtr) const Q_DECL_OVERRIDE
     { return true; }
-    QStringList nodeIds(NodePtr node) const
+    QStringList nodeIds(NodePtr node) const Q_DECL_OVERRIDE
     { return isNullNode(node) ? QStringList() : QStringList(OBJECT_PTR(node)->objectName()); }
-    bool isNullNode(NodePtr node) const
+    bool isNullNode(NodePtr node) const Q_DECL_OVERRIDE
     { return node.ptr == 0; }
-    NodePtr parentNode(NodePtr node) const
+    NodePtr parentNode(NodePtr node) const Q_DECL_OVERRIDE
     { NodePtr n; n.ptr = isNullNode(node) ? 0 : parentObject(OBJECT_PTR(node)); return n; }
-    NodePtr previousSiblingNode(NodePtr) const
+    NodePtr previousSiblingNode(NodePtr) const Q_DECL_OVERRIDE
     { NodePtr n; n.ptr = 0; return n; }
-    NodePtr duplicateNode(NodePtr node) const
+    NodePtr duplicateNode(NodePtr node) const Q_DECL_OVERRIDE
     { return node; }
-    void freeNode(NodePtr) const
+    void freeNode(NodePtr) const Q_DECL_OVERRIDE
     { }
 
 private:
@@ -1579,7 +1579,7 @@ QVector<QCss::StyleRule> QStyleSheetStyle::styleRules(const QObject *obj) const
     styleSelector.styleSheets += objectSs;
 
     StyleSelector::NodePtr n;
-    n.ptr = (void *)obj;
+    n.ptr = const_cast<QObject *>(obj);
     QVector<QCss::StyleRule> rules = styleSelector.styleRulesForNode(n);
     styleSheetCaches->styleRulesCache.insert(obj, rules);
     return rules;
@@ -3397,8 +3397,10 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                         state = QIcon::On;
 
                     QPixmap pixmap = button->icon.pixmap(button->iconSize, mode, state);
-                    int labelWidth = pixmap.width();
-                    int labelHeight = pixmap.height();
+                    int pixmapWidth = pixmap.width() / pixmap.devicePixelRatio();
+                    int pixmapHeight = pixmap.height() / pixmap.devicePixelRatio();
+                    int labelWidth = pixmapWidth;
+                    int labelHeight = pixmapHeight;
                     int iconSpacing = 4;//### 4 is currently hardcoded in QPushButton::sizeHint()
                     int textWidth = button->fontMetrics.boundingRect(opt->rect, tf, button->text).width();
                     if (!button->text.isEmpty())
@@ -3407,15 +3409,15 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                     //Determine label alignment:
                     if (textAlignment & Qt::AlignLeft) { /*left*/
                         iconRect = QRect(textRect.x(), textRect.y() + (textRect.height() - labelHeight) / 2,
-                                         pixmap.width(), pixmap.height());
+                                         pixmapWidth, pixmapHeight);
                     } else if (textAlignment & Qt::AlignHCenter) { /* center */
                         iconRect = QRect(textRect.x() + (textRect.width() - labelWidth) / 2,
                                          textRect.y() + (textRect.height() - labelHeight) / 2,
-                                         pixmap.width(), pixmap.height());
+                                         pixmapWidth, pixmapHeight);
                     } else { /*right*/
                         iconRect = QRect(textRect.x() + textRect.width() - labelWidth,
                                          textRect.y() + (textRect.height() - labelHeight) / 2,
-                                         pixmap.width(), pixmap.height());
+                                         pixmapWidth, pixmapHeight);
                     }
 
                     iconRect = visualRect(button->direction, textRect, iconRect);
@@ -4049,9 +4051,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
            if (!dwOpt->title.isEmpty()) {
                QRect r = subElementRect(SE_DockWidgetTitleBarText, opt, w);
                if (dwOpt->verticalTitleBar) {
-                   QSize s = r.size();
-                   s.transpose();
-                   r.setSize(s);
+                   r.setSize(r.size().transposed());
                    p->save();
                    p->translate(r.left(), r.top() + r.width());
                    p->rotate(-90);
@@ -4956,7 +4956,7 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
             sz = csz + QSize(vertical ? 0 : spaceForIcon, vertical ? spaceForIcon : 0);
             return subRule.boxSize(subRule.adjustSize(sz));
         }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         if (baseStyle()->inherits("QMacStyle")) {
             //adjust the size after the call to the style because the mac style ignore the size arguments anyway.
             //this might cause the (max-){width,height} property to include the native style border while they should not.

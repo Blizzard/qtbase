@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -648,10 +648,10 @@ int QTextLayout::nextCursorPosition(int oldPos, CursorMode mode) const
             while (oldPos < len && d->atWordSeparator(oldPos))
                 oldPos++;
         } else {
-            while (oldPos < len && !d->atSpace(oldPos) && !d->atWordSeparator(oldPos))
+            while (oldPos < len && !attributes[oldPos].whiteSpace && !d->atWordSeparator(oldPos))
                 oldPos++;
         }
-        while (oldPos < len && d->atSpace(oldPos))
+        while (oldPos < len && attributes[oldPos].whiteSpace)
             oldPos++;
     }
 
@@ -679,7 +679,7 @@ int QTextLayout::previousCursorPosition(int oldPos, CursorMode mode) const
         while (oldPos && !attributes[oldPos].graphemeBoundary)
             oldPos--;
     } else {
-        while (oldPos && d->atSpace(oldPos-1))
+        while (oldPos > 0 && attributes[oldPos - 1].whiteSpace)
             oldPos--;
 
         if (oldPos && d->atWordSeparator(oldPos-1)) {
@@ -687,7 +687,7 @@ int QTextLayout::previousCursorPosition(int oldPos, CursorMode mode) const
             while (oldPos && d->atWordSeparator(oldPos-1))
                 oldPos--;
         } else {
-            while (oldPos && !d->atSpace(oldPos-1) && !d->atWordSeparator(oldPos-1))
+            while (oldPos > 0 && !attributes[oldPos - 1].whiteSpace && !d->atWordSeparator(oldPos-1))
                 oldPos--;
         }
     }
@@ -1776,6 +1776,11 @@ void QTextLine::layout_helper(int maxGlyphs)
 
             QFixed x = line.x + line.textWidth + lbh.tmpData.textWidth + lbh.spaceData.textWidth;
             QFixed tabWidth = eng->calculateTabWidth(item, x);
+            attributes = eng->attributes();
+            if (!attributes)
+                return;
+            lbh.logClusters = eng->layoutData->logClustersPtr;
+            lbh.glyphs = eng->shapedGlyphs(&current);
 
             lbh.spaceData.textWidth += tabWidth;
             lbh.spaceData.length++;
@@ -2063,9 +2068,8 @@ static QGlyphRun glyphRunWithInfo(QFontEngine *fontEngine,
     // Make a font for this particular engine
     QRawFont font;
     QRawFontPrivate *fontD = QRawFontPrivate::get(font);
-    fontD->fontEngine = fontEngine;
-    fontD->thread = QThread::currentThread();
-    fontD->fontEngine->ref.ref();
+    fontD->setFontEngine(fontEngine);
+
     QVarLengthArray<glyph_t> glyphsArray;
     QVarLengthArray<QFixedPoint> positionsArray;
 
@@ -2087,7 +2091,9 @@ static QGlyphRun glyphRunWithInfo(QFontEngine *fontEngine,
     qreal minY = 0;
     qreal maxY = 0;
     QVector<quint32> glyphs;
+    glyphs.reserve(glyphsArray.size());
     QVector<QPointF> positions;
+    positions.reserve(glyphsArray.size());
     for (int i=0; i<glyphsArray.size(); ++i) {
         glyphs.append(glyphsArray.at(i) & 0xffffff);
 

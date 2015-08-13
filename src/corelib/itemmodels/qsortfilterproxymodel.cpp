@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -195,7 +195,8 @@ public:
     }
 
     void _q_sourceDataChanged(const QModelIndex &source_top_left,
-                           const QModelIndex &source_bottom_right);
+                              const QModelIndex &source_bottom_right,
+                              const QVector<int> &roles);
     void _q_sourceHeaderDataChanged(Qt::Orientation orientation, int start, int end);
 
     void _q_sourceAboutToBeReset();
@@ -279,7 +280,7 @@ public:
     void updateChildrenMapping(const QModelIndex &source_parent, Mapping *parent_mapping,
                                Qt::Orientation orient, int start, int end, int delta_item_count, bool remove);
 
-    virtual void _q_sourceModelDestroyed();
+    virtual void _q_sourceModelDestroyed() Q_DECL_OVERRIDE;
 };
 
 typedef QHash<QModelIndex, QSortFilterProxyModelPrivate::Mapping *> IndexMap;
@@ -1131,7 +1132,8 @@ QSet<int> QSortFilterProxyModelPrivate::handle_filter_changed(
 }
 
 void QSortFilterProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &source_top_left,
-                                                        const QModelIndex &source_bottom_right)
+                                                        const QModelIndex &source_bottom_right,
+                                                        const QVector<int> &roles)
 {
     Q_Q(QSortFilterProxyModel);
     if (!source_top_left.isValid() || !source_bottom_right.isValid())
@@ -1228,7 +1230,7 @@ void QSortFilterProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &sourc
                 --source_right_column;
             const QModelIndex proxy_bottom_right = create_index(
                 proxy_end_row, m->proxy_columns.at(source_right_column), it);
-            emit q->dataChanged(proxy_top_left, proxy_bottom_right);
+            emit q->dataChanged(proxy_top_left, proxy_bottom_right, roles);
         }
     }
 
@@ -1732,8 +1734,8 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
 
     beginResetModel();
 
-    disconnect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-               this, SLOT(_q_sourceDataChanged(QModelIndex,QModelIndex)));
+    disconnect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)),
+               this, SLOT(_q_sourceDataChanged(QModelIndex,QModelIndex,QVector<int>)));
 
     disconnect(d->model, SIGNAL(headerDataChanged(Qt::Orientation,int,int)),
                this, SLOT(_q_sourceHeaderDataChanged(Qt::Orientation,int,int)));
@@ -1785,8 +1787,8 @@ void QSortFilterProxyModel::setSourceModel(QAbstractItemModel *sourceModel)
 
     QAbstractProxyModel::setSourceModel(sourceModel);
 
-    connect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-            this, SLOT(_q_sourceDataChanged(QModelIndex,QModelIndex)));
+    connect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)),
+            this, SLOT(_q_sourceDataChanged(QModelIndex,QModelIndex,QVector<int>)));
 
     connect(d->model, SIGNAL(headerDataChanged(Qt::Orientation,int,int)),
             this, SLOT(_q_sourceHeaderDataChanged(Qt::Orientation,int,int)));
@@ -2034,30 +2036,14 @@ Qt::DropActions QSortFilterProxyModel::supportedDropActions() const
     return d->model->supportedDropActions();
 }
 
+// Qt6: remove unnecessary reimplementation
 /*!
   \reimp
 */
 bool QSortFilterProxyModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
                                          int row, int column, const QModelIndex &parent)
 {
-    Q_D(QSortFilterProxyModel);
-    if ((row == -1) && (column == -1))
-        return d->model->dropMimeData(data, action, -1, -1, mapToSource(parent));
-    int source_destination_row = -1;
-    int source_destination_column = -1;
-    QModelIndex source_parent;
-    if (row == rowCount(parent)) {
-        source_parent = mapToSource(parent);
-        source_destination_row = d->model->rowCount(source_parent);
-    } else {
-        QModelIndex proxy_index = index(row, column, parent);
-        QModelIndex source_index = mapToSource(proxy_index);
-        source_destination_row = source_index.row();
-        source_destination_column = source_index.column();
-        source_parent = source_index.parent();
-    }
-    return d->model->dropMimeData(data, action, source_destination_row,
-                                  source_destination_column, source_parent);
+    return QAbstractProxyModel::dropMimeData(data, action, row, column, parent);
 }
 
 /*!
@@ -2591,8 +2577,8 @@ void QSortFilterProxyModel::invalidateFilter()
 
 /*!
     Returns \c true if the value of the item referred to by the given
-    index \a left is less than the value of the item referred to by
-    the given index \a right, otherwise returns \c false.
+    index \a source_left is less than the value of the item referred to by
+    the given index \a source_right, otherwise returns \c false.
 
     This function is used as the < operator when sorting, and handles
     the following QVariant types:
@@ -2626,11 +2612,11 @@ void QSortFilterProxyModel::invalidateFilter()
 
     \sa sortRole, sortCaseSensitivity, dynamicSortFilter
 */
-bool QSortFilterProxyModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
+bool QSortFilterProxyModel::lessThan(const QModelIndex &source_left, const QModelIndex &source_right) const
 {
     Q_D(const QSortFilterProxyModel);
-    QVariant l = (left.model() ? left.model()->data(left, d->sort_role) : QVariant());
-    QVariant r = (right.model() ? right.model()->data(right, d->sort_role) : QVariant());
+    QVariant l = (source_left.model() ? source_left.model()->data(source_left, d->sort_role) : QVariant());
+    QVariant r = (source_right.model() ? source_right.model()->data(source_right, d->sort_role) : QVariant());
     switch (l.userType()) {
     case QVariant::Invalid:
         return (r.type() != QVariant::Invalid);
@@ -2759,11 +2745,6 @@ QItemSelection QSortFilterProxyModel::mapSelectionFromSource(const QItemSelectio
 {
     return QAbstractProxyModel::mapSelectionFromSource(sourceSelection);
 }
-
-/*!
-  \fn QObject *QSortFilterProxyModel::parent() const
-  \internal
-*/
 
 QT_END_NAMESPACE
 

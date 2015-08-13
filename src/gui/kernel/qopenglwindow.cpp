@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,6 +38,7 @@
 #include <QtGui/QOpenGLFunctions>
 #include <QtGui/private/qopengltextureblitter_p.h>
 #include <QtGui/private/qopenglextensions_p.h>
+#include <QtGui/private/qopenglcontext_p.h>
 #include <QtGui/QMatrix4x4>
 #include <QtGui/QOffscreenSurface>
 
@@ -101,6 +102,10 @@ QT_BEGIN_NAMESPACE
   this way they do not have to redraw the entire window content on each
   paintGL() call.
 
+  Similarly to QOpenGLWidget, QOpenGLWindow supports the Qt::AA_ShareOpenGLContexts
+  attribute. When enabled, the OpenGL contexts of all QOpenGLWindow instances will share
+  with each other. This allows accessing each other's shareable OpenGL resources.
+
   For more information on graphics in Qt, see \l {Graphics}.
  */
 
@@ -161,144 +166,165 @@ class QOpenGLWindowPrivate : public QPaintDeviceWindowPrivate
 {
     Q_DECLARE_PUBLIC(QOpenGLWindow)
 public:
-    QOpenGLWindowPrivate(QOpenGLWindow::UpdateBehavior updateBehavior)
+    QOpenGLWindowPrivate(QOpenGLContext *shareContext, QOpenGLWindow::UpdateBehavior updateBehavior)
         : updateBehavior(updateBehavior)
         , hasFboBlit(false)
+        , shareContext(shareContext)
     {
+        if (!shareContext)
+            this->shareContext = qt_gl_global_share_context();
     }
 
-    ~QOpenGLWindowPrivate()
-    {
-        Q_Q(QOpenGLWindow);
-        if (q->isValid()) {
-            q->makeCurrent(); // this works even when the platformwindow is destroyed
-            paintDevice.reset(0);
-            fbo.reset(0);
-            blitter.destroy();
-            q->doneCurrent();
-        }
-    }
+    ~QOpenGLWindowPrivate();
 
     static QOpenGLWindowPrivate *get(QOpenGLWindow *w) { return w->d_func(); }
 
-    void bindFBO()
-    {
-        if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
-            fbo->bind();
-        else
-            QOpenGLFramebufferObject::bindDefault();
-    }
+    void bindFBO();
+    void initialize();
 
-    void beginPaint(const QRegion &region) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(region);
-        Q_Q(QOpenGLWindow);
-
-        if (!context) {
-            context.reset(new QOpenGLContext);
-            context->setFormat(q->requestedFormat());
-            if (!context->create())
-                qWarning("QOpenGLWindow::beginPaint: Failed to create context");
-            if (!context->makeCurrent(q))
-                qWarning("QOpenGLWindow::beginPaint: Failed to make context current");
-
-            paintDevice.reset(new QOpenGLWindowPaintDevice(q));
-            if (updateBehavior == QOpenGLWindow::PartialUpdateBlit)
-                hasFboBlit = QOpenGLFramebufferObject::hasOpenGLFramebufferBlit();
-
-            q->initializeGL();
-        } else {
-            context->makeCurrent(q);
-        }
-
-        const int deviceWidth = q->width() * q->devicePixelRatio();
-        const int deviceHeight = q->height() * q->devicePixelRatio();
-        const QSize deviceSize(deviceWidth, deviceHeight);
-        if (updateBehavior > QOpenGLWindow::NoPartialUpdate) {
-            if (!fbo || fbo->size() != deviceSize) {
-                QOpenGLFramebufferObjectFormat fboFormat;
-                fboFormat.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
-                if (q->requestedFormat().samples() > 0) {
-                    if (updateBehavior != QOpenGLWindow::PartialUpdateBlend)
-                        fboFormat.setSamples(q->requestedFormat().samples());
-                    else
-                        qWarning("QOpenGLWindow: PartialUpdateBlend does not support multisampling");
-                }
-                fbo.reset(new QOpenGLFramebufferObject(deviceSize, fboFormat));
-                markWindowAsDirty();
-            }
-        } else {
-            markWindowAsDirty();
-        }
-
-        paintDevice->setSize(QSize(deviceWidth, deviceHeight));
-        paintDevice->setDevicePixelRatio(q->devicePixelRatio());
-        context->functions()->glViewport(0, 0, deviceWidth, deviceHeight);
-
-        context->functions()->glBindFramebuffer(GL_FRAMEBUFFER, context->defaultFramebufferObject());
-
-        q->paintUnderGL();
-
-        if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
-            fbo->bind();
-    }
-
-    void endPaint() Q_DECL_OVERRIDE
-    {
-        Q_Q(QOpenGLWindow);
-
-        if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
-            fbo->release();
-
-        context->functions()->glBindFramebuffer(GL_FRAMEBUFFER, context->defaultFramebufferObject());
-
-        if (updateBehavior == QOpenGLWindow::PartialUpdateBlit && hasFboBlit) {
-            const int deviceWidth = q->width() * q->devicePixelRatio();
-            const int deviceHeight = q->height() * q->devicePixelRatio();
-            QOpenGLExtensions extensions(context.data());
-            extensions.glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->handle());
-            extensions.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, context->defaultFramebufferObject());
-            extensions.glBlitFramebuffer(0, 0, deviceWidth, deviceHeight,
-                                         0, 0, deviceWidth, deviceHeight,
-                                         GL_COLOR_BUFFER_BIT, GL_NEAREST);
-        } else if (updateBehavior > QOpenGLWindow::NoPartialUpdate) {
-            if (updateBehavior == QOpenGLWindow::PartialUpdateBlend) {
-                context->functions()->glEnable(GL_BLEND);
-                context->functions()->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            }
-            if (!blitter.isCreated())
-                blitter.create();
-
-            QRect windowRect(QPoint(0, 0), fbo->size());
-            QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(windowRect, windowRect);
-            blitter.bind();
-            blitter.blit(fbo->texture(), target, QOpenGLTextureBlitter::OriginBottomLeft);
-            blitter.release();
-
-            if (updateBehavior == QOpenGLWindow::PartialUpdateBlend)
-                context->functions()->glDisable(GL_BLEND);
-        }
-
-        q->paintOverGL();
-    }
-
-    void flush(const QRegion &region) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(region);
-        Q_Q(QOpenGLWindow);
-        context->swapBuffers(q);
-        emit q->frameSwapped();
-    }
+    void beginPaint(const QRegion &region) Q_DECL_OVERRIDE;
+    void endPaint() Q_DECL_OVERRIDE;
+    void flush(const QRegion &region) Q_DECL_OVERRIDE;
 
     QOpenGLWindow::UpdateBehavior updateBehavior;
     bool hasFboBlit;
     QScopedPointer<QOpenGLContext> context;
+    QOpenGLContext *shareContext;
     QScopedPointer<QOpenGLFramebufferObject> fbo;
     QScopedPointer<QOpenGLWindowPaintDevice> paintDevice;
     QOpenGLTextureBlitter blitter;
     QColor backgroundColor;
     QScopedPointer<QOffscreenSurface> offscreenSurface;
 };
+
+QOpenGLWindowPrivate::~QOpenGLWindowPrivate()
+{
+    Q_Q(QOpenGLWindow);
+    if (q->isValid()) {
+        q->makeCurrent(); // this works even when the platformwindow is destroyed
+        paintDevice.reset(0);
+        fbo.reset(0);
+        blitter.destroy();
+        q->doneCurrent();
+    }
+}
+
+void QOpenGLWindowPrivate::initialize()
+{
+    Q_Q(QOpenGLWindow);
+
+    if (context)
+        return;
+
+    context.reset(new QOpenGLContext);
+    context->setShareContext(shareContext);
+    context->setFormat(q->requestedFormat());
+    if (!context->create())
+        qWarning("QOpenGLWindow::beginPaint: Failed to create context");
+    if (!context->makeCurrent(q))
+        qWarning("QOpenGLWindow::beginPaint: Failed to make context current");
+
+    paintDevice.reset(new QOpenGLWindowPaintDevice(q));
+    if (updateBehavior == QOpenGLWindow::PartialUpdateBlit)
+        hasFboBlit = QOpenGLFramebufferObject::hasOpenGLFramebufferBlit();
+
+    q->initializeGL();
+}
+
+void QOpenGLWindowPrivate::beginPaint(const QRegion &region)
+{
+    Q_UNUSED(region);
+    Q_Q(QOpenGLWindow);
+
+    initialize();
+    context->makeCurrent(q);
+
+    const int deviceWidth = q->width() * q->devicePixelRatio();
+    const int deviceHeight = q->height() * q->devicePixelRatio();
+    const QSize deviceSize(deviceWidth, deviceHeight);
+    if (updateBehavior > QOpenGLWindow::NoPartialUpdate) {
+        if (!fbo || fbo->size() != deviceSize) {
+            QOpenGLFramebufferObjectFormat fboFormat;
+            fboFormat.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+            if (q->requestedFormat().samples() > 0) {
+                if (updateBehavior != QOpenGLWindow::PartialUpdateBlend)
+                    fboFormat.setSamples(q->requestedFormat().samples());
+                else
+                    qWarning("QOpenGLWindow: PartialUpdateBlend does not support multisampling");
+            }
+            fbo.reset(new QOpenGLFramebufferObject(deviceSize, fboFormat));
+            markWindowAsDirty();
+        }
+    } else {
+        markWindowAsDirty();
+    }
+
+    paintDevice->setSize(QSize(deviceWidth, deviceHeight));
+    paintDevice->setDevicePixelRatio(q->devicePixelRatio());
+    context->functions()->glViewport(0, 0, deviceWidth, deviceHeight);
+
+    context->functions()->glBindFramebuffer(GL_FRAMEBUFFER, context->defaultFramebufferObject());
+
+    q->paintUnderGL();
+
+    if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
+        fbo->bind();
+}
+
+void QOpenGLWindowPrivate::endPaint()
+{
+    Q_Q(QOpenGLWindow);
+
+    if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
+        fbo->release();
+
+    context->functions()->glBindFramebuffer(GL_FRAMEBUFFER, context->defaultFramebufferObject());
+
+    if (updateBehavior == QOpenGLWindow::PartialUpdateBlit && hasFboBlit) {
+        const int deviceWidth = q->width() * q->devicePixelRatio();
+        const int deviceHeight = q->height() * q->devicePixelRatio();
+        QOpenGLExtensions extensions(context.data());
+        extensions.glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->handle());
+        extensions.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, context->defaultFramebufferObject());
+        extensions.glBlitFramebuffer(0, 0, deviceWidth, deviceHeight,
+                                     0, 0, deviceWidth, deviceHeight,
+                                     GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    } else if (updateBehavior > QOpenGLWindow::NoPartialUpdate) {
+        if (updateBehavior == QOpenGLWindow::PartialUpdateBlend) {
+            context->functions()->glEnable(GL_BLEND);
+            context->functions()->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        if (!blitter.isCreated())
+            blitter.create();
+
+        QRect windowRect(QPoint(0, 0), fbo->size());
+        QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(windowRect, windowRect);
+        blitter.bind();
+        blitter.blit(fbo->texture(), target, QOpenGLTextureBlitter::OriginBottomLeft);
+        blitter.release();
+
+        if (updateBehavior == QOpenGLWindow::PartialUpdateBlend)
+            context->functions()->glDisable(GL_BLEND);
+    }
+
+    q->paintOverGL();
+}
+
+void QOpenGLWindowPrivate::bindFBO()
+{
+    if (updateBehavior > QOpenGLWindow::NoPartialUpdate)
+        fbo->bind();
+    else
+        QOpenGLFramebufferObject::bindDefault();
+}
+
+void QOpenGLWindowPrivate::flush(const QRegion &region)
+{
+    Q_UNUSED(region);
+    Q_Q(QOpenGLWindow);
+    context->swapBuffers(q);
+    emit q->frameSwapped();
+}
 
 void QOpenGLWindowPaintDevice::ensureActiveTarget()
 {
@@ -311,9 +337,44 @@ void QOpenGLWindowPaintDevice::ensureActiveTarget()
   \sa QOpenGLWindow::UpdateBehavior
  */
 QOpenGLWindow::QOpenGLWindow(QOpenGLWindow::UpdateBehavior updateBehavior, QWindow *parent)
-    : QPaintDeviceWindow(*(new QOpenGLWindowPrivate(updateBehavior)), parent)
+    : QPaintDeviceWindow(*(new QOpenGLWindowPrivate(Q_NULLPTR, updateBehavior)), parent)
 {
     setSurfaceType(QSurface::OpenGLSurface);
+}
+
+/*!
+  Constructs a new QOpenGLWindow with the given \a parent and \a updateBehavior. The QOpenGLWindow's context will share with \a shareContext.
+
+  \sa QOpenGLWindow::UpdateBehavior shareContext
+*/
+QOpenGLWindow::QOpenGLWindow(QOpenGLContext *shareContext, UpdateBehavior updateBehavior, QWindow *parent)
+    : QPaintDeviceWindow(*(new QOpenGLWindowPrivate(shareContext, updateBehavior)), parent)
+{
+    setSurfaceType(QSurface::OpenGLSurface);
+}
+
+/*!
+  Destroys the QOpenGLWindow instance, freeing its resources.
+
+  The OpenGLWindow's context is made current in the destructor, allowing for
+  safe destruction of any child object that may need to release OpenGL
+  resources belonging to the context provided by this window.
+
+  \warning if you have objects wrapping OpenGL resources (such as
+  QOpenGLBuffer, QOpenGLShaderProgram, etc.) as members of a QOpenGLWindow
+  subclass, you may need to add a call to makeCurrent() in that subclass'
+  destructor as well. Due to the rules of C++ object destruction, those objects
+  will be destroyed \e{before} calling this function (but after that the
+  destructor of the subclass has run), therefore making the OpenGL context
+  current in this function happens too late for their safe disposal.
+
+  \sa makeCurrent
+
+  \since 5.5
+*/
+QOpenGLWindow::~QOpenGLWindow()
+{
+    makeCurrent();
 }
 
 /*!
@@ -405,6 +466,15 @@ QOpenGLContext *QOpenGLWindow::context() const
 {
     Q_D(const QOpenGLWindow);
     return d->context.data();
+}
+
+/*!
+  \return The QOpenGLContext requested to be shared with this window's QOpenGLContext.
+*/
+QOpenGLContext *QOpenGLWindow::shareContext() const
+{
+    Q_D(const QOpenGLWindow);
+    return d->shareContext;
 }
 
 /*!
@@ -577,6 +647,8 @@ void QOpenGLWindow::paintEvent(QPaintEvent *event)
 void QOpenGLWindow::resizeEvent(QResizeEvent *event)
 {
     Q_UNUSED(event);
+    Q_D(QOpenGLWindow);
+    d->initialize();
     resizeGL(width(), height());
 }
 

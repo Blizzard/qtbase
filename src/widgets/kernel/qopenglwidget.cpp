@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,7 @@
 #include <QtGui/private/qopenglextensions_p.h>
 #include <QtGui/private/qfont_p.h>
 #include <QtGui/private/qopenglpaintdevice_p.h>
+#include <QtGui/private/qopenglcontext_p.h>
 #include <QtWidgets/private/qwidget_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -102,6 +103,12 @@ QT_BEGIN_NAMESPACE
   format, or at least formats that do not make the contexts
   non-sharable. To overcome this issue, prefer using
   QSurfaceFormat::setDefaultFormat() instead of setFormat().
+
+  \note Calling QSurfaceFormat::setDefaultFormat() before constructing
+  the QApplication instance is mandatory on some platforms (for example,
+  OS X) when an OpenGL core profile context is requested. This is to
+  ensure that resource sharing between contexts stays functional as all
+  internal contexts are created using the correct version and profile.
 
   \section1 Painting Techniques
 
@@ -420,10 +427,42 @@ QT_BEGIN_NAMESPACE
   the intention is to have a semi-transparent window. In that case the
   traditional approach of setting Qt::WA_TranslucentBackground is sufficient.
 
+  QOpenGLWidget supports multiple update behaviors, just like QOpenGLWindow. In
+  preserved mode the rendered content from the previous paintGL() call is
+  available in the next one, allowing incremental rendering. In non-preserved
+  mode the content is lost and paintGL() implementations are expected to redraw
+  everything in the view.
+
+  Before Qt 5.5 the default behavior of QOpenGLWidget was to preserve the
+  rendered contents between paintGL() calls. Since Qt 5.5 the default behavior
+  is non-preserved because this provides better performance and the majority of
+  applications have no need for the previous content. This also resembles the
+  semantics of an OpenGL-based QWindow and matches the default behavior of
+  QOpenGLWindow in that the color and ancillary buffers are invalidated for
+  each frame. To restore the preserved behavior, call setUpdateBehavior() with
+  \c PartialUpdate.
+
+  \section1 Alternatives
+
+  Adding a QOpenGLWidget into a window turns on OpenGL-based
+  compositing for the entire window.  In some special cases this may
+  not be ideal, and the old QGLWidget-style behavior with a separate,
+  native child window is desired. Desktop applications that understand
+  the limitations of this approach (for example when it comes to
+  overlaps, transparency, scroll views and MDI areas), can use
+  QOpenGLWindow with QWidget::createWindowContainer(). This is a
+  modern alternative to QGLWidget and is faster than QOpenGLWidget due
+  to the lack of the additional composition step. It is strongly
+  recommended to limit the usage of this approach to cases where there
+  is no other choice. Note that this option is not suitable for most
+  embedded and mobile platforms, and it is known to have issues on
+  certain desktop platforms (e.g. OS X) too. The stable,
+  cross-platform solution is always QOpenGLWidget.
+
   \e{OpenGL is a trademark of Silicon Graphics, Inc. in the United States and other
   countries.}
 
-  \sa QOpenGLFunctions, QOpenGLWindow, Qt::AA_ShareOpenGLContexts
+  \sa QOpenGLFunctions, QOpenGLWindow, Qt::AA_ShareOpenGLContexts, UpdateBehavior
 */
 
 /*!
@@ -453,6 +492,30 @@ QT_BEGIN_NAMESPACE
 
     This signal is emitted right after the framebuffer object has been recreated
     due to resizing the widget.
+*/
+
+/*!
+    \enum QOpenGLWidget::UpdateBehavior
+    \since 5.5
+
+    This enum describes the update semantics of QOpenGLWidget.
+
+    \value NoPartialUpdate QOpenGLWidget will discard the
+    contents of the color buffer and the ancillary buffers after the
+    QOpenGLWidget is rendered to screen. This is the same behavior that can be
+    expected by calling QOpenGLContext::swapBuffers with a default opengl
+    enabled QWindow as the argument. NoPartialUpdate can have some performance
+    benefits on certain hardware architectures common in the mobile and
+    embedded space when a framebuffer object is used as the rendering target.
+    The framebuffer object is invalidated between frames with
+    glDiscardFramebufferEXT if supported or a glClear. Please see the
+    documentation of EXT_discard_framebuffer for more information:
+    https://www.khronos.org/registry/gles/extensions/EXT/EXT_discard_framebuffer.txt
+
+    \value PartialUpdate The framebuffer objects color buffer and ancillary
+    buffers are not invalidated between frames.
+
+    \sa updateBehavior(), setUpdateBehavior()
 */
 
 class QOpenGLWidgetPaintDevicePrivate : public QOpenGLPaintDevicePrivate
@@ -486,9 +549,11 @@ public:
           surface(0),
           initialized(false),
           fakeHidden(false),
-          paintDevice(0),
           inBackingStorePaint(false),
-          flushPending(false)
+          hasBeenComposed(false),
+          flushPending(false),
+          paintDevice(0),
+          updateBehavior(QOpenGLWidget::NoPartialUpdate)
     {
         requestedFormat = QSurfaceFormat::defaultFormat();
     }
@@ -507,6 +572,8 @@ public:
     void invokeUserPaint();
     void render();
 
+    void invalidateFbo();
+
     QImage grabFramebuffer() Q_DECL_OVERRIDE;
     void beginBackingStorePainting() Q_DECL_OVERRIDE { inBackingStorePaint = true; }
     void endBackingStorePainting() Q_DECL_OVERRIDE { inBackingStorePaint = false; }
@@ -522,10 +589,12 @@ public:
     QOffscreenSurface *surface;
     bool initialized;
     bool fakeHidden;
-    QOpenGLPaintDevice *paintDevice;
     bool inBackingStorePaint;
-    QSurfaceFormat requestedFormat;
+    bool hasBeenComposed;
     bool flushPending;
+    QOpenGLPaintDevice *paintDevice;
+    QSurfaceFormat requestedFormat;
+    QOpenGLWidget::UpdateBehavior updateBehavior;
 };
 
 void QOpenGLWidgetPaintDevicePrivate::beginPaint()
@@ -578,12 +647,22 @@ GLuint QOpenGLWidgetPrivate::textureId() const
 
 void QOpenGLWidgetPrivate::reset()
 {
+    Q_Q(QOpenGLWidget);
+
+    // Destroy the OpenGL resources first. These need the context to be current.
+    if (initialized)
+        q->makeCurrent();
+
     delete paintDevice;
     paintDevice = 0;
     delete fbo;
     fbo = 0;
     delete resolvedFbo;
     resolvedFbo = 0;
+
+    if (initialized)
+        q->doneCurrent();
+
     // Delete the context first, then the surface. Slots connected to
     // the context's aboutToBeDestroyed() may still call makeCurrent()
     // to perform some cleanup.
@@ -636,8 +715,9 @@ void QOpenGLWidgetPrivate::beginCompose()
     if (flushPending) {
         flushPending = false;
         q->makeCurrent();
-        context->functions()->glFlush();
+        static_cast<QOpenGLExtensions *>(context->functions())->flushShared();
     }
+    hasBeenComposed = true;
     emit q->aboutToCompose();
 }
 
@@ -665,6 +745,7 @@ void QOpenGLWidgetPrivate::initialize()
     QScopedPointer<QOpenGLContext> ctx(new QOpenGLContext);
     ctx->setShareContext(shareContext);
     ctx->setFormat(requestedFormat);
+    ctx->setScreen(shareContext->screen());
     if (!ctx->create()) {
         qWarning("QOpenGLWidget: Failed to create context");
         return;
@@ -688,6 +769,7 @@ void QOpenGLWidgetPrivate::initialize()
     // in QQuickWidget, use a dedicated QOffscreenSurface.
     surface = new QOffscreenSurface;
     surface->setFormat(ctx->format());
+    surface->setScreen(ctx->screen());
     surface->create();
 
     if (!ctx->makeCurrent(surface)) {
@@ -712,17 +794,25 @@ void QOpenGLWidgetPrivate::resolveSamples()
         q->makeCurrent();
         QRect rect(QPoint(0, 0), fbo->size());
         QOpenGLFramebufferObject::blitFramebuffer(resolvedFbo, rect, fbo, rect);
+        flushPending = true;
     }
 }
 
 void QOpenGLWidgetPrivate::invokeUserPaint()
 {
     Q_Q(QOpenGLWidget);
-    QOpenGLFunctions *f = QOpenGLContext::currentContext()->functions();
+
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    Q_ASSERT(ctx && fbo);
+
+    QOpenGLFunctions *f = ctx->functions();
+    QOpenGLContextPrivate::get(ctx)->defaultFboRedirect = fbo->handle();
 
     f->glViewport(0, 0, q->width() * q->devicePixelRatio(), q->height() * q->devicePixelRatio());
     q->paintGL();
-    f->glFlush();
+    flushPending = true;
+
+    QOpenGLContextPrivate::get(ctx)->defaultFboRedirect = 0;
 }
 
 void QOpenGLWidgetPrivate::render()
@@ -733,7 +823,29 @@ void QOpenGLWidgetPrivate::render()
         return;
 
     q->makeCurrent();
+
+    if (updateBehavior == QOpenGLWidget::NoPartialUpdate && hasBeenComposed) {
+        invalidateFbo();
+        hasBeenComposed = false;
+    }
+
     invokeUserPaint();
+}
+
+void QOpenGLWidgetPrivate::invalidateFbo()
+{
+    QOpenGLExtensions *f = static_cast<QOpenGLExtensions *>(QOpenGLContext::currentContext()->functions());
+    if (f->hasOpenGLExtension(QOpenGLExtensions::DiscardFramebuffer)) {
+        const int gl_color_attachment0 = 0x8CE0;  // GL_COLOR_ATTACHMENT0
+        const int gl_depth_attachment = 0x8D00;   // GL_DEPTH_ATTACHMENT
+        const int gl_stencil_attachment = 0x8D20; // GL_STENCIL_ATTACHMENT
+        const GLenum attachments[] = {
+            gl_color_attachment0, gl_depth_attachment, gl_stencil_attachment
+        };
+        f->glDiscardFramebufferEXT(GL_FRAMEBUFFER, sizeof attachments / sizeof *attachments, attachments);
+    } else {
+        f->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    }
 }
 
 extern Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format, bool include_alpha);
@@ -748,6 +860,7 @@ QImage QOpenGLWidgetPrivate::grabFramebuffer()
     resolveSamples();
     q->makeCurrent();
     QImage res = qt_gl_read_framebuffer(q->size() * q->devicePixelRatio(), false, false);
+    res.setDevicePixelRatio(q->devicePixelRatio());
 
     return res;
 }
@@ -784,10 +897,45 @@ QOpenGLWidget::QOpenGLWidget(QWidget *parent, Qt::WindowFlags f)
 }
 
 /*!
-  Destroys the widget
- */
+  Destroys the QOpenGLWidget instance, freeing its resources.
+
+  The QOpenGLWidget's context is made current in the destructor, allowing for
+  safe destruction of any child object that may need to release OpenGL
+  resources belonging to the context provided by this widget.
+
+  \warning if you have objects wrapping OpenGL resources (such as
+  QOpenGLBuffer, QOpenGLShaderProgram, etc.) as members of a OpenGLWidget
+  subclass, you may need to add a call to makeCurrent() in that subclass'
+  destructor as well. Due to the rules of C++ object destruction, those objects
+  will be destroyed \e{before} calling this function (but after that the
+  destructor of the subclass has run), therefore making the OpenGL context
+  current in this function happens too late for their safe disposal.
+
+  \sa makeCurrent
+*/
 QOpenGLWidget::~QOpenGLWidget()
 {
+    makeCurrent();
+}
+
+/*!
+  Sets this widget's update behavior to \a updateBehavior.
+  \since 5.5
+*/
+void QOpenGLWidget::setUpdateBehavior(UpdateBehavior updateBehavior)
+{
+    Q_D(QOpenGLWidget);
+    d->updateBehavior = updateBehavior;
+}
+
+/*!
+  \return the update behavior of the widget.
+  \since 5.5
+*/
+QOpenGLWidget::UpdateBehavior QOpenGLWidget::updateBehavior() const
+{
+    Q_D(const QOpenGLWidget);
+    return d->updateBehavior;
 }
 
 /*!
@@ -866,10 +1014,8 @@ bool QOpenGLWidget::isValid() const
 void QOpenGLWidget::makeCurrent()
 {
     Q_D(QOpenGLWidget);
-    if (!d->initialized) {
-        qWarning("QOpenGLWidget: Cannot make uninitialized widget current");
+    if (!d->initialized)
         return;
-    }
 
     d->context->makeCurrent(d->surface);
 

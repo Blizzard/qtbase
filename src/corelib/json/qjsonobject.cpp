@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,7 @@ QT_BEGIN_NAMESPACE
     \class QJsonObject
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
@@ -192,7 +193,7 @@ QJsonObject &QJsonObject::operator =(const QJsonObject &other)
     The keys in \a map will be used as the keys in the JSON object,
     and the QVariant values will be converted to JSON values.
 
-    \sa toVariantMap(), QJsonValue::fromVariant()
+    \sa fromVariantHash(), toVariantMap(), QJsonValue::fromVariant()
  */
 QJsonObject QJsonObject::fromVariantMap(const QVariantMap &map)
 {
@@ -208,6 +209,8 @@ QJsonObject QJsonObject::fromVariantMap(const QVariantMap &map)
     Converts this object to a QVariantMap.
 
     Returns the created map.
+
+    \sa toVariantHash()
  */
 QVariantMap QJsonObject::toVariantMap() const
 {
@@ -222,7 +225,48 @@ QVariantMap QJsonObject::toVariantMap() const
 }
 
 /*!
+    Converts the variant hash \a hash to a QJsonObject.
+    \since 5.5
+
+    The keys in \a hash will be used as the keys in the JSON object,
+    and the QVariant values will be converted to JSON values.
+
+    \sa fromVariantMap(), toVariantHash(), QJsonValue::fromVariant()
+ */
+QJsonObject QJsonObject::fromVariantHash(const QVariantHash &hash)
+{
+    // ### this is implemented the trivial way, not the most efficient way
+
+    QJsonObject object;
+    for (QVariantHash::const_iterator it = hash.constBegin(); it != hash.constEnd(); ++it)
+        object.insert(it.key(), QJsonValue::fromVariant(it.value()));
+    return object;
+}
+
+/*!
+    Converts this object to a QVariantHash.
+    \since 5.5
+
+    Returns the created hash.
+
+    \sa toVariantMap()
+ */
+QVariantHash QJsonObject::toVariantHash() const
+{
+    QVariantHash hash;
+    if (o) {
+        for (uint i = 0; i < o->length; ++i) {
+            QJsonPrivate::Entry *e = o->entryAt(i);
+            hash.insert(e->key(), QJsonValue(d, o, e->value).toVariant());
+        }
+    }
+    return hash;
+}
+
+/*!
     Returns a list of all keys in this object.
+
+    The list is sorted lexographically.
  */
 QStringList QJsonObject::keys() const
 {
@@ -1070,6 +1114,7 @@ void QJsonObject::setValueAt(int i, const QJsonValue &val)
 #if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
 QDebug operator<<(QDebug dbg, const QJsonObject &o)
 {
+    QDebugStateSaver saver(dbg);
     if (!o.o) {
         dbg << "QJsonObject()";
         return dbg;
@@ -1079,7 +1124,7 @@ QDebug operator<<(QDebug dbg, const QJsonObject &o)
     dbg.nospace() << "QJsonObject("
                   << json.constData() // print as utf-8 string without extra quotation marks
                   << ")";
-    return dbg.space();
+    return dbg;
 }
 #endif
 

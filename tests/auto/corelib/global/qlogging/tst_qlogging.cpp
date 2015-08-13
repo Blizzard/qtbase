@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,6 +40,9 @@
 class tst_qmessagehandler : public QObject
 {
     Q_OBJECT
+public:
+    tst_qmessagehandler();
+
 public slots:
     void initTestCase();
 
@@ -90,6 +93,12 @@ void customMsgHandler(QtMsgType type, const char *msg)
     s_line = 0;
     s_function = 0;
     s_message = QString::fromLocal8Bit(msg);
+}
+
+tst_qmessagehandler::tst_qmessagehandler()
+{
+    // ensure it's unset, otherwise we'll have trouble
+    qputenv("QT_MESSAGE_PATTERN", "");
 }
 
 void tst_qmessagehandler::initTestCase()
@@ -721,10 +730,11 @@ void tst_qmessagehandler::qMessagePattern_data()
             << "static destructor"
             << "debug tst_qlogging 65 MyClass::myFunction from_a_function 34"
             << "debug tst_qlogging 75 main qDebug"
-            << "warning tst_qlogging 76 main qWarning"
-            << "critical tst_qlogging 77 main qCritical"
-            << "warning tst_qlogging 80 main qDebug with category"
-            << "debug tst_qlogging 84 main qDebug2");
+            << "info tst_qlogging 76 main qInfo"
+            << "warning tst_qlogging 77 main qWarning"
+            << "critical tst_qlogging 78 main qCritical"
+            << "warning tst_qlogging 81 main qDebug with category"
+            << "debug tst_qlogging 85 main qDebug2");
 
 
     QTest::newRow("invalid") << "PREFIX: %{unknown} %{message}" << false << (QList<QByteArray>()
@@ -755,6 +765,12 @@ void tst_qmessagehandler::qMessagePattern_data()
             << "QT_MESSAGE_PATTERN: %{if-*} cannot be nested"
             << "A DEBUG qDebug  "
             << "A  qWarning  ");
+
+    QTest::newRow("pid-tid") << "%{pid}/%{threadid}: %{message}"
+         << true << QList<QByteArray>(); // can't match anything, just test validity
+    QTest::newRow("qthreadptr") << "ThreadId:%{qthreadptr}: %{message}"
+         << true << (QList<QByteArray>()
+              << "ThreadId:0x");
 
     // This test won't work when midnight is too close... wait a bit
     while (QTime::currentTime() > QTime(23, 59, 30))
@@ -811,6 +827,7 @@ void tst_qmessagehandler::qMessagePattern()
     process.start(appExe);
     QVERIFY2(process.waitForStarted(), qPrintable(
         QString::fromLatin1("Could not start %1: %2").arg(appExe, process.errorString())));
+    QByteArray pid = QByteArray::number(process.processId());
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardError();
@@ -825,6 +842,8 @@ void tst_qmessagehandler::qMessagePattern()
             QVERIFY(output.contains(e));
         }
     }
+    if (pattern.startsWith("%{pid}"))
+        QVERIFY2(output.startsWith('"' + pid), "PID: " + pid + "\noutput:\n" + output);
 #endif
 }
 
@@ -859,6 +878,7 @@ void tst_qmessagehandler::setMessagePattern()
     //qDebug() << output;
     QByteArray expected = "static constructor\n"
             "[debug] qDebug\n"
+            "[info] qInfo\n"
             "[warning] qWarning\n"
             "[critical] qCritical\n"
             "[warning] qDebug with category\n";
@@ -890,10 +910,13 @@ void tst_qmessagehandler::formatLogMessage_data()
                            << QtDebugMsg << BA("main.cpp") << 1 << BA("func") << BA("") << "msg";
 
     // test the if conditions
-    QString format = "[%{if-debug}D%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] %{if-category}%{category}: %{endif}%{message}";
+    QString format = "[%{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] %{if-category}%{category}: %{endif}%{message}";
     QTest::newRow("if-debug")
             << format << "[D] msg"
             << QtDebugMsg << BA("") << 0 << BA("func") << QByteArray() << "msg";
+    QTest::newRow("if_info")
+            << format << "[I] msg"
+            << QtInfoMsg << BA("") << 0 << BA("func") << QByteArray() << "msg";
     QTest::newRow("if_warning")
             << format << "[W] msg"
             << QtWarningMsg << BA("") << 0 << BA("func") << QByteArray() << "msg";

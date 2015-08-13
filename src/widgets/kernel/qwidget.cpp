@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -35,7 +35,7 @@
 #include "qapplication_p.h"
 #include "qbrush.h"
 #include "qcursor.h"
-#include "qdesktopwidget.h"
+#include "qdesktopwidget_p.h"
 #include "qevent.h"
 #include "qhash.h"
 #include "qlayout.h"
@@ -53,7 +53,7 @@
 #ifndef QT_NO_ACCESSIBILITY
 # include "qaccessible.h"
 #endif
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 # include "qt_mac_p.h"
 # include "qt_cocoa_helpers_mac_p.h"
 # include "qmainwindow.h"
@@ -76,7 +76,7 @@
 #include <private/qgraphicseffect_p.h>
 #include <qbackingstore.h>
 #include <private/qwidgetbackingstore_p.h>
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 # include <private/qpaintengine_mac_p.h>
 #endif
 #include <private/qpaintengine_raster_p.h>
@@ -108,7 +108,7 @@
 QT_BEGIN_NAMESPACE
 
 static bool qt_enable_backingstore = true;
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
 // for compatibility with Qt 4.0
 Q_WIDGETS_EXPORT void qt_x11_set_global_double_buffer(bool enable)
 {
@@ -116,7 +116,7 @@ Q_WIDGETS_EXPORT void qt_x11_set_global_double_buffer(bool enable)
 }
 #endif
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 bool qt_mac_clearDirtyOnWidgetInsideDrawWidget = false;
 #endif
 
@@ -131,7 +131,7 @@ static inline bool hasBackingStoreSupport()
     return true;
 }
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #  define QT_NO_PAINT_DEBUG
 #endif
 
@@ -272,13 +272,13 @@ QWidgetPrivate::QWidgetPrivate(int version)
 #if defined(Q_OS_WIN)
       , noPaintOnScreen(0)
 #endif
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
       , picture(0)
-#elif defined(Q_WS_WIN)
+#elif defined(Q_DEAD_CODE_FROM_QT4_WIN)
   #ifndef QT_NO_GESTURES
       , nativeGesturePanEnabled(0)
   #endif
-#elif defined(Q_WS_MAC)
+#elif defined(Q_DEAD_CODE_FROM_QT4_MAC)
       , needWindowChange(0)
       , window_event(0)
       , qd_hd(0)
@@ -294,7 +294,7 @@ QWidgetPrivate::QWidgetPrivate(int version)
 
     isWidget = true;
     memset(high_attributes, 0, sizeof(high_attributes));
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     drawRectOriginalAdded = false;
     originalDrawMethod = true;
     changeMethods = false;
@@ -303,7 +303,7 @@ QWidgetPrivate::QWidgetPrivate(int version)
     toolbar_ancestor = 0;
     flushRequested = false;
     touchEventsEnabled = false;
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
 #ifdef QWIDGET_EXTRA_DEBUG
     static int count = 0;
     qDebug() << "widgets" << ++count;
@@ -359,12 +359,12 @@ void QWidgetPrivate::setWSGeometry()
 void QWidgetPrivate::updateWidgetTransform(QEvent *event)
 {
     Q_Q(QWidget);
-    if (q == qGuiApp->focusObject() || event->type() == QEvent::FocusIn) {
+    if (q == QGuiApplication::focusObject() || event->type() == QEvent::FocusIn) {
         QTransform t;
         QPoint p = q->mapTo(q->topLevelWidget(), QPoint(0,0));
         t.translate(p.x(), p.y());
-        qApp->inputMethod()->setInputItemTransform(t);
-        qApp->inputMethod()->setInputItemRectangle(q->rect());
+        QGuiApplication::inputMethod()->setInputItemTransform(t);
+        QGuiApplication::inputMethod()->setInputItemRectangle(q->rect());
     }
 }
 
@@ -1063,7 +1063,7 @@ void QWidgetPrivate::adjustFlags(Qt::WindowFlags &flags, QWidget *w)
         // Only enable this on non-Mac platforms. Since the old way of doing this would
         // interpret WindowSystemMenuHint as a close button and we can't change that behavior
         // we can't just add this in.
-#ifndef Q_WS_MAC
+#ifndef Q_DEAD_CODE_FROM_QT4_MAC
         if ((flags & (Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint | Qt::WindowContextHelpButtonHint))
 #  ifdef Q_OS_WIN
             && type != Qt::Dialog // QTBUG-2027, allow for menu-less dialogs.
@@ -1111,9 +1111,10 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
     if (allWidgets)
         allWidgets->insert(q);
 
-    QWidget *desktopWidget = 0;
+    int targetScreen = -1;
     if (parentWidget && parentWidget->windowType() == Qt::Desktop) {
-        desktopWidget = parentWidget;
+        const QDesktopScreenWidget *sw = qobject_cast<const QDesktopScreenWidget *>(parentWidget);
+        targetScreen = sw ? sw->screenNumber() : 0;
         parentWidget = 0;
     }
 
@@ -1126,17 +1127,17 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
     }
 #endif
 
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (desktopWidget) {
         // make sure the widget is created on the same screen as the
         // programmer specified desktop widget
         xinfo = desktopWidget->d_func()->xinfo;
     }
 #endif
-    if (desktopWidget) {
-        const int screen = desktopWidget->d_func()->topData()->screenIndex;
+    if (targetScreen >= 0) {
+        topData()->initialScreenIndex = targetScreen;
         if (QWindow *window = q->windowHandle())
-            window->setScreen(QGuiApplication::screens().value(screen, 0));
+            window->setScreen(QGuiApplication::screens().value(targetScreen, Q_NULLPTR));
     }
 
     data.fstrut_dirty = true;
@@ -1160,7 +1161,7 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
         mustHaveWindowHandle = 1;
         q->setAttribute(Qt::WA_NativeWindow);
     }
-//#ifdef Q_WS_MAC
+//#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 //    q->setAttribute(Qt::WA_NativeWindow);
 //#endif
 
@@ -1185,9 +1186,9 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
         setOpaque(q->isWindow() && background.style() != Qt::NoBrush && background.isOpaque());
     }
     data.fnt = QFont(data.fnt, q);
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     data.fnt.x11SetScreen(xinfo.screen());
-#endif // Q_WS_X11
+#endif // Q_DEAD_CODE_FROM_QT4_X11
 
     q->setAttribute(Qt::WA_PendingMoveEvent);
     q->setAttribute(Qt::WA_PendingResizeEvent);
@@ -1204,7 +1205,7 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
 
     extraPaintEngine = 0;
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // If we add a child to the unified toolbar, we have to redirect the painting.
     if (parentWidget && parentWidget->d_func() && parentWidget->d_func()->isInUnifiedToolbar) {
         if (parentWidget->d_func()->unifiedSurface) {
@@ -1212,7 +1213,7 @@ void QWidgetPrivate::init(QWidget *parentWidget, Qt::WindowFlags f)
             parentWidget->d_func()->unifiedSurface->recursiveRedirect(toolbar, toolbar, toolbar->d_func()->toolbar_offset);
         }
     }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
 }
 
 
@@ -1283,10 +1284,8 @@ void QWidget::create(WId window, bool initializeWindow, bool destroyOldWindow)
     }
 
 
-    static int paintOnScreenEnv = -1;
-    if (paintOnScreenEnv == -1)
-        paintOnScreenEnv = qgetenv("QT_ONSCREEN_PAINT").toInt() > 0 ? 1 : 0;
-    if (paintOnScreenEnv == 1)
+    static const bool paintOnScreenEnv = qEnvironmentVariableIntValue("QT_ONSCREEN_PAINT") > 0;
+    if (paintOnScreenEnv)
         setAttribute(Qt::WA_PaintOnScreen);
 
     if (QApplicationPrivate::testAttribute(Qt::AA_NativeWindows))
@@ -1297,14 +1296,14 @@ void QWidget::create(WId window, bool initializeWindow, bool destroyOldWindow)
              << "Alien?" << !testAttribute(Qt::WA_NativeWindow);
 #endif
 
-#if defined (Q_WS_WIN) && !defined(QT_NO_DRAGANDDROP)
+#if defined (Q_DEAD_CODE_FROM_QT4_WIN) && !defined(QT_NO_DRAGANDDROP)
     // Unregister the dropsite (if already registered) before we
     // re-create the widget with a native window.
     if (testAttribute(Qt::WA_WState_Created) && !internalWinId() && testAttribute(Qt::WA_NativeWindow)
             && d->extra && d->extra->dropTarget) {
         d->registerDropSite(false);
     }
-#endif // defined (Q_WS_WIN) && !defined(QT_NO_DRAGANDDROP)
+#endif // defined (Q_DEAD_CODE_FROM_QT4_WIN) && !defined(QT_NO_DRAGANDDROP)
 
     d->updateIsOpaque();
 
@@ -1414,8 +1413,15 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
         win->setGeometry(q->geometry());
     else
         win->resize(q->size());
-    if (win->isTopLevel())
-        win->setScreen(QGuiApplication::screens().value(topData()->screenIndex, 0));
+    if (win->isTopLevel()) {
+        int screenNumber = topData()->initialScreenIndex;
+        topData()->initialScreenIndex = -1;
+        if (screenNumber < 0) {
+            screenNumber = q->windowType() != Qt::Desktop
+                ? QApplication::desktop()->screenNumber(q) : 0;
+        }
+        win->setScreen(QGuiApplication::screens().value(screenNumber, Q_NULLPTR));
+    }
 
     QSurfaceFormat format = win->requestedFormat();
     if ((flags & Qt::Window) && win->surfaceType() != QSurface::OpenGLSurface
@@ -1585,7 +1591,7 @@ QWidget::~QWidget()
         }
     }
 
-#if defined(Q_WS_WIN) || defined(Q_WS_X11)|| defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_X11)|| defined(Q_DEAD_CODE_FROM_QT4_MAC)
     else if (!internalWinId() && isVisible()) {
         qApp->d_func()->sendSyntheticEnterLeave(this);
     }
@@ -1629,7 +1635,7 @@ QWidget::~QWidget()
 
     d->blockSig = blocked;
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // QCocoaView holds a pointer back to this widget. Clear it now
     // to make sure it's not followed later on. The lifetime of the
     // QCocoaView might exceed the lifetime of this widget in cases
@@ -1680,7 +1686,7 @@ void QWidgetPrivate::setWinId(WId id)                // set widget identifier
     const WId oldWinId = data.winid;
 
     data.winid = id;
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     hd = id; // X11: hd == ident
 #endif
     if (mapper && id && !userDesktopWidget) {
@@ -1715,10 +1721,10 @@ void QWidgetPrivate::createTLExtra()
         x->embedded = 0;
         x->window = 0;
         x->shareContext = 0;
-        x->screenIndex = 0;
-#ifdef Q_WS_MAC
+        x->initialScreenIndex = -1;
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         x->wasMaximized = false;
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
 #ifdef QWIDGET_EXTRA_DEBUG
         static int count = 0;
         qDebug() << "tlextra" << ++count;
@@ -2112,14 +2118,14 @@ void QWidgetPrivate::subtractOpaqueSiblings(QRegion &sourceRegion, bool *hasDirt
                                             bool alsoNonOpaque) const
 {
     Q_Q(const QWidget);
-    static int disableSubtractOpaqueSiblings = qgetenv("QT_NO_SUBTRACTOPAQUESIBLINGS").toInt();
+    static int disableSubtractOpaqueSiblings = qEnvironmentVariableIntValue("QT_NO_SUBTRACTOPAQUESIBLINGS");
     if (disableSubtractOpaqueSiblings || q->isWindow())
         return;
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     if (q->d_func()->isInUnifiedToolbar)
         return;
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
 
     QRect clipBoundingRect;
     bool dirtyClipBoundingRect = true;
@@ -2253,7 +2259,7 @@ void QWidgetPrivate::updateIsOpaque()
 #endif //QT_NO_GRAPHICSEFFECT
 
     Q_Q(QWidget);
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     if (q->testAttribute(Qt::WA_X11OpenGLOverlay)) {
         setOpaque(false);
         return;
@@ -2312,7 +2318,7 @@ static inline void fillRegion(QPainter *painter, const QRegion &rgn, const QBrus
     Q_ASSERT(painter);
 
     if (brush.style() == Qt::TexturePattern) {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         // Optimize pattern filling on mac by using HITheme directly
         // when filling with the standard widget background.
         // Defined in qmacstyle_mac.cpp
@@ -2324,7 +2330,7 @@ static inline void fillRegion(QPainter *painter, const QRegion &rgn, const QBrus
             painter->setClipRegion(rgn);
             painter->drawTiledPixmap(rect, brush.texture(), rect.topLeft());
         }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
 
     } else if (brush.gradient()
                && brush.gradient()->coordinateMode() == QGradient::ObjectBoundingMode) {
@@ -2396,7 +2402,7 @@ void QWidgetPrivate::paintBackground(QPainter *painter, const QRegion &rgn, int 
   visible widgets.
 */
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     extern QPointer<QWidget> qt_button_down;
 #else
     extern QWidget *qt_button_down;
@@ -2602,6 +2608,8 @@ QString QWidget::styleSheet() const
 void QWidget::setStyleSheet(const QString& styleSheet)
 {
     Q_D(QWidget);
+    if (data->in_destructor)
+        return;
     d->createExtra();
 
     QStyleSheetStyle *proxy = qobject_cast<QStyleSheetStyle *>(d->extra->style);
@@ -2683,7 +2691,7 @@ void QWidget::setStyle(QStyle *style)
 }
 
 void QWidgetPrivate::setStyle_helper(QStyle *newStyle, bool propagate, bool
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         metalHack
 #endif
         )
@@ -2694,7 +2702,7 @@ void QWidgetPrivate::setStyle_helper(QStyle *newStyle, bool propagate, bool
     QPointer<QStyle> origStyle;
 #endif
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // the metalhack boolean allows Qt/Mac to do a proper re-polish depending
     // on how the Qt::WA_MacBrushedMetal attribute is set. It is only ever
     // set when changing that attribute and passes the widget's CURRENT style.
@@ -2714,12 +2722,12 @@ void QWidgetPrivate::setStyle_helper(QStyle *newStyle, bool propagate, bool
     if (q->windowType() != Qt::Desktop) {
         if (polished) {
             oldStyle->unpolish(q);
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
             if (metalHack)
                 macUpdateMetalAttribute();
 #endif
             q->style()->polish(q);
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         } else if (metalHack) {
             macUpdateMetalAttribute();
 #endif
@@ -3084,7 +3092,7 @@ bool QWidget::isFullScreen() const
 */
 void QWidget::showFullScreen()
 {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // If the unified toolbar is enabled, we have to disable it before going fullscreen.
     QMainWindow *mainWindow = qobject_cast<QMainWindow*>(this);
     if (mainWindow && mainWindow->unifiedTitleAndToolBarOnMac()) {
@@ -3092,7 +3100,7 @@ void QWidget::showFullScreen()
         QMainWindowLayout *mainLayout = qobject_cast<QMainWindowLayout*>(mainWindow->layout());
         mainLayout->activateUnifiedToolbarAfterFullScreen = true;
     }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
     ensurePolished();
 
     setWindowState((windowState() & ~(Qt::WindowMinimized | Qt::WindowMaximized))
@@ -3120,7 +3128,7 @@ void QWidget::showMaximized()
 
     setWindowState((windowState() & ~(Qt::WindowMinimized | Qt::WindowFullScreen))
                    | Qt::WindowMaximized);
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // If the unified toolbar was enabled before going fullscreen, we have to enable it back.
     QMainWindow *mainWindow = qobject_cast<QMainWindow*>(this);
     if (mainWindow)
@@ -3131,7 +3139,7 @@ void QWidget::showMaximized()
             mainLayout->activateUnifiedToolbarAfterFullScreen = false;
         }
     }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
     setVisible(true);
 }
 
@@ -3149,7 +3157,7 @@ void QWidget::showNormal()
     setWindowState(windowState() & ~(Qt::WindowMinimized
                                      | Qt::WindowMaximized
                                      | Qt::WindowFullScreen));
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // If the unified toolbar was enabled before going fullscreen, we have to enable it back.
     QMainWindow *mainWindow = qobject_cast<QMainWindow*>(this);
     if (mainWindow)
@@ -3160,7 +3168,7 @@ void QWidget::showNormal()
             mainLayout->activateUnifiedToolbarAfterFullScreen = false;
         }
     }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
     setVisible(true);
 }
 
@@ -3221,7 +3229,11 @@ void QWidget::addAction(QAction *action)
 
     \sa removeAction(), QMenu, addAction()
 */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+void QWidget::addActions(const QList<QAction *> &actions)
+#else
 void QWidget::addActions(QList<QAction*> actions)
+#endif
 {
     for(int i = 0; i < actions.count(); i++)
         insertAction(0, actions.at(i));
@@ -3368,7 +3380,7 @@ void QWidgetPrivate::setEnabled_helper(bool enable)
         if (w && !w->testAttribute(attribute))
             w->d_func()->setEnabled_helper(enable);
     }
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (q->testAttribute(Qt::WA_SetCursor) || q->isWindow()) {
         // enforce the windows behavior of clearing the cursor on
         // disabled widgets
@@ -3382,7 +3394,7 @@ void QWidgetPrivate::setEnabled_helper(bool enable)
         qt_qpa_set_cursor(q, false);
     }
 #endif
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
     setEnabled_helper_sys(enable);
 #endif
 #ifndef QT_NO_IM
@@ -3391,10 +3403,10 @@ void QWidgetPrivate::setEnabled_helper(bool enable)
 
         if (enable) {
             if (focusWidget->testAttribute(Qt::WA_InputMethodEnabled))
-                qApp->inputMethod()->update(Qt::ImEnabled);
+                QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         } else {
-            qApp->inputMethod()->commit();
-            qApp->inputMethod()->update(Qt::ImEnabled);
+            QGuiApplication::inputMethod()->commit();
+            QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         }
     }
 #endif //QT_NO_IM
@@ -4274,7 +4286,7 @@ QPoint QWidget::mapFromParent(const QPoint &pos) const
 
 QWidget *QWidget::window() const
 {
-    QWidget *w = (QWidget *)this;
+    QWidget *w = const_cast<QWidget *>(this);
     QWidget *p = w->parentWidget();
     while (!w->isWindow() && p) {
         w = p;
@@ -4486,7 +4498,7 @@ const QPalette &QWidget::palette() const
         ) {
         data->pal.setCurrentColorGroup(QPalette::Active);
     } else {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         extern bool qt_mac_can_clickThrough(const QWidget *); //qwidget_mac.cpp
         if (qt_mac_can_clickThrough(this))
             data->pal.setCurrentColorGroup(QPalette::Active);
@@ -4730,7 +4742,7 @@ void QWidgetPrivate::updateFont(const QFont &font)
 #endif
 
     data.fnt = QFont(font, q);
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     // make sure the font set on this widget is associated with the correct screen
     data.fnt.x11SetScreen(xinfo.screen());
 #endif
@@ -4847,7 +4859,7 @@ void QWidget::unsetLayoutDirection()
     \fn QFontMetrics QWidget::fontMetrics() const
 
     Returns the font metrics for the widget's current font.
-    Equivalent to QFontMetrics(widget->font()).
+    Equivalent to \c QFontMetrics(widget->font()).
 
     \sa font(), fontInfo(), setFont()
 */
@@ -4856,7 +4868,7 @@ void QWidget::unsetLayoutDirection()
     \fn QFontInfo QWidget::fontInfo() const
 
     Returns the font info for the widget's current font.
-    Equivalent to QFontInto(widget->font()).
+    Equivalent to \c QFontInfo(widget->font()).
 
     \sa font(), fontMetrics(), setFont()
 */
@@ -4903,7 +4915,7 @@ void QWidget::setCursor(const QCursor &cursor)
 {
     Q_D(QWidget);
 // On Mac we must set the cursor even if it is the ArrowCursor.
-#if !defined(Q_WS_MAC)
+#if !defined(Q_DEAD_CODE_FROM_QT4_MAC)
     if (cursor.shape() != Qt::ArrowCursor
         || (d->extra && d->extra->curs))
 #endif
@@ -5219,6 +5231,9 @@ QGraphicsEffect *QWidget::graphicsEffect() const
 
     \note This function will apply the effect on itself and all its children.
 
+    \note Graphics effects are not supported for OpenGL-based widgets, such as QGLWidget,
+    QOpenGLWidget and QQuickWidget.
+
     \since 4.6
 
     \sa graphicsEffect()
@@ -5328,7 +5343,7 @@ void QWidgetPrivate::render_helper(QPainter *painter, const QPoint &targetOffset
     Q_ASSERT(!toBePainted.isEmpty());
 
     Q_Q(QWidget);
-#ifndef Q_WS_MAC
+#ifndef Q_DEAD_CODE_FROM_QT4_MAC
     const QTransform originalTransform = painter->worldTransform();
     const bool useDeviceCoordinates = originalTransform.isScaling();
     if (!useDeviceCoordinates) {
@@ -5339,7 +5354,10 @@ void QWidgetPrivate::render_helper(QPainter *painter, const QPoint &targetOffset
         if (size.isNull())
             return;
 
-        QPixmap pixmap(size);
+        const qreal pixmapDevicePixelRatio = qreal(painter->device()->devicePixelRatio());
+        QPixmap pixmap(size * pixmapDevicePixelRatio);
+        pixmap.setDevicePixelRatio(pixmapDevicePixelRatio);
+
         if (!(renderFlags & QWidget::DrawWindowBackground) || !isOpaque)
             pixmap.fill(Qt::transparent);
         q->render(&pixmap, QPoint(), toBePainted, renderFlags);
@@ -5352,7 +5370,7 @@ void QWidgetPrivate::render_helper(QPainter *painter, const QPoint &targetOffset
         if (restore)
             painter->setRenderHints(QPainter::SmoothPixmapTransform, false);
 
-#ifndef Q_WS_MAC
+#ifndef Q_DEAD_CODE_FROM_QT4_MAC
     } else {
         // Render via a pixmap in device coordinates (to avoid pixmap scaling).
         QTransform transform = originalTransform;
@@ -5461,7 +5479,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
             if (paintEngine) {
                 setRedirected(pdev, -offset);
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
                 // (Alien support) Special case for Mac when redirecting: If the paint device
                 // is of the Widget type we need to set WA_WState_InPaintEvent since painting
                 // outside the paint event is not supported on QWidgets. The attributeis
@@ -5538,12 +5556,12 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
             }
 
             // Native widgets need to be marked dirty on screen so painting will be done in correct context
-            if (backingStore && !onScreen && !asRoot && (q->internalWinId() || !q->nativeParentWidget()->isWindow()))
+            if (backingStore && !onScreen && !asRoot && (q->internalWinId() || (q->nativeParentWidget() && !q->nativeParentWidget()->isWindow())))
                 backingStore->markDirtyOnScreen(toBePainted, q, offset);
 
             //restore
             if (paintEngine) {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
                 if (pdev->devType() == QInternal::Widget)
                     static_cast<QWidget *>(pdev)->setAttribute(Qt::WA_WState_InPaintEvent, false);
 #endif
@@ -5617,7 +5635,7 @@ void QWidgetPrivate::render(QPaintDevice *target, const QPoint &targetOffset,
     if (paintRegion.isEmpty())
         return;
 
-#ifndef Q_WS_MAC
+#ifndef Q_DEAD_CODE_FROM_QT4_MAC
     QPainter *oldSharedPainter = inRenderWithPainter ? sharedPainter() : 0;
 
     // Use the target's shared painter if set (typically set when doing
@@ -6236,7 +6254,7 @@ QString QWidget::windowRole() const
 */
 void QWidget::setWindowRole(const QString &role)
 {
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     Q_D(QWidget);
     d->topData()->role = role;
     d->setWindowRole();
@@ -6378,7 +6396,7 @@ void QWidget::setFocus(Qt::FocusReason reason)
         f = f->d_func()->extra->focus_proxy;
 
     if (QApplication::focusWidget() == f
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
         && GetFocus() == f->internalWinId()
 #endif
        )
@@ -6414,7 +6432,7 @@ void QWidget::setFocus(Qt::FocusReason reason)
         if (prev) {
             if (reason != Qt::PopupFocusReason && reason != Qt::MenuBarFocusReason
                 && prev->testAttribute(Qt::WA_InputMethodEnabled)) {
-                qApp->inputMethod()->commit();
+                QGuiApplication::inputMethod()->commit();
             }
 
             if (reason != Qt::NoFocusReason) {
@@ -6537,7 +6555,7 @@ void QWidget::clearFocus()
 {
     if (hasFocus()) {
         if (testAttribute(Qt::WA_InputMethodEnabled))
-            qApp->inputMethod()->commit();
+            QGuiApplication::inputMethod()->commit();
 
         QFocusEvent focusAboutToChange(QEvent::FocusAboutToChange);
         QApplication::sendEvent(this, &focusAboutToChange);
@@ -6563,7 +6581,7 @@ void QWidget::clearFocus()
     if (hasFocus()) {
         // Update proxy state
         QApplicationPrivate::setFocusWidget(0, Qt::OtherFocusReason);
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
         if (!(windowType() == Qt::Popup) && GetFocus() == internalWinId())
             SetFocus(0);
         else
@@ -7118,14 +7136,16 @@ void QWidgetPrivate::setGeometry_sys(int x, int y, int w, int h, bool isMove)
 
     bool needsShow = false;
 
-    if (!(data.window_state & Qt::WindowFullScreen) && (w == 0 || h == 0)) {
-        q->setAttribute(Qt::WA_OutsideWSRange, true);
-        if (q->isVisible() && q->testAttribute(Qt::WA_Mapped))
-            hide_sys();
-        data.crect = QRect(x, y, w, h);
-    } else if (q->isVisible() && q->testAttribute(Qt::WA_OutsideWSRange)) {
-        q->setAttribute(Qt::WA_OutsideWSRange, false);
-        needsShow = true;
+    if (q->isWindow()) {
+        if (!(data.window_state & Qt::WindowFullScreen) && (w == 0 || h == 0)) {
+            q->setAttribute(Qt::WA_OutsideWSRange, true);
+            if (q->isVisible() && q->testAttribute(Qt::WA_Mapped))
+                hide_sys();
+            data.crect = QRect(x, y, w, h);
+        } else if (q->isVisible() && q->testAttribute(Qt::WA_OutsideWSRange)) {
+            q->setAttribute(Qt::WA_OutsideWSRange, false);
+            needsShow = true;
+        }
     }
 
     if (q->isVisible()) {
@@ -7193,7 +7213,7 @@ void QWidgetPrivate::setGeometry_sys(int x, int y, int w, int h, bool isMove)
 */
 QByteArray QWidget::saveGeometry() const
 {
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // We check if the window was maximized during this invocation. If so, we need to record the
     // starting position as 0,0.
     Q_D(const QWidget);
@@ -7204,7 +7224,7 @@ QByteArray QWidget::saveGeometry() const
         newFramePosition.moveTo(0, 0);
         newNormalPosition.moveTo(0, 0);
     }
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
     QByteArray array;
     QDataStream stream(&array, QIODevice::WriteOnly);
     stream.setVersion(QDataStream::Qt_4_0);
@@ -7218,13 +7238,13 @@ QByteArray QWidget::saveGeometry() const
     stream << magicNumber
            << majorVersion
            << minorVersion
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
            << newFramePosition
            << newNormalPosition
 #else
            << frameGeometry()
            << normalGeometry()
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
            << qint32(screenNumber)
            << quint8(windowState() & Qt::WindowMaximized)
            << quint8(windowState() & Qt::WindowFullScreen)
@@ -7235,7 +7255,7 @@ QByteArray QWidget::saveGeometry() const
 /*!
     \since 4.2
 
-    Restores the geometry and state top-level widgets stored in the
+    Restores the geometry and state of top-level widgets stored in the
     byte array \a geometry. Returns \c true on success; otherwise
     returns \c false.
 
@@ -7295,6 +7315,8 @@ bool QWidget::restoreGeometry(const QByteArray &geometry)
         stream >> restoredScreenWidth;
 
     const QDesktopWidget * const desktop = QApplication::desktop();
+    if (restoredScreenNumber >= desktop->numScreens())
+        restoredScreenNumber = desktop->primaryScreen();
     const qreal screenWidthF = qreal(desktop->screenGeometry(restoredScreenNumber).width());
     // Sanity check bailing out when large variations of screen sizes occur due to
     // high DPI scaling or different levels of DPI awareness.
@@ -7322,9 +7344,6 @@ bool QWidget::restoreGeometry(const QByteArray &geometry)
                                        .expandedTo(d_func()->adjustedSize()));
     }
 
-    if (restoredScreenNumber >= desktop->numScreens())
-        restoredScreenNumber = desktop->primaryScreen();
-
     const QRect availableGeometry = desktop->availableGeometry(restoredScreenNumber);
 
     // Modify the restored geometry if we are about to restore to coordinates
@@ -7333,7 +7352,7 @@ bool QWidget::restoreGeometry(const QByteArray &geometry)
     // - The title bar is outside the available geometry.
     // - (Mac only) The window is higher than the available geometry. It must
     //   be possible to bring the size grip on screen by moving the window.
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     restoredFrameGeometry.setHeight(qMin(restoredFrameGeometry.height(), availableGeometry.height()));
     restoredNormalGeometry.setHeight(qMin(restoredNormalGeometry.height(), availableGeometry.height() - frameHeight));
 #endif
@@ -7382,7 +7401,7 @@ bool QWidget::restoreGeometry(const QByteArray &geometry)
        d_func()->topData()->normalGeometry = restoredNormalGeometry;
     } else {
         QPoint offset;
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
         if (isFullScreen())
             offset = d_func()->topData()->fullScreenOffset;
 #endif
@@ -7738,10 +7757,17 @@ void QWidgetPrivate::show_helper()
 
 
 
+    const bool isWindow = q->isWindow();
+#ifndef QT_NO_GRAPHICSVIEW
+    bool isEmbedded = isWindow && q->graphicsProxyWidget() != Q_NULLPTR;
+#else
+    bool isEmbedded = false;
+#endif
+
     // popup handling: new popups and tools need to be raised, and
     // existing popups must be closed. Also propagate the current
     // windows's KeyboardFocusChange status.
-    if (q->isWindow()) {
+    if (isWindow && !isEmbedded) {
         if ((q->windowType() == Qt::Tool) || (q->windowType() == Qt::Popup) || q->windowType() == Qt::ToolTip) {
             q->raise();
             if (q->parentWidget() && q->parentWidget()->window()->testAttribute(Qt::WA_KeyboardFocusChange))
@@ -7756,10 +7782,8 @@ void QWidgetPrivate::show_helper()
 
     // Automatic embedding of child windows of widgets already embedded into
     // QGraphicsProxyWidget when they are shown the first time.
-    bool isEmbedded = false;
 #ifndef QT_NO_GRAPHICSVIEW
-    if (q->isWindow()) {
-        isEmbedded = q->graphicsProxyWidget() ? true : false;
+    if (isWindow) {
         if (!isEmbedded && !bypassGraphicsProxyWidget(q)) {
             QGraphicsProxyWidget *ancestorProxy = nearestGraphicsProxyWidget(q->parentWidget());
             if (ancestorProxy) {
@@ -7775,7 +7799,7 @@ void QWidgetPrivate::show_helper()
     // On Windows, show the popup now so that our own focus handling
     // stores the correct old focus widget even if it's stolen in the
     // showevent
-#if defined(Q_WS_WIN) || defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_MAC)
     if (!isEmbedded && q->windowType() == Qt::Popup)
         qApp->d_func()->openPopup(q);
 #endif
@@ -7898,7 +7922,7 @@ void QWidgetPrivate::hide_helper()
     if (!isEmbedded && (q->windowType() == Qt::Popup))
         qApp->d_func()->closePopup(q);
 
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
     if (q->isWindow() && !(q->windowType() == Qt::Popup) && q->parentWidget()
         && !q->parentWidget()->isHidden() && q->isActiveWindow())
         q->parentWidget()->activateWindow();        // Activate parent
@@ -8013,26 +8037,11 @@ void QWidget::setVisible(bool visible)
             && !parentWidget()->testAttribute(Qt::WA_WState_Created))
             parentWidget()->window()->d_func()->createRecursively();
 
-        //we have to at least create toplevels before applyX11SpecificCommandLineArguments
-        //but not children of non-visible parents
+        //create toplevels but not children of non-visible parents
         QWidget *pw = parentWidget();
         if (!testAttribute(Qt::WA_WState_Created)
             && (isWindow() || pw->testAttribute(Qt::WA_WState_Created))) {
             create();
-        }
-
-        // Handling of the -qwindowgeometry, -geometry command line arguments
-        if (windowType() == Qt::Window && windowHandle()) {
-            static bool done = false;
-            if (!done) {
-                done = true;
-                const QRect oldGeometry = frameGeometry();
-                const QRect geometry = QGuiApplicationPrivate::applyWindowGeometrySpecification(oldGeometry, windowHandle());
-                if (oldGeometry.size() != geometry.size())
-                    resize(geometry.size());
-                if (geometry.topLeft() != oldGeometry.topLeft())
-                    move(geometry.topLeft());
-            } // done
         }
 
         bool wasResized = testAttribute(Qt::WA_Resized);
@@ -8093,7 +8102,7 @@ void QWidget::setVisible(bool visible)
     } else { // hide
         if (testAttribute(Qt::WA_WState_ExplicitShowHide) && testAttribute(Qt::WA_WState_Hidden))
             return;
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
         // reset WS_DISABLED style in a Blocked window
         if(isWindow() && testAttribute(Qt::WA_WState_Created)
            && QApplicationPrivate::isBlockedByModal(this))
@@ -8178,7 +8187,7 @@ void QWidgetPrivate::hideChildren(bool spontaneous)
         QWidget *widget = qobject_cast<QWidget*>(childList.at(i));
         if (!widget || widget->isWindow() || widget->testAttribute(Qt::WA_WState_Hidden))
             continue;
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         // Before doing anything we need to make sure that we don't leave anything in a non-consistent state.
         // When hiding a widget we need to make sure that no mouse_down events are active, because
         // the mouse_up event will never be received by a hidden widget or one of its descendants.
@@ -8194,7 +8203,7 @@ void QWidgetPrivate::hideChildren(bool spontaneous)
         // supposed to trigger because it is not visible.
         if(widget == qt_button_down)
             qt_button_down = 0;
-#endif // Q_WS_MAC
+#endif // Q_DEAD_CODE_FROM_QT4_MAC
         if (spontaneous)
             widget->setAttribute(Qt::WA_Mapped, false);
         else
@@ -8429,7 +8438,7 @@ QSize QWidgetPrivate::adjustedSize() const
             s.setWidth(qMax(s.width(), 200));
         if (exp & Qt::Vertical)
             s.setHeight(qMax(s.height(), 100));
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
         QRect screen = QApplication::desktop()->screenGeometry(q->x11Info().screen());
 #else // all others
         QRect screen = QApplication::desktop()->screenGeometry(q->pos());
@@ -8562,7 +8571,7 @@ bool QWidget::isAncestorOf(const QWidget *child) const
     return false;
 }
 
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
 inline void setDisabledStyle(QWidget *w, bool setStyle)
 {
     // set/reset WS_DISABLED style.
@@ -8984,7 +8993,7 @@ bool QWidget::event(QEvent *event)
                 }
             }
         }
-#if defined(Q_WS_WIN)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
             setDisabledStyle(this, (event->type() == QEvent::WindowBlocked));
 #endif
         break;
@@ -9011,7 +9020,7 @@ bool QWidget::event(QEvent *event)
     case QEvent::EmbeddingControl:
         d->topData()->frameStrut.setCoords(0 ,0, 0, 0);
         data->fstrut_dirty = false;
-#if defined(Q_WS_WIN) || defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_X11)
         d->topData()->embedded = 1;
 #endif
         break;
@@ -9036,7 +9045,7 @@ bool QWidget::event(QEvent *event)
             }
             break;
         }
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     case QEvent::MacGLWindowChange:
         d->needWindowChange = false;
         break;
@@ -9147,7 +9156,7 @@ void QWidget::changeEvent(QEvent * event)
     case QEvent::MacSizeChange:
         updateGeometry();
         break;
-#elif defined Q_WS_MAC
+#elif defined Q_DEAD_CODE_FROM_QT4_MAC
     case QEvent::ToolTipChange:
     case QEvent::MouseTrackingChange:
         qt_mac_update_mouseTracking(this);
@@ -9408,9 +9417,11 @@ void QWidget::focusOutEvent(QFocusEvent *)
     if (focusPolicy() != Qt::NoFocus || !isWindow())
         update();
 
-    // automatically hide the SIP
+#ifndef Q_OS_IOS
+    // FIXME: revisit autoSIP logic, QTBUG-42906
     if (qApp->autoSipEnabled() && testAttribute(Qt::WA_InputMethodEnabled))
-        qApp->inputMethod()->hide();
+        QGuiApplication::inputMethod()->hide();
+#endif
 }
 
 /*!
@@ -9698,8 +9709,8 @@ void QWidget::setInputMethodHints(Qt::InputMethodHints hints)
     if (d->imHints == hints)
         return;
     d->imHints = hints;
-    if (this == qApp->focusObject())
-        qApp->inputMethod()->update(Qt::ImHints);
+    if (this == QGuiApplication::focusObject())
+        QGuiApplication::inputMethod()->update(Qt::ImHints);
 #endif //QT_NO_IM
 }
 
@@ -10415,7 +10426,7 @@ void QWidget::setParent(QWidget *parent, Qt::WindowFlags f)
     // (f & Qt::MSWindowsOwnDC) clause (which is set on QGLWidgets on all
     // platforms).
     if (newParent
-#if defined(Q_WS_WIN) || defined(QT_OPENGL_ES)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(QT_OPENGL_ES)
         || (f & Qt::MSWindowsOwnDC)
 #endif
         ) {
@@ -10435,7 +10446,7 @@ void QWidget::setParent(QWidget *parent, Qt::WindowFlags f)
         }
 
 //### already hidden above ---> must probably do something smart on the mac
-// #ifdef Q_WS_MAC
+// #ifdef Q_DEAD_CODE_FROM_QT4_MAC
 //             extern bool qt_mac_is_macdrawer(const QWidget *); //qwidget_mac.cpp
 //             if(!qt_mac_is_macdrawer(q)) //special case
 //                 q->setAttribute(Qt::WA_WState_Hidden);
@@ -10496,9 +10507,8 @@ void QWidgetPrivate::setParent_sys(QWidget *newparent, Qt::WindowFlags f)
     if (newparent && newparent->windowType() == Qt::Desktop) {
         // make sure the widget is created on the same screen as the
         // programmer specified desktop widget
-
-        // get the desktop's screen number
-        targetScreen = newparent->window()->d_func()->topData()->screenIndex;
+        const QDesktopScreenWidget *sw = qobject_cast<const QDesktopScreenWidget *>(newparent);
+        targetScreen = sw ? sw->screenNumber() : 0;
         newparent = 0;
     }
 
@@ -10511,8 +10521,9 @@ void QWidgetPrivate::setParent_sys(QWidget *newparent, Qt::WindowFlags f)
             QWidget *parentWithWindow =
                 newparent ? (newparent->windowHandle() ? newparent : newparent->nativeParentWidget()) : 0;
             if (parentWithWindow) {
-                if (f & Qt::Window) {
-                    q->windowHandle()->setTransientParent(parentWithWindow->windowHandle());
+                QWidget *topLevel = parentWithWindow->window();
+                if ((f & Qt::Window) && topLevel && topLevel->windowHandle()) {
+                    q->windowHandle()->setTransientParent(topLevel->windowHandle());
                     q->windowHandle()->setParent(0);
                 } else {
                     q->windowHandle()->setTransientParent(0);
@@ -10529,7 +10540,7 @@ void QWidgetPrivate::setParent_sys(QWidget *newparent, Qt::WindowFlags f)
         f |= Qt::Window;
         if (targetScreen == -1) {
             if (parent)
-                targetScreen = q->parentWidget()->window()->d_func()->topData()->screenIndex;
+                targetScreen = QApplication::desktop()->screenNumber(q->parentWidget()->window());
         }
     }
 
@@ -10573,12 +10584,11 @@ void QWidgetPrivate::setParent_sys(QWidget *newparent, Qt::WindowFlags f)
 
     // move the window to the selected screen
     if (!newparent && targetScreen != -1) {
-        if (maybeTopData())
-            maybeTopData()->screenIndex = targetScreen;
         // only if it is already created
-        if (q->testAttribute(Qt::WA_WState_Created)) {
+        if (q->testAttribute(Qt::WA_WState_Created))
             q->windowHandle()->setScreen(QGuiApplication::screens().value(targetScreen, 0));
-        }
+        else
+            topData()->initialScreenIndex = targetScreen;
     }
 }
 
@@ -10914,9 +10924,9 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         return;
 
     Q_D(QWidget);
-    Q_ASSERT_X(sizeof(d->high_attributes)*8 >= (Qt::WA_AttributeCount - sizeof(uint)*8),
-               "QWidget::setAttribute(WidgetAttribute, bool)",
-               "QWidgetPrivate::high_attributes[] too small to contain all attributes in WidgetAttribute");
+    Q_STATIC_ASSERT_X(sizeof(d->high_attributes)*8 >= (Qt::WA_AttributeCount - sizeof(uint)*8),
+                      "QWidget::setAttribute(WidgetAttribute, bool): "
+                      "QWidgetPrivate::high_attributes[] too small to contain all attributes in WidgetAttribute");
 #ifdef Q_OS_WIN
     // ### Don't use PaintOnScreen+paintEngine() to do native painting in some future release
     if (attribute == Qt::WA_PaintOnScreen && on && windowType() != Qt::Desktop && !inherits("QGLWidget")) {
@@ -10966,7 +10976,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         d->receiveChildEvents = !on;
         break;
     case Qt::WA_MacBrushedMetal:
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         d->setStyle_helper(style(), false, true);  // Make sure things get unpolished/polished correctly.
         // fall through since changing the metal attribute affects the opaque size grip.
     case Qt::WA_MacOpaqueSizeGrip:
@@ -10983,7 +10993,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         break;
 #endif
     case Qt::WA_MacAlwaysShowToolWindow:
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         d->macUpdateHideOnSuspend();
 #endif
         break;
@@ -11042,25 +11052,25 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
             d->createTLSysExtra();
 #ifndef QT_NO_IM
         QWidget *focusWidget = d->effectiveFocusWidget();
-        if (on && !internalWinId() && this == qApp->focusObject()
+        if (on && !internalWinId() && this == QGuiApplication::focusObject()
             && focusWidget->testAttribute(Qt::WA_InputMethodEnabled)) {
-            qApp->inputMethod()->commit();
-            qApp->inputMethod()->update(Qt::ImEnabled);
+            QGuiApplication::inputMethod()->commit();
+            QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         }
         if (!qApp->testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) && parentWidget())
             parentWidget()->d_func()->enforceNativeChildren();
         if (on && !internalWinId() && testAttribute(Qt::WA_WState_Created))
             d->createWinId();
-        if (isEnabled() && focusWidget->isEnabled() && this == qApp->focusObject()
+        if (isEnabled() && focusWidget->isEnabled() && this == QGuiApplication::focusObject()
             && focusWidget->testAttribute(Qt::WA_InputMethodEnabled)) {
-            qApp->inputMethod()->update(Qt::ImEnabled);
+            QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         }
 #endif //QT_NO_IM
         break;
     }
     case Qt::WA_PaintOnScreen:
         d->updateIsOpaque();
-#if defined(Q_WS_WIN) || defined(Q_WS_X11) || defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_X11) || defined(Q_DEAD_CODE_FROM_QT4_MAC)
         // Recreate the widget if it's already created as an alien widget and
         // WA_PaintOnScreen is enabled. Paint on screen widgets must have win id.
         // So must their children.
@@ -11080,16 +11090,16 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         d->updateSystemBackground();
         break;
     case Qt::WA_TransparentForMouseEvents:
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
         d->macUpdateIgnoreMouseEvents();
 #endif
         break;
     case Qt::WA_InputMethodEnabled: {
 #ifndef QT_NO_IM
-        if (qApp->focusObject() == this) {
+        if (QGuiApplication::focusObject() == this) {
             if (!on)
-                qApp->inputMethod()->commit();
-            qApp->inputMethod()->update(Qt::ImEnabled);
+                QGuiApplication::inputMethod()->commit();
+            QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         }
 #endif //QT_NO_IM
         break;
@@ -11099,7 +11109,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         d->resolveFont();
         d->resolveLocale();
         break;
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     case Qt::WA_NoX11EventCompression:
         if (!d->extra)
             d->createExtra();
@@ -11124,7 +11134,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         break;
     }
 
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     case Qt::WA_X11NetWmWindowTypeDesktop:
     case Qt::WA_X11NetWmWindowTypeDock:
     case Qt::WA_X11NetWmWindowTypeToolBar:
@@ -11159,7 +11169,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
 
         break;
     case Qt::WA_AcceptTouchEvents:
-#if defined(Q_WS_WIN) || defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_WIN) || defined(Q_DEAD_CODE_FROM_QT4_MAC)
         if (on)
             d->registerTouchWindow();
 #endif
@@ -11577,8 +11587,8 @@ void QWidget::setShortcutAutoRepeat(int id, bool enable)
 void QWidget::updateMicroFocus()
 {
     // updating everything since this is currently called for any kind of state change
-    if (this == qApp->focusObject())
-        qApp->inputMethod()->update(Qt::ImQueryAll);
+    if (this == QGuiApplication::focusObject())
+        QGuiApplication::inputMethod()->update(Qt::ImQueryAll);
 }
 
 /*!
@@ -11780,7 +11790,7 @@ QRect QWidgetPrivate::frameStrut() const
     }
 
     if (data.fstrut_dirty
-#ifndef Q_WS_WIN
+#ifndef Q_DEAD_CODE_FROM_QT4_WIN
         // ### Fix properly for 4.3
         && q->isVisible()
 #endif
@@ -12063,6 +12073,7 @@ QOpenGLContext *QWidgetPrivate::shareContext() const
         QOpenGLContext *ctx = new QOpenGLContext;
         ctx->setShareContext(qt_gl_global_share_context());
         ctx->setFormat(extra->topextra->window->format());
+        ctx->setScreen(extra->topextra->window->screen());
         ctx->create();
         that->extra->topextra->shareContext = ctx;
     }
@@ -12255,7 +12266,7 @@ QPoint QWidget::mapToGlobal(const QPoint &pos) const
 {
 #ifndef QT_NO_GRAPHICSVIEW
     Q_D(const QWidget);
-    if (d->extra && d->extra->proxyWidget) {
+    if (d->extra && d->extra->proxyWidget && d->extra->proxyWidget->scene()) {
         const QList <QGraphicsView *> views = d->extra->proxyWidget->scene()->views();
         if (!views.isEmpty()) {
             const QPointF scenePos = d->extra->proxyWidget->mapToScene(pos);
@@ -12290,7 +12301,7 @@ QPoint QWidget::mapFromGlobal(const QPoint &pos) const
 {
 #ifndef QT_NO_GRAPHICSVIEW
     Q_D(const QWidget);
-    if (d->extra && d->extra->proxyWidget) {
+    if (d->extra && d->extra->proxyWidget && d->extra->proxyWidget->scene()) {
         const QList <QGraphicsView *> views = d->extra->proxyWidget->scene()->views();
         if (!views.isEmpty()) {
             const QPoint viewPortPos = views.first()->viewport()->mapFromGlobal(pos);
@@ -12389,10 +12400,9 @@ static void releaseMouseGrabOfWidget(QWidget *widget)
     \note Only visible widgets can grab mouse input. If isVisible()
     returns \c false for a widget, that widget cannot call grabMouse().
 
-    \note \b{(Mac OS X developers)} For \e Cocoa, calling
-    grabMouse() on a widget only works when the mouse is inside the
-    frame of that widget.  For \e Carbon, it works outside the widget's
-    frame as well, like for Windows and X11.
+    \note On Windows, grabMouse() only works when the mouse is inside a window
+    owned by the process.
+    On OS X, grabMouse() only works when the mouse is inside the frame of that widget.
 
     \sa releaseMouse(), grabKeyboard(), releaseKeyboard()
 */
@@ -12413,7 +12423,7 @@ void QWidget::grabMouse()
 
     \warning Grabbing the mouse might lock the terminal.
 
-    \note \b{(Mac OS X developers)} See the note in QWidget::grabMouse().
+    \note See the note in QWidget::grabMouse().
 
     \sa releaseMouse(), grabKeyboard(), releaseKeyboard(), setCursor()
 */
@@ -12576,13 +12586,10 @@ int QWidget::metric(PaintDeviceMetric m) const
 
     QWindow *topLevelWindow = 0;
     QScreen *screen = 0;
-    if (QWidget *topLevel = window())
+    if (QWidget *topLevel = window()) {
         topLevelWindow = topLevel->windowHandle();
-
-    if (topLevelWindow) {
-        QPlatformScreen *platformScreen = QPlatformScreen::platformScreenForWindow(topLevelWindow);
-        if (platformScreen)
-            screen = platformScreen->screen();
+        if (topLevelWindow)
+            screen = topLevelWindow->screen();
     }
     if (!screen && QGuiApplication::primaryScreen())
         screen = QGuiApplication::primaryScreen();
@@ -12692,7 +12699,7 @@ void QWidget::setMask(const QRegion &newMask)
     d->extra->mask = newMask;
     d->extra->hasMask = !newMask.isEmpty();
 
-#ifndef Q_WS_MAC
+#ifndef Q_DEAD_CODE_FROM_QT4_MAC
     if (!testAttribute(Qt::WA_WState_Created))
         return;
 #endif
@@ -12779,6 +12786,14 @@ void QWidget::setMask(const QBitmap &bitmap)
 void QWidget::clearMask()
 {
     setMask(QRegion());
+}
+
+void QWidgetPrivate::setWidgetParentHelper(QObject *widgetAsObject, QObject *newParent)
+{
+    Q_ASSERT(widgetAsObject->isWidgetType());
+    Q_ASSERT(!newParent || newParent->isWidgetType());
+    QWidget *widget = static_cast<QWidget*>(widgetAsObject);
+    widget->setParent(static_cast<QWidget*>(newParent));
 }
 
 QT_END_NAMESPACE

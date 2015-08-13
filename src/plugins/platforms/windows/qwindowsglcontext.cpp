@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -134,6 +134,10 @@
 #ifndef GL_CONTEXT_FLAG_DEBUG_BIT
 #define GL_CONTEXT_FLAG_DEBUG_BIT 0x00000002
 #endif
+
+// Common GL and WGL constants
+#define RESET_NOTIFICATION_STRATEGY_ARB 0x8256
+#define LOSE_CONTEXT_ON_RESET_ARB 0x8252
 
 QT_BEGIN_NAMESPACE
 
@@ -282,40 +286,41 @@ static inline void initPixelFormatDescriptor(PIXELFORMATDESCRIPTOR *d)
 
 QDebug operator<<(QDebug d, const PIXELFORMATDESCRIPTOR &pd)
 {
-    QDebug nsp = d.nospace();
-    nsp << "PIXELFORMATDESCRIPTOR "
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << "PIXELFORMATDESCRIPTOR "
         << "dwFlags=" << hex << showbase << pd.dwFlags << dec << noshowbase;
-    if (pd.dwFlags & PFD_DRAW_TO_WINDOW) nsp << " PFD_DRAW_TO_WINDOW";
-    if (pd.dwFlags & PFD_DRAW_TO_BITMAP) nsp << " PFD_DRAW_TO_BITMAP";
-    if (pd.dwFlags & PFD_SUPPORT_GDI) nsp << " PFD_SUPPORT_GDI";
-    if (pd.dwFlags & PFD_SUPPORT_OPENGL) nsp << " PFD_SUPPORT_OPENGL";
-    if (pd.dwFlags & PFD_GENERIC_ACCELERATED) nsp << " PFD_GENERIC_ACCELERATED";
-    if (pd.dwFlags & PFD_SUPPORT_DIRECTDRAW) nsp << " PFD_SUPPORT_DIRECTDRAW";
-    if (pd.dwFlags & PFD_DIRECT3D_ACCELERATED) nsp << " PFD_DIRECT3D_ACCELERATED";
-    if (pd.dwFlags & PFD_SUPPORT_COMPOSITION) nsp << " PFD_SUPPORT_COMPOSITION";
-    if (pd.dwFlags & PFD_GENERIC_FORMAT) nsp << " PFD_GENERIC_FORMAT";
-    if (pd.dwFlags & PFD_NEED_PALETTE) nsp << " PFD_NEED_PALETTE";
-    if (pd.dwFlags & PFD_NEED_SYSTEM_PALETTE) nsp << " PFD_NEED_SYSTEM_PALETTE";
-    if (pd.dwFlags & PFD_DOUBLEBUFFER) nsp << " PFD_DOUBLEBUFFER";
-    if (pd.dwFlags & PFD_STEREO) nsp << " PFD_STEREO";
-    if (pd.dwFlags & PFD_SWAP_LAYER_BUFFERS) nsp << " PFD_SWAP_LAYER_BUFFERS";
-    if (hasGLOverlay(pd)) nsp << " overlay";
-    nsp << " iPixelType=" << pd.iPixelType << " cColorBits=" << pd.cColorBits
+    if (pd.dwFlags & PFD_DRAW_TO_WINDOW) d << " PFD_DRAW_TO_WINDOW";
+    if (pd.dwFlags & PFD_DRAW_TO_BITMAP) d << " PFD_DRAW_TO_BITMAP";
+    if (pd.dwFlags & PFD_SUPPORT_GDI) d << " PFD_SUPPORT_GDI";
+    if (pd.dwFlags & PFD_SUPPORT_OPENGL) d << " PFD_SUPPORT_OPENGL";
+    if (pd.dwFlags & PFD_GENERIC_ACCELERATED) d << " PFD_GENERIC_ACCELERATED";
+    if (pd.dwFlags & PFD_SUPPORT_DIRECTDRAW) d << " PFD_SUPPORT_DIRECTDRAW";
+    if (pd.dwFlags & PFD_DIRECT3D_ACCELERATED) d << " PFD_DIRECT3D_ACCELERATED";
+    if (pd.dwFlags & PFD_SUPPORT_COMPOSITION) d << " PFD_SUPPORT_COMPOSITION";
+    if (pd.dwFlags & PFD_GENERIC_FORMAT) d << " PFD_GENERIC_FORMAT";
+    if (pd.dwFlags & PFD_NEED_PALETTE) d << " PFD_NEED_PALETTE";
+    if (pd.dwFlags & PFD_NEED_SYSTEM_PALETTE) d << " PFD_NEED_SYSTEM_PALETTE";
+    if (pd.dwFlags & PFD_DOUBLEBUFFER) d << " PFD_DOUBLEBUFFER";
+    if (pd.dwFlags & PFD_STEREO) d << " PFD_STEREO";
+    if (pd.dwFlags & PFD_SWAP_LAYER_BUFFERS) d << " PFD_SWAP_LAYER_BUFFERS";
+    if (hasGLOverlay(pd)) d << " overlay";
+    d << " iPixelType=" << pd.iPixelType << " cColorBits=" << pd.cColorBits
         << " cRedBits=" << pd.cRedBits << " cRedShift=" << pd.cRedShift
         << " cGreenBits=" << pd.cGreenBits << " cGreenShift=" << pd.cGreenShift
         << " cBlueBits=" << pd.cBlueBits << " cBlueShift=" << pd.cBlueShift;
-    nsp  << " cDepthBits=" << pd.cDepthBits;
+    d  << " cDepthBits=" << pd.cDepthBits;
     if (pd.cStencilBits)
-        nsp << " cStencilBits=" << pd.cStencilBits;
+        d << " cStencilBits=" << pd.cStencilBits;
     if (pd.cAuxBuffers)
-        nsp << " cAuxBuffers=" << pd.cAuxBuffers;
-    nsp << " iLayerType=" << pd.iLayerType;
+        d << " cAuxBuffers=" << pd.cAuxBuffers;
+    d << " iLayerType=" << pd.iLayerType;
     if (pd.dwVisibleMask)
-        nsp << " dwVisibleMask=" << pd.dwVisibleMask;
+        d << " dwVisibleMask=" << pd.dwVisibleMask;
     if (pd.cAlphaBits)
-        nsp << " cAlphaBits=" << pd.cAlphaBits << " cAlphaShift=" << pd.cAlphaShift;
+        d << " cAlphaBits=" << pd.cAlphaBits << " cAlphaShift=" << pd.cAlphaShift;
     if (pd.cAccumBits)
-        nsp << " cAccumBits=" << pd.cAccumBits << " cAccumRedBits=" << pd.cAccumRedBits
+        d << " cAccumBits=" << pd.cAccumBits << " cAccumRedBits=" << pd.cAccumRedBits
         << " cAccumGreenBits=" << pd.cAccumGreenBits << " cAccumBlueBits=" << pd.cAccumBlueBits
         << " cAccumAlphaBits=" << pd.cAccumAlphaBits;
     return d;
@@ -597,6 +602,14 @@ static int choosePixelFormat(HDC hdc,
             break;
         if (iAttributes[samplesValuePosition] > 1) {
             iAttributes[samplesValuePosition] /= 2;
+        } else if (iAttributes[samplesValuePosition] == 1) {
+            // Fallback in case it is unable to initialize with any
+            // samples to avoid falling back to the GDI path
+            // NB: The sample attributes needs to be at the end for this
+            // to work correctly
+            iAttributes[samplesValuePosition - 1] = FALSE;
+            iAttributes[samplesValuePosition] = 0;
+            iAttributes[samplesValuePosition + 1] = 0;
         } else {
             break;
         }
@@ -747,6 +760,12 @@ static HGLRC createContext(const QOpenGLStaticContext &staticContext,
             break;
         }
     }
+
+    if (format.testOption(QSurfaceFormat::ResetNotification)) {
+        attributes[attribIndex++] = RESET_NOTIFICATION_STRATEGY_ARB;
+        attributes[attribIndex++] = LOSE_CONTEXT_ON_RESET_ARB;
+    }
+
     qCDebug(lcQpaGl) << __FUNCTION__ << "Creating context version"
         << majorVersion << '.' << minorVersion <<  attribIndex / 2 << "attributes";
 
@@ -859,6 +878,10 @@ QWindowsOpenGLContextFormat QWindowsOpenGLContextFormat::current()
         result.options |= QSurfaceFormat::DeprecatedFunctions;
     if (value & GL_CONTEXT_FLAG_DEBUG_BIT)
         result.options |= QSurfaceFormat::DebugContext;
+    value = 0;
+    QOpenGLStaticContext::opengl32.glGetIntegerv(RESET_NOTIFICATION_STRATEGY_ARB, &value);
+    if (value == LOSE_CONTEXT_ON_RESET_ARB)
+        result.options |= QSurfaceFormat::ResetNotification;
     if (result.version < 0x0302)
         return result;
     // v3.2 onwards: Profiles
@@ -884,9 +907,10 @@ void QWindowsOpenGLContextFormat::apply(QSurfaceFormat *format) const
 
 QDebug operator<<(QDebug d, const QWindowsOpenGLContextFormat &f)
 {
-    d.nospace() << "ContextFormat: v" << (f.version >> 8) << '.'
-                << (f.version & 0xFF) << " profile: " << f.profile
-                << " options: " << f.options;
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << "ContextFormat: v" << (f.version >> 8) << '.' << (f.version & 0xFF)
+        << " profile: " << f.profile << " options: " << f.options;
     return d;
 }
 
@@ -996,16 +1020,17 @@ QOpenGLStaticContext *QOpenGLStaticContext::create(bool softwareRendering)
 
 QDebug operator<<(QDebug d, const QOpenGLStaticContext &s)
 {
-    QDebug nsp = d.nospace();
-    nsp << "OpenGL: " << s.vendor << ',' << s.renderer << " default "
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << "OpenGL: " << s.vendor << ',' << s.renderer << " default "
         <<  s.defaultFormat;
     if (s.extensions &  QOpenGLStaticContext::SampleBuffers)
-        nsp << ",SampleBuffers";
+        d << ",SampleBuffers";
     if (s.hasExtensions())
-        nsp << ", Extension-API present";
-    nsp  << "\nExtensions: " << (s.extensionNames.count(' ') + 1);
+        d << ", Extension-API present";
+    d << "\nExtensions: " << (s.extensionNames.count(' ') + 1);
     if (QWindowsContext::verbose > 1)
-        nsp <<  s.extensionNames;
+        d <<  s.extensionNames;
     return d;
 }
 
@@ -1032,7 +1057,9 @@ QWindowsGLContext::QWindowsGLContext(QOpenGLStaticContext *staticContext,
     m_pixelFormat(0),
     m_extensionsUsed(false),
     m_swapInterval(-1),
-    m_ownsContext(true)
+    m_ownsContext(true),
+    m_getGraphicsResetStatus(0),
+    m_lost(false)
 {
     if (!m_staticContext) // Something went very wrong. Stop here, isValid() will return false.
         return;
@@ -1212,6 +1239,28 @@ bool QWindowsGLContext::updateObtainedParams(HDC hdc, int *obtainedSwapInterval)
     if (m_staticContext->wglGetSwapInternalExt && obtainedSwapInterval)
         *obtainedSwapInterval = m_staticContext->wglGetSwapInternalExt();
 
+    bool hasRobustness = false;
+    if (m_obtainedFormat.majorVersion() < 3) {
+        const char *exts = (const char *) QOpenGLStaticContext::opengl32.glGetString(GL_EXTENSIONS);
+        hasRobustness = exts && strstr(exts, "GL_ARB_robustness");
+    } else {
+        typedef const GLubyte * (APIENTRY *glGetStringi_t)(GLenum, GLuint);
+        glGetStringi_t glGetStringi = (glGetStringi_t) QOpenGLStaticContext::opengl32.wglGetProcAddress("glGetStringi");
+        if (glGetStringi) {
+            GLint n = 0;
+            QOpenGLStaticContext::opengl32.glGetIntegerv(GL_NUM_EXTENSIONS, &n);
+            for (GLint i = 0; i < n; ++i) {
+                const char *p = (const char *) glGetStringi(GL_EXTENSIONS, i);
+                if (p && !strcmp(p, "GL_ARB_robustness")) {
+                    hasRobustness = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (hasRobustness)
+        m_getGraphicsResetStatus = (GLenum (APIENTRY *)()) QOpenGLStaticContext::opengl32.wglGetProcAddress("glGetGraphicsResetStatusARB");
+
     QOpenGLStaticContext::opengl32.wglMakeCurrent(prevSurface, prevContext);
     return true;
 }
@@ -1267,6 +1316,7 @@ bool QWindowsGLContext::makeCurrent(QPlatformSurface *surface)
 
     // Do we already have a DC entry for that window?
     QWindowsWindow *window = static_cast<QWindowsWindow *>(surface);
+    window->aboutToMakeCurrent();
     const HWND hwnd = window->handle();
     if (const QOpenGLContextData *contextData = findByHWND(m_windowContexts, hwnd)) {
         // Repeated calls to wglMakeCurrent when vsync is enabled in the driver will
@@ -1296,7 +1346,16 @@ bool QWindowsGLContext::makeCurrent(QPlatformSurface *surface)
     }
     m_windowContexts.append(newContext);
 
+    m_lost = false;
     bool success = QOpenGLStaticContext::opengl32.wglMakeCurrent(newContext.hdc, newContext.renderingContext);
+    if (!success) {
+        if (m_getGraphicsResetStatus && m_getGraphicsResetStatus()) {
+            m_lost = true;
+            qCDebug(lcQpaGl) << "makeCurrent(): context loss detected" << this;
+            // Drop the surface. Will recreate on the next makeCurrent.
+            window->invalidateSurface();
+        }
+    }
 
     // Set the swap interval
     if (m_staticContext->wglSwapInternalExt) {

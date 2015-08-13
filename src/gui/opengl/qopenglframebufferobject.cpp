@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -468,6 +468,8 @@ void QOpenGLFramebufferObjectPrivate::init(QOpenGLFramebufferObject *, const QSi
 
     funcs.glGenFramebuffers(1, &fbo);
     funcs.glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    QOpenGLContextPrivate::get(ctx)->qgl_current_fbo_invalid = true;
 
     GLuint color_buffer = 0;
 
@@ -995,7 +997,11 @@ bool QOpenGLFramebufferObject::bind()
     if (current->shareGroup() != d->fbo_guard->group())
         qWarning("QOpenGLFramebufferObject::bind() called from incompatible context");
 #endif
+
     d->funcs.glBindFramebuffer(GL_FRAMEBUFFER, d->fbo());
+
+    QOpenGLContextPrivate::get(current)->qgl_current_fbo_invalid = true;
+
     if (d->texture_guard || d->format.samples() != 0)
         d->valid = d->checkFramebufferStatus(current);
     else
@@ -1027,8 +1033,11 @@ bool QOpenGLFramebufferObject::release()
         qWarning("QOpenGLFramebufferObject::release() called from incompatible context");
 #endif
 
-    if (current)
+    if (current) {
         d->funcs.glBindFramebuffer(GL_FRAMEBUFFER, current->defaultFramebufferObject());
+
+        QOpenGLContextPrivate::get(current)->qgl_current_fbo_invalid = true;
+    }
 
     return true;
 }
@@ -1192,9 +1201,23 @@ Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format,
     If used together with QOpenGLPaintDevice, \a flipped should be the opposite of the value
     of QOpenGLPaintDevice::paintFlipped().
 
-    Will try to return a premultiplied ARBG32 or RGB32 image. Since 5.2 it will fall back to
-    a premultiplied RGBA8888 or RGBx8888 image when reading to ARGB32 is not supported. Since 5.4 an
-    A2BGR30 image is returned if the internal format is RGB10_A2.
+    The returned image has a format of premultiplied ARGB32 or RGB32. The latter is used
+    only when internalTextureFormat() is set to \c GL_RGB.
+
+    If the rendering in the framebuffer was not done with premultiplied alpha in mind,
+    create a wrapper QImage with a non-premultiplied format. This is necessary before
+    performing operations like QImage::save() because otherwise the image data would get
+    unpremultiplied, even though it was not premultiplied in the first place. To create
+    such a wrapper without performing a copy of the pixel data, do the following:
+
+    \code
+    QImage fboImage(fbo.toImage());
+    QImage image(fboImage.constBits(), fboImage.width(), fboImage.height(), QImage::Format_ARGB32);
+    \endcode
+
+    Since Qt 5.2 the function will fall back to premultiplied RGBA8888 or RGBx8888 when
+    reading to (A)RGB32 is not supported. Since 5.4 an A2BGR30 image is returned if the
+    internal format is RGB10_A2.
 
     For multisampled framebuffer objects the samples are resolved using the
     \c{GL_EXT_framebuffer_blit} extension. If the extension is not available, the contents
@@ -1270,8 +1293,10 @@ bool QOpenGLFramebufferObject::bindDefault()
 {
     QOpenGLContext *ctx = const_cast<QOpenGLContext *>(QOpenGLContext::currentContext());
 
-    if (ctx)
+    if (ctx) {
         ctx->functions()->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+        QOpenGLContextPrivate::get(ctx)->qgl_current_fbo_invalid = true;
+    }
 #ifdef QT_DEBUG
     else
         qWarning("QOpenGLFramebufferObject::bindDefault() called without current context.");
@@ -1340,6 +1365,7 @@ void QOpenGLFramebufferObject::setAttachment(QOpenGLFramebufferObject::Attachmen
         qWarning("QOpenGLFramebufferObject::setAttachment() called from incompatible context");
 #endif
     d->funcs.glBindFramebuffer(GL_FRAMEBUFFER, d->fbo());
+    QOpenGLContextPrivate::get(current)->qgl_current_fbo_invalid = true;
     d->initAttachments(current, attachment);
 }
 
@@ -1458,8 +1484,10 @@ void QOpenGLFramebufferObject::blitFramebuffer(QOpenGLFramebufferObject *target,
     const int ty0 = targetRect.top();
     const int ty1 = targetRect.top() + targetRect.height();
 
-    extensions.glBindFramebuffer(GL_READ_FRAMEBUFFER, source ? source->handle() : 0);
-    extensions.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target ? target->handle() : 0);
+    const GLuint defaultFboId = ctx->defaultFramebufferObject();
+
+    extensions.glBindFramebuffer(GL_READ_FRAMEBUFFER, source ? source->handle() : defaultFboId);
+    extensions.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target ? target->handle() : defaultFboId);
 
     extensions.glBlitFramebuffer(sx0, sy0, sx1, sy1,
                                  tx0, ty0, tx1, ty1,

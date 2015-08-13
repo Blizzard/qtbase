@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,26 +69,14 @@ extern "C" {
 
 QT_BEGIN_NAMESPACE
 
-void QT_FASTCALL convert_rgb888_to_rgb32_C(quint32 *dst, const uchar *src, int len)
-{
-    // Expand 24->32 bpp.
-    for (int i = 0; i < len; ++i) {
-        *dst++ = qRgb(src[0], src[1], src[2]);
-        src += 3;
-    }
-}
-
+Q_GUI_EXPORT void QT_FASTCALL qt_convert_rgb888_to_rgb32(quint32 *dst, const uchar *src, int len);
 typedef void (QT_FASTCALL *Rgb888ToRgb32Converter)(quint32 *dst, const uchar *src, int len);
-
-static Rgb888ToRgb32Converter rgb888ToRgb32ConverterPtr = convert_rgb888_to_rgb32_C;
 
 struct my_error_mgr : public jpeg_error_mgr {
     jmp_buf setjmp_buffer;
 };
 
-#if defined(Q_C_CALLBACKS)
 extern "C" {
-#endif
 
 static void my_error_exit (j_common_ptr cinfo)
 {
@@ -106,9 +94,7 @@ static void my_output_message(j_common_ptr cinfo)
     qWarning("%s", buffer);
 }
 
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 
 static const int max_buf = 4096;
@@ -123,9 +109,7 @@ public:
     my_jpeg_source_mgr(QIODevice *device);
 };
 
-#if defined(Q_C_CALLBACKS)
 extern "C" {
-#endif
 
 static void qt_init_source(j_decompress_ptr)
 {
@@ -185,9 +169,7 @@ static void qt_term_source(j_decompress_ptr cinfo)
         src->device->seek(src->device->pos() - src->bytes_in_buffer);
 }
 
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 inline my_jpeg_source_mgr::my_jpeg_source_mgr(QIODevice *device)
 {
@@ -220,7 +202,7 @@ inline static bool read_jpeg_format(QImage::Format &format, j_decompress_ptr cin
     bool result = true;
     switch (cinfo->output_components) {
     case 1:
-        format = QImage::Format_Indexed8;
+        format = QImage::Format_Grayscale8;
         break;
     case 3:
     case 4:
@@ -240,7 +222,7 @@ static bool ensureValidImage(QImage *dest, struct jpeg_decompress_struct *info,
     QImage::Format format;
     switch (info->output_components) {
     case 1:
-        format = QImage::Format_Indexed8;
+        format = QImage::Format_Grayscale8;
         break;
     case 3:
     case 4:
@@ -250,22 +232,17 @@ static bool ensureValidImage(QImage *dest, struct jpeg_decompress_struct *info,
         return false; // unsupported format
     }
 
-    if (dest->size() != size || dest->format() != format) {
+    if (dest->size() != size || dest->format() != format)
         *dest = QImage(size, format);
-
-        if (format == QImage::Format_Indexed8) {
-            dest->setColorCount(256);
-            for (int i = 0; i < 256; i++)
-                dest->setColor(i, qRgb(i,i,i));
-        }
-    }
 
     return !dest->isNull();
 }
 
 static bool read_jpeg_image(QImage *outImage,
                             QSize scaledSize, QRect scaledClipRect,
-                            QRect clipRect, volatile int inQuality, j_decompress_ptr info, struct my_error_mgr* err  )
+                            QRect clipRect, volatile int inQuality,
+                            Rgb888ToRgb32Converter converter,
+                            j_decompress_ptr info, struct my_error_mgr* err  )
 {
     if (!setjmp(err->setjmp_buffer)) {
         // -1 means default quality.
@@ -406,7 +383,7 @@ static bool read_jpeg_image(QImage *outImage,
                 if (info->output_components == 3) {
                     uchar *in = rows[0] + clip.x() * 3;
                     QRgb *out = (QRgb*)outImage->scanLine(y);
-                    rgb888ToRgb32ConverterPtr(out, in, clip.width());
+                    converter(out, in, clip.width());
                 } else if (info->out_color_space == JCS_CMYK) {
                     // Convert CMYK->RGB.
                     uchar *in = rows[0] + clip.x() * 4;
@@ -465,9 +442,7 @@ public:
 };
 
 
-#if defined(Q_C_CALLBACKS)
 extern "C" {
-#endif
 
 static void qt_init_destination(j_compress_ptr)
 {
@@ -497,9 +472,7 @@ static void qt_term_destination(j_compress_ptr cinfo)
         (*cinfo->err->error_exit)((j_common_ptr)cinfo);
 }
 
-#if defined(Q_C_CALLBACKS)
 }
-#endif
 
 inline my_jpeg_destination_mgr::my_jpeg_destination_mgr(QIODevice *device)
 {
@@ -541,14 +514,17 @@ static inline void set_text(const QImage &image, j_compress_ptr cinfo, const QSt
         comment += it.value().toLatin1();
         if (comment.length() > 65530)
             comment.truncate(65530);
-        jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *)comment.constData(), comment.size());
+        jpeg_write_marker(cinfo, JPEG_COM, (const JOCTET *)comment.constData(), comment.size());
     }
 }
 
-static bool write_jpeg_image(const QImage &image, QIODevice *device, volatile int sourceQuality, const QString &description)
+static bool write_jpeg_image(const QImage &image, QIODevice *device, volatile int sourceQuality, const QString &description, bool optimize, bool progressive)
 {
     bool success = false;
     const QVector<QRgb> cmap = image.colorTable();
+
+    if (image.format() == QImage::Format_Invalid || image.format() == QImage::Format_Alpha8)
+        return false;
 
     struct jpeg_compress_struct cinfo;
     JSAMPROW row_pointer[1];
@@ -573,18 +549,22 @@ static bool write_jpeg_image(const QImage &image, QIODevice *device, volatile in
         cinfo.image_width = image.width();
         cinfo.image_height = image.height();
 
-        bool gray=false;
+        bool gray = false;
         switch (image.format()) {
         case QImage::Format_Mono:
         case QImage::Format_MonoLSB:
         case QImage::Format_Indexed8:
             gray = true;
-            for (int i = image.colorCount(); gray && i--;) {
-                gray = gray & (qRed(cmap[i]) == qGreen(cmap[i]) &&
-                               qRed(cmap[i]) == qBlue(cmap[i]));
+            for (int i = image.colorCount(); gray && i; i--) {
+                gray = gray & qIsGray(cmap[i-1]);
             }
             cinfo.input_components = gray ? 1 : 3;
             cinfo.in_color_space = gray ? JCS_GRAYSCALE : JCS_RGB;
+            break;
+        case QImage::Format_Grayscale8:
+            gray = true;
+            cinfo.input_components = 1;
+            cinfo.in_color_space = JCS_GRAYSCALE;
             break;
         default:
             cinfo.input_components = 3;
@@ -607,6 +587,11 @@ static bool write_jpeg_image(const QImage &image, QIODevice *device, volatile in
             cinfo.Y_density = (image.dotsPerMeterY()+50) / 100;
         }
 
+        if (optimize)
+            cinfo.optimize_coding = true;
+
+        if (progressive)
+            jpeg_simple_progression(&cinfo);
 
         int quality = sourceQuality >= 0 ? qMin(int(sourceQuality),100) : 75;
         jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
@@ -670,6 +655,9 @@ static bool write_jpeg_image(const QImage &image, QIODevice *device, volatile in
                     }
                 }
                 break;
+            case QImage::Format_Grayscale8:
+                memcpy(row, image.constScanLine(cinfo.next_scanline), w);
+                break;
             case QImage::Format_RGB888:
                 memcpy(row, image.constScanLine(cinfo.next_scanline), w * 3);
                 break;
@@ -726,7 +714,8 @@ public:
     };
 
     QJpegHandlerPrivate(QJpegHandler *qq)
-        : quality(75), exifOrientation(1), iod_src(0), state(Ready), q(qq)
+        : quality(75), transformation(QImageIOHandler::TransformationNone), iod_src(0),
+          rgb888ToRgb32ConverterPtr(qt_convert_rgb888_to_rgb32), state(Ready), optimize(false), progressive(false), q(qq)
     {}
 
     ~QJpegHandlerPrivate()
@@ -741,10 +730,9 @@ public:
 
     bool readJpegHeader(QIODevice*);
     bool read(QImage *image);
-    void applyExifOrientation(QImage *image);
 
     int quality;
-    int exifOrientation;
+    QImageIOHandler::Transformations transformation;
     QVariant size;
     QImage::Format format;
     QSize scaledSize;
@@ -757,7 +745,12 @@ public:
     struct my_jpeg_source_mgr * iod_src;
     struct my_error_mgr err;
 
+    Rgb888ToRgb32Converter rgb888ToRgb32ConverterPtr;
+
     State state;
+
+    bool optimize;
+    bool progressive;
 
     QJpegHandler *q;
 };
@@ -767,9 +760,8 @@ static bool readExifHeader(QDataStream &stream)
     char prefix[6];
     if (stream.readRawData(prefix, sizeof(prefix)) != sizeof(prefix))
         return false;
-    if (prefix[0] != 'E' || prefix[1] != 'x' || prefix[2] != 'i' || prefix[3] != 'f' || prefix[4] != 0 || prefix[5] != 0)
-        return false;
-    return true;
+    static const char exifMagic[6] = {'E', 'x', 'i', 'f', 0, 0};
+    return memcmp(prefix, exifMagic, 6) == 0;
 }
 
 /*
@@ -793,6 +785,7 @@ static int getExifOrientation(QByteArray &exifData)
 
     quint16 val;
     quint32 offset;
+    const qint64 headerStart = stream.device()->pos();
 
     // read byte order marker
     stream >> val;
@@ -809,29 +802,29 @@ static int getExifOrientation(QByteArray &exifData)
         return -1;
 
     stream >> offset;
-    // we have already used 8 bytes of TIFF header
-    offset -= 8;
 
     // read IFD
     while (!stream.atEnd()) {
         quint16 numEntries;
 
         // skip offset bytes to get the next IFD
-        if (stream.skipRawData(offset) != (qint32)offset)
+        const qint64 bytesToSkip = offset - (stream.device()->pos() - headerStart);
+
+        if (stream.skipRawData(bytesToSkip) != bytesToSkip)
             return -1;
 
         stream >> numEntries;
 
-        for (;numEntries > 0; --numEntries) {
+        for (; numEntries > 0; --numEntries) {
             quint16 tag;
             quint16 type;
             quint32 components;
-            quint32 value;
+            quint16 value;
+            quint16 dummy;
 
-            stream >> tag >> type >> components >> value;
-
+            stream >> tag >> type >> components >> value >> dummy;
             if (tag == 0x0112) { // Tag Exif.Image.Orientation
-                if (components !=1)
+                if (components != 1)
                     return -1;
                 if (type != 3) // we are expecting it to be an unsigned short
                     return -1;
@@ -853,6 +846,31 @@ static int getExifOrientation(QByteArray &exifData)
     // No Exif orientation was found
     return 0;
 }
+
+static QImageIOHandler::Transformations exif2Qt(int exifOrientation)
+{
+    switch (exifOrientation) {
+    case 1: // normal
+        return QImageIOHandler::TransformationNone;
+    case 2: // mirror horizontal
+        return QImageIOHandler::TransformationMirror;
+    case 3: // rotate 180
+        return QImageIOHandler::TransformationRotate180;
+    case 4: // mirror vertical
+        return QImageIOHandler::TransformationFlip;
+    case 5: // mirror horizontal and rotate 270 CW
+        return QImageIOHandler::TransformationFlipAndRotate90;
+    case 6: // rotate 90 CW
+        return QImageIOHandler::TransformationRotate90;
+    case 7: // mirror horizontal and rotate 90 CW
+        return QImageIOHandler::TransformationMirrorAndRotate90;
+    case 8: // rotate 270 CW
+        return QImageIOHandler::TransformationRotate270;
+    }
+    qWarning("Invalid EXIF orientation");
+    return QImageIOHandler::TransformationNone;
+}
+
 /*!
     \internal
 */
@@ -872,7 +890,7 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
 
         if (!setjmp(err.setjmp_buffer)) {
             jpeg_save_markers(&info, JPEG_COM, 0xFFFF);
-            jpeg_save_markers(&info, JPEG_APP0+1, 0xFFFF); // Exif uses APP1 marker
+            jpeg_save_markers(&info, JPEG_APP0 + 1, 0xFFFF); // Exif uses APP1 marker
 
             (void) jpeg_read_header(&info, TRUE);
 
@@ -903,16 +921,18 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
                     description += key + QLatin1String(": ") + value.simplified();
                     readTexts.append(key);
                     readTexts.append(value);
-                } else if (marker->marker == JPEG_APP0+1) {
+                } else if (marker->marker == JPEG_APP0 + 1) {
                     exifData.append((const char*)marker->data, marker->data_length);
                 }
             }
 
-            if (exifData.size()) {
+            if (!exifData.isEmpty()) {
                 // Exif data present
-                int orientation = getExifOrientation(exifData);
-                if (orientation > 0)
-                    exifOrientation = orientation;
+                int exifOrientation = getExifOrientation(exifData);
+                if (exifOrientation == -1)
+                    return false;
+                if (exifOrientation > 0)
+                    transformation = exif2Qt(exifOrientation);
             }
 
             state = ReadHeader;
@@ -928,48 +948,6 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
     return true;
 }
 
-void QJpegHandlerPrivate::applyExifOrientation(QImage *image)
-{
-    // This is not an optimized implementation, but easiest to maintain
-    QTransform transform;
-
-    switch (exifOrientation) {
-        case 1: // normal
-            break;
-        case 2: // mirror horizontal
-            *image = image->mirrored(true, false);
-            break;
-        case 3: // rotate 180
-            transform.rotate(180);
-            *image = image->transformed(transform);
-            break;
-        case 4: // mirror vertical
-            *image = image->mirrored(false, true);
-            break;
-        case 5: // mirror horizontal and rotate 270 CCW
-            *image = image->mirrored(true, false);
-            transform.rotate(270);
-            *image = image->transformed(transform);
-            break;
-        case 6: // rotate 90 CW
-            transform.rotate(90);
-            *image = image->transformed(transform);
-            break;
-        case 7: // mirror horizontal and rotate 90 CW
-            *image = image->mirrored(true, false);
-            transform.rotate(90);
-            *image = image->transformed(transform);
-            break;
-        case 8: // rotate 270 CW
-            transform.rotate(-90);
-            *image = image->transformed(transform);
-            break;
-        default:
-            qWarning("This should never happen");
-    }
-    exifOrientation = 1;
-}
-
 bool QJpegHandlerPrivate::read(QImage *image)
 {
     if(state == Ready)
@@ -977,11 +955,10 @@ bool QJpegHandlerPrivate::read(QImage *image)
 
     if(state == ReadHeader)
     {
-        bool success = read_jpeg_image(image, scaledSize, scaledClipRect, clipRect, quality, &info, &err);
+        bool success = read_jpeg_image(image, scaledSize, scaledClipRect, clipRect, quality, rgb888ToRgb32ConverterPtr, &info, &err);
         if (success) {
             for (int i = 0; i < readTexts.size()-1; i+=2)
                 image->setText(readTexts.at(i), readTexts.at(i+1));
-            applyExifOrientation(image);
 
             state = Ready;
             return true;
@@ -1005,20 +982,18 @@ QJpegHandler::QJpegHandler()
     // from qimage_neon.cpp
 
     if (qCpuHasFeature(NEON))
-        rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_neon;
+        d->rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_neon;
 #endif
 
 #if defined(QT_COMPILER_SUPPORTS_SSSE3)
-    // from qimage_ssse3.cpp
-
-    if (false) {
-    } else if (qCpuHasFeature(SSSE3)) {
-        rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_ssse3;
+    // from qimage_ssse3.cpps
+    if (qCpuHasFeature(SSSE3)) {
+        d->rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_ssse3;
     }
 #endif // QT_COMPILER_SUPPORTS_SSSE3
 #if defined(QT_COMPILER_SUPPORTS_MIPS_DSPR2)
     if (qCpuHasFeature(DSPR2)) {
-        rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_mips_dspr2_asm;
+        d->rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_mips_dspr2_asm;
     }
 #endif // QT_COMPILER_SUPPORTS_DSPR2
 }
@@ -1061,9 +1036,17 @@ bool QJpegHandler::read(QImage *image)
     return d->read(image);
 }
 
+extern void qt_imageTransform(QImage &src, QImageIOHandler::Transformations orient);
+
 bool QJpegHandler::write(const QImage &image)
 {
-    return write_jpeg_image(image, device(), d->quality, d->description);
+    if (d->transformation != QImageIOHandler::TransformationNone) {
+        // We don't support writing EXIF headers so apply the transform to the data.
+        QImage img = image;
+        qt_imageTransform(img, d->transformation);
+        return write_jpeg_image(img, device(), d->quality, d->description, d->optimize, d->progressive);
+    }
+    return write_jpeg_image(image, device(), d->quality, d->description, d->optimize, d->progressive);
 }
 
 bool QJpegHandler::supportsOption(ImageOption option) const
@@ -1074,7 +1057,10 @@ bool QJpegHandler::supportsOption(ImageOption option) const
         || option == ClipRect
         || option == Description
         || option == Size
-        || option == ImageFormat;
+        || option == ImageFormat
+        || option == OptimizedWrite
+        || option == ProgressiveScanWrite
+        || option == ImageTransformation;
 }
 
 QVariant QJpegHandler::option(ImageOption option) const
@@ -1097,6 +1083,13 @@ QVariant QJpegHandler::option(ImageOption option) const
     case ImageFormat:
         d->readJpegHeader(device());
         return d->format;
+    case OptimizedWrite:
+        return d->optimize;
+    case ProgressiveScanWrite:
+        return d->progressive;
+    case ImageTransformation:
+        d->readJpegHeader(device());
+        return int(d->transformation);
     default:
         break;
     }
@@ -1122,6 +1115,17 @@ void QJpegHandler::setOption(ImageOption option, const QVariant &value)
     case Description:
         d->description = value.toString();
         break;
+    case OptimizedWrite:
+        d->optimize = value.toBool();
+        break;
+    case ProgressiveScanWrite:
+        d->progressive = value.toBool();
+        break;
+    case ImageTransformation: {
+        int transformation = value.toInt();
+        if (transformation > 0 && transformation < 8)
+            d->transformation = QImageIOHandler::Transformations(transformation);
+    }
     default:
         break;
     }

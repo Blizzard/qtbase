@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -76,11 +76,7 @@ private slots:
     void sizeHint_data();
     void sizeHint();
     void taskQTBUG_20191_shortcutWithKeypadModifer();
-/*
-    void state();
-    void group();
-    void stateChanged();
-*/
+    void emitReleasedAfterChange();
 
 protected slots:
     void resetCounters();
@@ -419,19 +415,6 @@ void tst_QPushButton::clicked()
     QCOMPARE( release_count, (uint)10 );
 }
 
-/*
-void tst_QPushButton::group()
-{
-}
-
-void tst_QPushButton::state()
-{
-}
-
-void tst_QPushButton::stateChanged()
-{
-}
-*/
 QPushButton *pb = 0;
 void tst_QPushButton::helperSlotDelete()
 {
@@ -679,6 +662,37 @@ void tst_QPushButton::taskQTBUG_20191_shortcutWithKeypadModifer()
     QTest::qWait(300);
     QCOMPARE(spy1.count(), 0);
     QCOMPARE(spy2.count(), 1);
+}
+
+void tst_QPushButton::emitReleasedAfterChange()
+{
+    QPushButton *button1 = new QPushButton("A");
+    QPushButton *button2 = new QPushButton("B");
+    QVBoxLayout *layout = new QVBoxLayout();
+    layout->addWidget(button1);
+    layout->addWidget(button2);
+    QDialog dialog;
+    dialog.setLayout(layout);
+    dialog.show();
+    QTest::qWaitForWindowExposed(&dialog);
+    QApplication::setActiveWindow(&dialog);
+    button1->setFocus();
+
+    QSignalSpy spy(button1, SIGNAL(released()));
+    QTest::mousePress(button1, Qt::LeftButton);
+    QVERIFY(button1->isDown());
+    QTest::keyClick(&dialog, Qt::Key_Tab);
+    QVERIFY(!button1->isDown());
+    QCOMPARE(spy.count(), 1);
+    spy.clear();
+
+    QCOMPARE(spy.count(), 0);
+    button1->setFocus();
+    QTest::mousePress(button1, Qt::LeftButton);
+    QVERIFY(button1->isDown());
+    button1->setEnabled(false);
+    QVERIFY(!button1->isDown());
+    QCOMPARE(spy.count(), 1);
 }
 
 QTEST_MAIN(tst_QPushButton)

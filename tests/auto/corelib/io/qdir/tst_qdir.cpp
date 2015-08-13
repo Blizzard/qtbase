@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -89,6 +89,8 @@ private slots:
 
     void entryList_data();
     void entryList();
+
+    void entryListTimedSort();
 
     void entryListSimple_data();
     void entryListSimple();
@@ -214,8 +216,35 @@ private:
 Q_DECLARE_METATYPE(tst_QDir::UncHandling)
 
 tst_QDir::tst_QDir()
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    : m_dataPath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+#else
     : m_dataPath(QFileInfo(QFINDTESTDATA("testData")).absolutePath())
+#endif
 {
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QString resourceSourcePath = QStringLiteral(":/android_testdata/");
+    QDirIterator it(resourceSourcePath, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+
+        QFileInfo fileInfo = it.fileInfo();
+
+        if (!fileInfo.isDir()) {
+            QString destination = m_dataPath + QLatin1Char('/') + fileInfo.filePath().mid(resourceSourcePath.length());
+            QFileInfo destinationFileInfo(destination);
+            if (!destinationFileInfo.exists()) {
+                QDir().mkpath(destinationFileInfo.path());
+                if (!QFile::copy(fileInfo.filePath(), destination))
+                    qWarning("Failed to copy %s", qPrintable(fileInfo.filePath()));
+            }
+        }
+
+    }
+
+    if (!QDir::setCurrent(m_dataPath))
+        qWarning("Couldn't set current path to %s", qPrintable(m_dataPath));
+#endif
 }
 
 void tst_QDir::init()
@@ -802,6 +831,45 @@ void tst_QDir::entryList()
     QFile::remove(entrylistPath + "linktodirectory.lnk");
     QFile::remove(entrylistPath + "brokenlink.lnk");
     QFile::remove(entrylistPath + "brokenlink");
+}
+
+void tst_QDir::entryListTimedSort()
+{
+#ifndef QT_NO_PROCESS
+    const QString touchBinary = "/bin/touch";
+    if (!QFile::exists(touchBinary))
+        QSKIP("/bin/touch not found");
+
+    const QString entrylistPath = m_dataPath + "/entrylist/";
+    QTemporaryFile aFile(entrylistPath + "A-XXXXXX.qws");
+    QTemporaryFile bFile(entrylistPath + "B-XXXXXX.qws");
+
+    QVERIFY(aFile.open());
+    QVERIFY(bFile.open());
+    {
+        QProcess p;
+        p.start(touchBinary, QStringList() << "-t" << "201306021513" << aFile.fileName());
+        QVERIFY(p.waitForFinished(1000));
+    }
+    {
+        QProcess p;
+        p.start(touchBinary, QStringList() << "-t" << "201504131513" << bFile.fileName());
+        QVERIFY(p.waitForFinished(1000));
+    }
+
+    QStringList actual = QDir(entrylistPath).entryList(QStringList() << "*.qws", QDir::NoFilter,
+                                                       QDir::Time);
+
+    QFileInfo aFileInfo(aFile);
+    QFileInfo bFileInfo(bFile);
+    QVERIFY(bFileInfo.lastModified().msecsTo(aFileInfo.lastModified()) < 0);
+
+    QCOMPARE(actual.size(), 2);
+    QCOMPARE(actual.first(), bFileInfo.fileName());
+    QCOMPARE(actual.last(), aFileInfo.fileName());
+#else
+    QSKIP("This test requires QProcess support.");
+#endif // QT_NO_PROCESS
 }
 
 void tst_QDir::entryListSimple_data()
@@ -2028,6 +2096,10 @@ void tst_QDir::equalityOperator_data()
     //need a path in the root directory that is unlikely to be a symbolic link.
 #if defined (Q_OS_WIN)
     QString pathinroot("c:/windows/..");
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QString pathinroot("/system/..");
+#elif defined(Q_OS_HAIKU)
+    QString pathinroot("/boot/..");
 #else
     QString pathinroot("/usr/..");
 #endif
@@ -2145,7 +2217,11 @@ void tst_QDir::cdNonreadable()
 
 void tst_QDir::cdBelowRoot()
 {
-#if defined (Q_OS_UNIX)
+#if defined (Q_OS_ANDROID)
+#define ROOT QString("/")
+#define DIR QString("/system")
+#define CD_INTO "system"
+#elif defined (Q_OS_UNIX)
 #define ROOT QString("/")
 #define DIR QString("/tmp")
 #define CD_INTO "tmp"

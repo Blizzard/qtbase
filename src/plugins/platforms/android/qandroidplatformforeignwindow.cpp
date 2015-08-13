@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -73,19 +73,10 @@ void QAndroidPlatformForeignWindow::raise()
 
 void QAndroidPlatformForeignWindow::setGeometry(const QRect &rect)
 {
-    QWindow *parent = window()->parent();
-    QRect newGeometry = rect;
-
-    if (parent != 0)
-        newGeometry.moveTo(parent->mapToGlobal(rect.topLeft()));
-
-    if (newGeometry == geometry())
-        return;
-
-    QAndroidPlatformWindow::setGeometry(newGeometry);
+    QAndroidPlatformWindow::setGeometry(rect);
 
     if (m_surfaceId != -1)
-        QtAndroid::setSurfaceGeometry(m_surfaceId, newGeometry);
+        QtAndroid::setSurfaceGeometry(m_surfaceId, rect);
 }
 
 void QAndroidPlatformForeignWindow::setVisible(bool visible)
@@ -106,7 +97,6 @@ void QAndroidPlatformForeignWindow::setVisible(bool visible)
 void QAndroidPlatformForeignWindow::applicationStateChanged(Qt::ApplicationState state)
 {
     if (state <= Qt::ApplicationHidden
-            && QtAndroid::blockEventLoopsWhenSuspended()
             && m_surfaceId != -1) {
         QtAndroid::destroySurface(m_surfaceId);
         m_surfaceId = -1;
@@ -119,18 +109,7 @@ void QAndroidPlatformForeignWindow::applicationStateChanged(Qt::ApplicationState
 
 void QAndroidPlatformForeignWindow::setParent(const QPlatformWindow *window)
 {
-    QRect newGeometry = geometry();
-
-    if (window != 0)
-        newGeometry.moveTo(window->mapToGlobal(geometry().topLeft()));
-
-    if (newGeometry != geometry())
-        QAndroidPlatformWindow::setGeometry(newGeometry);
-
-    if (m_surfaceId == -1)
-        return;
-
-    QtAndroid::setSurfaceGeometry(m_surfaceId, newGeometry);
+    Q_UNUSED(window);
 }
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,6 +41,7 @@
 
 #include <qdebug.h>
 
+#ifndef QT_NO_ACCESSIBILITY
 #include "socket_interface.h"
 #include "constant_mappings_p.h"
 #include "../accessibility/qaccessiblebridgeutils_p.h"
@@ -1047,6 +1048,8 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
         }
         break;
     }
+    case QAccessible::SelectionAdd:
+    case QAccessible::SelectionRemove:
     case QAccessible::Selection: {
         QAccessibleInterface * iface = event->accessibleInterface();
         if (!iface) {
@@ -1104,7 +1107,6 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
     case QAccessible::ParentChanged:
     case QAccessible::DialogStart:
     case QAccessible::DialogEnd:
-    case QAccessible::SelectionRemove:
     case QAccessible::PopupMenuStart:
     case QAccessible::PopupMenuEnd:
     case QAccessible::SoundPlayed:
@@ -1146,7 +1148,6 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
     case QAccessible::TextAttributeChanged:
     case QAccessible::TextColumnChanged:
     case QAccessible::VisibleDataChanged:
-    case QAccessible::SelectionAdd:
     case QAccessible::SelectionWithin:
     case QAccessible::LocationChanged:
     case QAccessible::HelpChanged:
@@ -1923,6 +1924,124 @@ QAccessible::TextBoundaryType AtSpiAdaptor::qAccessibleBoundaryType(int atspiTex
     return QAccessible::CharBoundary;
 }
 
+namespace
+{
+    struct AtSpiAttribute {
+        QString name;
+        QString value;
+        AtSpiAttribute(const QString &aName, const QString &aValue) : name(aName), value(aValue) {}
+        bool isNull() const { return name.isNull() || value.isNull(); }
+    };
+
+    QString atspiColor(const QString &ia2Color)
+    {
+        // "rgb(%u,%u,%u)" -> "%u,%u,%u"
+        return ia2Color.mid(4, ia2Color.length() - (4+1));
+    }
+
+    QString atspiSize(const QString &ia2Size)
+    {
+        // "%fpt" -> "%f"
+        return ia2Size.left(ia2Size.length() - 2);
+    }
+
+    AtSpiAttribute atspiTextAttribute(const QString &ia2Name, const QString &ia2Value)
+    {
+        QString name = ia2Name;
+        QString value = ia2Value;
+
+        // IAccessible2: http://www.linuxfoundation.org/collaborate/workgroups/accessibility/iaccessible2/textattributes
+        // ATK attribute names: https://git.gnome.org/browse/orca/tree/src/orca/text_attribute_names.py
+        // ATK attribute values: https://developer.gnome.org/atk/unstable/AtkText.html#AtkTextAttribute
+
+        // https://bugzilla.gnome.org/show_bug.cgi?id=744553 "ATK docs provide no guidance for allowed values of some text attributes"
+        // specifically for "weight", "invalid", "language" and value range for colors
+
+        if (ia2Name == QStringLiteral("background-color")) {
+            name = QStringLiteral("bg-color");
+            value = atspiColor(value);
+        } else if (ia2Name == QStringLiteral("font-family")) {
+            name = QStringLiteral("family-name");
+        } else if (ia2Name == QStringLiteral("color")) {
+            name = QStringLiteral("fg-color");
+            value = atspiColor(value);
+        } else if (ia2Name == QStringLiteral("text-align")) {
+            name = QStringLiteral("justification");
+            if (value == QStringLiteral("justify")) {
+                value = QStringLiteral("fill");
+            } else {
+                if (value != QStringLiteral("left") &&
+                    value != QStringLiteral("right") &&
+                    value != QStringLiteral("center")
+                ) {
+                    value = QString();
+                    qAtspiDebug() << "Unknown text-align attribute value \"" << value << "\" cannot be translated to AT-SPI.";
+                }
+            }
+        } else if (ia2Name == QStringLiteral("font-size")) {
+            name = QStringLiteral("size");
+            value = atspiSize(value);
+        } else if (ia2Name == QStringLiteral("font-style")) {
+            name = QStringLiteral("style");
+            if (value != QStringLiteral("normal") &&
+                value != QStringLiteral("italic") &&
+                value != QStringLiteral("oblique")
+            ) {
+                value = QString();
+                qAtspiDebug() << "Unknown font-style attribute value \"" << value << "\" cannot be translated to AT-SPI.";
+            }
+        } else if (ia2Name == QStringLiteral("text-underline-type")) {
+            name = QStringLiteral("underline");
+            if (value != QStringLiteral("none") &&
+                value != QStringLiteral("single") &&
+                value != QStringLiteral("double")
+            ) {
+                value = QString();
+                qAtspiDebug() << "Unknown text-underline-type attribute value \"" << value << "\" cannot be translated to AT-SPI.";
+            }
+        } else if (ia2Name == QStringLiteral("font-weight")) {
+            name = QStringLiteral("weight");
+            if (value == QStringLiteral("normal"))
+                // Orca seems to accept all IAccessible2 values except for "normal"
+                // (on which it produces traceback and fails to read any following text attributes),
+                // but that is the default value, so omit it anyway
+                value = QString();
+        } else if (ia2Name == QStringLiteral("text-position")) {
+            name = QStringLiteral("vertical-align");
+            if (value != QStringLiteral("baseline") &&
+                value != QStringLiteral("super") &&
+                value != QStringLiteral("sub")
+            ) {
+                value = QString();
+                qAtspiDebug() << "Unknown text-position attribute value \"" << value << "\" cannot be translated to AT-SPI.";
+            }
+        } else if (ia2Name == QStringLiteral("writing-mode")) {
+            name = QStringLiteral("direction");
+            if (value == QStringLiteral("lr"))
+                value = QStringLiteral("ltr");
+            else if (value == QStringLiteral("rl"))
+                value = QStringLiteral("rtl");
+            else if (value == QStringLiteral("tb")) {
+                // IAccessible2 docs refer to XSL, which specifies "tb" is shorthand for "tb-rl"; so at least give a hint about the horizontal direction (ATK does not support vertical direction in this attribute (yet))
+                value = QStringLiteral("rtl");
+                qAtspiDebug() << "writing-mode attribute value \"tb\" translated only w.r.t. horizontal direction; vertical direction ignored";
+            } else {
+                value = QString();
+                qAtspiDebug() << "Unknown writing-mode attribute value \"" << value << "\" cannot be translated to AT-SPI.";
+            }
+        } else if (ia2Name == QStringLiteral("language")) {
+            // OK - ATK has no docs on the format of the value, IAccessible2 has reasonable format - leave it at that now
+        } else if (ia2Name == QStringLiteral("invalid")) {
+            // OK - ATK docs are vague but suggest they support the same range of values as IAccessible2
+        } else {
+            // attribute we know nothing about
+            name = QString();
+            value = QString();
+        }
+        return AtSpiAttribute(name, value);
+    }
+}
+
 // FIXME all attribute methods below should share code
 QVariantList AtSpiAdaptor::getAttributes(QAccessibleInterface *interface, int offset, bool includeDefaults) const
 {
@@ -1937,7 +2056,9 @@ QVariantList AtSpiAdaptor::getAttributes(QAccessibleInterface *interface, int of
     foreach (const QString &attr, attributes) {
         QStringList items;
         items = attr.split(QLatin1Char(':'), QString::SkipEmptyParts, Qt::CaseSensitive);
-        set[items[0]] = items[1];
+        AtSpiAttribute attribute = atspiTextAttribute(items[0], items[1]);
+        if (!attribute.isNull())
+            set[attribute.name] = attribute.value;
     }
 
     QVariantList list;
@@ -1961,7 +2082,9 @@ QVariantList AtSpiAdaptor::getAttributeValue(QAccessibleInterface *interface, in
     foreach (const QString& attr, attributes) {
         QStringList items;
         items = attr.split(QLatin1Char(':'), QString::SkipEmptyParts, Qt::CaseSensitive);
-        map[items[0]] = items[1];
+        AtSpiAttribute attribute = atspiTextAttribute(items[0], items[1]);
+        if (!attribute.isNull())
+            map[attribute.name] = attribute.value;
     }
     mapped = map[attributeName];
     defined = mapped.isEmpty();
@@ -2356,3 +2479,4 @@ bool AtSpiAdaptor::tableInterface(QAccessibleInterface *interface, const QString
 }
 
 QT_END_NAMESPACE
+#endif //QT_NO_ACCESSIBILITY

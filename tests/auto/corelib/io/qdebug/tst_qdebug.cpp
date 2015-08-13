@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -52,6 +52,7 @@ private slots:
     void stateSaver() const;
     void veryLongWarningMessage() const;
     void qDebugQChar() const;
+    void qDebugQString() const;
     void qDebugQStringRef() const;
     void qDebugQLatin1String() const;
     void qDebugQByteArray() const;
@@ -344,6 +345,54 @@ void tst_QDebug::qDebugQChar() const
 
 }
 
+void tst_QDebug::qDebugQString() const
+{
+    /* Use a basic string. */
+    {
+        QString file, function;
+        int line = 0;
+        const QString in(QLatin1String("input"));
+        const QStringRef inRef(&in);
+
+        MessageHandlerSetter mhs(myMessageHandler);
+        { qDebug() << inRef; }
+#ifndef QT_NO_MESSAGELOGCONTEXT
+        file = __FILE__; line = __LINE__ - 2; function = Q_FUNC_INFO;
+#endif
+        QCOMPARE(s_msgType, QtDebugMsg);
+        QCOMPARE(s_msg, QString::fromLatin1("\"input\""));
+        QCOMPARE(QString::fromLatin1(s_file), file);
+        QCOMPARE(s_line, line);
+        QCOMPARE(QString::fromLatin1(s_function), function);
+    }
+
+    /* simpler tests from now on */
+    MessageHandlerSetter mhs(myMessageHandler);
+
+    QString string = "Hello";
+    qDebug() << string;
+    QCOMPARE(s_msg, QString("\"Hello\""));
+
+    qDebug().noquote().nospace() << string;
+    QCOMPARE(s_msg, string);
+
+    qDebug().noquote().nospace() << qSetFieldWidth(8) << string;
+    QCOMPARE(s_msg, "   " + string);
+
+    string = QLatin1String("\nSm\xF8rg\xE5sbord\\");
+    qDebug().noquote().nospace() << string;
+    QCOMPARE(s_msg, string);
+
+    qDebug() << string;
+    QCOMPARE(s_msg, QString("\"\\nSm\\u00F8rg\\u00E5sbord\\\\\""));
+
+    // surrogate pairs (including broken pairings)
+    ushort utf16[] = { 0xDC00, 0xD800, 0xDC00, 'x', 0xD800, 0xDC00, 0xD800, 0 };
+    string = QString::fromUtf16(utf16);
+    qDebug() << string;
+    QCOMPARE(s_msg, QString("\"\\uDC00\\U00010000x\\U00010000\\uD800\""));
+}
+
 void tst_QDebug::qDebugQStringRef() const
 {
     /* Use a basic string. */
@@ -403,6 +452,24 @@ void tst_QDebug::qDebugQLatin1String() const
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);
+
+    /* simpler tests from now on */
+    QLatin1String string("\"Hello\"");
+    qDebug() << string;
+    QCOMPARE(s_msg, QString("\"\\\"Hello\\\"\""));
+
+    qDebug().noquote().nospace() << string;
+    QCOMPARE(s_msg, QString(string));
+
+    qDebug().noquote().nospace() << qSetFieldWidth(8) << string;
+    QCOMPARE(s_msg, " " + QString(string));
+
+    string = QLatin1String("\nSm\xF8rg\xE5sbord\\");
+    qDebug().noquote().nospace() << string;
+    QCOMPARE(s_msg, QString(string));
+
+    qDebug() << string;
+    QCOMPARE(s_msg, QString("\"\\nSm\\u00F8rg\\u00E5sbord\\\\\""));
 }
 
 void tst_QDebug::qDebugQByteArray() const
@@ -423,6 +490,28 @@ void tst_QDebug::qDebugQByteArray() const
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);
+
+    /* simpler tests from now on */
+    QByteArray ba = "\"Hello\"";
+    qDebug() << ba;
+    QCOMPARE(s_msg, QString("\"\\\"Hello\\\"\""));
+
+    qDebug().noquote().nospace() << ba;
+    QCOMPARE(s_msg, QString::fromLatin1(ba));
+
+    qDebug().noquote().nospace() << qSetFieldWidth(8) << ba;
+    QCOMPARE(s_msg, " " + QString::fromLatin1(ba));
+
+    ba = "\nSm\xC3\xB8rg\xC3\xA5sbord\\";
+    qDebug().noquote().nospace() << ba;
+    QCOMPARE(s_msg, QString::fromUtf8(ba));
+
+    qDebug() << ba;
+    QCOMPARE(s_msg, QString("\"\\nSm\\xC3\\xB8rg\\xC3\\xA5sbord\\\\\""));
+
+    // ensure that it closes hex escape sequences correctly
+    qDebug() << QByteArray("\377FFFF");
+    QCOMPARE(s_msg, QString("\"\\xFF\"\"FFFF\""));
 }
 
 enum TestEnum {

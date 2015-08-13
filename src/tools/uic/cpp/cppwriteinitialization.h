@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,9 +61,6 @@ namespace CPP {
         int compare(const FontHandle &) const;
     private:
         const DomFont *m_domFont;
-#if defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3)
-        friend uint qHash(const FontHandle &);
-#endif
     };
     inline bool operator ==(const FontHandle &f1, const FontHandle &f2) { return f1.compare(f2) == 0; }
     inline bool operator  <(const FontHandle &f1, const FontHandle &f2) { return f1.compare(f2) < 0; }
@@ -75,9 +72,6 @@ namespace CPP {
         int compare(const IconHandle &) const;
     private:
         const DomResourceIcon *m_domIcon;
-#if defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3)
-        friend uint qHash(const IconHandle &);
-#endif
     };
     inline bool operator ==(const IconHandle &i1, const IconHandle &i2) { return i1.compare(i2) == 0; }
     inline bool operator  <(const IconHandle &i1, const IconHandle &i2) { return i1.compare(i2) < 0; }
@@ -89,15 +83,9 @@ namespace CPP {
         int compare(const SizePolicyHandle &) const;
     private:
         const DomSizePolicy *m_domSizePolicy;
-#if defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3)
-        friend uint qHash(const SizePolicyHandle &);
-#endif
     };
     inline bool operator ==(const SizePolicyHandle &f1, const SizePolicyHandle &f2) { return f1.compare(f2) == 0; }
-#if !(defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3))
     inline bool operator  <(const SizePolicyHandle &f1, const SizePolicyHandle &f2) { return f1.compare(f2) < 0; }
-#endif
-
 
 
 struct WriteInitialization : public TreeWalker
@@ -110,47 +98,47 @@ struct WriteInitialization : public TreeWalker
 //
 // widgets
 //
-    void acceptUI(DomUI *node);
-    void acceptWidget(DomWidget *node);
-    void acceptWidgetScripts(const DomScripts &, DomWidget *node, const  DomWidgets &childWidgets);
+    void acceptUI(DomUI *node) Q_DECL_OVERRIDE;
+    void acceptWidget(DomWidget *node) Q_DECL_OVERRIDE;
+    void acceptWidgetScripts(const DomScripts &, DomWidget *node, const  DomWidgets &childWidgets) Q_DECL_OVERRIDE;
 
-    void acceptLayout(DomLayout *node);
-    void acceptSpacer(DomSpacer *node);
-    void acceptLayoutItem(DomLayoutItem *node);
+    void acceptLayout(DomLayout *node) Q_DECL_OVERRIDE;
+    void acceptSpacer(DomSpacer *node) Q_DECL_OVERRIDE;
+    void acceptLayoutItem(DomLayoutItem *node) Q_DECL_OVERRIDE;
 
 //
 // actions
 //
-    void acceptActionGroup(DomActionGroup *node);
-    void acceptAction(DomAction *node);
-    void acceptActionRef(DomActionRef *node);
+    void acceptActionGroup(DomActionGroup *node) Q_DECL_OVERRIDE;
+    void acceptAction(DomAction *node) Q_DECL_OVERRIDE;
+    void acceptActionRef(DomActionRef *node) Q_DECL_OVERRIDE;
 
 //
 // tab stops
 //
-    void acceptTabStops(DomTabStops *tabStops);
+    void acceptTabStops(DomTabStops *tabStops) Q_DECL_OVERRIDE;
 
 //
 // custom widgets
 //
-    void acceptCustomWidgets(DomCustomWidgets *node);
-    void acceptCustomWidget(DomCustomWidget *node);
+    void acceptCustomWidgets(DomCustomWidgets *node) Q_DECL_OVERRIDE;
+    void acceptCustomWidget(DomCustomWidget *node) Q_DECL_OVERRIDE;
 
 //
 // layout defaults/functions
 //
-    void acceptLayoutDefault(DomLayoutDefault *node)   { m_LayoutDefaultHandler.acceptLayoutDefault(node); }
-    void acceptLayoutFunction(DomLayoutFunction *node) { m_LayoutDefaultHandler.acceptLayoutFunction(node); }
+    void acceptLayoutDefault(DomLayoutDefault *node) Q_DECL_OVERRIDE   { m_LayoutDefaultHandler.acceptLayoutDefault(node); }
+    void acceptLayoutFunction(DomLayoutFunction *node) Q_DECL_OVERRIDE { m_LayoutDefaultHandler.acceptLayoutFunction(node); }
 
 //
 // signal/slot connections
 //
-    void acceptConnection(DomConnection *connection);
+    void acceptConnection(DomConnection *connection) Q_DECL_OVERRIDE;
 
 //
 // images
 //
-    void acceptImage(DomImage *image);
+    void acceptImage(DomImage *image) Q_DECL_OVERRIDE;
 
     enum {
         Use43UiFile = 0,
@@ -287,15 +275,9 @@ private:
     ColorBrushHash m_colorBrushHash;
     // Map from font properties to  font variable name for reuse
     // Map from size policy to  variable for reuse
-#if defined(Q_OS_MAC) && defined(Q_CC_GNU) && (__GNUC__ == 3 && __GNUC_MINOR__ == 3)
-    typedef QHash<FontHandle, QString> FontPropertiesNameMap;
-    typedef QHash<IconHandle, QString> IconPropertiesNameMap;
-    typedef QHash<SizePolicyHandle, QString> SizePolicyNameMap;
-#else
     typedef QMap<FontHandle, QString> FontPropertiesNameMap;
     typedef QMap<IconHandle, QString> IconPropertiesNameMap;
     typedef QMap<SizePolicyHandle, QString> SizePolicyNameMap;
-#endif
     FontPropertiesNameMap m_fontPropertiesNameMap;
     IconPropertiesNameMap m_iconPropertiesNameMap;
     SizePolicyNameMap     m_sizePolicyNameMap;

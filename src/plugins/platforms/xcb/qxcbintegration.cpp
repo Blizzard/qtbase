@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,6 +41,7 @@
 #include "qxcbnativeinterface.h"
 #include "qxcbclipboard.h"
 #include "qxcbdrag.h"
+#include "qxcbglintegration.h"
 
 #ifndef QT_NO_SESSIONMANAGER
 #include "qxcbsessionmanager.h"
@@ -69,15 +70,6 @@
 #include <private/qgenericunixthemes_p.h>
 #include <qpa/qplatforminputcontext.h>
 
-#if defined(XCB_USE_GLX)
-#include "qglxintegration.h"
-#elif defined(XCB_USE_EGL)
-#include "qxcbeglsurface.h"
-#include <QtPlatformSupport/private/qeglplatformcontext_p.h>
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
-#include <QtPlatformHeaders/QEGLNativeContext>
-#endif
-
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QScreen>
 #include <QtGui/QOffscreenSurface>
@@ -92,11 +84,11 @@
 
 QT_BEGIN_NAMESPACE
 
-#if defined(QT_DEBUG) && defined(Q_OS_LINUX)
 // Find out if our parent process is gdb by looking at the 'exe' symlink under /proc,.
 // or, for older Linuxes, read out 'cmdline'.
 static bool runningUnderDebugger()
 {
+#if defined(QT_DEBUG) && defined(Q_OS_LINUX)
     const QString parentProc = QLatin1String("/proc/") + QString::number(getppid());
     const QFileInfo parentProcExe(parentProc + QLatin1String("/exe"));
     if (parentProcExe.isSymLink())
@@ -113,29 +105,31 @@ static bool runningUnderDebugger()
             s += c;
     }
     return s == "gdb";
-}
+#else
+    return false;
 #endif
+}
+
+QXcbIntegration *QXcbIntegration::m_instance = Q_NULLPTR;
 
 QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char **argv)
     : m_services(new QGenericUnixServices)
     , m_instanceName(0)
+    , m_canGrab(true)
+    , m_defaultVisualId(UINT_MAX)
 {
+    m_instance = this;
+
     qRegisterMetaType<QXcbWindow*>();
 #ifdef XCB_USE_XLIB
     XInitThreads();
 #endif
     m_nativeInterface.reset(new QXcbNativeInterface);
 
-    bool canGrab = true;
-    #if defined(QT_DEBUG) && defined(Q_OS_LINUX)
-    canGrab = !runningUnderDebugger();
-    #endif
-    static bool canNotGrabEnv = qgetenv("QT_XCB_NO_GRAB_SERVER").length();
-    if (canNotGrabEnv)
-        canGrab = false;
-
     // Parse arguments
     const char *displayName = 0;
+    bool noGrabArg = false;
+    bool doGrabArg = false;
     if (argc) {
         int j = 1;
         for (int i = 1; i < argc; i++) {
@@ -146,20 +140,46 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
                 displayName = argv[++i];
             else if (arg == "-name" && i < argc - 1)
                 m_instanceName = argv[++i];
+            else if (arg == "-nograb")
+                noGrabArg = true;
+            else if (arg == "-dograb")
+                doGrabArg = true;
+            else if (arg == "-visual" && i < argc - 1) {
+                bool ok = false;
+                m_defaultVisualId = QByteArray(argv[++i]).toUInt(&ok, 0);
+                if (!ok)
+                    m_defaultVisualId = UINT_MAX;
+            }
             else
                 argv[j++] = argv[i];
         }
         argc = j;
     } // argc
 
-    m_connections << new QXcbConnection(m_nativeInterface.data(), canGrab, displayName);
+    bool underDebugger = runningUnderDebugger();
+    if (noGrabArg && doGrabArg && underDebugger) {
+        qWarning() << "Both -nograb and -dograb command line arguments specified. Please pick one. -nograb takes prcedence";
+        doGrabArg = false;
+    }
+
+#if defined(QT_DEBUG)
+    if (!noGrabArg && !doGrabArg && underDebugger) {
+        qDebug("Qt: gdb: -nograb added to command-line options.\n"
+               "\t Use the -dograb option to enforce grabbing.");
+    }
+#endif
+    m_canGrab = (!underDebugger && !noGrabArg) || (underDebugger && doGrabArg);
+
+    static bool canNotGrabEnv = qEnvironmentVariableIsSet("QT_XCB_NO_GRAB_SERVER");
+    if (canNotGrabEnv)
+        m_canGrab = false;
+
+    m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, displayName);
 
     for (int i = 0; i < parameters.size() - 1; i += 2) {
-#ifdef Q_XCB_DEBUG
-        qDebug() << "QXcbIntegration: Connecting to additional display: " << parameters.at(i) << parameters.at(i+1);
-#endif
-        QString display = parameters.at(i) + ':' + parameters.at(i+1);
-        m_connections << new QXcbConnection(m_nativeInterface.data(), display.toLatin1().constData());
+        qCDebug(lcQpaScreen) << "connecting to additional display: " << parameters.at(i) << parameters.at(i+1);
+        QString display = parameters.at(i) + QLatin1Char(':') + parameters.at(i+1);
+        m_connections << new QXcbConnection(m_nativeInterface.data(), m_canGrab, m_defaultVisualId, display.toLatin1().constData());
     }
 
     m_fontDatabase.reset(new QGenericUnixFontDatabase());
@@ -168,86 +188,38 @@ QXcbIntegration::QXcbIntegration(const QStringList &parameters, int &argc, char 
 QXcbIntegration::~QXcbIntegration()
 {
     qDeleteAll(m_connections);
+    m_instance = Q_NULLPTR;
 }
 
 QPlatformWindow *QXcbIntegration::createPlatformWindow(QWindow *window) const
 {
-    return new QXcbWindow(window);
+    QXcbScreen *screen = static_cast<QXcbScreen *>(window->screen()->handle());
+    QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
+    if (window->type() != Qt::Desktop) {
+        if (glIntegration) {
+            QXcbWindow *xcbWindow = glIntegration->createWindow(window);
+            xcbWindow->create();
+            return xcbWindow;
+        }
+    }
+
+    Q_ASSERT(window->type() == Qt::Desktop || !window->supportsOpenGL()
+             || (!glIntegration && window->surfaceType() == QSurface::RasterGLSurface)); // for VNC
+    QXcbWindow *xcbWindow = new QXcbWindow(window);
+    xcbWindow->create();
+    return xcbWindow;
 }
-
-#if defined(XCB_USE_EGL)
-class QEGLXcbPlatformContext : public QEGLPlatformContext
-{
-public:
-    QEGLXcbPlatformContext(const QSurfaceFormat &glFormat, QPlatformOpenGLContext *share,
-                           EGLDisplay display, QXcbConnection *c, const QVariant &nativeHandle)
-        : QEGLPlatformContext(glFormat, share, display, 0, nativeHandle)
-        , m_connection(c)
-    {
-        Q_XCB_NOOP(m_connection);
-    }
-
-    void swapBuffers(QPlatformSurface *surface)
-    {
-        Q_XCB_NOOP(m_connection);
-        QEGLPlatformContext::swapBuffers(surface);
-        Q_XCB_NOOP(m_connection);
-    }
-
-    bool makeCurrent(QPlatformSurface *surface)
-    {
-        Q_XCB_NOOP(m_connection);
-        bool ret = QEGLPlatformContext::makeCurrent(surface);
-        Q_XCB_NOOP(m_connection);
-        return ret;
-    }
-
-    void doneCurrent()
-    {
-        Q_XCB_NOOP(m_connection);
-        QEGLPlatformContext::doneCurrent();
-        Q_XCB_NOOP(m_connection);
-    }
-
-    EGLSurface eglSurfaceForPlatformSurface(QPlatformSurface *surface)
-    {
-        if (surface->surface()->surfaceClass() == QSurface::Window)
-            return static_cast<QXcbWindow *>(surface)->eglSurface()->surface();
-        else
-            return static_cast<QEGLPbuffer *>(surface)->pbuffer();
-    }
-
-    QVariant nativeHandle() const {
-        return QVariant::fromValue<QEGLNativeContext>(QEGLNativeContext(eglContext(), eglDisplay()));
-    }
-
-private:
-    QXcbConnection *m_connection;
-};
-#endif
 
 #ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QXcbIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
     QXcbScreen *screen = static_cast<QXcbScreen *>(context->screen()->handle());
-#if defined(XCB_USE_GLX)
-    QGLXContext *platformContext = new QGLXContext(screen, context->format(),
-                                                   context->shareHandle(), context->nativeHandle());
-    context->setNativeHandle(platformContext->nativeHandle());
-    return platformContext;
-#elif defined(XCB_USE_EGL)
-    QEGLXcbPlatformContext *platformContext = new QEGLXcbPlatformContext(context->format(),
-                                                                         context->shareHandle(),
-                                                                         screen->connection()->egl_display(),
-                                                                         screen->connection(),
-                                                                         context->nativeHandle());
-    context->setNativeHandle(platformContext->nativeHandle());
-    return platformContext;
-#else
-    Q_UNUSED(screen);
-    qWarning("QXcbIntegration: Cannot create platform OpenGL context, neither GLX nor EGL are enabled");
-    return 0;
-#endif
+    QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
+    if (!glIntegration) {
+        qWarning("QXcbIntegration: Cannot create platform OpenGL context, neither GLX nor EGL are enabled");
+        return Q_NULLPTR;
+    }
+    return glIntegration->createPlatformOpenGLContext(context);
 }
 #endif
 
@@ -258,45 +230,23 @@ QPlatformBackingStore *QXcbIntegration::createPlatformBackingStore(QWindow *wind
 
 QPlatformOffscreenSurface *QXcbIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
 {
-#if defined(XCB_USE_GLX)
-    static bool vendorChecked = false;
-    static bool glxPbufferUsable = true;
-    if (!vendorChecked) {
-        vendorChecked = true;
-        const char *glxvendor = glXGetClientString(glXGetCurrentDisplay(), GLX_VENDOR);
-        if (glxvendor && !strcmp(glxvendor, "ATI"))
-            glxPbufferUsable = false;
-    }
-    if (glxPbufferUsable)
-        return new QGLXPbuffer(surface);
-    else
-        return 0; // trigger fallback to hidden QWindow
-#elif defined(XCB_USE_EGL)
     QXcbScreen *screen = static_cast<QXcbScreen *>(surface->screen()->handle());
-    return new QEGLPbuffer(screen->connection()->egl_display(), surface->requestedFormat(), surface);
-#else
-    Q_UNUSED(surface);
-    qWarning("QXcbIntegration: Cannot create platform offscreen surface, neither GLX nor EGL are enabled");
-    return 0;
-#endif
+    QXcbGlIntegration *glIntegration = screen->connection()->glIntegration();
+    if (!glIntegration) {
+        qWarning("QXcbIntegration: Cannot create platform offscreen surface, neither GLX nor EGL are enabled");
+        return Q_NULLPTR;
+    }
+    return glIntegration->createPlatformOffscreenSurface(surface);
 }
 
 bool QXcbIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 {
     switch (cap) {
     case ThreadedPixmaps: return true;
-#if defined(XCB_USE_GLX)
-    case OpenGL: return m_connections.at(0)->hasGLX();
-#elif defined(XCB_USE_EGL)
-    case OpenGL: return true;
-#else
-    case OpenGL: return false;
-#endif
-#if defined(XCB_USE_GLX)
-    case ThreadedOpenGL: return m_connections.at(0)->supportsThreadedRendering() && QGLXContext::supportsThreading();
-#else
-    case ThreadedOpenGL: return m_connections.at(0)->supportsThreadedRendering();
-#endif
+    case OpenGL: return m_connections.first()->glIntegration();
+    case ThreadedOpenGL: return m_connections.at(0)->threadedEventHandling()
+                         && m_connections.at(0)->glIntegration()
+                             && m_connections.at(0)->glIntegration()->supportsThreadedOpenGL();
     case WindowMasks: return true;
     case MultipleWindows: return true;
     case ForeignWindows: return true;
@@ -408,12 +358,14 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
     case QPlatformIntegration::StartDragTime:
     case QPlatformIntegration::KeyboardAutoRepeatRate:
     case QPlatformIntegration::PasswordMaskDelay:
-    case QPlatformIntegration::FontSmoothingGamma:
     case QPlatformIntegration::StartDragVelocity:
     case QPlatformIntegration::UseRtlExtensions:
     case QPlatformIntegration::PasswordMaskCharacter:
         // TODO using various xcb, gnome or KDE settings
         break; // Not implemented, use defaults
+    case QPlatformIntegration::FontSmoothingGamma:
+        // Match Qt 4.8 text rendering, and rendering of other X11 toolkits.
+        return qreal(1.0);
     case QPlatformIntegration::StartDragDistance: {
         // The default (in QPlatformTheme::defaultThemeHint) is 10 pixels, but
         // on a high-resolution screen it makes sense to increase it.
@@ -430,9 +382,8 @@ QVariant QXcbIntegration::styleHint(QPlatformIntegration::StyleHint hint) const
         // X11 always has support for windows, but the
         // window manager could prevent it (e.g. matchbox)
         return false;
-    case QPlatformIntegration::SynthesizeMouseFromTouchEvents:
-        // We do not want Qt to synthesize mouse events if X11 already does it.
-        return m_connections.at(0)->hasTouchWithoutMouseEmulation();
+    case QPlatformIntegration::ReplayMousePressOutsidePopup:
+        return false;
     default:
         break;
     }

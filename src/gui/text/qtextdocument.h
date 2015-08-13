@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -63,7 +63,6 @@ class QTextCursor;
 
 template<typename T> class QVector;
 
-#ifndef Q_QDOC // Workaround for QTBUG-35230
 namespace Qt
 {
     Q_GUI_EXPORT bool mightBeRichText(const QString&);
@@ -73,7 +72,6 @@ namespace Qt
     Q_GUI_EXPORT QTextCodec *codecForHtml(const QByteArray &ba);
 #endif
 }
-#endif // Q_QDOC
 
 class Q_GUI_EXPORT QAbstractUndoItem
 {
@@ -160,10 +158,17 @@ public:
     Q_DECLARE_FLAGS(FindFlags, FindFlag)
 
     QTextCursor find(const QString &subString, int from = 0, FindFlags options = 0) const;
-    QTextCursor find(const QString &subString, const QTextCursor &from, FindFlags options = 0) const;
+    QTextCursor find(const QString &subString, const QTextCursor &cursor, FindFlags options = 0) const;
 
+#ifndef QT_NO_REGEXP
     QTextCursor find(const QRegExp &expr, int from = 0, FindFlags options = 0) const;
-    QTextCursor find(const QRegExp &expr, const QTextCursor &from, FindFlags options = 0) const;
+    QTextCursor find(const QRegExp &expr, const QTextCursor &cursor, FindFlags options = 0) const;
+#endif
+
+#ifndef QT_NO_REGULAREXPRESSION
+    QTextCursor find(const QRegularExpression &expr, int from = 0, FindFlags options = 0) const;
+    QTextCursor find(const QRegularExpression &expr, const QTextCursor &cursor, FindFlags options = 0) const;
+#endif
 
     QTextFrame *frameAt(int pos) const;
     QTextFrame *rootFrame() const;

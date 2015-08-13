@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -86,6 +86,9 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+typedef QList<QTextCodec*>::ConstIterator TextCodecListConstIt;
+typedef QList<QByteArray>::ConstIterator ByteArrayListConstIt;
 
 Q_GLOBAL_STATIC_WITH_ARGS(QMutex, textCodecsMutex, (QMutex::Recursive));
 QMutex *qTextCodecsMutex() { return textCodecsMutex(); }
@@ -519,20 +522,21 @@ QTextCodec *QTextCodec::codecForName(const QByteArray &name)
             return codec;
     }
 
-    for (int i = 0; i < globalData->allCodecs.size(); ++i) {
-        QTextCodec *cursor = globalData->allCodecs.at(i);
+    for (TextCodecListConstIt it = globalData->allCodecs.constBegin(), cend = globalData->allCodecs.constEnd(); it != cend; ++it) {
+        QTextCodec *cursor = *it;
         if (qTextCodecNameMatch(cursor->name(), name)) {
             if (cache)
                 cache->insert(name, cursor);
             return cursor;
         }
         QList<QByteArray> aliases = cursor->aliases();
-        for (int y = 0; y < aliases.size(); ++y)
-            if (qTextCodecNameMatch(aliases.at(y), name)) {
+        for (ByteArrayListConstIt ait = aliases.constBegin(), acend = aliases.constEnd(); ait != acend; ++ait) {
+            if (qTextCodecNameMatch(*ait, name)) {
                 if (cache)
                     cache->insert(name, cursor);
                 return cursor;
             }
+        }
     }
 
     return 0;
@@ -567,9 +571,8 @@ QTextCodec* QTextCodec::codecForMib(int mib)
             return codec;
     }
 
-    QList<QTextCodec*>::ConstIterator i;
-    for (int i = 0; i < globalData->allCodecs.size(); ++i) {
-        QTextCodec *cursor = globalData->allCodecs.at(i);
+    for (TextCodecListConstIt it = globalData->allCodecs.constBegin(), cend = globalData->allCodecs.constEnd(); it != cend; ++it) {
+        QTextCodec *cursor = *it;
         if (cursor->mibEnum() == mib) {
             if (cache)
                 cache->insert(key, cursor);
@@ -604,9 +607,9 @@ QList<QByteArray> QTextCodec::availableCodecs()
 
     QList<QByteArray> codecs;
 
-    for (int i = 0; i < globalData->allCodecs.size(); ++i) {
-        codecs += globalData->allCodecs.at(i)->name();
-        codecs += globalData->allCodecs.at(i)->aliases();
+    for (TextCodecListConstIt it = globalData->allCodecs.constBegin(), cend = globalData->allCodecs.constEnd(); it != cend; ++it) {
+        codecs += (*it)->name();
+        codecs += (*it)->aliases();
     }
 
 #ifdef QT_USE_ICU
@@ -636,8 +639,8 @@ QList<int> QTextCodec::availableMibs()
 
     QList<int> codecs;
 
-    for (int i = 0; i < globalData->allCodecs.size(); ++i)
-        codecs += globalData->allCodecs.at(i)->mibEnum();
+    for (TextCodecListConstIt it = globalData->allCodecs.constBegin(), cend = globalData->allCodecs.constEnd(); it != cend; ++it)
+        codecs += (*it)->mibEnum();
 
     return codecs;
 #endif
@@ -1144,13 +1147,30 @@ QTextCodec *QTextCodec::codecForUtfText(const QByteArray &ba)
     return codecForUtfText(ba, QTextCodec::codecForMib(/*Latin 1*/ 4));
 }
 
+/*!
+    \fn QTextCodec * QTextCodec::codecForTr ()
+    \obsolete
+
+    Returns the codec used by QObject::tr() on its argument. If this
+    function returns 0 (the default), tr() assumes Latin-1.
+
+    \sa  setCodecForTr()
+*/
+
+/*!
+    \fn QTextCodec::setCodecForTr ( QTextCodec * c )
+    \obsolete
+
+    Sets the codec used by QObject::tr() on its argument to c. If c
+    is 0 (the default), tr() assumes Latin-1.
+*/
 
 /*!
     \internal
     \since 4.3
-    Determines whether the decoder encountered a failure while decoding the input. If
-    an error was encountered, the produced result is undefined, and gets converted as according
-    to the conversion flags.
+    Determines whether the decoder encountered a failure while decoding the
+    input. If an error was encountered, the produced result is undefined, and
+    gets converted as according to the conversion flags.
  */
 bool QTextDecoder::hasFailure() const
 {

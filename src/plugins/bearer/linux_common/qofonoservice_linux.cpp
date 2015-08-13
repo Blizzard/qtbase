@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -67,23 +67,23 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, ObjectPathPropert
 QT_BEGIN_NAMESPACE
 
 QOfonoManagerInterface::QOfonoManagerInterface( QObject *parent)
-        : QDBusAbstractInterface(QStringLiteral(OFONO_SERVICE),
-                                 QStringLiteral(OFONO_MANAGER_PATH),
+        : QDBusAbstractInterface(QLatin1String(OFONO_SERVICE),
+                                 QLatin1String(OFONO_MANAGER_PATH),
                                  OFONO_MANAGER_INTERFACE,
                                  QDBusConnection::systemBus(), parent)
 {
     qDBusRegisterMetaType<ObjectPathProperties>();
     qDBusRegisterMetaType<PathPropertiesList>();
 
-    QDBusConnection::systemBus().connect(QStringLiteral(OFONO_SERVICE),
-                           QStringLiteral(OFONO_MANAGER_PATH),
-                           QStringLiteral(OFONO_MANAGER_INTERFACE),
-                           QStringLiteral("ModemAdded"),
+    QDBusConnection::systemBus().connect(QLatin1String(OFONO_SERVICE),
+                           QLatin1String(OFONO_MANAGER_PATH),
+                           QLatin1String(OFONO_MANAGER_INTERFACE),
+                           QLatin1String("ModemAdded"),
                            this,SLOT(modemAdded(QDBusObjectPath, QVariantMap)));
-    QDBusConnection::systemBus().connect(QStringLiteral(OFONO_SERVICE),
-                           QStringLiteral(OFONO_MANAGER_PATH),
-                           QStringLiteral(OFONO_MANAGER_INTERFACE),
-                           QStringLiteral("ModemRemoved"),
+    QDBusConnection::systemBus().connect(QLatin1String(OFONO_SERVICE),
+                           QLatin1String(OFONO_MANAGER_PATH),
+                           QLatin1String(OFONO_MANAGER_INTERFACE),
+                           QLatin1String("ModemRemoved"),
                            this,SLOT(modemRemoved(QDBusObjectPath)));
 }
 
@@ -137,15 +137,15 @@ void QOfonoManagerInterface::modemRemoved(const QDBusObjectPath &path)
 
 
 QOfonoModemInterface::QOfonoModemInterface(const QString &dbusPathName, QObject *parent)
-    : QDBusAbstractInterface(QStringLiteral(OFONO_SERVICE),
+    : QDBusAbstractInterface(QLatin1String(OFONO_SERVICE),
                              dbusPathName,
                              OFONO_MODEM_INTERFACE,
                              QDBusConnection::systemBus(), parent)
 {
-    QDBusConnection::systemBus().connect(QStringLiteral(OFONO_SERVICE),
+    QDBusConnection::systemBus().connect(QLatin1String(OFONO_SERVICE),
                                          path(),
                                          OFONO_MODEM_INTERFACE,
-                                         QStringLiteral("PropertyChanged"),
+                                         QLatin1String("PropertyChanged"),
                                          this,SLOT(propertyChanged(QString,QDBusVariant)));
 }
 
@@ -199,7 +199,7 @@ QVariant QOfonoModemInterface::getProperty(const QString &property)
 
 
 QOfonoNetworkRegistrationInterface::QOfonoNetworkRegistrationInterface(const QString &dbusPathName, QObject *parent)
-    : QDBusAbstractInterface(QStringLiteral(OFONO_SERVICE),
+    : QDBusAbstractInterface(QLatin1String(OFONO_SERVICE),
                              dbusPathName,
                              OFONO_NETWORK_REGISTRATION_INTERFACE,
                              QDBusConnection::systemBus(), parent)
@@ -269,6 +269,18 @@ QStringList QOfonoDataConnectionManagerInterface::contexts()
     return contextList;
 }
 
+PathPropertiesList QOfonoDataConnectionManagerInterface::contextsWithProperties()
+{
+    if (contextListProperties.isEmpty()) {
+        QDBusPendingReply<PathPropertiesList > reply = call(QLatin1String("GetContexts"));
+        reply.waitForFinished();
+        if (!reply.isError()) {
+            contextListProperties = reply.value();
+        }
+    }
+    return contextListProperties;
+}
+
 bool QOfonoDataConnectionManagerInterface::roamingAllowed()
 {
     QVariant var = getProperty(QStringLiteral("RoamingAllowed"));
@@ -283,14 +295,10 @@ QString QOfonoDataConnectionManagerInterface::bearer()
 
 QVariant QOfonoDataConnectionManagerInterface::getProperty(const QString &property)
 {
-    QVariant var;
-    QVariantMap map = getProperties();
-    if (map.contains(property))
-        var = map.value(property);
-    return var;
+    return getProperties().value(property);
 }
 
-QVariantMap QOfonoDataConnectionManagerInterface::getProperties()
+QVariantMap &QOfonoDataConnectionManagerInterface::getProperties()
 {
     if (propertiesMap.isEmpty()) {
         QList<QVariant> argumentList;

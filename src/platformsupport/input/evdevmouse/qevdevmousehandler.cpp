@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,6 +38,7 @@
 #include <QPoint>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QLoggingCategory>
 #include <qpa/qwindowsysteminterface.h>
 
 #include <qplatformdefs.h>
@@ -48,19 +49,15 @@
 #include <linux/kd.h>
 #include <linux/input.h>
 
-#include <qdebug.h>
-
-//#define QT_QPA_MOUSE_HANDLER_DEBUG
-
 #define TEST_BIT(array, bit)    (array[bit/8] & (1<<(bit%8)))
 
 QT_BEGIN_NAMESPACE
 
+Q_LOGGING_CATEGORY(qLcEvdevMouse, "qt.qpa.input")
+
 QEvdevMouseHandler *QEvdevMouseHandler::create(const QString &device, const QString &specification)
 {
-#ifdef QT_QPA_MOUSE_HANDLER_DEBUG
-    qWarning() << "Try to create mouse handler for" << device << specification;
-#endif
+    qCDebug(qLcEvdevMouse) << "create mouse handler for" << device << specification;
 
     bool compression = true;
     int jitterLimit = 0;
@@ -85,7 +82,7 @@ QEvdevMouseHandler *QEvdevMouseHandler::create(const QString &device, const QStr
         ::ioctl(fd, EVIOCGRAB, grab);
         return new QEvdevMouseHandler(device, fd, abs, compression, jitterLimit);
     } else {
-        qWarning("Cannot open mouse input device '%s': %s", qPrintable(device), strerror(errno));
+        qErrnoWarning(errno, "Cannot open mouse input device %s", qPrintable(device));
         return 0;
     }
 }
@@ -148,12 +145,10 @@ bool QEvdevMouseHandler::getHardwareMaximum()
     m_hardwareScalerX = static_cast<qreal>(m_hardwareWidth) / (g.right() - g.left());
     m_hardwareScalerY = static_cast<qreal>(m_hardwareHeight) / (g.bottom() - g.top());
 
-#ifdef QT_QPA_MOUSE_HANDLER_DEBUG
-    qDebug() << "Absolute pointing device";
-    qDebug() << "hardware max x" << m_hardwareWidth;
-    qDebug() << "hardware max y" << m_hardwareHeight;
-    qDebug() << "hardware scalers x" << m_hardwareScalerX << "y" << m_hardwareScalerY;
-#endif
+    qCDebug(qLcEvdevMouse) << "Absolute pointing device"
+                           << "hardware max x" << m_hardwareWidth
+                           << "hardware max y" << m_hardwareHeight
+                           << "hardware scalers x" << m_hardwareScalerX << "y" << m_hardwareScalerY;
 
     return true;
 }
@@ -194,11 +189,11 @@ void QEvdevMouseHandler::readMouseData()
         int result = QT_READ(m_fd, reinterpret_cast<char *>(buffer) + n, sizeof(buffer) - n);
 
         if (result == 0) {
-            qWarning("Got EOF from the input device.");
+            qWarning("evdevmouse: Got EOF from the input device");
             return;
         } else if (result < 0) {
             if (errno != EINTR && errno != EAGAIN) {
-                qWarning("Could not read from input device: %s", strerror(errno));
+                qErrnoWarning(errno, "evdevmouse: Could not read from input device");
                 return;
             }
         } else {
@@ -212,7 +207,6 @@ void QEvdevMouseHandler::readMouseData()
 
     for (int i = 0; i < n; ++i) {
         struct ::input_event *data = &buffer[i];
-        //qDebug() << ">>" << hex << data->type << data->code << dec << data->value;
         if (data->type == EV_ABS) {
             // Touchpads: store the absolute position for now, will calculate a relative one later.
             if (data->code == ABS_X && m_x != data->value) {

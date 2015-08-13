@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -83,13 +83,13 @@ static bool isPackage(const QFileSystemMetaData &data, const QFileSystemEntry &e
 
     if (suffix.length() > 0) {
         // First step: is the extension known ?
-        CFStringRef extensionRef = QCFString::toCFStringRef(suffix);
-        CFStringRef uniformTypeIdentifier = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extensionRef, NULL);
+        QCFType<CFStringRef> extensionRef = QCFString::toCFStringRef(suffix);
+        QCFType<CFStringRef> uniformTypeIdentifier = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, extensionRef, NULL);
         if (UTTypeConformsTo(uniformTypeIdentifier, kUTTypeBundle))
             return true;
 
         // Second step: check if an application knows the package type
-        CFStringRef path = QCFString::toCFStringRef(entry.filePath());
+        QCFType<CFStringRef> path = QCFString::toCFStringRef(entry.filePath());
         QCFType<CFURLRef> url = CFURLCreateWithFileSystemPath(0, path, kCFURLPOSIXPathStyle, true);
 
         UInt32 type, creator;
@@ -220,7 +220,7 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
     if (entry.isEmpty() || entry.isRoot())
         return entry;
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX) && !defined(Q_OS_ANDROID) && _POSIX_VERSION < 200809L
+#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX) && !defined(Q_OS_ANDROID) && !defined(Q_OS_HAIKU) && _POSIX_VERSION < 200809L
     // realpath(X,0) is not supported
     Q_UNUSED(data);
     return QFileSystemEntry(slowCanonicalized(absoluteName(entry).filePath()));
@@ -250,6 +250,26 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
             return QFileSystemEntry(ret);
         }
     }
+
+# elif defined(Q_OS_ANDROID)
+    // On some Android versions, realpath() will return a path even if it does not exist
+    // To work around this, we check existence in advance.
+    if (!data.hasFlags(QFileSystemMetaData::ExistsAttribute))
+        fillMetaData(entry, data, QFileSystemMetaData::ExistsAttribute);
+
+    if (!data.exists()) {
+        ret = 0;
+        errno = ENOENT;
+    } else {
+        ret = (char*)malloc(PATH_MAX + 1);
+        if (realpath(entry.nativeFilePath().constData(), (char*)ret) == 0) {
+            const int savedErrno = errno; // errno is checked below, and free() might change it
+            free(ret);
+            errno = savedErrno;
+            ret = 0;
+        }
+    }
+
 # else
 #  if _POSIX_VERSION >= 200801L
     ret = realpath(entry.nativeFilePath().constData(), (char*)0);
@@ -412,7 +432,7 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
             what |= QFileSystemMetaData::DirectoryType;
     }
     if (what & QFileSystemMetaData::HiddenAttribute) {
-        // Mac OS >= 10.5: st_flags & UF_HIDDEN
+        // OS X >= 10.5: st_flags & UF_HIDDEN
         what |= QFileSystemMetaData::PosixStatFlags;
     }
 #endif // defined(Q_OS_MACX)
@@ -723,36 +743,29 @@ bool QFileSystemEngine::setCurrentPath(const QFileSystemEntry &path)
 QFileSystemEntry QFileSystemEngine::currentPath()
 {
     QFileSystemEntry result;
-    QT_STATBUF st;
-    if (QT_STAT(".", &st) == 0) {
 #if defined(__GLIBC__) && !defined(PATH_MAX)
-        char *currentName = ::get_current_dir_name();
-        if (currentName) {
-            result = QFileSystemEntry(QByteArray(currentName), QFileSystemEntry::FromNativePath());
-            ::free(currentName);
-        }
-#else
-        char currentName[PATH_MAX+1];
-        if (::getcwd(currentName, PATH_MAX)) {
-#if defined(Q_OS_VXWORKS) && defined(VXWORKS_VXSIM)
-            QByteArray dir(currentName);
-            if (dir.indexOf(':') < dir.indexOf('/'))
-                dir.remove(0, dir.indexOf(':')+1);
-
-            qstrncpy(currentName, dir.constData(), PATH_MAX);
-#endif
-            result = QFileSystemEntry(QByteArray(currentName), QFileSystemEntry::FromNativePath());
-        }
-# if defined(QT_DEBUG)
-        if (result.isEmpty())
-            qWarning("QFileSystemEngine::currentPath: getcwd() failed");
-# endif
-#endif
-    } else {
-# if defined(QT_DEBUG)
-        qWarning("QFileSystemEngine::currentPath: stat(\".\") failed");
-# endif
+    char *currentName = ::get_current_dir_name();
+    if (currentName) {
+        result = QFileSystemEntry(QByteArray(currentName), QFileSystemEntry::FromNativePath());
+        ::free(currentName);
     }
+#else
+    char currentName[PATH_MAX+1];
+    if (::getcwd(currentName, PATH_MAX)) {
+#if defined(Q_OS_VXWORKS) && defined(VXWORKS_VXSIM)
+        QByteArray dir(currentName);
+        if (dir.indexOf(':') < dir.indexOf('/'))
+            dir.remove(0, dir.indexOf(':')+1);
+
+        qstrncpy(currentName, dir.constData(), PATH_MAX);
+#endif
+        result = QFileSystemEntry(QByteArray(currentName), QFileSystemEntry::FromNativePath());
+    }
+# if defined(QT_DEBUG)
+    if (result.isEmpty())
+        qWarning("QFileSystemEngine::currentPath: getcwd() failed");
+# endif
+#endif
     return result;
 }
 QT_END_NAMESPACE

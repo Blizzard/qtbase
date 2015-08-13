@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -67,30 +67,30 @@ public:
                   const QSet<QString> &topics);
     virtual ~QmlDocVisitor();
 
-    bool visit(QQmlJS::AST::UiImport *import);
-    void endVisit(QQmlJS::AST::UiImport *definition);
+    bool visit(QQmlJS::AST::UiImport *import) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::UiImport *definition) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::UiObjectDefinition *definition);
-    void endVisit(QQmlJS::AST::UiObjectDefinition *definition);
+    bool visit(QQmlJS::AST::UiObjectDefinition *definition) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::UiObjectDefinition *definition) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::UiPublicMember *member);
-    void endVisit(QQmlJS::AST::UiPublicMember *definition);
+    bool visit(QQmlJS::AST::UiPublicMember *member) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::UiPublicMember *definition) Q_DECL_OVERRIDE;
 
-    virtual bool visit(QQmlJS::AST::UiObjectBinding *);
-    virtual void endVisit(QQmlJS::AST::UiObjectBinding *);
-    virtual void endVisit(QQmlJS::AST::UiArrayBinding *);
-    virtual bool visit(QQmlJS::AST::UiArrayBinding *);
+    virtual bool visit(QQmlJS::AST::UiObjectBinding *) Q_DECL_OVERRIDE;
+    virtual void endVisit(QQmlJS::AST::UiObjectBinding *) Q_DECL_OVERRIDE;
+    virtual void endVisit(QQmlJS::AST::UiArrayBinding *) Q_DECL_OVERRIDE;
+    virtual bool visit(QQmlJS::AST::UiArrayBinding *) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::IdentifierPropertyName *idproperty);
+    bool visit(QQmlJS::AST::IdentifierPropertyName *idproperty) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::FunctionDeclaration *);
-    void endVisit(QQmlJS::AST::FunctionDeclaration *);
+    bool visit(QQmlJS::AST::FunctionDeclaration *) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::FunctionDeclaration *) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::UiScriptBinding *);
-    void endVisit(QQmlJS::AST::UiScriptBinding *);
+    bool visit(QQmlJS::AST::UiScriptBinding *) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::UiScriptBinding *) Q_DECL_OVERRIDE;
 
-    bool visit(QQmlJS::AST::UiQualifiedId *);
-    void endVisit(QQmlJS::AST::UiQualifiedId *);
+    bool visit(QQmlJS::AST::UiQualifiedId *) Q_DECL_OVERRIDE;
+    void endVisit(QQmlJS::AST::UiQualifiedId *) Q_DECL_OVERRIDE;
 
 private:
     QString getFullyQualifiedId(QQmlJS::AST::UiQualifiedId *id);

@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -177,6 +177,7 @@ void (*QAbstractDeclarativeData::parentChanged)(QAbstractDeclarativeData *, QObj
 void (*QAbstractDeclarativeData::signalEmitted)(QAbstractDeclarativeData *, QObject *, int, void **) = 0;
 int  (*QAbstractDeclarativeData::receivers)(QAbstractDeclarativeData *, const QObject *, int) = 0;
 bool (*QAbstractDeclarativeData::isSignalConnected)(QAbstractDeclarativeData *, const QObject *, int) = 0;
+void (*QAbstractDeclarativeData::setWidgetParent)(QObject *, QObject *) = 0;
 
 QObjectData::~QObjectData() {}
 
@@ -1394,7 +1395,7 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
     \sa signalsBlocked()
 */
 
-bool QObject::blockSignals(bool block)
+bool QObject::blockSignals(bool block) Q_DECL_NOTHROW
 {
     Q_D(QObject);
     bool previous = d->blockSig;
@@ -1475,7 +1476,7 @@ void QObject::moveToThread(QThread *targetThread)
                  currentData->thread, d->threadData->thread, targetData ? targetData->thread : Q_NULLPTR);
 
 #ifdef Q_OS_MAC
-        qWarning("On Mac OS X, you might be loading two sets of Qt binaries into the same process. "
+        qWarning("You might be loading two sets of Qt binaries into the same process. "
                  "Check that all plugins are compiled against the right Qt binaries. Export "
                  "DYLD_PRINT_LIBRARIES=1 and check that only one set of binaries are being loaded.");
 #endif
@@ -2661,8 +2662,8 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     const char *method_arg = method;
     ++method; // skip code
 
-    QByteArray methodName;
     QArgumentTypeArray methodTypes;
+    QByteArray methodName = QMetaObjectPrivate::decodeMethodSignature(method, methodTypes);
     const QMetaObject *rmeta = receiver->metaObject();
     int method_index_relative = -1;
     Q_ASSERT(QMetaObjectPrivate::get(rmeta)->revision >= 7);
@@ -2741,9 +2742,9 @@ QMetaObject::Connection QObject::connect(const QObject *sender, const char *sign
     You can check if the QMetaObject::Connection is valid by casting it to a bool.
 
     This function works in the same way as
-    connect(const QObject *sender, const char *signal,
+    \c {connect(const QObject *sender, const char *signal,
             const QObject *receiver, const char *method,
-            Qt::ConnectionType type)
+            Qt::ConnectionType type)}
     but it uses QMetaMethod to specify signal and method.
 
     \sa connect(const QObject *sender, const char *signal, const QObject *receiver, const char *method, Qt::ConnectionType type)
@@ -2996,7 +2997,7 @@ bool QObject::disconnect(const QObject *sender, const char *signal,
     otherwise returns \c false.
 
     This function provides the same possibilities like
-    disconnect(const QObject *sender, const char *signal, const QObject *receiver, const char *method)
+    \c {disconnect(const QObject *sender, const char *signal, const QObject *receiver, const char *method) }
     but uses QMetaMethod to represent the signal and the method to be disconnected.
 
     Additionally this function returnsfalse and no signals and slots disconnected
@@ -3710,13 +3711,14 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
             } else if (callFunction && c->method_offset <= receiver->metaObject()->methodOffset()) {
                 //we compare the vtable to make sure we are not in the destructor of the object.
                 locker.unlock();
+                const int methodIndex = c->method();
                 if (qt_signal_spy_callback_set.slot_begin_callback != 0)
-                    qt_signal_spy_callback_set.slot_begin_callback(receiver, c->method(), argv ? argv : empty_argv);
+                    qt_signal_spy_callback_set.slot_begin_callback(receiver, methodIndex, argv ? argv : empty_argv);
 
                 callFunction(receiver, QMetaObject::InvokeMetaMethod, method_relative, argv ? argv : empty_argv);
 
                 if (qt_signal_spy_callback_set.slot_end_callback != 0)
-                    qt_signal_spy_callback_set.slot_end_callback(receiver, c->method());
+                    qt_signal_spy_callback_set.slot_end_callback(receiver, methodIndex);
                 locker.relock();
             } else {
                 const int method = method_relative + c->method_offset;
@@ -4093,14 +4095,16 @@ QObjectUserData* QObject::userData(uint id) const
 
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug dbg, const QObject *o) {
+QDebug operator<<(QDebug dbg, const QObject *o)
+{
+    QDebugStateSaver saver(dbg);
     if (!o)
-        return dbg << "QObject(0x0) ";
+        return dbg << "QObject(0x0)";
     dbg.nospace() << o->metaObject()->className() << '(' << (void *)o;
     if (!o->objectName().isEmpty())
         dbg << ", name = " << o->objectName();
     dbg << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 
@@ -4110,7 +4114,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
 
     This macro associates extra information to the class, which is available
     using QObject::metaObject(). Qt makes only limited use of this feature, in
-    the \l{Active Qt}, \l{Qt D-Bus} and \l{Qt QML} modules.
+    the \l{Active Qt}, \l{Qt D-Bus} and \l{Qt QML module}{Qt QML}.
 
     The extra information takes the form of a \a Name string and a \a Value
     literal string.
@@ -4122,7 +4126,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     \sa QMetaObject::classInfo()
     \sa QAxFactory
     \sa {Using Qt D-Bus Adaptors}
-    \sa {Extending QML - Default Property Example}
+    \sa {Extending QML}
 */
 
 /*!
@@ -4174,6 +4178,7 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
 /*!
     \macro Q_ENUMS(...)
     \relates QObject
+    \obsolete
 
     This macro registers one or several enum types to the meta-object
     system.
@@ -4187,34 +4192,86 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
     defining it. In addition, the class \e defining the enum has to
     inherit QObject as well as declare the enum using Q_ENUMS().
 
+    In new code, you should prefer the use of the Q_ENUM() macro, which makes the
+    type available also to the meta type system.
+    For instance, QMetaEnum::fromType() will not work with types declared with Q_ENUMS().
+
     \sa {Qt's Property System}
 */
 
 /*!
     \macro Q_FLAGS(...)
     \relates QObject
+    \obsolete
 
-    This macro registers one or several \l{QFlags}{flags types} to the
+    This macro registers one or several \l{QFlags}{flags types} with the
     meta-object system. It is typically used in a class definition to declare
     that values of a given enum can be used as flags and combined using the
     bitwise OR operator.
-
-    For example, in QLibrary, the \l{QLibrary::LoadHints}{LoadHints} flag is
-    declared in the following way:
-
-    \snippet code/src_corelib_kernel_qobject.cpp 39a
-
-    The declaration of the flags themselves is performed in the public section
-    of the QLibrary class itself, using the \l Q_DECLARE_FLAGS() macro:
-
-    \snippet code/src_corelib_kernel_qobject.cpp 39b
 
     \note This macro takes care of registering individual flag values
     with the meta-object system, so it is unnecessary to use Q_ENUMS()
     in addition to this macro.
 
+    In new code, you should prefer the use of the Q_FLAG() macro, which makes the
+    type available also to the meta type system.
+
     \sa {Qt's Property System}
 */
+
+/*!
+    \macro Q_ENUM(...)
+    \relates QObject
+    \since 5.5
+
+    This macro registers an enum type with the meta-object system.
+    It must be placed after the enum declaration in a class that has the Q_OBJECT or the
+    Q_GADGET macro.
+
+    For example:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 38
+
+    Enumerations that are declared with Q_ENUM have their QMetaEnum registered in the
+    enclosing QMetaObject. You can also use QMetaEnum::fromType() to get the QMetaEnum.
+
+    Registered enumerations are automatically registered also to the Qt meta
+    type system, making them known to QMetaType without the need to use
+    Q_DECLARE_METATYPE(). This will enable useful features; for example, if used
+    in a QVariant, you can convert them to strings. Likewise, passing them to
+    QDebug will print out their names.
+
+    \sa {Qt's Property System}
+*/
+
+
+/*!
+    \macro Q_FLAG(...)
+    \relates QObject
+    \since 5.5
+
+    This macro registers a single \l{QFlags}{flags types} with the
+    meta-object system. It is typically used in a class definition to declare
+    that values of a given enum can be used as flags and combined using the
+    bitwise OR operator.
+
+    The macro must be placed after the enum declaration.
+
+    For example, in QLibrary, the \l{QLibrary::LoadHints}{LoadHints} flag is
+    declared in the following way:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 39
+
+    The declaration of the flags themselves is performed in the public section
+    of the QLibrary class itself, using the \l Q_DECLARE_FLAGS() macro.
+
+    \note The Q_FLAG macro takes care of registering individual flag values
+    with the meta-object system, so it is unnecessary to use Q_ENUM()
+    in addition to this macro.
+
+    \sa {Qt's Property System}
+*/
+
 
 /*!
     \macro Q_OBJECT
@@ -4233,13 +4290,26 @@ QDebug operator<<(QDebug dbg, const QObject *o) {
 
     \note This macro requires the class to be a subclass of QObject. Use
     Q_GADGET instead of Q_OBJECT to enable the meta object system's support
-    for enums in a class that is not a QObject subclass. Q_GADGET makes a
-    class member, \c{staticMetaObject}, available.
-    \c{staticMetaObject} is of type QMetaObject and provides access to the
-    enums declared with Q_ENUMS.
-    Q_GADGET is provided only for C++.
+    for enums in a class that is not a QObject subclass.
 
     \sa {Meta-Object System}, {Signals and Slots}, {Qt's Property System}
+*/
+
+/*!
+    \macro Q_GADGET
+    \relates QObject
+
+    The Q_GADGET macro is a lighter version of the Q_OBJECT macro for classes
+    that do not inherit from QObject but still want to use some of the
+    reflection capabilities offered by QMetaObject. Just like the Q_OBJECT
+    macro, it must appear in the private section of a class definition.
+
+    Q_GADGETs can have Q_ENUM, Q_PROPERTY and Q_INVOKABLE, but they cannot have
+    signals or slots
+
+    Q_GADGET makes a class member, \c{staticMetaObject}, available.
+    \c{staticMetaObject} is of type QMetaObject and provides access to the
+    enums declared with Q_ENUMS.
 */
 
 /*!

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,6 +33,7 @@
 
 #include "private/qwindow_p.h"
 #include "qwidgetwindow_p.h"
+#include "qlayout.h"
 
 #include "private/qwidget_p.h"
 #include "private/qapplication_p.h"
@@ -62,7 +63,7 @@ class QWidgetWindowPrivate : public QWindowPrivate
 {
     Q_DECLARE_PUBLIC(QWidgetWindow)
 public:
-    QWindow *eventReceiver() {
+    QWindow *eventReceiver() Q_DECL_OVERRIDE {
         Q_Q(QWidgetWindow);
         QWindow *w = q;
         while (w->parent() && qobject_cast<QWidgetWindow *>(w) && qobject_cast<QWidgetWindow *>(w->parent())) {
@@ -71,7 +72,7 @@ public:
         return w;
     }
 
-    void clearFocusObject()
+    void clearFocusObject() Q_DECL_OVERRIDE
     {
         Q_Q(QWidgetWindow);
         QWidget *widget = q->widget();
@@ -79,7 +80,37 @@ public:
             widget->focusWidget()->clearFocus();
     }
 
+    QRectF closestAcceptableGeometry(const QRectF &rect) const Q_DECL_OVERRIDE;
 };
+
+QRectF QWidgetWindowPrivate::closestAcceptableGeometry(const QRectF &rect) const
+{
+    Q_Q(const QWidgetWindow);
+    const QWidget *widget = q->widget();
+    if (!widget->isWindow() || !widget->hasHeightForWidth())
+        return QRect();
+    const QSize oldSize = rect.size().toSize();
+    const QSize newSize = QLayout::closestAcceptableSize(widget, oldSize);
+    if (newSize == oldSize)
+        return QRectF();
+    const int dw = newSize.width() - oldSize.width();
+    const int dh = newSize.height() - oldSize.height();
+    QRectF result = rect;
+    const QRectF currentGeometry(widget->geometry());
+    const qreal topOffset = result.top() - currentGeometry.top();
+    const qreal bottomOffset = result.bottom() - currentGeometry.bottom();
+    if (qAbs(topOffset) > qAbs(bottomOffset))
+        result.setTop(result.top() - dh); // top edge drag
+    else
+        result.setBottom(result.bottom() + dh); // bottom edge drag
+    const qreal leftOffset = result.left() - currentGeometry.left();
+    const qreal rightOffset = result.right() - currentGeometry.right();
+    if (qAbs(leftOffset) > qAbs(rightOffset))
+        result.setLeft(result.left() - dw); // left edge drag
+    else
+        result.setRight(result.right() + dw); // right edge drag
+    return result;
+}
 
 QWidgetWindow::QWidgetWindow(QWidget *widget)
     : QWindow(*new QWidgetWindowPrivate(), 0)
@@ -115,6 +146,12 @@ QObject *QWidgetWindow::focusObject() const
 
     if (!widget)
         widget = m_widget;
+
+    if (widget) {
+        QObject *focusObj = QWidgetPrivate::get(widget)->focusObject();
+        if (focusObj)
+            return focusObj;
+    }
 
     return widget;
 }
@@ -154,7 +191,7 @@ bool QWidgetWindow::event(QEvent *event)
     case QEvent::FocusAboutToChange:
         if (QApplicationPrivate::focus_widget) {
             if (QApplicationPrivate::focus_widget->testAttribute(Qt::WA_InputMethodEnabled))
-                qApp->inputMethod()->commit();
+                QGuiApplication::inputMethod()->commit();
 
             QGuiApplication::sendSpontaneousEvent(QApplicationPrivate::focus_widget, event);
         }
@@ -255,11 +292,21 @@ bool QWidgetWindow::event(QEvent *event)
     case QEvent::WindowBlocked:
         qt_button_down = 0;
         break;
+
+    case QEvent::UpdateRequest:
+        // This is not the same as an UpdateRequest for a QWidget. That just
+        // syncs the backing store while here we also must mark as dirty.
+        m_widget->repaint();
+        return true;
+
     default:
         break;
     }
 
-    return m_widget->event(event) || QWindow::event(event);
+    if (m_widget->event(event) && event->type() != QEvent::Timer)
+        return true;
+
+    return QWindow::event(event);
 }
 
 QPointer<QWidget> qt_last_mouse_receiver = 0;
@@ -403,6 +450,7 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
             QGuiApplicationPrivate::setMouseEventSource(&e, QGuiApplicationPrivate::mouseEventSource(event));
             e.setTimestamp(event->timestamp());
             QApplicationPrivate::sendMouseEvent(receiver, &e, alien, m_widget, &qt_button_down, qt_last_mouse_receiver);
+            qt_last_mouse_receiver = receiver;
         } else {
             // close disabled popups when a mouse button is pressed or released
             switch (event->type()) {
@@ -417,7 +465,8 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
         }
 
         if (qApp->activePopupWidget() != activePopupWidget
-            && qt_replay_popup_mouse_event) {
+            && qt_replay_popup_mouse_event
+            && QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ReplayMousePressOutsidePopup).toBool()) {
             if (m_widget->windowType() != Qt::Popup)
                 qt_button_down = 0;
             if (event->type() == QEvent::MouseButtonPress) {
@@ -506,7 +555,8 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
                                             &qt_button_down, qt_last_mouse_receiver);
     }
 #ifndef QT_NO_CONTEXTMENU
-    if (event->type() == contextMenuTrigger && event->button() == Qt::RightButton) {
+    if (event->type() == contextMenuTrigger && event->button() == Qt::RightButton
+        && m_widget->rect().contains(event->pos())) {
         QContextMenuEvent e(QContextMenuEvent::Mouse, mapped, event->globalPos(), event->modifiers());
         QGuiApplication::sendSpontaneousEvent(receiver, &e);
     }
@@ -597,12 +647,13 @@ void QWidgetWindow::handleScreenChange()
     sendScreenChangeRecursively(m_widget);
 
     // Invalidate the backing store buffer and repaint immediately.
-    repaintWindow();
+    if (screen())
+        repaintWindow();
 }
 
 void QWidgetWindow::repaintWindow()
 {
-    if (!m_widget->isVisible() || !m_widget->updatesEnabled())
+    if (!m_widget->isVisible() || !m_widget->updatesEnabled() || !m_widget->rect().isValid())
         return;
 
     QTLWExtra *tlwExtra = m_widget->window()->d_func()->maybeTopData();
@@ -674,7 +725,7 @@ void QWidgetWindow::handleWheelEvent(QWheelEvent *event)
 
     QPoint mapped = widget->mapFrom(m_widget, event->pos());
 
-    QWheelEvent translated(mapped, event->globalPos(), event->pixelDelta(), event->angleDelta(), event->delta(), event->orientation(), event->buttons(), event->modifiers(), event->phase());
+    QWheelEvent translated(mapped, event->globalPos(), event->pixelDelta(), event->angleDelta(), event->delta(), event->orientation(), event->buttons(), event->modifiers(), event->phase(), event->source());
     QGuiApplication::sendSpontaneousEvent(widget, &translated);
 }
 

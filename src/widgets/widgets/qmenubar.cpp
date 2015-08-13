@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,8 +69,8 @@ class QMenuBarExtension : public QToolButton
 public:
     explicit QMenuBarExtension(QWidget *parent);
 
-    QSize sizeHint() const;
-    void paintEvent(QPaintEvent *);
+    QSize sizeHint() const Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE;
 };
 
 QMenuBarExtension::QMenuBarExtension(QWidget *parent)
@@ -1631,9 +1631,8 @@ QSize QMenuBar::sizeHint() const
     int margin = 2*vmargin + 2*fw + spaceBelowMenuBar;
     if(d->leftWidget) {
         QSize sz = d->leftWidget->sizeHint();
-        ret.setWidth(ret.width() + sz.width());
-        if(sz.height() + margin > ret.height())
-            ret.setHeight(sz.height() + margin);
+        sz.rheight() += margin;
+        ret = ret.expandedTo(sz);
     }
     if(d->rightWidget) {
         QSize sz = d->rightWidget->sizeHint();
@@ -1921,15 +1920,6 @@ QAction *QMenuBar::defaultAction() const
     Often this is used to update status information.
 
     \sa triggered(), QAction::hovered()
-*/
-
-/*!
-    \fn void QMenuBar::addAction(QAction *action)
-    \overload
-
-    Appends the action \a action to the menu bar's list of actions.
-
-    \sa QMenu::addAction(), QWidget::addAction(), QWidget::actions()
 */
 
 // for private slots

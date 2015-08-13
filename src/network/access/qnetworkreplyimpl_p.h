@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,16 +69,16 @@ class QNetworkReplyImpl: public QNetworkReply
 public:
     QNetworkReplyImpl(QObject *parent = 0);
     ~QNetworkReplyImpl();
-    virtual void abort();
+    virtual void abort() Q_DECL_OVERRIDE;
 
     // reimplemented from QNetworkReply / QIODevice
-    virtual void close();
-    virtual qint64 bytesAvailable() const;
-    virtual void setReadBufferSize(qint64 size);
-    virtual bool canReadLine () const;
+    virtual void close() Q_DECL_OVERRIDE;
+    virtual qint64 bytesAvailable() const Q_DECL_OVERRIDE;
+    virtual void setReadBufferSize(qint64 size) Q_DECL_OVERRIDE;
+    virtual bool canReadLine () const Q_DECL_OVERRIDE;
 
-    virtual qint64 readData(char *data, qint64 maxlen);
-    virtual bool event(QEvent *);
+    virtual qint64 readData(char *data, qint64 maxlen) Q_DECL_OVERRIDE;
+    virtual bool event(QEvent *) Q_DECL_OVERRIDE;
 
     Q_DECLARE_PRIVATE(QNetworkReplyImpl)
     Q_PRIVATE_SLOT(d_func(), void _q_startOperation())
@@ -94,10 +94,10 @@ public:
 
 #ifndef QT_NO_SSL
 protected:
-    void sslConfigurationImplementation(QSslConfiguration &configuration) const;
-    void setSslConfigurationImplementation(const QSslConfiguration &configuration);
-    virtual void ignoreSslErrors();
-    virtual void ignoreSslErrorsImplementation(const QList<QSslError> &errors);
+    void sslConfigurationImplementation(QSslConfiguration &configuration) const Q_DECL_OVERRIDE;
+    void setSslConfigurationImplementation(const QSslConfiguration &configuration) Q_DECL_OVERRIDE;
+    virtual void ignoreSslErrors() Q_DECL_OVERRIDE;
+    virtual void ignoreSslErrorsImplementation(const QList<QSslError> &errors) Q_DECL_OVERRIDE;
 #endif
 };
 
@@ -214,9 +214,9 @@ public:
                           QNetworkAccessManager::Operation op);
     ~QDisabledNetworkReply();
 
-    void abort() { }
+    void abort() Q_DECL_OVERRIDE { }
 protected:
-    qint64 readData(char *, qint64) { return -1; }
+    qint64 readData(char *, qint64) Q_DECL_OVERRIDE { return -1; }
 };
 #endif
 

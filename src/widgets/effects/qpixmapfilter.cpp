@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -329,7 +329,7 @@ static void convolute(
     QRectF sbounded = srect.adjusted(-kernelWidth / 2, -kernelHeight / 2, (kernelWidth - 1) / 2, (kernelHeight - 1) / 2);
     QPoint srcStartPoint = sbounded.toAlignedRect().topLeft()+(targetRect.topLeft()-rect.topLeft());
 
-    const uint *sourceStart = (uint*)processImage.scanLine(0);
+    const uint *sourceStart = (const uint*)processImage.scanLine(0);
     uint *outputStart = (uint*)destImage->scanLine(0);
 
     int yk = srcStartPoint.y();
@@ -416,17 +416,7 @@ void QPixmapConvolutionFilter::draw(QPainter *painter, const QPointF &p, const Q
     if (src.isNull())
         return;
 
-    QPixmapFilter *filter = painter->paintEngine() && painter->paintEngine()->isExtended() ?
-        static_cast<QPaintEngineEx *>(painter->paintEngine())->pixmapFilter(type(), this) : 0;
-    QPixmapConvolutionFilter *convolutionFilter = static_cast<QPixmapConvolutionFilter*>(filter);
-    if (convolutionFilter) {
-        convolutionFilter->setConvolutionKernel(d->convolutionKernel, d->kernelWidth, d->kernelHeight);
-        convolutionFilter->d_func()->convoluteAlpha = d->convoluteAlpha;
-        convolutionFilter->draw(painter, p, src, srcRect);
-        return;
-    }
-
-    // falling back to raster implementation
+    // raster implementation
 
     QImage *target = 0;
     if (painter->paintEngine()->paintDevice()->devType() == QInternal::Image) {
@@ -705,7 +695,8 @@ void expblur(QImage &img, qreal radius, bool improvedQuality = false, int transp
 
     Q_ASSERT(img.format() == QImage::Format_ARGB32_Premultiplied
              || img.format() == QImage::Format_RGB32
-             || img.format() == QImage::Format_Indexed8);
+             || img.format() == QImage::Format_Indexed8
+             || img.format() == QImage::Format_Grayscale8);
 
     // choose the alpha such that pixels at radius distance from a fully
     // saturated pixel will have an alpha component of no greater than
@@ -780,7 +771,7 @@ Q_WIDGETS_EXPORT QImage qt_halfScaled(const QImage &source)
 
     QImage srcImage = source;
 
-    if (source.format() == QImage::Format_Indexed8) {
+    if (source.format() == QImage::Format_Indexed8 || source.format() == QImage::Format_Grayscale8) {
         // assumes grayscale
         QImage dest(source.width() / 2, source.height() / 2, srcImage.format());
 
@@ -890,7 +881,7 @@ Q_WIDGETS_EXPORT void qt_blurImage(QPainter *p, QImage &blurImage, qreal radius,
 
 Q_WIDGETS_EXPORT void qt_blurImage(QImage &blurImage, qreal radius, bool quality, int transposed = 0)
 {
-    if (blurImage.format() == QImage::Format_Indexed8)
+    if (blurImage.format() == QImage::Format_Indexed8 || blurImage.format() == QImage::Format_Grayscale8)
         expblur<12, 10, true>(blurImage, radius, quality, transposed);
     else
         expblur<12, 10, false>(blurImage, radius, quality, transposed);
@@ -924,16 +915,6 @@ void QPixmapBlurFilter::draw(QPainter *painter, const QPointF &p, const QPixmap 
     if (qt_scaleForTransform(painter->transform(), &scale))
         scaledRadius /= scale;
 
-    QPixmapFilter *filter = painter->paintEngine() && painter->paintEngine()->isExtended() ?
-        static_cast<QPaintEngineEx *>(painter->paintEngine())->pixmapFilter(type(), this) : 0;
-    QPixmapBlurFilter *blurFilter = static_cast<QPixmapBlurFilter*>(filter);
-    if (blurFilter) {
-        blurFilter->setRadius(scaledRadius);
-        blurFilter->setBlurHints(d->hints);
-        blurFilter->draw(painter, p, src, srcRect);
-        return;
-    }
-
     QImage srcImage;
     QImage destImage;
 
@@ -965,7 +946,7 @@ static void grayscale(const QImage &image, QImage &dest, const QRect& rect = QRe
         destRect.moveTo(QPoint(0, 0));
     }
 
-    unsigned int *data = (unsigned int *)image.bits();
+    const unsigned int *data = (const unsigned int *)image.bits();
     unsigned int *outData = (unsigned int *)dest.bits();
 
     if (dest.size() == image.size() && image.rect() == srcRect) {
@@ -978,7 +959,7 @@ static void grayscale(const QImage &image, QImage &dest, const QRect& rect = QRe
     } else {
         int yd = destRect.top();
         for (int y = srcRect.top(); y <= srcRect.bottom() && y < image.height(); y++) {
-            data = (unsigned int*)image.scanLine(y);
+            data = (const unsigned int*)image.scanLine(y);
             outData = (unsigned int*)dest.scanLine(yd++);
             int xd = destRect.left();
             for (int x = srcRect.left(); x <= srcRect.right() && x < image.width(); x++) {
@@ -1094,17 +1075,7 @@ void QPixmapColorizeFilter::draw(QPainter *painter, const QPointF &dest, const Q
     if (src.isNull())
         return;
 
-    QPixmapFilter *filter = painter->paintEngine() && painter->paintEngine()->isExtended() ?
-        static_cast<QPaintEngineEx *>(painter->paintEngine())->pixmapFilter(type(), this) : 0;
-    QPixmapColorizeFilter *colorizeFilter = static_cast<QPixmapColorizeFilter*>(filter);
-    if (colorizeFilter) {
-        colorizeFilter->setColor(d->color);
-        colorizeFilter->setStrength(d->strength);
-        colorizeFilter->draw(painter, dest, src, srcRect);
-        return;
-    }
-
-    // falling back to raster implementation
+    // raster implementation
 
     if (!d->opaque) {
         painter->drawPixmap(dest, src, srcRect);
@@ -1327,17 +1298,6 @@ void QPixmapDropShadowFilter::draw(QPainter *p,
 
     if (px.isNull())
         return;
-
-    QPixmapFilter *filter = p->paintEngine() && p->paintEngine()->isExtended() ?
-        static_cast<QPaintEngineEx *>(p->paintEngine())->pixmapFilter(type(), this) : 0;
-    QPixmapDropShadowFilter *dropShadowFilter = static_cast<QPixmapDropShadowFilter*>(filter);
-    if (dropShadowFilter) {
-        dropShadowFilter->setColor(d->color);
-        dropShadowFilter->setBlurRadius(d->radius);
-        dropShadowFilter->setOffset(d->offset);
-        dropShadowFilter->draw(p, pos, px, src);
-        return;
-    }
 
     QImage tmp(px.size(), QImage::Format_ARGB32_Premultiplied);
     tmp.fill(0);

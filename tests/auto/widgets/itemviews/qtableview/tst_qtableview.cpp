@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -195,15 +195,19 @@ private slots:
     void task191545_dragSelectRows();
     void taskQTBUG_5062_spansInconsistency();
     void taskQTBUG_4516_clickOnRichTextLabel();
+#ifndef QT_NO_WHEELEVENT
     void taskQTBUG_5237_wheelEventOnHeader();
+#endif
     void taskQTBUG_8585_crashForNoGoodReason();
     void taskQTBUG_7774_RtoLVisualRegionForSelection();
     void taskQTBUG_8777_scrollToSpans();
     void taskQTBUG_10169_sizeHintForRow();
     void taskQTBUG_30653_doItemsLayout();
 
+#ifndef QT_NO_WHEELEVENT
     void mouseWheel_data();
     void mouseWheel();
+#endif
 
     void addColumnWhileEditing();
     void task234926_setHeaderSorting();
@@ -434,7 +438,7 @@ public:
     {
         QTableView::setModel(model);
         connect(selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                     this, SLOT(currentChanged(QModelIndex,QModelIndex)));
+                     this, SLOT(slotCurrentChanged(QModelIndex,QModelIndex)));
         connect(selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
                      this, SLOT(itemSelectionChanged(QItemSelection,QItemSelection)));
     }
@@ -495,7 +499,7 @@ public:
 
     bool checkSignalOrder;
 public slots:
-    void currentChanged(QModelIndex , QModelIndex ) {
+    void slotCurrentChanged(QModelIndex, QModelIndex) {
         hasCurrentChanged++;
         if (checkSignalOrder)
             QVERIFY(hasCurrentChanged > hasSelectionChanged);
@@ -3994,7 +3998,7 @@ void tst_QTableView::task248688_autoScrollNavigation()
     }
 }
 
-
+#ifndef QT_NO_WHEELEVENT
 void tst_QTableView::mouseWheel_data()
 {
     QTest::addColumn<int>("scrollMode");
@@ -4051,6 +4055,7 @@ void tst_QTableView::mouseWheel()
     QApplication::sendEvent(view.viewport(), &verticalEvent);
     QVERIFY(qAbs(view.verticalScrollBar()->value() - verticalPosition) < 10);
 }
+#endif // !QT_NO_WHEELEVENT
 
 void tst_QTableView::addColumnWhileEditing()
 {
@@ -4283,6 +4288,9 @@ void tst_QTableView::taskQTBUG_4516_clickOnRichTextLabel()
     QLabel label("rich text");
     label.setTextFormat(Qt::RichText);
     view.setIndexWidget(model.index(1,1), &label);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
     view.setCurrentIndex(model.index(0,0));
     QCOMPARE(view.currentIndex(), model.index(0,0));
 
@@ -4311,6 +4319,7 @@ void tst_QTableView::changeHeaderData()
     QVERIFY(view.verticalHeader()->width() > textWidth);
 }
 
+#ifndef QT_NO_WHEELEVENT
 void tst_QTableView::taskQTBUG_5237_wheelEventOnHeader()
 {
     QTableView view;
@@ -4327,6 +4336,7 @@ void tst_QTableView::taskQTBUG_5237_wheelEventOnHeader()
     int sbValueAfter = view.verticalScrollBar()->value();
     QVERIFY(sbValueBefore != sbValueAfter);
 }
+#endif
 
 class TestTableView : public QTableView {
 Q_OBJECT

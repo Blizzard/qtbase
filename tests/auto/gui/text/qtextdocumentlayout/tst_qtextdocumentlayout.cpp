@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -67,6 +67,7 @@ private slots:
     void clippedTableCell();
     void floatingTablePageBreak();
     void imageAtRightAlignedTab();
+    void blockVisibility();
 
 private:
     QTextDocument *doc;
@@ -310,6 +311,47 @@ void tst_QTextDocumentLayout::imageAtRightAlignedTab()
 
    // Everything should fit into the 300 pixels
    QCOMPARE(doc->idealWidth(), 300.0);
+}
+
+void tst_QTextDocumentLayout::blockVisibility()
+{
+    QTextCursor cursor(doc);
+    for (int i = 0; i < 10; ++i) {
+        if (!doc->isEmpty())
+            cursor.insertBlock();
+        cursor.insertText(QString::number(i));
+    }
+
+    qreal margin = doc->documentMargin();
+    QSizeF emptySize(2 * margin, 2 * margin);
+    QSizeF halfSize = doc->size();
+    halfSize.rheight() -= 2 * margin;
+    halfSize.rheight() /= 2;
+    halfSize.rheight() += 2 * margin;
+
+    for (int i = 0; i < 10; i += 2) {
+        QTextBlock block = doc->findBlockByNumber(i);
+        block.setVisible(false);
+        doc->markContentsDirty(block.position(), block.length());
+    }
+
+    QCOMPARE(doc->size(), halfSize);
+
+    for (int i = 1; i < 10; i += 2) {
+        QTextBlock block = doc->findBlockByNumber(i);
+        block.setVisible(false);
+        doc->markContentsDirty(block.position(), block.length());
+    }
+
+    QCOMPARE(doc->size(), emptySize);
+
+    for (int i = 0; i < 10; i += 2) {
+        QTextBlock block = doc->findBlockByNumber(i);
+        block.setVisible(true);
+        doc->markContentsDirty(block.position(), block.length());
+    }
+
+    QCOMPARE(doc->size(), halfSize);
 }
 
 QTEST_MAIN(tst_QTextDocumentLayout)

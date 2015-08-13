@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -37,7 +37,9 @@
 #include <QtGui/QWindow>
 #include <QtGui/QScreen>
 #include <QtGui/QCursor>
+#include <QtGui/QFont>
 #include <QtGui/QPalette>
+#include <QtGui/QStyleHints>
 #include <qpa/qwindowsysteminterface.h>
 #include <qgenericplugin.h>
 
@@ -74,6 +76,12 @@ private slots:
     void genericPluginsAndWindowSystemEvents();
     void layoutDirection();
     void globalShareContext();
+    void testSetPaletteAttribute();
+
+    void staticFunctions();
+
+    void settableStyleHints_data();
+    void settableStyleHints(); // Needs to run last as it changes style hints.
 };
 
 void tst_QGuiApplication::cleanup()
@@ -812,6 +820,33 @@ void tst_QGuiApplication::quitOnLastWindowClosed()
         QCOMPARE(spy.count(), 1);
         QVERIFY(spy2.count() > 15);      // Should be around 20 if closing did not cause the quit
     }
+    {
+        int argc = 0;
+        QGuiApplication app(argc, 0);
+        app.setQuitOnLastWindowClosed(false);
+
+        QTimer timer;
+        timer.setInterval(2000);
+        timer.setSingleShot(true);
+        QObject::connect(&timer, SIGNAL(timeout()), &app, SLOT(quit()));
+
+        QSignalSpy spy(&app, SIGNAL(lastWindowClosed()));
+        QSignalSpy spy2(&timer, SIGNAL(timeout()));
+
+        QPointer<QWindow> mainWindow = new QWindow;
+
+        mainWindow->show();
+
+        QTimer::singleShot(1000, mainWindow, SLOT(close())); // This should not quit the application
+        timer.start();
+
+        app.exec();
+
+        QCOMPARE(spy2.count(), 1); // quit timer fired
+        QCOMPARE(spy.count(), 1); // lastWindowClosed emitted
+
+        app.setQuitOnLastWindowClosed(true); // restore underlying static to default value
+   }
 }
 
 static Qt::ScreenOrientation testOrientationToSend = Qt::PrimaryOrientation;
@@ -932,6 +967,78 @@ void tst_QGuiApplication::globalShareContext()
 #else
     QSKIP("No OpenGL support");
 #endif
+}
+
+void tst_QGuiApplication::testSetPaletteAttribute()
+{
+    QCoreApplication::setAttribute(Qt::AA_SetPalette, false);
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+
+    QGuiApplication app(argc, argv);
+
+    QVERIFY(!QCoreApplication::testAttribute(Qt::AA_SetPalette));
+    QPalette palette;
+    palette.setColor(QPalette::Foreground, Qt::red);
+    QGuiApplication::setPalette(palette);
+
+    QVERIFY(QCoreApplication::testAttribute(Qt::AA_SetPalette));
+}
+
+// Test that static functions do not crash if there is no application instance.
+void tst_QGuiApplication::staticFunctions()
+{
+    QGuiApplication::setApplicationDisplayName(QString());
+    QGuiApplication::applicationDisplayName();
+    QGuiApplication::allWindows();
+    QGuiApplication::topLevelWindows();
+    QGuiApplication::topLevelAt(QPoint(0, 0));
+    QGuiApplication::setWindowIcon(QIcon());
+    QGuiApplication::windowIcon();
+    QGuiApplication::platformName();
+    QGuiApplication::modalWindow();
+    QGuiApplication::focusWindow();
+    QGuiApplication::focusObject();
+    QGuiApplication::primaryScreen();
+    QGuiApplication::screens();
+    QGuiApplication::overrideCursor();
+    QGuiApplication::setOverrideCursor(QCursor());
+    QGuiApplication::changeOverrideCursor(QCursor());
+    QGuiApplication::restoreOverrideCursor();
+    QGuiApplication::keyboardModifiers();
+    QGuiApplication::queryKeyboardModifiers();
+    QGuiApplication::mouseButtons();
+    QGuiApplication::setLayoutDirection(Qt::LeftToRight);
+    QGuiApplication::layoutDirection();
+    QGuiApplication::styleHints();
+    QGuiApplication::setDesktopSettingsAware(true);
+    QGuiApplication::desktopSettingsAware();
+    QGuiApplication::inputMethod();
+    QGuiApplication::platformNativeInterface();
+    QGuiApplication::platformFunction(QByteArrayLiteral("bla"));
+    QGuiApplication::setQuitOnLastWindowClosed(true);
+    QGuiApplication::quitOnLastWindowClosed();
+    QGuiApplication::applicationState();
+}
+
+void tst_QGuiApplication::settableStyleHints_data()
+{
+    QTest::addColumn<bool>("appInstance");
+    QTest::newRow("app") << true;
+    QTest::newRow("no-app") << false;
+}
+
+void tst_QGuiApplication::settableStyleHints()
+{
+    QFETCH(bool, appInstance);
+    int argc = 0;
+    QScopedPointer<QGuiApplication> app;
+    if (appInstance)
+        app.reset(new QGuiApplication(argc, 0));
+
+    const int keyboardInputInterval = 555;
+    QGuiApplication::styleHints()->setKeyboardInputInterval(keyboardInputInterval);
+    QCOMPARE(QGuiApplication::styleHints()->keyboardInputInterval(), keyboardInputInterval);
 }
 
 QTEST_APPLESS_MAIN(tst_QGuiApplication)

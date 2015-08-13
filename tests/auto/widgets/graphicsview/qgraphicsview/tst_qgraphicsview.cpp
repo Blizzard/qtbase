@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -143,6 +143,10 @@ class tst_QGraphicsView : public QObject
 {
     Q_OBJECT
 
+public:
+    tst_QGraphicsView()
+        : platformName(qApp->platformName().toLower())
+    { }
 private slots:
     void initTestCase();
     void cleanup();
@@ -160,6 +164,7 @@ private slots:
     void dragMode_scrollHand();
     void dragMode_rubberBand();
     void rubberBandSelectionMode();
+    void rubberBandExtendSelection();
     void rotated_rubberBand();
     void backgroundBrush();
     void foregroundBrush();
@@ -193,7 +198,9 @@ private slots:
     void mapFromScenePoly();
     void mapFromScenePath();
     void sendEvent();
+#ifndef QT_NO_WHEELEVENT
     void wheelEvent();
+#endif
 #ifndef QTEST_NO_CURSOR
     void cursor();
     void cursor2();
@@ -272,6 +279,7 @@ private:
 #if defined Q_OS_BLACKBERRY
     QScopedPointer<QWidget> rootWindow;
 #endif
+    QString platformName;
 };
 
 void tst_QGraphicsView::initTestCase()
@@ -934,6 +942,61 @@ void tst_QGraphicsView::rubberBandSelectionMode()
     sendMouseMove(view.viewport(), view.viewport()->rect().bottomRight(),
                   Qt::LeftButton, Qt::LeftButton);
     QCOMPARE(scene.selectedItems(), QList<QGraphicsItem *>() << rect);
+}
+
+void tst_QGraphicsView::rubberBandExtendSelection()
+{
+   QWidget toplevel;
+   setFrameless(&toplevel);
+
+   QGraphicsScene scene(0, 0, 1000, 1000);
+
+   QGraphicsView view(&scene, &toplevel);
+   view.setDragMode(QGraphicsView::RubberBandDrag);
+   toplevel.show();
+
+   // Disable mouse tracking to prevent the window system from sending mouse
+   // move events to the viewport while we are synthesizing events. If
+   // QGraphicsView gets a mouse move event with no buttons down, it'll
+   // terminate the rubber band.
+   view.viewport()->setMouseTracking(false);
+
+   QGraphicsItem *item1 = scene.addRect(10, 10, 100, 100);
+   QGraphicsItem *item2 = scene.addRect(10, 120, 100, 100);
+   QGraphicsItem *item3 = scene.addRect(10, 230, 100, 100);
+
+   item1->setFlag(QGraphicsItem::ItemIsSelectable);
+   item2->setFlag(QGraphicsItem::ItemIsSelectable);
+   item3->setFlag(QGraphicsItem::ItemIsSelectable);
+
+   // select first item
+   item1->setSelected(true);
+   QCOMPARE(scene.selectedItems(), QList<QGraphicsItem *>() << item1);
+
+   // first rubberband without modifier key
+   sendMousePress(view.viewport(), view.mapFromScene(20, 115), Qt::LeftButton);
+   sendMouseMove(view.viewport(), view.mapFromScene(20, 300), Qt::LeftButton, Qt::LeftButton);
+   QVERIFY(!item1->isSelected());
+   QVERIFY(item2->isSelected());
+   QVERIFY(item3->isSelected());
+   sendMouseRelease(view.viewport(), QPoint(), Qt::LeftButton);
+
+   scene.clearSelection();
+
+   // select first item
+   item1->setSelected(true);
+   QVERIFY(item1->isSelected());
+
+   // now rubberband with modifier key
+   {
+      QPoint clickPoint = view.mapFromScene(20, 115);
+      QMouseEvent event(QEvent::MouseButtonPress, clickPoint, view.viewport()->mapToGlobal(clickPoint), Qt::LeftButton, 0, Qt::ControlModifier);
+      QApplication::sendEvent(view.viewport(), &event);
+   }
+   sendMouseMove(view.viewport(), view.mapFromScene(20, 300), Qt::LeftButton, Qt::LeftButton);
+   QVERIFY(item1->isSelected());
+   QVERIFY(item2->isSelected());
+   QVERIFY(item3->isSelected());
 }
 
 void tst_QGraphicsView::rotated_rubberBand()
@@ -2105,13 +2168,13 @@ void tst_QGraphicsView::sendEvent()
     QCOMPARE(item->events.at(item->events.size() - 2), QEvent::GraphicsSceneMouseRelease);
     QCOMPARE(item->events.at(item->events.size() - 1), QEvent::UngrabMouse);
 
-    QKeyEvent keyPress(QEvent::KeyPress, Qt::Key_Space, 0);
-    QApplication::sendEvent(view.viewport(), &keyPress);
+    QTest::keyPress(view.viewport(), Qt::Key_Space);
     QCOMPARE(item->events.size(), 9);
     QCOMPARE(item->events.at(item->events.size() - 2), QEvent::ShortcutOverride);
     QCOMPARE(item->events.last(), QEvent::KeyPress);
 }
 
+#ifndef QT_NO_WHEELEVENT
 class MouseWheelScene : public QGraphicsScene
 {
 public:
@@ -2168,6 +2231,7 @@ void tst_QGraphicsView::wheelEvent()
     QCOMPARE(spy.count(), 2);
     QVERIFY(widget->hasFocus());
 }
+#endif // !QT_NO_WHEELEVENT
 
 #ifndef QTEST_NO_CURSOR
 void tst_QGraphicsView::cursor()
@@ -2828,6 +2892,8 @@ void tst_QGraphicsView::scrollBarRanges()
     if (style == QLatin1String("GTK+") && useStyledPanel)
         QSKIP("GTK + style test skipped, see QTBUG-29002");
 
+    if (useStyledPanel && style == QStringLiteral("Macintosh") && platformName == QStringLiteral("cocoa"))
+        QSKIP("Insignificant on OSX");
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.setRenderHint(QPainter::Antialiasing);
@@ -4734,6 +4800,8 @@ public:
 
 void tst_QGraphicsView::hoverLeave()
 {
+    if (platformName == QStringLiteral("cocoa"))
+        QSKIP("Insignificant on OSX");
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     QGraphicsScene scene;
     QGraphicsView view(&scene);

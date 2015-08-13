@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -131,6 +132,34 @@ public:
                       val0, val1, val2, val3, val4, val5, val6, val7, val8, val9);
     }
 
+    bool invokeOnGadget(void *gadget,
+                QGenericReturnArgument returnValue,
+                QGenericArgument val0 = QGenericArgument(0),
+                QGenericArgument val1 = QGenericArgument(),
+                QGenericArgument val2 = QGenericArgument(),
+                QGenericArgument val3 = QGenericArgument(),
+                QGenericArgument val4 = QGenericArgument(),
+                QGenericArgument val5 = QGenericArgument(),
+                QGenericArgument val6 = QGenericArgument(),
+                QGenericArgument val7 = QGenericArgument(),
+                QGenericArgument val8 = QGenericArgument(),
+                QGenericArgument val9 = QGenericArgument()) const;
+    inline bool invokeOnGadget(void *gadget,
+                       QGenericArgument val0 = QGenericArgument(0),
+                       QGenericArgument val1 = QGenericArgument(),
+                       QGenericArgument val2 = QGenericArgument(),
+                       QGenericArgument val3 = QGenericArgument(),
+                       QGenericArgument val4 = QGenericArgument(),
+                       QGenericArgument val5 = QGenericArgument(),
+                       QGenericArgument val6 = QGenericArgument(),
+                       QGenericArgument val7 = QGenericArgument(),
+                       QGenericArgument val8 = QGenericArgument(),
+                       QGenericArgument val9 = QGenericArgument()) const
+    {
+        return invokeOnGadget(gadget, QGenericReturnArgument(),
+                      val0, val1, val2, val3, val4, val5, val6, val7, val8, val9);
+    }
+
     inline bool isValid() const { return mobj != 0; }
 
 #ifdef Q_QDOC
@@ -194,6 +223,15 @@ public:
     inline const QMetaObject *enclosingMetaObject() const { return mobj; }
 
     inline bool isValid() const { return name() != 0; }
+
+    template<typename T> static QMetaEnum fromType() {
+        Q_STATIC_ASSERT_X(QtPrivate::IsQEnumHelper<T>::Value,
+                          "QMetaEnum::fromType only works with enums declared as Q_ENUM or Q_FLAG");
+        const QMetaObject *metaObject = qt_getEnumMetaObject(T());
+        const char *name = qt_getEnumName(T());
+        return metaObject->enumerator(metaObject->indexOfEnumerator(name));
+    }
+
 private:
     const QMetaObject *mobj;
     uint handle;
@@ -237,11 +275,17 @@ public:
     bool write(QObject *obj, const QVariant &value) const;
     bool reset(QObject *obj) const;
 
+    QVariant readOnGadget(const void *gadget) const;
+    bool writeOnGadget(void *gadget, const QVariant &value) const;
+    bool resetOnGadget(void *gadget) const;
+
     bool hasStdCppSet() const;
     inline bool isValid() const { return isReadable(); }
     inline const QMetaObject *enclosingMetaObject() const { return mobj; }
 
 private:
+    int registerPropertyType() const;
+
     const QMetaObject *mobj;
     uint handle;
     int idx;

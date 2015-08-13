@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -200,7 +200,7 @@ public:
         preparedQueriesEnabled(false)
     { }
 
-    QString fieldSerial(int i) const { return QLatin1Char('$') + QString::number(i + 1); }
+    QString fieldSerial(int i) const Q_DECL_OVERRIDE { return QLatin1Char('$') + QString::number(i + 1); }
     void deallocatePreparedStmt();
     const QPSQLDriverPrivate * privDriver() const
     {
@@ -426,11 +426,8 @@ QVariant QPSQLResult::data(int i)
 #ifndef QT_NO_DATESTRING
         if (str.isEmpty())
             return QVariant(QTime());
-        if (str.at(str.length() - 3) == QLatin1Char('+') || str.at(str.length() - 3) == QLatin1Char('-'))
-            // strip the timezone
-            // TODO: fix this when timestamp support comes into QDateTime
-            return QVariant(QTime::fromString(str.left(str.length() - 3), Qt::ISODate));
-        return QVariant(QTime::fromString(str, Qt::ISODate));
+        else
+            return QVariant(QTime::fromString(str, Qt::ISODate));
 #else
         return QVariant(str);
 #endif
@@ -438,26 +435,20 @@ QVariant QPSQLResult::data(int i)
     case QVariant::DateTime: {
         QString dtval = QString::fromLatin1(val);
 #ifndef QT_NO_DATESTRING
-        if (dtval.length() < 10)
+        if (dtval.length() < 10) {
             return QVariant(QDateTime());
-        // remove the timezone
-        // TODO: fix this when timestamp support comes into QDateTime
-        if (dtval.at(dtval.length() - 3) == QLatin1Char('+') || dtval.at(dtval.length() - 3) == QLatin1Char('-'))
-            dtval.chop(3);
-        // milliseconds are sometimes returned with 2 digits only
-        if (dtval.at(dtval.length() - 3).isPunct())
-            dtval += QLatin1Char('0');
-        if (dtval.isEmpty())
-            return QVariant(QDateTime());
-        else
-            return QVariant(QDateTime::fromString(dtval, Qt::ISODate));
+       } else {
+            QChar sign = dtval[dtval.size() - 3];
+            if (sign == QLatin1Char('-') || sign == QLatin1Char('+')) dtval += QLatin1String(":00");
+            return QVariant(QDateTime::fromString(dtval, Qt::ISODate).toLocalTime());
+        }
 #else
         return QVariant(dtval);
 #endif
     }
     case QVariant::ByteArray: {
         size_t len;
-        unsigned char *data = PQunescapeBytea((unsigned char*)val, &len);
+        unsigned char *data = PQunescapeBytea((const unsigned char*)val, &len);
         QByteArray ba((const char*)data, len);
         qPQfreemem(data);
         return QVariant(ba);
@@ -536,6 +527,11 @@ QSqlRecord QPSQLResult::record() const
         int precision = PQfmod(d->result, i);
 
         switch (ptype) {
+        case QTIMESTAMPOID:
+        case QTIMESTAMPTZOID:
+            precision = 3;
+            break;
+
         case QNUMERICOID:
             if (precision != -1) {
                 len = (precision >> 16);
@@ -569,7 +565,7 @@ void QPSQLResult::virtual_hook(int id, void *data)
     QSqlResult::virtual_hook(id, data);
 }
 
-static QString qCreateParamString(const QVector<QVariant> boundValues, const QSqlDriver *driver)
+static QString qCreateParamString(const QVector<QVariant> &boundValues, const QSqlDriver *driver)
 {
     if (boundValues.isEmpty())
         return QString();
@@ -1252,6 +1248,23 @@ QSqlRecord QPSQLDriver::record(const QString& tablename) const
     return info;
 }
 
+template <class FloatType>
+inline void assignSpecialPsqlFloatValue(FloatType val, QString *target)
+{
+    if (isnan(val)) {
+        *target = QLatin1String("'NaN'");
+    } else {
+        switch (isinf(val)) {
+        case 1:
+            *target = QLatin1String("'Infinity'");
+            break;
+        case -1:
+            *target = QLatin1String("'-Infinity'");
+            break;
+        }
+    }
+}
+
 QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
 {
     Q_D(const QPSQLDriver);
@@ -1259,19 +1272,14 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
     if (field.isNull()) {
         r = QLatin1String("NULL");
     } else {
-        switch (field.type()) {
+        switch (int(field.type())) {
         case QVariant::DateTime:
 #ifndef QT_NO_DATESTRING
             if (field.value().toDateTime().isValid()) {
-                QDate dt = field.value().toDateTime().date();
-                QTime tm = field.value().toDateTime().time();
-                // msecs need to be right aligned otherwise psql interprets them wrong
-                r = QLatin1Char('\'') + QString::number(dt.year()) + QLatin1Char('-')
-                          + QString::number(dt.month()).rightJustified(2, QLatin1Char('0')) + QLatin1Char('-')
-                          + QString::number(dt.day()).rightJustified(2, QLatin1Char('0')) + QLatin1Char(' ')
-                          + tm.toString() + QLatin1Char('.')
-                          + QString::number(tm.msec()).rightJustified(3, QLatin1Char('0'))
-                          + QLatin1Char('\'');
+                // we force the value to be considered with a timezone information, and we force it to be UTC
+                // this is safe since postgresql stores only the UTC value and not the timezone offset (only used
+                // while parsing), so we have correct behavior in both case of with timezone and without tz
+                r = QLatin1String("TIMESTAMP WITH TIME ZONE ") + QLatin1Char('\'') + field.value().toDateTime().toUTC().toString(QLatin1String("yyyy-MM-ddThh:mm:ss.zzz")) + QLatin1Char('Z') + QLatin1Char('\'');
             } else {
                 r = QLatin1String("NULL");
             }
@@ -1304,9 +1312,9 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
             QByteArray ba(field.value().toByteArray());
             size_t len;
 #if defined PG_VERSION_NUM && PG_VERSION_NUM-0 >= 80200
-            unsigned char *data = PQescapeByteaConn(d->connection, (unsigned char*)ba.constData(), ba.size(), &len);
+            unsigned char *data = PQescapeByteaConn(d->connection, (const unsigned char*)ba.constData(), ba.size(), &len);
 #else
-            unsigned char *data = PQescapeBytea((unsigned char*)ba.constData(), ba.size(), &len);
+            unsigned char *data = PQescapeBytea((const unsigned char*)ba.constData(), ba.size(), &len);
 #endif
             r += QLatin1Char('\'');
             r += QLatin1String((const char*)data);
@@ -1314,21 +1322,16 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
             qPQfreemem(data);
             break;
         }
-        case QVariant::Double: {
-            double val = field.value().toDouble();
-            if (isnan(val))
-                r = QLatin1String("'NaN'");
-            else {
-                int res = isinf(val);
-                if (res == 1)
-                    r = QLatin1String("'Infinity'");
-                else if (res == -1)
-                    r = QLatin1String("'-Infinity'");
-                else
-                    r = QSqlDriver::formatValue(field, trimStrings);
-            }
+        case QMetaType::Float:
+            assignSpecialPsqlFloatValue(field.value().toFloat(), &r);
+            if (r.isEmpty())
+                r = QSqlDriver::formatValue(field, trimStrings);
             break;
-        }
+        case QVariant::Double:
+            assignSpecialPsqlFloatValue(field.value().toDouble(), &r);
+            if (r.isEmpty())
+                r = QSqlDriver::formatValue(field, trimStrings);
+            break;
         default:
             r = QSqlDriver::formatValue(field, trimStrings);
             break;

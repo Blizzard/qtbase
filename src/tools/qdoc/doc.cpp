@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -49,6 +49,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <qdebug.h>
+#include "generator.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -1611,12 +1612,14 @@ void DocParser::parse(const QString& source,
                     QString word = in.mid(startPos, pos - startPos);
                     // is word a C++ symbol or an English word?
                     if ((numInternalUppercase >= 1 && numLowercase >= 2)
-                            || numStrangeSymbols >= 1) {
-                        append(Atom::AutoLink, word);
+                            || numStrangeSymbols > 0) {
+                        if (word.startsWith(QString("__")))
+                            appendWord(word);
+                        else
+                            append(Atom::AutoLink, word);
                     }
-                    else {
+                    else
                         appendWord(word);
-                    }
                 }
             }
         }
@@ -1690,12 +1693,15 @@ void DocParser::insertTarget(const QString &target, bool keyword)
     }
     else {
         targetMap_.insert(target, location());
-        append(Atom::Target, target);
         priv->constructExtra();
-        if (keyword)
+        if (keyword) {
+            append(Atom::Keyword, target);
             priv->extra->keywords_.append(priv->text.lastAtom());
-        else
+        }
+        else {
+            append(Atom::Target, target);
             priv->extra->targets_.append(priv->text.lastAtom());
+        }
     }
 }
 
@@ -1991,7 +1997,7 @@ void DocParser::append(const QString &string)
     Atom::Type lastType = priv->text.lastAtom()->type();
     if ((lastType == Atom::Code) && priv->text.lastAtom()->string().endsWith(QLatin1String("\n\n")))
         priv->text.lastAtom()->chopString();
-    priv->text << Atom(string);
+    priv->text << Atom(string); // The Atom type is Link.
 }
 
 void DocParser::append(Atom::Type type, const QString& p1, const QString& p2)
@@ -2008,7 +2014,7 @@ void DocParser::append(const QString& p1, const QString& p2)
     if ((lastType == Atom::Code) && priv->text.lastAtom()->string().endsWith(QLatin1String("\n\n")))
         priv->text.lastAtom()->chopString();
     if (p2.isEmpty())
-        priv->text << Atom(p1);
+        priv->text << Atom(p1); // The Atom type is Link.
     else
         priv->text << LinkAtom(p1, p2);
 }
@@ -2319,7 +2325,10 @@ QString DocParser::getBracedArgument(bool verbatim)
                 }
                 break;
             default:
-                arg += in[pos];
+                if (in[pos].isSpace() && !verbatim)
+                    arg += QChar(' ');
+                else
+                    arg += in[pos];
                 pos++;
             }
         }
@@ -2813,21 +2822,6 @@ QString DocParser::slashed(const QString& str)
     return QLatin1Char('/') + result + QLatin1Char('/');
 }
 
-#define COMMAND_BRIEF                   Doc::alias("brief")
-#define COMMAND_QMLBRIEF                Doc::alias("qmlbrief")
-
-#if 0
-Doc::Doc(const Location& start_loc,
-         const Location& end_loc,
-         const QString& source,
-         const QSet<QString>& metaCommandSet)
-{
-    priv = new DocPrivate(start_loc,end_loc,source);
-    DocParser parser;
-    parser.parse(source,priv,metaCommandSet,QSet<QString>());
-}
-#endif
-
 /*!
   Parse the qdoc comment \a source. Build up a list of all the topic
   commands found including their arguments.  This constructor is used
@@ -3150,7 +3144,7 @@ void Doc::initialize(const Config& config)
     DocParser::sourceDirs = config.getCanonicalPathList(CONFIG_SOURCEDIRS);
     DocParser::quoting = config.getBool(CONFIG_QUOTINGINFORMATION);
 
-    QmlClassNode::qmlOnly = config.getBool(CONFIG_QMLONLY);
+    QmlTypeNode::qmlOnly = config.getBool(CONFIG_QMLONLY);
     QStringMap reverseAliasMap;
     config_ = &config;
 
@@ -3234,6 +3228,9 @@ void Doc::initialize(const Config& config)
     }
 }
 
+/*!
+  All the heap allocated variables are deleted.
+ */
 void Doc::terminate()
 {
     DocParser::exampleFiles.clear();
@@ -3308,7 +3305,10 @@ CodeMarker *Doc::quoteFromFile(const Location &location,
                                         DocParser::exampleDirs,
                                         fileName, userFriendlyFilePath);
     if (filePath.isEmpty()) {
-        location.warning(tr("Cannot find file to quote from: '%1'").arg(fileName));
+        QString details = QLatin1String("Example directories: ") + DocParser::exampleDirs.join(QLatin1Char(' '));
+        if (!DocParser::exampleFiles.isEmpty())
+            details += QLatin1String(", example files: ") + DocParser::exampleFiles.join(QLatin1Char(' '));
+        location.warning(tr("Cannot find file to quote from: '%1'").arg(fileName), details);
     }
     else {
         QFile inFile(filePath);
@@ -3323,9 +3323,7 @@ CodeMarker *Doc::quoteFromFile(const Location &location,
 
     QString dirPath = QFileInfo(filePath).path();
     CodeMarker *marker = CodeMarker::markerForFileName(fileName);
-    quoter.quoteFromFile(userFriendlyFilePath,
-                         code,
-                         marker->markedUpCode(code, 0, location));
+    quoter.quoteFromFile(userFriendlyFilePath, code, marker->markedUpCode(code, 0, location));
     return marker;
 }
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,63 +61,63 @@ public:
     QSocks5SocketEngine(QObject *parent = 0);
     ~QSocks5SocketEngine();
 
-    bool initialize(QAbstractSocket::SocketType type, QAbstractSocket::NetworkLayerProtocol protocol = QAbstractSocket::IPv4Protocol);
-    bool initialize(qintptr socketDescriptor, QAbstractSocket::SocketState socketState = QAbstractSocket::ConnectedState);
+    bool initialize(QAbstractSocket::SocketType type, QAbstractSocket::NetworkLayerProtocol protocol = QAbstractSocket::IPv4Protocol) Q_DECL_OVERRIDE;
+    bool initialize(qintptr socketDescriptor, QAbstractSocket::SocketState socketState = QAbstractSocket::ConnectedState) Q_DECL_OVERRIDE;
 
     void setProxy(const QNetworkProxy &networkProxy);
 
-    qintptr socketDescriptor() const;
+    qintptr socketDescriptor() const Q_DECL_OVERRIDE;
 
-    bool isValid() const;
+    bool isValid() const Q_DECL_OVERRIDE;
 
     bool connectInternal();
-    bool connectToHost(const QHostAddress &address, quint16 port);
-    bool connectToHostByName(const QString &name, quint16 port);
-    bool bind(const QHostAddress &address, quint16 port);
-    bool listen();
-    int accept();
-    void close();
+    bool connectToHost(const QHostAddress &address, quint16 port) Q_DECL_OVERRIDE;
+    bool connectToHostByName(const QString &name, quint16 port) Q_DECL_OVERRIDE;
+    bool bind(const QHostAddress &address, quint16 port) Q_DECL_OVERRIDE;
+    bool listen() Q_DECL_OVERRIDE;
+    int accept() Q_DECL_OVERRIDE;
+    void close() Q_DECL_OVERRIDE;
 
-    qint64 bytesAvailable() const;
+    qint64 bytesAvailable() const Q_DECL_OVERRIDE;
 
-    qint64 read(char *data, qint64 maxlen);
-    qint64 write(const char *data, qint64 len);
+    qint64 read(char *data, qint64 maxlen) Q_DECL_OVERRIDE;
+    qint64 write(const char *data, qint64 len) Q_DECL_OVERRIDE;
 
 #ifndef QT_NO_UDPSOCKET
 #ifndef QT_NO_NETWORKINTERFACE
     bool joinMulticastGroup(const QHostAddress &groupAddress,
-                            const QNetworkInterface &interface);
+                            const QNetworkInterface &interface) Q_DECL_OVERRIDE;
     bool leaveMulticastGroup(const QHostAddress &groupAddress,
-                             const QNetworkInterface &interface);
-    QNetworkInterface multicastInterface() const;
-    bool setMulticastInterface(const QNetworkInterface &iface);
+                             const QNetworkInterface &interface) Q_DECL_OVERRIDE;
+    QNetworkInterface multicastInterface() const Q_DECL_OVERRIDE;
+    bool setMulticastInterface(const QNetworkInterface &iface) Q_DECL_OVERRIDE;
 #endif // QT_NO_NETWORKINTERFACE
 
     qint64 readDatagram(char *data, qint64 maxlen, QHostAddress *addr = 0,
-        quint16 *port = 0);
+        quint16 *port = 0) Q_DECL_OVERRIDE;
     qint64 writeDatagram(const char *data, qint64 len, const QHostAddress &addr,
-        quint16 port);
-    bool hasPendingDatagrams() const;
-    qint64 pendingDatagramSize() const;
+        quint16 port) Q_DECL_OVERRIDE;
+    bool hasPendingDatagrams() const Q_DECL_OVERRIDE;
+    qint64 pendingDatagramSize() const Q_DECL_OVERRIDE;
 #endif // QT_NO_UDPSOCKET
 
-    qint64 bytesToWrite() const;
+    qint64 bytesToWrite() const Q_DECL_OVERRIDE;
 
-    int option(SocketOption option) const;
-    bool setOption(SocketOption option, int value);
+    int option(SocketOption option) const Q_DECL_OVERRIDE;
+    bool setOption(SocketOption option, int value) Q_DECL_OVERRIDE;
 
-    bool waitForRead(int msecs = 30000, bool *timedOut = 0);
-    bool waitForWrite(int msecs = 30000, bool *timedOut = 0);
+    bool waitForRead(int msecs = 30000, bool *timedOut = 0) Q_DECL_OVERRIDE;
+    bool waitForWrite(int msecs = 30000, bool *timedOut = 0) Q_DECL_OVERRIDE;
     bool waitForReadOrWrite(bool *readyToRead, bool *readyToWrite,
                             bool checkRead, bool checkWrite,
-                            int msecs = 30000, bool *timedOut = 0);
+                            int msecs = 30000, bool *timedOut = 0) Q_DECL_OVERRIDE;
 
-    bool isReadNotificationEnabled() const;
-    void setReadNotificationEnabled(bool enable);
-    bool isWriteNotificationEnabled() const;
-    void setWriteNotificationEnabled(bool enable);
-    bool isExceptionNotificationEnabled() const;
-    void setExceptionNotificationEnabled(bool enable);
+    bool isReadNotificationEnabled() const Q_DECL_OVERRIDE;
+    void setReadNotificationEnabled(bool enable) Q_DECL_OVERRIDE;
+    bool isWriteNotificationEnabled() const Q_DECL_OVERRIDE;
+    void setWriteNotificationEnabled(bool enable) Q_DECL_OVERRIDE;
+    bool isExceptionNotificationEnabled() const Q_DECL_OVERRIDE;
+    void setExceptionNotificationEnabled(bool enable) Q_DECL_OVERRIDE;
 
 private:
     Q_DECLARE_PRIVATE(QSocks5SocketEngine)
@@ -149,8 +149,8 @@ public:
     virtual bool beginAuthenticate(QTcpSocket *socket, bool *completed);
     virtual bool continueAuthenticate(QTcpSocket *socket, bool *completed);
 
-    virtual bool seal(const QByteArray buf, QByteArray *sealedBuf);
-    virtual bool unSeal(const QByteArray sealedBuf, QByteArray *buf);
+    virtual bool seal(const QByteArray &buf, QByteArray *sealedBuf);
+    virtual bool unSeal(const QByteArray &sealedBuf, QByteArray *buf);
     virtual bool unSeal(QTcpSocket *sealedSocket, QByteArray *buf);
 
     virtual QString errorString() { return QString(); }
@@ -160,11 +160,11 @@ class QSocks5PasswordAuthenticator : public QSocks5Authenticator
 {
 public:
     QSocks5PasswordAuthenticator(const QString &userName, const QString &password);
-    char methodId();
-    bool beginAuthenticate(QTcpSocket *socket, bool *completed);
-    bool continueAuthenticate(QTcpSocket *socket, bool *completed);
+    char methodId() Q_DECL_OVERRIDE;
+    bool beginAuthenticate(QTcpSocket *socket, bool *completed) Q_DECL_OVERRIDE;
+    bool continueAuthenticate(QTcpSocket *socket, bool *completed) Q_DECL_OVERRIDE;
 
-    QString errorString();
+    QString errorString() Q_DECL_OVERRIDE;
 
 private:
     QString userName;
@@ -282,8 +282,8 @@ class Q_AUTOTEST_EXPORT QSocks5SocketEngineHandler : public QSocketEngineHandler
 {
 public:
     virtual QAbstractSocketEngine *createSocketEngine(QAbstractSocket::SocketType socketType,
-                                                      const QNetworkProxy &, QObject *parent);
-    virtual QAbstractSocketEngine *createSocketEngine(qintptr socketDescriptor, QObject *parent);
+                                                      const QNetworkProxy &, QObject *parent) Q_DECL_OVERRIDE;
+    virtual QAbstractSocketEngine *createSocketEngine(qintptr socketDescriptor, QObject *parent) Q_DECL_OVERRIDE;
 };
 
 

@@ -1,8 +1,8 @@
 #!/bin/sh
 #############################################################################
 ##
-## Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-## Contact: http://www.qt-project.org/legal
+## Copyright (C) 2015 The Qt Company Ltd.
+## Contact: http://www.qt.io/licensing/
 ##
 ## This file is the build configuration utility of the Qt Toolkit.
 ##
@@ -11,9 +11,9 @@
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and Digia. For licensing terms and
-## conditions see http://qt.digia.com/licensing. For further information
-## use the contact form at http://qt.digia.com/contact-us.
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see http://www.qt.io/terms-conditions. For further
+## information use the contact form at http://www.qt.io/contact-us.
 ##
 ## GNU Lesser General Public License Usage
 ## Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 ##
-## In addition, as a special exception, Digia gives you certain additional
-## rights. These rights are described in the Digia Qt LGPL Exception
+## As a special exception, The Qt Company gives you certain additional
+## rights. These rights are described in The Qt Company LGPL Exception
 ## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 ##
 ## $QT_END_LICENSE$
@@ -71,4 +71,26 @@ do
 
   echo -e "\ngenerating DSA public key to DER file ..."
   openssl dsa -in dsa-pri-$size.pem -pubout -out dsa-pub-$size.der -outform DER
+done
+
+#--- EC ----------------------------------------------------------------------------
+# Note: EC will be generated with pre-defined curves. You can check supported curves
+#       with openssl ecparam -list_curves.
+#       If OpenSSL 1.0.2 is available brainpool should be added!
+# brainpoolP256r1 brainpoolP384r1 brainpoolP512r1
+for curve in secp224r1 prime256v1 secp384r1
+do
+  size=`tr -cd 0-9 <<< $curve`
+  size=${size::-1} # remove last number of curve name as we need bit size only
+  echo -e "\ngenerating EC private key to PEM file ..."
+  openssl ecparam -name $curve -genkey -noout -out ec-pri-$size-$curve.pem
+
+  echo -e "\ngenerating EC private key to DER file ..."
+  openssl ec -in ec-pri-$size-$curve.pem -out ec-pri-$size-$curve.der -outform DER
+
+  echo -e "\ngenerating EC public key to PEM file ..."
+  openssl ec -in ec-pri-$size-$curve.pem -pubout -out ec-pub-$size-$curve.pem
+
+  echo -e "\ngenerating EC public key to DER file ..."
+  openssl ec -in ec-pri-$size-$curve.pem -pubout -out ec-pub-$size-$curve.der -outform DER
 done

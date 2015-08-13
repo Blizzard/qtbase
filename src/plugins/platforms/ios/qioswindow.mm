@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -75,6 +67,15 @@ QIOSWindow::QIOSWindow(QWindow *window)
 
     setWindowState(window->windowState());
     setOpacity(window->opacity());
+
+    Qt::ScreenOrientation initialOrientation = window->contentOrientation();
+    if (initialOrientation != Qt::PrimaryOrientation) {
+        // Start up in portrait, then apply possible content orientation,
+        // as per Apple's documentation.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            handleContentOrientationChange(initialOrientation);
+        });
+    }
 }
 
 QIOSWindow::~QIOSWindow()
@@ -118,8 +119,9 @@ void QIOSWindow::setVisible(bool visible)
     }
 
     if (visible && shouldAutoActivateWindow()) {
-        requestActivateWindow();
-    } else if (!visible && qGuiApp->focusWindow() == window()) {
+        if (!window()->property("_q_showWithoutActivating").toBool())
+            requestActivateWindow();
+    } else if (!visible && [m_view isActiveWindow]) {
         // Our window was active/focus window but now hidden, so relinquish
         // focus to the next possible window in the stack.
         NSArray *subviews = m_view.viewController.view.subviews;
@@ -144,10 +146,14 @@ void QIOSWindow::setVisible(bool visible)
 
 bool QIOSWindow::shouldAutoActivateWindow() const
 {
+    if (![m_view canBecomeFirstResponder])
+        return false;
+
     // We don't want to do automatic window activation for popup windows
-    // (including Tool, ToolTip and SplashScreen windows), unless they
-    // are standalone (no parent/transient parent), and hence not active.
-    return !(window()->type() & Qt::Popup) || !window()->isActive();
+    // that are unlikely to contain editable controls (to avoid hiding
+    // the keyboard while the popup is showing)
+    const Qt::WindowType type = window()->type();
+    return (type != Qt::Popup && type != Qt::ToolTip) || !window()->isActive();
 }
 
 void QIOSWindow::setOpacity(qreal level)
@@ -204,6 +210,25 @@ void QIOSWindow::applyGeometry(const QRect &rect)
 
 bool QIOSWindow::isExposed() const
 {
+    // Note: At startup of an iOS app it will enter UIApplicationStateInactive
+    // while showing the launch screen, and once the application returns from
+    // applicationDidFinishLaunching it will hide the launch screen and enter
+    // UIApplicationStateActive. Technically, a window is not exposed until
+    // it's actually visible on screen, and Apple also documents that "Apps
+    // that use OpenGL ES for drawing must not use didFinishLaunching to
+    // prepare their drawing environment. Instead, defer any OpenGL ES
+    // drawing calls to applicationDidBecomeActive". Unfortunately, if we
+    // wait until the applicationState reaches ApplicationActive to signal
+    // that the window is exposed, we get a lag between hiding the launch
+    // screen and blitting the first pixels of the application, as Qt
+    // spends some time drawing those pixels in response to the expose.
+    // In practice there doesn't seem to be any issues starting GL setup
+    // and drawing from within applicationDidFinishLaunching, and this is
+    // also the recommended approach for other 3rd party GL toolkits on iOS,
+    // so we 'cheat', and report that a window is exposed even if the app
+    // is in UIApplicationStateInactive, so that the startup transition
+    // between the launch screen and the application content is smooth.
+
     return qApp->applicationState() > Qt::ApplicationHidden
         && window()->isVisible() && !window()->geometry().isEmpty();
 }
@@ -223,7 +248,8 @@ void QIOSWindow::setWindowState(Qt::WindowState state)
         applyGeometry(m_normalGeometry);
         break;
     case Qt::WindowMaximized:
-        applyGeometry(screen()->availableGeometry());
+        applyGeometry(window()->flags() & Qt::MaximizeUsingFullscreenGeometryHint ?
+            screen()->geometry() : screen()->availableGeometry());
         break;
     case Qt::WindowFullScreen:
         applyGeometry(screen()->geometry());
@@ -240,17 +266,10 @@ void QIOSWindow::setWindowState(Qt::WindowState state)
 
 void QIOSWindow::setParent(const QPlatformWindow *parentWindow)
 {
-    if (parentWindow) {
-        UIView *parentView = reinterpret_cast<UIView *>(parentWindow->winId());
-        [parentView addSubview:m_view];
-    } else if (isQtApplication()) {
-        for (UIWindow *uiWindow in [[UIApplication sharedApplication] windows]) {
-            if (uiWindow.screen == static_cast<QIOSScreen *>(screen())->uiScreen()) {
-                [uiWindow.rootViewController.view addSubview:m_view];
-                break;
-            }
-        }
-    }
+    UIView *parentView = parentWindow ? reinterpret_cast<UIView *>(parentWindow->winId())
+        : isQtApplication() ? static_cast<QIOSScreen *>(screen())->uiWindow().rootViewController.view : 0;
+
+    [parentView addSubview:m_view];
 }
 
 void QIOSWindow::requestActivateWindow()
@@ -321,10 +340,12 @@ void QIOSWindow::updateWindowLevel()
 
 void QIOSWindow::handleContentOrientationChange(Qt::ScreenOrientation orientation)
 {
-    // Keep the status bar in sync with content orientation. This will ensure
-    // that the task bar (and associated gestures) are aligned correctly:
-    UIInterfaceOrientation uiOrientation = UIInterfaceOrientation(fromQtScreenOrientation(orientation));
-    [[UIApplication sharedApplication] setStatusBarOrientation:uiOrientation animated:NO];
+    // Update the QWindow representation straight away, so that
+    // we can update the statusbar orientation based on the new
+    // content orientation.
+    qt_window_private(window())->contentOrientation = orientation;
+
+    [m_view.qtViewController updateProperties];
 }
 
 void QIOSWindow::applicationStateChanged(Qt::ApplicationState)

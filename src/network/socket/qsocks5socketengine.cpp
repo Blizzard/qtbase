@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -47,6 +47,7 @@
 #include "qcoreapplication.h"
 #include "qurl.h"
 #include "qauthenticator.h"
+#include "private/qiodevice_p.h"
 #include <qendian.h>
 #include <qnetworkinterface.h>
 
@@ -269,19 +270,6 @@ static int qt_socks5_get_host_address_and_port(const QByteArray &buf, QHostAddre
     return ret;
 }
 
-/*
-   Returns the difference between msecs and elapsed. If msecs is -1,
-   however, -1 is returned.
-*/
-static int qt_timeout_value(int msecs, int elapsed)
-{
-    if (msecs == -1)
-        return -1;
-
-    int timeout = msecs - elapsed;
-    return timeout < 0 ? 0 : timeout;
-}
-
 struct QSocks5Data
 {
     QTcpSocket *controlSocket;
@@ -331,7 +319,7 @@ public:
     QSocks5BindData *retrieve(qintptr socketDescriptor);
 
 protected:
-    void timerEvent(QTimerEvent * event);
+    void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
 
     QMutex mutex;
     int sweepTimerId;
@@ -438,13 +426,13 @@ bool QSocks5Authenticator::continueAuthenticate(QTcpSocket *socket, bool *comple
     return true;
 }
 
-bool QSocks5Authenticator::seal(const QByteArray buf, QByteArray *sealedBuf)
+bool QSocks5Authenticator::seal(const QByteArray &buf, QByteArray *sealedBuf)
 {
     *sealedBuf = buf;
     return true;
 }
 
-bool QSocks5Authenticator::unSeal(const QByteArray sealedBuf, QByteArray *buf)
+bool QSocks5Authenticator::unSeal(const QByteArray &sealedBuf, QByteArray *buf)
 {
     *buf = sealedBuf;
     return true;
@@ -1396,7 +1384,7 @@ bool QSocks5SocketEngine::bind(const QHostAddress &addr, quint16 port)
         dummy.setProxy(QNetworkProxy::NoProxy);
         if (!dummy.bind()
             || writeDatagram(0,0, d->data->controlSocket->localAddress(), dummy.localPort()) != 0
-            || !dummy.waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))
+            || !dummy.waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))
             || dummy.readDatagram(0,0, &d->localAddress, &d->localPort) != 0) {
             QSOCKS5_DEBUG << "udp actual address and port lookup failed";
             setState(QAbstractSocket::UnconnectedState);
@@ -1484,7 +1472,7 @@ void QSocks5SocketEngine::close()
             QElapsedTimer stopWatch;
             stopWatch.start();
             while (!d->data->controlSocket->bytesToWrite()) {
-               if (!d->data->controlSocket->waitForBytesWritten(qt_timeout_value(msecs, stopWatch.elapsed())))
+               if (!d->data->controlSocket->waitForBytesWritten(qt_subtract_from_timeout(msecs, stopWatch.elapsed())))
                    break;
             }
         }
@@ -1740,7 +1728,7 @@ bool QSocks5SocketEnginePrivate::waitForConnected(int msecs, bool *timedOut)
     stopWatch.start();
 
     while (socks5State != wantedState) {
-        if (!data->controlSocket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+        if (!data->controlSocket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
             if (data->controlSocket->state() == QAbstractSocket::UnconnectedState)
                 return true;
 
@@ -1774,7 +1762,7 @@ bool QSocks5SocketEngine::waitForRead(int msecs, bool *timedOut)
     if (d->mode == QSocks5SocketEnginePrivate::ConnectMode ||
         d->mode == QSocks5SocketEnginePrivate::BindMode) {
         while (!d->readNotificationActivated) {
-            if (!d->data->controlSocket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+            if (!d->data->controlSocket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
                 if (d->data->controlSocket->state() == QAbstractSocket::UnconnectedState)
                     return true;
 
@@ -1787,7 +1775,7 @@ bool QSocks5SocketEngine::waitForRead(int msecs, bool *timedOut)
 #ifndef QT_NO_UDPSOCKET
     } else {
         while (!d->readNotificationActivated) {
-            if (!d->udpData->udpSocket->waitForReadyRead(qt_timeout_value(msecs, stopWatch.elapsed()))) {
+            if (!d->udpData->udpSocket->waitForReadyRead(qt_subtract_from_timeout(msecs, stopWatch.elapsed()))) {
                 setError(d->udpData->udpSocket->error(), d->udpData->udpSocket->errorString());
                 if (timedOut && d->udpData->udpSocket->error() == QAbstractSocket::SocketTimeoutError)
                     *timedOut = true;
@@ -1824,11 +1812,11 @@ bool QSocks5SocketEngine::waitForWrite(int msecs, bool *timedOut)
 
     // flush any bytes we may still have buffered in the time that we have left
     if (d->data->controlSocket->bytesToWrite())
-        d->data->controlSocket->waitForBytesWritten(qt_timeout_value(msecs, stopWatch.elapsed()));
+        d->data->controlSocket->waitForBytesWritten(qt_subtract_from_timeout(msecs, stopWatch.elapsed()));
     while ((msecs == -1 || stopWatch.elapsed() < msecs)
            && d->data->controlSocket->state() == QAbstractSocket::ConnectedState
            && d->data->controlSocket->bytesToWrite() >= MaxWriteBufferSize)
-        d->data->controlSocket->waitForBytesWritten(qt_timeout_value(msecs, stopWatch.elapsed()));
+        d->data->controlSocket->waitForBytesWritten(qt_subtract_from_timeout(msecs, stopWatch.elapsed()));
     return d->data->controlSocket->bytesToWrite() < MaxWriteBufferSize;
 }
 

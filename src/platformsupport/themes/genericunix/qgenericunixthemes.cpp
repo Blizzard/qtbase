@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -44,6 +44,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QDebug>
 #include <QtCore/QHash>
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QSettings>
 #include <QtCore/QVariant>
 #include <QtCore/QStringList>
@@ -51,10 +52,16 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformservices.h>
 #include <qpa/qplatformdialoghelper.h>
+#if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
+#include "QtPlatformSupport/private/qdbustrayicon_p.h"
+#include "QtPlatformSupport/private/qdbusplatformmenu_p.h"
+#endif
 
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(qLcTray)
 
 ResourceHelper::ResourceHelper()
 {
@@ -84,6 +91,21 @@ const char *QGenericUnixTheme::name = "generic";
 // XRender/FontConfig which we can now assume as default.
 static const char defaultSystemFontNameC[] = "Sans Serif";
 enum { defaultSystemFontSize = 9 };
+
+#if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
+static bool isDBusTrayAvailable() {
+    static bool dbusTrayAvailable = false;
+    static bool dbusTrayAvailableKnown = false;
+    if (!dbusTrayAvailableKnown) {
+        QDBusMenuConnection conn;
+        if (conn.isStatusNotifierHostRegistered())
+            dbusTrayAvailable = true;
+        dbusTrayAvailableKnown = true;
+        qCDebug(qLcTray) << "D-Bus tray available:" << dbusTrayAvailable;
+    }
+    return dbusTrayAvailable;
+}
+#endif
 
 class QGenericUnixThemePrivate : public QPlatformThemePrivate
 {
@@ -135,8 +157,22 @@ QStringList QGenericUnixTheme::xdgIconThemePaths()
         if (xdgIconsDir.isDir())
             paths.append(xdgIconsDir.absoluteFilePath());
     }
+
+    const QFileInfo pixmapsIconsDir(QStringLiteral("/usr/share/pixmaps"));
+    if (pixmapsIconsDir.isDir())
+        paths.append(pixmapsIconsDir.absoluteFilePath());
+
     return paths;
 }
+
+#if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
+QPlatformSystemTrayIcon *QGenericUnixTheme::createPlatformSystemTrayIcon() const
+{
+    if (isDBusTrayAvailable())
+        return new QDBusTrayIcon();
+    return Q_NULLPTR;
+}
+#endif
 
 QVariant QGenericUnixTheme::themeHint(ThemeHint hint) const
 {
@@ -170,6 +206,7 @@ public:
         , toolButtonStyle(Qt::ToolButtonTextBesideIcon)
         , toolBarIconSize(0)
         , singleClick(true)
+        , wheelScrollLines(3)
     { }
 
     static QString kdeGlobals(const QString &kdeDir)
@@ -193,6 +230,7 @@ public:
     int toolButtonStyle;
     int toolBarIconSize;
     bool singleClick;
+    int wheelScrollLines;
 };
 
 void QKdeThemePrivate::refresh()
@@ -241,6 +279,10 @@ void QKdeThemePrivate::refresh()
         else if (toolBarStyle == QLatin1String("TextUnderIcon"))
             toolButtonStyle = Qt::ToolButtonTextUnderIcon;
     }
+
+    const QVariant wheelScrollLinesValue = readKdeSetting(QStringLiteral("KDE/WheelScrollLines"), kdeDirs, kdeSettings);
+    if (wheelScrollLinesValue.isValid())
+        wheelScrollLines = wheelScrollLinesValue.toInt();
 
     // Read system font, ignore 'smallestReadableFont'
     if (QFont *systemFont = kdeFont(readKdeSetting(QStringLiteral("font"), kdeDirs, kdeSettings)))
@@ -428,6 +470,8 @@ QVariant QKdeTheme::themeHint(QPlatformTheme::ThemeHint hint) const
         return QVariant(int(KdeKeyboardScheme));
     case QPlatformTheme::ItemViewActivateItemOnSingleClick:
         return QVariant(d->singleClick);
+    case QPlatformTheme::WheelScrollLines:
+        return QVariant(d->wheelScrollLines);
     default:
         break;
     }
@@ -496,6 +540,15 @@ QPlatformTheme *QKdeTheme::createKdeTheme()
     return new QKdeTheme(kdeDirs, kdeVersion);
 }
 
+#if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
+QPlatformSystemTrayIcon *QKdeTheme::createPlatformSystemTrayIcon() const
+{
+    if (isDBusTrayAvailable())
+        return new QDBusTrayIcon();
+    return Q_NULLPTR;
+}
+#endif
+
 #endif // QT_NO_SETTINGS
 
 /*!
@@ -512,7 +565,7 @@ class QGnomeThemePrivate : public QPlatformThemePrivate
 {
 public:
     QGnomeThemePrivate() : fontsConfigured(false) { }
-    void configureFonts(QString gtkFontName) const
+    void configureFonts(const QString &gtkFontName) const
     {
         Q_ASSERT(!fontsConfigured);
         const int split = gtkFontName.lastIndexOf(QChar::Space);
@@ -582,6 +635,15 @@ QString QGnomeTheme::gtkFontName() const
     return QStringLiteral("%1 %2").arg(QLatin1String(defaultSystemFontNameC)).arg(defaultSystemFontSize);
 }
 
+#if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
+QPlatformSystemTrayIcon *QGnomeTheme::createPlatformSystemTrayIcon() const
+{
+    if (isDBusTrayAvailable())
+        return new QDBusTrayIcon();
+    return Q_NULLPTR;
+}
+#endif
+
 QString QGnomeTheme::standardButtonText(int button) const
 {
     switch (button) {
@@ -624,20 +686,25 @@ QStringList QGenericUnixTheme::themeNames()
     QStringList result;
     if (QGuiApplication::desktopSettingsAware()) {
         const QByteArray desktopEnvironment = QGuiApplicationPrivate::platformIntegration()->services()->desktopEnvironment();
-        if (desktopEnvironment == "KDE") {
+        QList<QByteArray> gtkBasedEnvironments;
+        gtkBasedEnvironments << "GNOME"
+                             << "X-CINNAMON"
+                             << "UNITY"
+                             << "MATE"
+                             << "XFCE"
+                             << "LXDE";
+        QList<QByteArray> desktopNames = desktopEnvironment.split(':');
+        Q_FOREACH (const QByteArray &desktopName, desktopNames) {
+            if (desktopEnvironment == "KDE") {
 #ifndef QT_NO_SETTINGS
-            result.push_back(QLatin1String(QKdeTheme::name));
+                result.push_back(QLatin1String(QKdeTheme::name));
 #endif
-        } else if (desktopEnvironment == "GNOME" ||
-                desktopEnvironment == "X-CINNAMON" ||
-                desktopEnvironment == "UNITY" ||
-                desktopEnvironment == "MATE" ||
-                desktopEnvironment == "XFCE" ||
-                desktopEnvironment == "LXDE") { // Gtk-based desktops
-            // prefer the GTK2 theme implementation with native dialogs etc.
-            result.push_back(QStringLiteral("gtk2"));
-            // fallback to the generic Gnome theme if loading the GTK2 theme fails
-            result.push_back(QLatin1String(QGnomeTheme::name));
+            } else if (gtkBasedEnvironments.contains(desktopName)) {
+                // prefer the GTK2 theme implementation with native dialogs etc.
+                result.push_back(QStringLiteral("gtk2"));
+                // fallback to the generic Gnome theme if loading the GTK2 theme fails
+                result.push_back(QLatin1String(QGnomeTheme::name));
+            }
         }
         const QString session = QString::fromLocal8Bit(qgetenv("DESKTOP_SESSION"));
         if (!session.isEmpty() && session != QLatin1String("default") && !result.contains(session))

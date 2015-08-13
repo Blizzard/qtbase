@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -78,6 +78,8 @@ private slots:
     void find2();
     void findWithRegExp_data();
     void findWithRegExp();
+    void findWithRegularExpression_data();
+    void findWithRegularExpression();
     void findMultiple();
     void basicIsModifiedChecks();
     void moreIsModified();
@@ -185,9 +187,11 @@ private slots:
     void QTBUG28998_linkColor();
 
     void textCursorUsageWithinContentsChange();
-
+    void cssInheritance();
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
+    void buildRegExpData();
+    static QString cssFontSizeString(const QFont &font);
 
     QTextDocument *doc;
     QTextCursor cursor;
@@ -208,6 +212,13 @@ public:
     QRectF blockBoundingRect(const QTextBlock &) const { return QRectF(); }
     void documentChanged(int, int, int) {}
 };
+
+QString tst_QTextDocument::cssFontSizeString(const QFont &font)
+{
+    return font.pointSize() >= 0
+            ? QStringLiteral("%1pt").arg(font.pointSizeF())
+            : QStringLiteral("%1px").arg(font.pixelSize());
+}
 
 // Testing get/set functions
 void tst_QTextDocument::getSetCheck()
@@ -251,8 +262,12 @@ void tst_QTextDocument::init()
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:%4;\">\n");
-    htmlHead = htmlHead.arg(defaultFont.family()).arg(defaultFont.pointSizeF()).arg(defaultFont.weight() * 8).arg((defaultFont.italic() ? "italic" : "normal"));
+            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\">\n");
+    htmlHead = htmlHead
+                .arg(defaultFont.family())
+                .arg(cssFontSizeString(defaultFont))
+                .arg(defaultFont.weight() * 8)
+                .arg((defaultFont.italic() ? "italic" : "normal"));
 
     htmlTail = QString("</body></html>");
 }
@@ -344,21 +359,7 @@ void tst_QTextDocument::find()
 
 void tst_QTextDocument::findWithRegExp_data()
 {
-    QTest::addColumn<QString>("haystack");
-    QTest::addColumn<QString>("needle");
-    QTest::addColumn<int>("flags");
-    QTest::addColumn<int>("from");
-    QTest::addColumn<int>("anchor");
-    QTest::addColumn<int>("position");
-
-    // match integers 0 to 99
-    QTest::newRow("1") << "23" << "^\\d\\d?$" << int(QTextDocument::FindCaseSensitively) << 0 << 0 << 2;
-    // match ampersands but not &amp;
-    QTest::newRow("2") << "His &amp; hers & theirs" << "&(?!amp;)"<< int(QTextDocument::FindCaseSensitively) << 0 << 15 << 16;
-    //backward search
-    QTest::newRow("3") << QString::fromLatin1("HelloBlahWorld Blah Hah")
-                              << "h" << int(QTextDocument::FindBackward) << 18 << 8 << 9;
-
+    buildRegExpData();
 }
 
 void tst_QTextDocument::findWithRegExp()
@@ -375,6 +376,34 @@ void tst_QTextDocument::findWithRegExp()
     QRegExp expr(needle);
     QTextDocument::FindFlags flg(flags);
     expr.setCaseSensitivity((flg & QTextDocument::FindCaseSensitively) ? Qt::CaseSensitive : Qt::CaseInsensitive);
+    cursor = doc->find(expr, from, flg);
+
+    if (anchor != -1) {
+        QCOMPARE(cursor.anchor(), anchor);
+        QCOMPARE(cursor.position(), position);
+    } else {
+        QVERIFY(cursor.isNull());
+    }
+}
+
+void tst_QTextDocument::findWithRegularExpression_data()
+{
+    buildRegExpData();
+}
+
+void tst_QTextDocument::findWithRegularExpression()
+{
+    QFETCH(QString, haystack);
+    QFETCH(QString, needle);
+    QFETCH(int, flags);
+    QFETCH(int, from);
+    QFETCH(int, anchor);
+    QFETCH(int, position);
+
+    cursor.insertText(haystack);
+    //search using a regular expression
+    QRegularExpression expr(needle);
+    QTextDocument::FindFlags flg(flags);
     cursor = doc->find(expr, from, flg);
 
     if (anchor != -1) {
@@ -1772,12 +1801,16 @@ void tst_QTextDocument::toHtmlBodyBgColor()
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:%4;\""
+            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
             " bgcolor=\"#0000ff\">\n"
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
             "</body></html>");
 
-    expectedHtml = expectedHtml.arg(defaultFont.family()).arg(defaultFont.pointSizeF()).arg(defaultFont.weight() * 8).arg((defaultFont.italic() ? "italic" : "normal"));
+    expectedHtml = expectedHtml
+                    .arg(defaultFont.family())
+                    .arg(cssFontSizeString(defaultFont))
+                    .arg(defaultFont.weight() * 8)
+                    .arg((defaultFont.italic() ? "italic" : "normal"));
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -1797,12 +1830,15 @@ void tst_QTextDocument::toHtmlBodyBgColorRgba()
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:%4;\""
+            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
             " bgcolor=\"rgba(255,0,0,0.2)\">\n"
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
             "</body></html>");
 
-    expectedHtml = expectedHtml.arg(defaultFont.family()).arg(defaultFont.pointSizeF()).arg(defaultFont.weight() * 8).arg((defaultFont.italic() ? "italic" : "normal"));
+    expectedHtml = expectedHtml.arg(defaultFont.family())
+                    .arg(cssFontSizeString(defaultFont))
+                    .arg(defaultFont.weight() * 8)
+                    .arg((defaultFont.italic() ? "italic" : "normal"));
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -1822,12 +1858,16 @@ void tst_QTextDocument::toHtmlBodyBgColorTransparent()
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:%4;\""
+            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\""
             " bgcolor=\"transparent\">\n"
             "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
             "</body></html>");
 
-    expectedHtml = expectedHtml.arg(defaultFont.family()).arg(defaultFont.pointSizeF()).arg(defaultFont.weight() * 8).arg((defaultFont.italic() ? "italic" : "normal"));
+    expectedHtml = expectedHtml
+                    .arg(defaultFont.family())
+                    .arg(cssFontSizeString(defaultFont))
+                    .arg(defaultFont.weight() * 8)
+                    .arg((defaultFont.italic() ? "italic" : "normal"));
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -2446,8 +2486,10 @@ void tst_QTextDocument::html_defaultFont()
     doc->setDefaultFont(f);
     doc->setPlainText("Test");
 
-    QString bodyPart = QString::fromLatin1("<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:italic;\">")
-                       .arg(f.family()).arg(f.pointSizeF()).arg(f.weight() * 8);
+    QString bodyPart = QString::fromLatin1("<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:italic;\">")
+                       .arg(f.family())
+                       .arg(cssFontSizeString(f))
+                       .arg(f.weight() * 8);
 
     QString html = doc->toHtml();
     if (!html.contains(bodyPart)) {
@@ -2583,15 +2625,37 @@ void tst_QTextDocument::backgroundImage_checkExpectedHtml(const QTextDocument &d
             "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
             "p, li { white-space: pre-wrap; }\n"
             "</style></head>"
-            "<body style=\" font-family:'%1'; font-size:%2pt; font-weight:%3; font-style:%4;\">\n"
+            "<body style=\" font-family:'%1'; font-size:%2; font-weight:%3; font-style:%4;\">\n"
             "<table border=\"0\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px;\" cellspacing=\"2\" cellpadding=\"0\">"
             "\n<tr>\n<td background=\"foo.png\">"
             "\n<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
             "</td></tr></table></body></html>");
 
-    expectedHtml = expectedHtml.arg(defaultFont.family()).arg(defaultFont.pointSizeF()).arg(defaultFont.weight() * 8).arg((defaultFont.italic() ? "italic" : "normal"));
+    expectedHtml = expectedHtml
+                    .arg(defaultFont.family())
+                    .arg(cssFontSizeString(defaultFont))
+                    .arg(defaultFont.weight() * 8)
+                    .arg((defaultFont.italic() ? "italic" : "normal"));
 
     QCOMPARE(doc.toHtml(), expectedHtml);
+}
+
+void tst_QTextDocument::buildRegExpData()
+{
+    QTest::addColumn<QString>("haystack");
+    QTest::addColumn<QString>("needle");
+    QTest::addColumn<int>("flags");
+    QTest::addColumn<int>("from");
+    QTest::addColumn<int>("anchor");
+    QTest::addColumn<int>("position");
+
+    // match integers 0 to 99
+    QTest::newRow("1") << "23" << "^\\d\\d?$" << int(QTextDocument::FindCaseSensitively) << 0 << 0 << 2;
+    // match ampersands but not &amp;
+    QTest::newRow("2") << "His &amp; hers & theirs" << "&(?!amp;)"<< int(QTextDocument::FindCaseSensitively) << 0 << 15 << 16;
+    //backward search
+    QTest::newRow("3") << QString::fromLatin1("HelloBlahWorld Blah Hah")
+                              << "h" << int(QTextDocument::FindBackward) << 18 << 8 << 9;
 }
 
 void tst_QTextDocument::backgroundImage_toHtml()
@@ -2942,6 +3006,37 @@ void tst_QTextDocument::QTBUG27354_spaceAndSoftSpace()
         QPainter p(&image);
         document.drawContents(&p, image.rect());
     }
+    {
+        // If no p tag is specified it should not be inheriting it
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">p { line-height: 200% }</style></head><body>Foo<ul><li>First</li></ul></body></html>");
+        QTextBlock block = td.begin();
+        while (block.isValid()) {
+            QTextBlockFormat fmt = block.blockFormat();
+            QVERIFY(fmt.lineHeightType() == QTextBlockFormat::SingleHeight);
+            QVERIFY(fmt.lineHeight() == 0);
+            block = block.next();
+        }
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head></head><body><p>Foo</p><ul><li>First</li></ul></body></html>");
+        QList<double> originalMargins;
+        QTextBlock block = td.begin();
+        while (block.isValid()) {
+            originalMargins << block.blockFormat().topMargin();
+            block = block.next();
+        }
+        originalMargins[0] = 85;
+        td.setHtml("<html><head><style type=\"text/css\">body { margin-top: 85px; }</style></head><body><p>Foo</p><ul><li>First</li></ul></body></html>");
+        block = td.begin();
+        int count = 0;
+        while (block.isValid()) {
+            QTextBlockFormat fmt = block.blockFormat();
+            QCOMPARE(fmt.topMargin(), originalMargins.at(count++));
+            block = block.next();
+        }
+    }
 }
 
 class BaseDocument : public QTextDocument
@@ -3058,6 +3153,111 @@ void tst_QTextDocument::textCursorUsageWithinContentsChange()
 
     QCOMPARE(handler.text, QString("new text"));
     QCOMPARE(handler.verticalMovementX, -1);
+}
+
+void tst_QTextDocument::cssInheritance()
+{
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">body { line-height: 200% }</style></head><body>"
+            "<p>Foo</p><p>Bar</p><p>Baz</p></body></html>");
+        QTextBlock block = td.begin();
+        while (block.isValid()) {
+            QTextBlockFormat fmt = block.blockFormat();
+            QVERIFY(fmt.lineHeightType() == QTextBlockFormat::ProportionalHeight);
+            QVERIFY(fmt.lineHeight() == 200);
+            block = block.next();
+        }
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">body { line-height: 200% } p { line-height: 300% }</style></head><body>"
+                   "<p style=\"line-height: 40px\">Foo</p><p>Bar</p><p>Baz</p></body></html>");
+        QTextBlock block = td.begin();
+        QTextBlockFormat fmt = block.blockFormat();
+        QVERIFY(fmt.lineHeightType() == QTextBlockFormat::FixedHeight);
+        QVERIFY(fmt.lineHeight() == 40);
+        block = block.next();
+        fmt = block.blockFormat();
+        QVERIFY(fmt.lineHeightType() == QTextBlockFormat::ProportionalHeight);
+        QVERIFY(fmt.lineHeight() == 300);
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">body { font-weight: bold; background-color: #ff0000 }</style></head><body>"
+            "<p>Foo</p><p>Bar</p><p>Baz</p></body></html>");
+        QTextBlock block = td.begin();
+        while (block.isValid()) {
+            QVERIFY(block.blockFormat().background() == QBrush());
+            QVERIFY(block.charFormat().font().bold());
+            block = block.next();
+        }
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">body { font-style: italic; font-weight: normal; }</style></head><body>"
+            "<table><tr><th>Foo</th></tr><tr><td>Bar</td></tr></table></body></html>");
+        QTextBlock block = td.begin();
+        // First is the table
+        QTextCharFormat fmt = block.charFormat();
+        QVERIFY(!fmt.font().bold());
+        QVERIFY(fmt.font().italic());
+        // Then the th
+        block = block.next();
+        fmt = block.charFormat();
+        QVERIFY(fmt.font().bold());
+        QVERIFY(fmt.font().italic());
+        // Then the td
+        block = block.next();
+        fmt = block.charFormat();
+        QVERIFY(!fmt.font().bold());
+        QVERIFY(fmt.font().italic());
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><style type=\"text/css\">b { font-style: italic; font-weight: normal; }</style></head><body>"
+            "<p>This should be <b>bold</b></p></body></html>");
+        QTextBlock block = td.begin();
+        // First is the p
+        QTextCharFormat fmt = block.charFormat();
+        QVERIFY(!fmt.font().bold());
+        QTextBlock::iterator it = block.begin();
+        // The non bold text is first
+        QTextFragment currentFragment = it.fragment();
+        QVERIFY(currentFragment.isValid());
+        fmt = currentFragment.charFormat();
+        QVERIFY(!fmt.font().bold());
+        ++it;
+        QVERIFY(!it.atEnd());
+        // Now check the "bold" text
+        currentFragment = it.fragment();
+        QVERIFY(currentFragment.isValid());
+        fmt = currentFragment.charFormat();
+        QVERIFY(!fmt.font().bold());
+        QVERIFY(fmt.font().italic());
+    }
+    {
+        QTextDocument td;
+        td.setHtml("<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"test.css\"></head><body>"
+            "<p>This should be <b>bold</b></p></body></html>");
+        QTextBlock block = td.begin();
+        // First is the p
+        QTextCharFormat fmt = block.charFormat();
+        QVERIFY(!fmt.font().bold());
+        QTextBlock::iterator it = block.begin();
+        // The non bold text is first
+        QTextFragment currentFragment = it.fragment();
+        QVERIFY(currentFragment.isValid());
+        fmt = currentFragment.charFormat();
+        QVERIFY(!fmt.font().bold());
+        ++it;
+        QVERIFY(!it.atEnd());
+        // Now check the bold text
+        currentFragment = it.fragment();
+        QVERIFY(currentFragment.isValid());
+        fmt = currentFragment.charFormat();
+        QVERIFY(fmt.font().bold());
+    }
 }
 
 QTEST_MAIN(tst_QTextDocument)

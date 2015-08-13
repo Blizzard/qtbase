@@ -1,14 +1,14 @@
 /*
     Copyright (c) 2012-2013, BogDan Vatra <bogdan@kde.org>
-    Contact: http://www.qt-project.org/legal
+    Contact: http://www.qt.io/licensing/
 
     Commercial License Usage
     Licensees holding valid commercial Qt licenses may use this file in
     accordance with the commercial license agreement provided with the
     Software or, alternatively, in accordance with the terms contained in
-    a written agreement between you and Digia.  For licensing terms and
-    conditions see http://qt.digia.com/licensing.  For further information
-    use the contact form at http://qt.digia.com/contact-us.
+    a written agreement between you and The Qt Company. For licensing terms
+    and conditions see http://www.qt.io/terms-conditions. For further
+    information use the contact form at http://www.qt.io/contact-us.
 
     BSD License Usage
     Alternatively, this file may be used under the BSD license as follows:
@@ -187,7 +187,7 @@ public class QtActivity extends Activity
             QT_ANDROID_THEMES = new String[] {"Theme_Light"};
             QT_ANDROID_DEFAULT_THEME = "Theme_Light";
         }
-        else if ((Build.VERSION.SDK_INT >= 11 && Build.VERSION.SDK_INT <= 13) || Build.VERSION.SDK_INT == 21){
+        else if ((Build.VERSION.SDK_INT >= 11 && Build.VERSION.SDK_INT <= 13) || Build.VERSION.SDK_INT >= 21){
             QT_ANDROID_THEMES = new String[] {"Theme_Holo_Light"};
             QT_ANDROID_DEFAULT_THEME = "Theme_Holo_Light";
         } else {

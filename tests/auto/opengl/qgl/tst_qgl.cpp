@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,8 @@
 #include <qglcolormap.h>
 #include <qpaintengine.h>
 #include <qopenglfunctions.h>
+#include <qopenglframebufferobject.h>
+#include <qopenglpaintdevice.h>
 
 #include <QGraphicsView>
 #include <QGraphicsProxyWidget>
@@ -78,6 +80,7 @@ private slots:
     void glWidgetRendering();
     void glFBOSimpleRendering();
     void glFBORendering();
+    void currentFboSync();
     void multipleFBOInterleavedRendering();
     void glFBOUseInGLWidget();
     void glPBufferRendering();
@@ -1138,6 +1141,93 @@ void tst_QGL::glFBORendering()
     qt_opengl_check_test_pattern(fb);
 }
 
+class QOpenGLFramebufferObjectPaintDevice : public QOpenGLPaintDevice
+{
+public:
+    QOpenGLFramebufferObjectPaintDevice(int width, int height)
+        : QOpenGLPaintDevice(width, height)
+        , m_fbo(width, height, QOpenGLFramebufferObject::CombinedDepthStencil)
+    {
+    }
+
+    void ensureActiveTarget()
+    {
+        m_fbo.bind();
+    }
+
+    QImage toImage() const
+    {
+        return m_fbo.toImage();
+    }
+
+private:
+    QOpenGLFramebufferObject m_fbo;
+};
+
+void tst_QGL::currentFboSync()
+{
+    if (!QGLFramebufferObject::hasOpenGLFramebufferObjects())
+        QSKIP("QGLFramebufferObject not supported on this platform");
+
+#if defined(Q_OS_QNX)
+    QSKIP("Reading the QGLFramebufferObject is unsupported on this platform");
+#endif
+
+    QGLWidget glw;
+    glw.makeCurrent();
+
+    {
+        QGLFramebufferObject fbo1(256, 256, QGLFramebufferObject::CombinedDepthStencil);
+
+        QOpenGLFramebufferObjectPaintDevice fbo2(256, 256);
+
+        QImage sourceImage(256, 256, QImage::Format_ARGB32_Premultiplied);
+        QPainter sourcePainter(&sourceImage);
+        qt_opengl_draw_test_pattern(&sourcePainter, 256, 256);
+
+        QPainter fbo1Painter(&fbo1);
+
+        QPainter fbo2Painter(&fbo2);
+        fbo2Painter.drawImage(0, 0, sourceImage);
+        fbo2Painter.end();
+
+        QImage fbo2Image = fbo2.toImage();
+
+        fbo1Painter.drawImage(0, 0, sourceImage);
+        fbo1Painter.end();
+
+        QGLFramebufferObject::bindDefault();
+
+        QCOMPARE(fbo1.toImage(), fbo2Image);
+    }
+
+    {
+        QGLFramebufferObject fbo1(512, 512, QGLFramebufferObject::CombinedDepthStencil);
+
+        QOpenGLFramebufferObjectPaintDevice fbo2(256, 256);
+
+        QImage sourceImage(256, 256, QImage::Format_ARGB32_Premultiplied);
+        QPainter sourcePainter(&sourceImage);
+        qt_opengl_draw_test_pattern(&sourcePainter, 256, 256);
+
+        QPainter fbo2Painter(&fbo2);
+        fbo2Painter.drawImage(0, 0, sourceImage);
+        QImage fbo2Image1 = fbo2.toImage();
+        fbo2Painter.fillRect(0, 0, 256, 256, Qt::white);
+
+        QPainter fbo1Painter(&fbo1);
+        fbo1Painter.drawImage(0, 0, sourceImage);
+        fbo1Painter.end();
+
+        // check that the OpenGL paint engine now knows it needs to sync
+        fbo2Painter.drawImage(0, 0, sourceImage);
+        QImage fbo2Image2 = fbo2.toImage();
+
+        fbo2Painter.end();
+
+        QCOMPARE(fbo2Image1, fbo2Image2);
+    }
+}
 
 // Tests multiple QPainters active on different FBOs at the same time, with
 // interleaving painting. Performance-wise, this is sub-optimal, but it still

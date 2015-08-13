@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -39,7 +39,6 @@
 #include <QtGui/QOpenGLContext>
 
 #if defined(QT_OPENGL_ES_2_ANGLE) || defined(QT_OPENGL_DYNAMIC)
-#  define EGL_EGLEXT_PROTOTYPES
 #  include <QtANGLE/EGL/eglext.h>
 #endif
 
@@ -64,7 +63,7 @@ QT_BEGIN_NAMESPACE
 QWindowsLibEGL QWindowsEGLStaticContext::libEGL;
 QWindowsLibGLESv2 QWindowsEGLStaticContext::libGLESv2;
 
-#ifndef QT_STATIC
+#if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
 
 #ifdef Q_CC_MINGW
 static void *resolveFunc(HMODULE lib, const char *name)
@@ -111,7 +110,7 @@ void *QWindowsLibEGL::resolve(const char *name)
 
 #endif // !QT_STATIC
 
-#ifndef QT_STATIC
+#if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
 #  define RESOLVE(signature, name) signature(resolve( #name ));
 #else
 #  define RESOLVE(signature, name) signature(&::name);
@@ -127,7 +126,7 @@ bool QWindowsLibEGL::init()
 
     qCDebug(lcQpaGl) << "Qt: Using EGL from" << dllName;
 
-#ifndef QT_STATIC
+#if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
     m_lib = ::LoadLibraryW((const wchar_t *) QString::fromLatin1(dllName).utf16());
     if (!m_lib) {
         qErrnoWarning(::GetLastError(), "Failed to load %s", dllName);
@@ -137,7 +136,6 @@ bool QWindowsLibEGL::init()
 
     eglGetError = RESOLVE((EGLint (EGLAPIENTRY *)(void)), eglGetError);
     eglGetDisplay = RESOLVE((EGLDisplay (EGLAPIENTRY *)(EGLNativeDisplayType)), eglGetDisplay);
-    eglGetPlatformDisplayEXT = RESOLVE((EGLDisplay (EGLAPIENTRY *)(EGLenum platform, void *native_display, const EGLint *attrib_list)), eglGetPlatformDisplayEXT);
     eglInitialize = RESOLVE((EGLBoolean (EGLAPIENTRY *)(EGLDisplay, EGLint *, EGLint *)), eglInitialize);
     eglTerminate = RESOLVE((EGLBoolean (EGLAPIENTRY *)(EGLDisplay)), eglTerminate);
     eglChooseConfig = RESOLVE((EGLBoolean (EGLAPIENTRY *)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *)), eglChooseConfig);
@@ -156,10 +154,18 @@ bool QWindowsLibEGL::init()
     eglSwapBuffers = RESOLVE((EGLBoolean (EGLAPIENTRY *)(EGLDisplay , EGLSurface)), eglSwapBuffers);
     eglGetProcAddress = RESOLVE((__eglMustCastToProperFunctionPointerType (EGLAPIENTRY * )(const char *)), eglGetProcAddress);
 
-    return eglGetError && eglGetDisplay && eglInitialize;
+    if (!eglGetError || !eglGetDisplay || !eglInitialize || !eglGetProcAddress)
+        return false;
+
+    eglGetPlatformDisplayEXT = 0;
+#ifdef EGL_ANGLE_platform_angle
+    eglGetPlatformDisplayEXT = reinterpret_cast<EGLDisplay (EGLAPIENTRY *)(EGLenum, void *, const EGLint *)>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
+#endif
+
+    return true;
 }
 
-#ifndef QT_STATIC
+#if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
 void *QWindowsLibGLESv2::resolve(const char *name)
 {
     void *proc = m_lib ? resolveFunc(m_lib, name) : 0;
@@ -179,7 +185,7 @@ bool QWindowsLibGLESv2::init()
 #endif
 
     qCDebug(lcQpaGl) << "Qt: Using OpenGL ES 2.0 from" << dllName;
-#ifndef QT_STATIC
+#if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
     m_lib = ::LoadLibraryW((const wchar_t *) QString::fromLatin1(dllName).utf16());
     if (!m_lib) {
         qErrnoWarning(::GetLastError(), "Failed to load %s", dllName);
@@ -340,7 +346,7 @@ QWindowsEGLStaticContext::QWindowsEGLStaticContext(EGLDisplay display, int versi
 {
 }
 
-QWindowsEGLStaticContext *QWindowsEGLStaticContext::create()
+QWindowsEGLStaticContext *QWindowsEGLStaticContext::create(QWindowsOpenGLTester::Renderers preferredType)
 {
     const HDC dc = QWindowsContext::instance()->displayContext();
     if (!dc){
@@ -358,28 +364,35 @@ QWindowsEGLStaticContext *QWindowsEGLStaticContext::create()
     }
 
     EGLDisplay display = EGL_NO_DISPLAY;
-#ifdef EGL_ANGLE_platform_angle_opengl
-    if (libEGL.eglGetPlatformDisplayEXT && qEnvironmentVariableIsSet("QT_ANGLE_PLATFORM")) {
+    EGLint major = 0;
+    EGLint minor = 0;
+#ifdef EGL_ANGLE_platform_angle
+    if (libEGL.eglGetPlatformDisplayEXT
+        && (preferredType & QWindowsOpenGLTester::AngleBackendMask)) {
         const EGLint anglePlatformAttributes[][5] = {
             { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_NONE },
             { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, EGL_NONE },
-            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_PLATFORM_ANGLE_USE_WARP_ANGLE, EGL_TRUE, EGL_NONE }
+            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
+              EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE, EGL_NONE }
         };
         const EGLint *attributes = 0;
-        const QByteArray anglePlatform = qgetenv("QT_ANGLE_PLATFORM");
-        if (anglePlatform == "d3d11")
+        if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11)
             attributes = anglePlatformAttributes[0];
-        else if (anglePlatform == "d3d9")
+        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d9)
             attributes = anglePlatformAttributes[1];
-        else if (anglePlatform == "warp")
+        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11Warp)
             attributes = anglePlatformAttributes[2];
-        else
-            qCWarning(lcQpaGl) << "Invalid value set for QT_ANGLE_PLATFORM:" << anglePlatform;
-
-        if (attributes)
+        if (attributes) {
             display = libEGL.eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, dc, attributes);
+            if (!libEGL.eglInitialize(display, &major, &minor)) {
+                display = EGL_NO_DISPLAY;
+                major = minor = 0;
+            }
+        }
     }
-#endif // EGL_ANGLE_platform_angle_opengl
+#else // EGL_ANGLE_platform_angle
+    Q_UNUSED(preferredType)
+#endif
     if (display == EGL_NO_DISPLAY)
         display = libEGL.eglGetDisplay((EGLNativeDisplayType)dc);
     if (!display) {
@@ -387,9 +400,7 @@ QWindowsEGLStaticContext *QWindowsEGLStaticContext::create()
         return 0;
     }
 
-    EGLint major;
-    EGLint minor;
-    if (!libEGL.eglInitialize(display, &major, &minor)) {
+    if (!major && !libEGL.eglInitialize(display, &major, &minor)) {
         int err = libEGL.eglGetError();
         qWarning("%s: Could not initialize EGL display: error 0x%x\n", Q_FUNC_INFO, err);
         if (err == 0x3001)
@@ -412,12 +423,15 @@ QWindowsOpenGLContext *QWindowsEGLStaticContext::createContext(QOpenGLContext *c
     return new QWindowsEGLContext(this, context->format(), context->shareHandle());
 }
 
-void *QWindowsEGLStaticContext::createWindowSurface(void *nativeWindow, void *nativeConfig)
+void *QWindowsEGLStaticContext::createWindowSurface(void *nativeWindow, void *nativeConfig, int *err)
 {
+    *err = 0;
     EGLSurface surface = libEGL.eglCreateWindowSurface(m_display, (EGLConfig) nativeConfig,
                                                        (EGLNativeWindowType) nativeWindow, 0);
-    if (surface == EGL_NO_SURFACE)
-        qWarning("%s: Could not create the EGL window surface: 0x%x\n", Q_FUNC_INFO, libEGL.eglGetError());
+    if (surface == EGL_NO_SURFACE) {
+        *err = libEGL.eglGetError();
+        qWarning("%s: Could not create the EGL window surface: 0x%x\n", Q_FUNC_INFO, *err);
+    }
 
     return surface;
 }
@@ -573,8 +587,16 @@ bool QWindowsEGLContext::makeCurrent(QPlatformSurface *surface)
     QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
 
     QWindowsWindow *window = static_cast<QWindowsWindow *>(surface);
-    EGLSurface eglSurface = static_cast<EGLSurface>(window->surface(m_eglConfig));
-    Q_ASSERT(eglSurface);
+    window->aboutToMakeCurrent();
+    int err = 0;
+    EGLSurface eglSurface = static_cast<EGLSurface>(window->surface(m_eglConfig, &err));
+    if (eglSurface == EGL_NO_SURFACE) {
+        if (err == EGL_CONTEXT_LOST) {
+            m_eglContext = EGL_NO_CONTEXT;
+            qCDebug(lcQpaGl) << "Got EGL context lost in createWindowSurface() for context" << this;
+        }
+        return false;
+    }
 
     // shortcut: on some GPUs, eglMakeCurrent is not a cheap operation
     if (QWindowsEGLStaticContext::libEGL.eglGetCurrentContext() == m_eglContext &&
@@ -592,7 +614,17 @@ bool QWindowsEGLContext::makeCurrent(QPlatformSurface *surface)
             QWindowsEGLStaticContext::libEGL.eglSwapInterval(m_staticContext->display(), m_swapInterval);
         }
     } else {
-        qWarning("QWindowsEGLContext::makeCurrent: eglError: %x, this: %p \n", QWindowsEGLStaticContext::libEGL.eglGetError(), this);
+        err = QWindowsEGLStaticContext::libEGL.eglGetError();
+        // EGL_CONTEXT_LOST (loss of the D3D device) is not necessarily fatal.
+        // Qt Quick is able to recover for example.
+        if (err == EGL_CONTEXT_LOST) {
+            m_eglContext = EGL_NO_CONTEXT;
+            qCDebug(lcQpaGl) << "Got EGL context lost in makeCurrent() for context" << this;
+            // Drop the surface. Will recreate on the next makeCurrent.
+            window->invalidateSurface();
+        } else {
+            qWarning("QWindowsEGLContext::makeCurrent: eglError: %x, this: %p \n", err, this);
+        }
     }
 
     return ok;
@@ -610,8 +642,15 @@ void QWindowsEGLContext::swapBuffers(QPlatformSurface *surface)
 {
     QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
     QWindowsWindow *window = static_cast<QWindowsWindow *>(surface);
-    EGLSurface eglSurface = static_cast<EGLSurface>(window->surface(m_eglConfig));
-    Q_ASSERT(eglSurface);
+    int err = 0;
+    EGLSurface eglSurface = static_cast<EGLSurface>(window->surface(m_eglConfig, &err));
+    if (eglSurface == EGL_NO_SURFACE) {
+        if (err == EGL_CONTEXT_LOST) {
+            m_eglContext = EGL_NO_CONTEXT;
+            qCDebug(lcQpaGl) << "Got EGL context lost in createWindowSurface() for context" << this;
+        }
+        return;
+    }
 
     bool ok = QWindowsEGLStaticContext::libEGL.eglSwapBuffers(m_eglDisplay, eglSurface);
     if (!ok)

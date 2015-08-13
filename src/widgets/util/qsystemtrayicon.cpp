@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -37,6 +37,7 @@
 #ifndef QT_NO_SYSTEMTRAYICON
 
 #include "qmenu.h"
+#include "qlist.h"
 #include "qevent.h"
 #include "qpoint.h"
 #include "qlabel.h"
@@ -69,8 +70,12 @@ QT_BEGIN_NAMESPACE
 
     \list
     \li All supported versions of Windows.
-    \li All window managers for X11 that implement the \l{freedesktop.org} system
-       tray specification, including recent versions of KDE and GNOME.
+    \li All window managers and independent tray implementations for X11 that implement the
+       \l{http://standards.freedesktop.org/systemtray-spec/systemtray-spec-0.2.html freedesktop.org}
+       XEmbed system tray specification.
+    \li All X11 desktop environments that implement the D-Bus
+       \l{http://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/ StatusNotifierItem}
+       specification, including recent versions of KDE and Unity.
     \li All supported versions of Mac OS X. Note that the Growl
        notification system must be installed for
        QSystemTrayIcon::showMessage() to display messages on Mac OS X prior to 10.8 (Mountain Lion).
@@ -279,7 +284,7 @@ bool QSystemTrayIcon::isVisible() const
 */
 bool QSystemTrayIcon::event(QEvent *e)
 {
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (e->type() == QEvent::ToolTip) {
         Q_D(QSystemTrayIcon);
         return d->sys->deliverToolTipEvent(e);
@@ -582,7 +587,7 @@ void QBalloonTip::balloon(const QPoint& pos, int msecs, bool showArrow)
     }
 
     QPainterPath path;
-#if defined(QT_NO_XSHAPE) && defined(Q_WS_X11)
+#if defined(QT_NO_XSHAPE) && defined(Q_DEAD_CODE_FROM_QT4_X11)
     // XShape is required for setting the mask, so we just
     // draw an ugly square when its not available
     path.moveTo(0, 0);
@@ -704,11 +709,7 @@ void QSystemTrayIconPrivate::updateIcon_sys_qpa()
 void QSystemTrayIconPrivate::updateMenu_sys_qpa()
 {
     if (menu) {
-        if (!menu->platformMenu()) {
-            QPlatformMenu *platformMenu = qpa_sys->createMenu();
-            if (platformMenu)
-                menu->setPlatformMenu(platformMenu);
-        }
+        addPlatformMenu(menu);
         qpa_sys->updateMenu(menu->platformMenu());
     }
 }
@@ -718,8 +719,8 @@ void QSystemTrayIconPrivate::updateToolTip_sys_qpa()
     qpa_sys->updateToolTip(toolTip);
 }
 
-void QSystemTrayIconPrivate::showMessage_sys_qpa(const QString &message,
-                                                 const QString &title,
+void QSystemTrayIconPrivate::showMessage_sys_qpa(const QString &title,
+                                                 const QString &message,
                                                  QSystemTrayIcon::MessageIcon icon,
                                                  int msecs)
 {
@@ -737,8 +738,29 @@ void QSystemTrayIconPrivate::showMessage_sys_qpa(const QString &message,
     default:
         break;
     }
-    qpa_sys->showMessage(message, title, notificationIcon,
+    qpa_sys->showMessage(title, message, notificationIcon,
                      static_cast<QPlatformSystemTrayIcon::MessageIcon>(icon), msecs);
+}
+
+void QSystemTrayIconPrivate::addPlatformMenu(QMenu *menu) const
+{
+    if (menu->platformMenu())
+        return; // The platform menu already exists.
+
+    // The recursion depth is the same as menu depth, so should not
+    // be higher than 3 levels.
+    QListIterator<QAction *> it(menu->actions());
+    while (it.hasNext()) {
+        QAction *action = it.next();
+        if (action->menu())
+            addPlatformMenu(action->menu());
+    }
+
+    // This menu should be processed *after* its children, otherwise
+    // setMenu() is not called on respective QPlatformMenuItems.
+    QPlatformMenu *platformMenu = qpa_sys->createMenu();
+    if (platformMenu)
+        menu->setPlatformMenu(platformMenu);
 }
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtQml module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -55,6 +55,7 @@ QT_QML_BEGIN_NAMESPACE
 namespace QQmlJS {
 
 class Engine;
+class DiagnosticMessage;
 
 class QML_PARSER_EXPORT Directives {
 public:
@@ -64,17 +65,21 @@ public:
     {
     }
 
-    virtual void importFile(const QString &jsfile, const QString &module)
+    virtual void importFile(const QString &jsfile, const QString &module, int line, int column)
     {
         Q_UNUSED(jsfile);
         Q_UNUSED(module);
+        Q_UNUSED(line);
+        Q_UNUSED(column);
     }
 
-    virtual void importModule(const QString &uri, const QString &version, const QString &module)
+    virtual void importModule(const QString &uri, const QString &version, const QString &module, int line, int column)
     {
         Q_UNUSED(uri);
         Q_UNUSED(version);
         Q_UNUSED(module);
+        Q_UNUSED(line);
+        Q_UNUSED(column);
     }
 };
 
@@ -146,7 +151,7 @@ public:
     int lex();
 
     bool scanRegExp(RegExpBodyPrefix prefix = NoPrefix);
-    bool scanDirectives(Directives *directives);
+    bool scanDirectives(Directives *directives, DiagnosticMessage *error);
 
     int regExpFlags() const { return _patternFlags; }
     QString regExpPattern() const { return _tokenText; }

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -74,10 +74,6 @@ SessionWidget::SessionWidget(const QNetworkConfiguration &config, QWidget *paren
             this, SLOT(closeSession()));
     connect(stopSessionButton, SIGNAL(clicked()),
             this, SLOT(stopSession()));
-#ifdef MAEMO_UI
-    connect(deleteSessionButton, SIGNAL(clicked()),
-            this, SLOT(deleteSession()));
-#endif
 }
 
 SessionWidget::~SessionWidget()
@@ -93,13 +89,6 @@ void SessionWidget::timerEvent(QTimerEvent *e)
         activeTime->setText(QString::number(session->activeTime()));
     }
 }
-
-#ifdef MAEMO_UI
-void SessionWidget::deleteSession()
-{
-    delete this;
-}
-#endif
 
 void SessionWidget::updateSession()
 {

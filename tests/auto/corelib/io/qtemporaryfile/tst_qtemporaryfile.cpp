@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -92,6 +92,24 @@ void tst_QTemporaryFile::initTestCase()
     // For QTBUG_4796
     QVERIFY(QDir("test-XXXXXX").exists() || QDir().mkdir("test-XXXXXX"));
     QCoreApplication::setApplicationName("tst_qtemporaryfile");
+
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QString sourceDir(":/android_testdata/");
+    QDirIterator it(sourceDir, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+
+        QFileInfo sourceFileInfo = it.fileInfo();
+        if (!sourceFileInfo.isDir()) {
+            QFileInfo destinationFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QLatin1Char('/') + sourceFileInfo.filePath().mid(sourceDir.length()));
+
+            if (!destinationFileInfo.exists()) {
+                QVERIFY(QDir().mkpath(destinationFileInfo.path()));
+                QVERIFY(QFile::copy(sourceFileInfo.filePath(), destinationFileInfo.filePath()));
+            }
+        }
+    }
+#endif
 }
 
 void tst_QTemporaryFile::cleanupTestCase()
@@ -253,23 +271,29 @@ void tst_QTemporaryFile::autoRemove()
     QVERIFY(!QFile::exists(fileName));
 }
 
+struct ChdirOnReturn
+{
+    ChdirOnReturn(const QString& d) : dir(d) {}
+    ~ChdirOnReturn() {
+        QDir::setCurrent(dir);
+    }
+    QString dir;
+};
+
 void tst_QTemporaryFile::nonWritableCurrentDir()
 {
 #ifdef Q_OS_UNIX
     if (::geteuid() == 0)
         QSKIP("not valid running this test as root");
 
-    struct ChdirOnReturn
-    {
-        ChdirOnReturn(const QString& d) : dir(d) {}
-        ~ChdirOnReturn() {
-            QDir::setCurrent(dir);
-        }
-        QString dir;
-    };
     ChdirOnReturn cor(QDir::currentPath());
 
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    QDir::setCurrent("/data");
+#else
     QDir::setCurrent("/home");
+#endif
+
     // QTemporaryFile("tempXXXXXX") is probably a bad idea in any app
     // where the current dir could anything...
     QTemporaryFile file("tempXXXXXX");
@@ -438,6 +462,12 @@ void tst_QTemporaryFile::rename()
 void tst_QTemporaryFile::renameFdLeak()
 {
 #ifdef Q_OS_UNIX
+
+#  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    ChdirOnReturn cor(QDir::currentPath());
+    QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+#  endif
+
     const QByteArray sourceFile = QFile::encodeName(QFINDTESTDATA(__FILE__));
     QVERIFY(!sourceFile.isEmpty());
     // Test this on Unix only
@@ -641,7 +671,11 @@ void tst_QTemporaryFile::createNativeFile_data()
     QTest::addColumn<bool>("valid");
     QTest::addColumn<QByteArray>("content");
 
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    const QString nativeFilePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/resources/test.txt");
+#else
     const QString nativeFilePath = QFINDTESTDATA("resources/test.txt");
+#endif
 
     QTest::newRow("nativeFile") << nativeFilePath << (qint64)-1 << false << QByteArray();
     QTest::newRow("nativeFileWithPos") << nativeFilePath << (qint64)5 << false << QByteArray();

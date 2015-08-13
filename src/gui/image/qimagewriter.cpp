@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -91,6 +91,7 @@
 #include <qbytearray.h>
 #include <qfile.h>
 #include <qfileinfo.h>
+#include <qimage.h>
 #include <qimageiohandler.h>
 #include <qjsonarray.h>
 #include <qset.h>
@@ -252,6 +253,9 @@ public:
     QString description;
     QString text;
     QByteArray subType;
+    bool optimizedWrite;
+    bool progressiveScanWrite;
+    QImageIOHandler::Transformations transformation;
 
     // error
     QImageWriter::ImageWriterError imageWriterError;
@@ -271,8 +275,11 @@ QImageWriterPrivate::QImageWriterPrivate(QImageWriter *qq)
     quality = -1;
     compression = 0;
     gamma = 0.0;
+    optimizedWrite = false;
+    progressiveScanWrite = false;
     imageWriterError = QImageWriter::UnknownError;
     errorString = QImageWriter::tr("Unknown error");
+    transformation = QImageIOHandler::TransformationNone;
 
     q = qq;
 }
@@ -555,6 +562,90 @@ QList<QByteArray> QImageWriter::supportedSubTypes() const
 }
 
 /*!
+    \since 5.5
+
+    This is an image format-specific function which sets the \a optimize flags when
+    writing images. For image formats that do not support setting an \a optimize flag,
+    this value is ignored.
+
+    The default is false.
+
+    \sa optimizedWrite()
+*/
+void QImageWriter::setOptimizedWrite(bool optimize)
+{
+    d->optimizedWrite = optimize;
+}
+
+/*!
+    \since 5.5
+
+    Returns whether optimization has been turned on for writing the image.
+
+    \sa setOptimizedWrite()
+*/
+bool QImageWriter::optimizedWrite() const
+{
+    return d->optimizedWrite;
+}
+
+/*!
+    \since 5.5
+
+    This is an image format-specific function which turns on \a progressive scanning
+    when writing images. For image formats that do not support setting a \a progressive
+    scan flag, this value is ignored.
+
+    The default is false.
+
+    \sa progressiveScanWrite()
+*/
+
+void QImageWriter::setProgressiveScanWrite(bool progressive)
+{
+    d->progressiveScanWrite = progressive;
+}
+
+/*!
+    \since 5.5
+
+    Returns whether the image should be written as a progressive image.
+
+    \sa setProgressiveScanWrite()
+*/
+bool QImageWriter::progressiveScanWrite() const
+{
+    return d->progressiveScanWrite;
+}
+
+/*!
+    \since 5.5
+
+    Sets the image transformations metadata including orientation.
+
+    If transformation metadata is not supported by the image format,
+    the transform is applied before writing.
+
+    \sa transformation(), write()
+*/
+void QImageWriter::setTransformation(QImageIOHandler::Transformations transform)
+{
+    d->transformation = transform;
+}
+
+/*!
+    \since 5.5
+
+    Returns the transformation and orientation the image has been set to written with.
+
+    \sa setTransformation()
+*/
+QImageIOHandler::Transformations QImageWriter::transformation() const
+{
+    return d->transformation;
+}
+
+/*!
     \obsolete
 
     Use setText() instead.
@@ -633,6 +724,8 @@ bool QImageWriter::canWrite() const
     return d->canWriteHelper();
 }
 
+extern void qt_imageTransform(QImage &src, QImageIOHandler::Transformations orient);
+
 /*!
     Writes the image \a image to the assigned device or file
     name. Returns \c true on success; otherwise returns \c false. If the
@@ -647,6 +740,7 @@ bool QImageWriter::write(const QImage &image)
     if (!canWrite())
         return false;
 
+    QImage img = image;
     if (d->handler->supportsOption(QImageIOHandler::Quality))
         d->handler->setOption(QImageIOHandler::Quality, d->quality);
     if (d->handler->supportsOption(QImageIOHandler::CompressionRatio))
@@ -657,8 +751,16 @@ bool QImageWriter::write(const QImage &image)
         d->handler->setOption(QImageIOHandler::Description, d->description);
     if (!d->subType.isEmpty() && d->handler->supportsOption(QImageIOHandler::SubType))
         d->handler->setOption(QImageIOHandler::SubType, d->subType);
+    if (d->handler->supportsOption(QImageIOHandler::OptimizedWrite))
+        d->handler->setOption(QImageIOHandler::OptimizedWrite, d->optimizedWrite);
+    if (d->handler->supportsOption(QImageIOHandler::ProgressiveScanWrite))
+        d->handler->setOption(QImageIOHandler::ProgressiveScanWrite, d->progressiveScanWrite);
+    if (d->handler->supportsOption(QImageIOHandler::ImageTransformation))
+        d->handler->setOption(QImageIOHandler::ImageTransformation, int(d->transformation));
+    else
+        qt_imageTransform(img, d->transformation);
 
-    if (!d->handler->write(image))
+    if (!d->handler->write(img))
         return false;
     if (QFile *file = qobject_cast<QFile *>(d->device))
         file->flush();

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -505,6 +505,27 @@ Q_STATIC_ASSERT((!is_unsigned<qint64>::value));
 
 Q_STATIC_ASSERT((!is_signed<quint64>::value));
 Q_STATIC_ASSERT(( is_signed<qint64>::value));
+
+template<class T = void> struct is_default_constructible;
+
+template<> struct is_default_constructible<void>
+{
+protected:
+    template<bool> struct test { typedef char type; };
+public:
+    static bool const value = false;
+};
+template<> struct is_default_constructible<>::test<true> { typedef double type; };
+
+template<class T> struct is_default_constructible : is_default_constructible<>
+{
+private:
+    template<class U> static typename test<!!sizeof(::new U())>::type sfinae(U*);
+    template<class U> static char sfinae(...);
+public:
+    static bool const value = sizeof(sfinae<T>(0)) > 1;
+};
+
 
 } // namespace QtPrivate
 

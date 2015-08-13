@@ -24,16 +24,19 @@ contains(TEMPLATE, .*lib) {
         rplbase = $$dirname(_QMAKE_SUPER_CACHE_)/[^/][^/]*
     else: \
         rplbase = $$MODULE_BASE_OUTDIR
-    host_build: \
+    host_build {
+        qqt_libdir = \$\$\$\$[QT_HOST_LIBS]
         qt_libdir = $$[QT_HOST_LIBS]
-    else: \
-        qt_libdir = $$[QT_INSTALL_LIBS/raw]
+    } else {
+        qqt_libdir = \$\$\$\$[QT_INSTALL_LIBS]
+        qt_libdir = $$[QT_INSTALL_LIBS]
+    }
     contains(QMAKE_DEFAULT_LIBDIRS, $$qt_libdir) {
         lib_replace.match = "[^ ']*$$rplbase/lib"
         lib_replace.replace =
     } else {
         lib_replace.match = $$rplbase/lib
-        lib_replace.replace = $$qt_libdir
+        lib_replace.replace = $$qqt_libdir
     }
     lib_replace.CONFIG = path
     QMAKE_PRL_INSTALL_REPLACE += lib_replace
@@ -50,9 +53,6 @@ warnings_are_errors:warning_clean {
         reg_ver = $${QT_CLANG_MAJOR_VERSION}.$${QT_CLANG_MINOR_VERSION}
         contains(apple_ver, "4\\.[012]|5\\.[01]")|contains(reg_ver, "3\\.[34]") {
             QMAKE_CXXFLAGS_WARN_ON += -Werror -Wno-error=\\$${LITERAL_HASH}warnings -Wno-error=deprecated-declarations $$WERROR
-
-            # glibc's bswap_XX macros use the "register" keyword
-            linux:equals(reg_ver, "3.4"): QMAKE_CXXFLAGS_WARN_ON += -Wno-error=deprecated-register
         }
     } else:intel_icc:linux {
         # Intel CC 13.0 - 15.0, on Linux only
@@ -79,6 +79,9 @@ warnings_are_errors:warning_clean {
             # Work-around for bug https://code.google.com/p/android/issues/detail?id=58135
             android: QMAKE_CXXFLAGS_WARN_ON += -Wno-error=literal-suffix
         }
+    } else:msvc {
+        # enable for MSVC 2012, MSVC 2013
+        equals(MSVC_VER, "11.0")|equals(MSVC_VER, "12.0"): QMAKE_CXXFLAGS_WARN_ON += -WX
     }
     unset(ver)
 }

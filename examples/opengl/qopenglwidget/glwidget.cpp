@@ -1,7 +1,7 @@
 /****************************************************************************
  **
- ** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
- ** Contact: http://www.qt-project.org/legal
+ ** Copyright (C) 2015 The Qt Company Ltd.
+ ** Contact: http://www.qt.io/licensing/
  **
  ** This file is part of the examples of the Qt Toolkit.
  **
@@ -17,8 +17,8 @@
  **     notice, this list of conditions and the following disclaimer in
  **     the documentation and/or other materials provided with the
  **     distribution.
- **   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
- **     of its contributors may be used to endorse or promote products derived
+ **   * Neither the name of The Qt Company Ltd nor the names of its
+ **     contributors may be used to endorse or promote products derived
  **     from this software without specific prior written permission.
  **
  **
@@ -537,14 +537,14 @@ void GLWidget::setTransparent(bool transparent)
     window()->update();
 }
 
-void GLWidget::resizeGL(int w, int h)
+void GLWidget::resizeGL(int, int)
 {
     if (m_hasButton) {
         if (!m_btn) {
-            m_btn = new QPushButton("A widget on top.\nPress me!", this);
+            m_btn = new QPushButton("A widget on top.\nPress for more widgets.", this);
             connect(m_btn, &QPushButton::clicked, this, &GLWidget::handleButtonPress);
         }
-        m_btn->move(w / 2, h / 2);
+        m_btn->move(20, 80);
     }
 }
 

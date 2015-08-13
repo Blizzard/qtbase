@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -59,33 +59,33 @@ public:
 
     void paintBoxGap(GtkWidget *gtkWidget, const gchar* part, const QRect &rect,
                      GtkStateType state, GtkShadowType shadow, GtkPositionType gap_side, gint x,
-                     gint width, GtkStyle *style);
+                     gint width, GtkStyle *style) Q_DECL_OVERRIDE;
     void paintBox(GtkWidget *gtkWidget, const gchar* part,
                   const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style,
-                  const QString &pmKey = QString());
+                  const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintHline(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkStyle *style,
-                    int x1, int x2, int y, const QString &pmKey = QString());
+                    int x1, int x2, int y, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintVline(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkStyle *style,
-                    int y1, int y2, int x, const QString &pmKey = QString());
+                    int y1, int y2, int x, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintExpander(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state,
-                       GtkExpanderStyle expander_state, GtkStyle *style, const QString &pmKey = QString());
+                       GtkExpanderStyle expander_state, GtkStyle *style, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintFocus(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkStyle *style,
-                    const QString &pmKey = QString());
+                    const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintResizeGrip(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkShadowType shadow,
-                         GdkWindowEdge edge, GtkStyle *style, const QString &pmKey = QString());
+                         GdkWindowEdge edge, GtkStyle *style, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintArrow(GtkWidget *gtkWidget, const gchar* part, const QRect &arrowrect, GtkArrowType arrow_type, GtkStateType state, GtkShadowType shadow,
-                    gboolean fill, GtkStyle *style, const QString &pmKey = QString());
+                    gboolean fill, GtkStyle *style, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintHandle(GtkWidget *gtkWidget, const gchar* part, const QRect &rect,
-                     GtkStateType state, GtkShadowType shadow, GtkOrientation orientation, GtkStyle *style);
+                     GtkStateType state, GtkShadowType shadow, GtkOrientation orientation, GtkStyle *style) Q_DECL_OVERRIDE;
     void paintSlider(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkShadowType shadow,
-                     GtkStyle *style, GtkOrientation orientation, const QString &pmKey = QString());
+                     GtkStyle *style, GtkOrientation orientation, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
     void paintShadow(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkShadowType shadow,
-                     GtkStyle *style, const QString &pmKey = QString());
-    void paintFlatBox(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString & = QString());
+                     GtkStyle *style, const QString &pmKey = QString()) Q_DECL_OVERRIDE;
+    void paintFlatBox(GtkWidget *gtkWidget, const gchar* part, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString & = QString()) Q_DECL_OVERRIDE;
     void paintExtention(GtkWidget *gtkWidget, const gchar *part, const QRect &rect, GtkStateType state, GtkShadowType shadow,
-                        GtkPositionType gap_pos, GtkStyle *style);
-    void paintOption(GtkWidget *gtkWidget, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString &detail);
-    void paintCheckbox(GtkWidget *gtkWidget, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString &detail);
+                        GtkPositionType gap_pos, GtkStyle *style) Q_DECL_OVERRIDE;
+    void paintOption(GtkWidget *gtkWidget, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString &detail) Q_DECL_OVERRIDE;
+    void paintCheckbox(GtkWidget *gtkWidget, const QRect &rect, GtkStateType state, GtkShadowType shadow, GtkStyle *style, const QString &detail) Q_DECL_OVERRIDE;
 
 private:
     QPixmap renderTheme(uchar *bdata, uchar *wdata, const QRect &rect) const;

@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Intel Corporation.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -39,9 +40,14 @@
 #endif
 
 #include "qdebug.h"
+#include "qmetaobject.h"
 #include <private/qtextstream_p.h>
+#include <private/qtools_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using QtMiscUtils::toHexUpper;
+using QtMiscUtils::fromHex;
 
 // This file is needed to force compilation of QDebug into the kernel library.
 
@@ -144,6 +150,167 @@ QDebug::~QDebug()
                               stream->buffer);
         }
         delete stream;
+    }
+}
+
+/*!
+    \internal
+*/
+void QDebug::putUcs4(uint ucs4)
+{
+    maybeQuote('\'');
+    if (ucs4 < 0x20) {
+        stream->ts << hex << "\\x" << ucs4 << reset;
+    } else if (ucs4 < 0x80) {
+        stream->ts << char(ucs4);
+    } else {
+        stream->ts << hex << qSetPadChar(QLatin1Char('0'));
+        if (ucs4 < 0x10000)
+            stream->ts << qSetFieldWidth(4) << "\\u";
+        else
+            stream->ts << qSetFieldWidth(8) << "\\U";
+        stream->ts << ucs4 << reset;
+    }
+    maybeQuote('\'');
+}
+
+template <typename Char>
+static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, int length, bool isUnicode = true)
+{
+    QChar quote(QLatin1Char('"'));
+    d->write(&quote, 1);
+
+    bool lastWasHexEscape = false;
+    const Char *end = begin + length;
+    for (const Char *p = begin; p != end; ++p) {
+        // check if we need to insert "" to break an hex escape sequence
+        if (Q_UNLIKELY(lastWasHexEscape)) {
+            if (fromHex(*p) != -1) {
+                // yes, insert it
+                QChar quotes[] = { QLatin1Char('"'), QLatin1Char('"') };
+                d->write(quotes, 2);
+            }
+            lastWasHexEscape = false;
+        }
+
+        if (sizeof(Char) == sizeof(QChar)) {
+            int runLength = 0;
+            while (p + runLength != end &&
+                   p[runLength] < 0x7f && p[runLength] >= 0x20 && p[runLength] != '\\' && p[runLength] != '"')
+                ++runLength;
+            if (runLength) {
+                d->write(reinterpret_cast<const QChar *>(p), runLength);
+                p += runLength - 1;
+                continue;
+            }
+        } else if (*p < 0x7f && *p >= 0x20 && *p != '\\' && *p != '"') {
+            QChar c = QLatin1Char(*p);
+            d->write(&c, 1);
+            continue;
+        }
+
+        // print as an escape sequence
+        int buflen = 2;
+        ushort buf[sizeof "\\U12345678" - 1];
+        buf[0] = '\\';
+
+        switch (*p) {
+        case '"':
+        case '\\':
+            buf[1] = *p;
+            break;
+        case '\b':
+            buf[1] = 'b';
+            break;
+        case '\f':
+            buf[1] = 'f';
+            break;
+        case '\n':
+            buf[1] = 'n';
+            break;
+        case '\r':
+            buf[1] = 'r';
+            break;
+        case '\t':
+            buf[1] = 't';
+            break;
+        default:
+            if (!isUnicode) {
+                // print as hex escape
+                buf[1] = 'x';
+                buf[2] = toHexUpper(uchar(*p) >> 4);
+                buf[3] = toHexUpper(uchar(*p));
+                buflen = 4;
+                lastWasHexEscape = true;
+                break;
+            }
+            if (QChar::isHighSurrogate(*p)) {
+                if ((p + 1) != end && QChar::isLowSurrogate(p[1])) {
+                    // properly-paired surrogates
+                    uint ucs4 = QChar::surrogateToUcs4(*p, p[1]);
+                    ++p;
+                    buf[1] = 'U';
+                    buf[2] = '0'; // toHexUpper(ucs4 >> 32);
+                    buf[3] = '0'; // toHexUpper(ucs4 >> 28);
+                    buf[4] = toHexUpper(ucs4 >> 20);
+                    buf[5] = toHexUpper(ucs4 >> 16);
+                    buf[6] = toHexUpper(ucs4 >> 12);
+                    buf[7] = toHexUpper(ucs4 >> 8);
+                    buf[8] = toHexUpper(ucs4 >> 4);
+                    buf[9] = toHexUpper(ucs4);
+                    buflen = 10;
+                    break;
+                }
+                // improperly-paired surrogates, fall through
+            }
+            buf[1] = 'u';
+            buf[2] = toHexUpper(ushort(*p) >> 12);
+            buf[3] = toHexUpper(ushort(*p) >> 8);
+            buf[4] = toHexUpper(*p >> 4);
+            buf[5] = toHexUpper(*p);
+            buflen = 6;
+        }
+        d->write(reinterpret_cast<QChar *>(buf), buflen);
+    }
+
+    d->write(&quote, 1);
+}
+
+/*!
+    \internal
+    Duplicated from QtTest::toPrettyUnicode().
+*/
+void QDebug::putString(const QChar *begin, size_t length)
+{
+    if (stream->testFlag(Stream::NoQuotes)) {
+        // no quotes, write the string directly too (no pretty-printing)
+        // this respects the QTextStream state, though
+        stream->ts.d_ptr->putString(begin, int(length));
+    } else {
+        // we'll reset the QTextStream formatting mechanisms, so save the state
+        QDebugStateSaver saver(*this);
+        stream->ts.d_ptr->params.reset();
+        putEscapedString(stream->ts.d_ptr.data(), reinterpret_cast<const ushort *>(begin), int(length));
+    }
+}
+
+/*!
+    \internal
+    Duplicated from QtTest::toPrettyCString().
+*/
+void QDebug::putByteArray(const char *begin, size_t length, Latin1Content content)
+{
+    if (stream->testFlag(Stream::NoQuotes)) {
+        // no quotes, write the string directly too (no pretty-printing)
+        // this respects the QTextStream state, though
+        QString string = content == ContainsLatin1 ? QString::fromLatin1(begin, int(length)) : QString::fromUtf8(begin, int(length));
+        stream->ts.d_ptr->putString(string);
+    } else {
+        // we'll reset the QTextStream formatting mechanisms, so save the state
+        QDebugStateSaver saver(*this);
+        stream->ts.d_ptr->params.reset();
+        putEscapedString(stream->ts.d_ptr.data(), reinterpret_cast<const uchar *>(begin),
+                         int(length), content == ContainsLatin1);
     }
 }
 
@@ -476,5 +643,38 @@ QDebugStateSaver::~QDebugStateSaver()
 {
     d->restoreState();
 }
+
+#ifndef QT_NO_QOBJECT
+/*!
+    \internal
+ */
+QDebug qt_QMetaEnum_debugOperator(QDebug &dbg, int value, const QMetaObject *meta, const char *name)
+{
+    QDebugStateSaver saver(dbg);
+    QMetaEnum me = meta->enumerator(meta->indexOfEnumerator(name));
+    const char *key = me.valueToKey(value);
+    dbg.nospace() << meta->className() << "::" << name << '(';
+    if (key)
+        dbg << key;
+    else
+        dbg << value;
+    dbg << ')';
+    return dbg;
+}
+
+QDebug qt_QMetaEnum_flagDebugOperator(QDebug &debug, quint64 value, const QMetaObject *meta, const char *name)
+{
+    QDebugStateSaver saver(debug);
+    debug.resetFormat();
+    debug.noquote();
+    debug.nospace();
+    debug << "QFlags<";
+    const QMetaEnum me = meta->enumerator(meta->indexOfEnumerator(name));
+    if (const char *scope = me.scope())
+        debug << scope << "::";
+    debug << me.name() << ">(" << me.valueToKeys(value) << ')';
+    return debug;
+}
+#endif // !QT_NO_QOBJECT
 
 QT_END_NAMESPACE

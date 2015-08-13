@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -60,17 +52,24 @@ void QSslKeyPrivate::clear(bool deep)
     isNull = true;
     if (!QSslSocket::supportsSsl())
         return;
-    if (rsa) {
+    if (algorithm == QSsl::Rsa && rsa) {
         if (deep)
             q_RSA_free(rsa);
         rsa = 0;
     }
-    if (dsa) {
+    if (algorithm == QSsl::Dsa && dsa) {
         if (deep)
             q_DSA_free(dsa);
         dsa = 0;
     }
-    if (opaque) {
+#ifndef OPENSSL_NO_EC
+    if (algorithm == QSsl::Ec && ec) {
+       if (deep)
+            q_EC_KEY_free(ec);
+       ec = 0;
+    }
+#endif
+    if (algorithm == QSsl::Opaque && opaque) {
         if (deep)
             q_EVP_PKEY_free(opaque);
         opaque = 0;
@@ -99,6 +98,16 @@ bool QSslKeyPrivate::fromEVP_PKEY(EVP_PKEY *pkey)
 
         return true;
     }
+#ifndef OPENSSL_NO_EC
+    else if (pkey->type == EVP_PKEY_EC) {
+        isNull = false;
+        algorithm = QSsl::Ec;
+        type = QSsl::PrivateKey;
+        ec = q_EC_KEY_dup(q_EVP_PKEY_get1_EC_KEY(pkey));
+
+        return true;
+    }
+#endif
     else {
         // Unknown key type. This could be handled as opaque, but then
         // we'd eventually leak memory since we wouldn't be able to free
@@ -130,7 +139,7 @@ void QSslKeyPrivate::decodePem(const QByteArray &pem, const QByteArray &passPhra
     if (!bio)
         return;
 
-    void *phrase = (void *)passPhrase.constData();
+    void *phrase = const_cast<char *>(passPhrase.constData());
 
     if (algorithm == QSsl::Rsa) {
         RSA *result = (type == QSsl::PublicKey)
@@ -138,12 +147,20 @@ void QSslKeyPrivate::decodePem(const QByteArray &pem, const QByteArray &passPhra
             : q_PEM_read_bio_RSAPrivateKey(bio, &rsa, 0, phrase);
         if (rsa && rsa == result)
             isNull = false;
-    } else {
+    } else if (algorithm == QSsl::Dsa) {
         DSA *result = (type == QSsl::PublicKey)
             ? q_PEM_read_bio_DSA_PUBKEY(bio, &dsa, 0, phrase)
             : q_PEM_read_bio_DSAPrivateKey(bio, &dsa, 0, phrase);
         if (dsa && dsa == result)
             isNull = false;
+#ifndef OPENSSL_NO_EC
+    } else if (algorithm == QSsl::Ec) {
+        EC_KEY *result = (type == QSsl::PublicKey)
+            ? q_PEM_read_bio_EC_PUBKEY(bio, &ec, 0, phrase)
+            : q_PEM_read_bio_ECPrivateKey(bio, &ec, 0, phrase);
+        if (ec && ec == result)
+            isNull = false;
+#endif
     }
 
     q_BIO_free(bio);
@@ -154,8 +171,14 @@ int QSslKeyPrivate::length() const
     if (isNull || algorithm == QSsl::Opaque)
         return -1;
 
-    return (algorithm == QSsl::Rsa)
-           ? q_BN_num_bits(rsa->n) : q_BN_num_bits(dsa->p);
+    switch (algorithm) {
+        case QSsl::Rsa: return q_BN_num_bits(rsa->n);
+        case QSsl::Dsa: return q_BN_num_bits(dsa->p);
+#ifndef OPENSSL_NO_EC
+        case QSsl::Ec: return q_EC_GROUP_get_degree(q_EC_KEY_get0_group(ec));
+#endif
+        default: return -1;
+    }
 }
 
 QByteArray QSslKeyPrivate::toPem(const QByteArray &passPhrase) const
@@ -178,11 +201,11 @@ QByteArray QSslKeyPrivate::toPem(const QByteArray &passPhrase) const
                     bio, rsa,
                     // ### the cipher should be selectable in the API:
                     passPhrase.isEmpty() ? (const EVP_CIPHER *)0 : q_EVP_des_ede3_cbc(),
-                    (uchar *)passPhrase.data(), passPhrase.size(), 0, 0)) {
+                    const_cast<uchar *>((const uchar *)passPhrase.data()), passPhrase.size(), 0, 0)) {
                 fail = true;
             }
         }
-    } else {
+    } else if (algorithm == QSsl::Dsa) {
         if (type == QSsl::PublicKey) {
             if (!q_PEM_write_bio_DSA_PUBKEY(bio, dsa))
                 fail = true;
@@ -191,10 +214,27 @@ QByteArray QSslKeyPrivate::toPem(const QByteArray &passPhrase) const
                     bio, dsa,
                     // ### the cipher should be selectable in the API:
                     passPhrase.isEmpty() ? (const EVP_CIPHER *)0 : q_EVP_des_ede3_cbc(),
-                    (uchar *)passPhrase.data(), passPhrase.size(), 0, 0)) {
+                    const_cast<uchar *>((const uchar *)passPhrase.data()), passPhrase.size(), 0, 0)) {
                 fail = true;
             }
         }
+#ifndef OPENSSL_NO_EC
+    } else if (algorithm == QSsl::Ec) {
+        if (type == QSsl::PublicKey) {
+            if (!q_PEM_write_bio_EC_PUBKEY(bio, ec))
+                fail = true;
+        } else {
+            if (!q_PEM_write_bio_ECPrivateKey(
+                    bio, ec,
+                    // ### the cipher should be selectable in the API:
+                    passPhrase.isEmpty() ? (const EVP_CIPHER *)0 : q_EVP_des_ede3_cbc(),
+                    const_cast<uchar *>((const uchar *)passPhrase.data()), passPhrase.size(), 0, 0)) {
+                fail = true;
+            }
+        }
+#endif
+    } else {
+        fail = true;
     }
 
     QByteArray pem;
@@ -216,6 +256,10 @@ Qt::HANDLE QSslKeyPrivate::handle() const
         return Qt::HANDLE(rsa);
     case QSsl::Dsa:
         return Qt::HANDLE(dsa);
+#ifndef OPENSSL_NO_EC
+    case QSsl::Ec:
+        return Qt::HANDLE(ec);
+#endif
     default:
         return Qt::HANDLE(NULL);
     }

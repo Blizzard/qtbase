@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,11 +48,10 @@
 QT_BEGIN_NAMESPACE
 
 class QXcbScreen;
-class QXcbEGLSurface;
 class QXcbSyncWindowRequest;
 class QIcon;
 
-class QXcbWindow : public QXcbObject, public QXcbWindowEventListener, public QPlatformWindow
+class Q_XCB_EXPORT QXcbWindow : public QXcbObject, public QXcbWindowEventListener, public QPlatformWindow
 {
 public:
     enum NetWmState {
@@ -71,49 +70,50 @@ public:
     QXcbWindow(QWindow *window);
     ~QXcbWindow();
 
-    void setGeometry(const QRect &rect);
+    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE;
 
-    QMargins frameMargins() const;
+    QMargins frameMargins() const Q_DECL_OVERRIDE;
 
-    void setVisible(bool visible);
-    void setWindowFlags(Qt::WindowFlags flags);
-    void setWindowState(Qt::WindowState state);
-    WId winId() const;
-    void setParent(const QPlatformWindow *window);
+    void setVisible(bool visible) Q_DECL_OVERRIDE;
+    void setWindowFlags(Qt::WindowFlags flags) Q_DECL_OVERRIDE;
+    void setWindowState(Qt::WindowState state) Q_DECL_OVERRIDE;
+    WId winId() const Q_DECL_OVERRIDE;
+    void setParent(const QPlatformWindow *window) Q_DECL_OVERRIDE;
 
-    bool isExposed() const;
-    bool isEmbedded(const QPlatformWindow *parentWindow) const;
-    QPoint mapToGlobal(const QPoint &pos) const;
-    QPoint mapFromGlobal(const QPoint &pos) const;
+    bool isExposed() const Q_DECL_OVERRIDE;
+    bool isEmbedded(const QPlatformWindow *parentWindow) const Q_DECL_OVERRIDE;
+    QPoint mapToGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
+    QPoint mapFromGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
 
-    void setWindowTitle(const QString &title);
-    void setWindowIcon(const QIcon &icon);
-    void raise();
-    void lower();
-    void propagateSizeHints();
+    void setWindowTitle(const QString &title) Q_DECL_OVERRIDE;
+    void setWindowIcon(const QIcon &icon) Q_DECL_OVERRIDE;
+    void raise() Q_DECL_OVERRIDE;
+    void lower() Q_DECL_OVERRIDE;
+    void propagateSizeHints() Q_DECL_OVERRIDE;
 
-    void requestActivateWindow();
+    void requestActivateWindow() Q_DECL_OVERRIDE;
 
-    bool setKeyboardGrabEnabled(bool grab);
-    bool setMouseGrabEnabled(bool grab);
+    bool setKeyboardGrabEnabled(bool grab) Q_DECL_OVERRIDE;
+    bool setMouseGrabEnabled(bool grab) Q_DECL_OVERRIDE;
 
     void setCursor(xcb_cursor_t cursor);
 
-    QSurfaceFormat format() const;
+    QSurfaceFormat format() const Q_DECL_OVERRIDE;
 
-    void windowEvent(QEvent *event);
+    void windowEvent(QEvent *event) Q_DECL_OVERRIDE;
 
-    bool startSystemResize(const QPoint &pos, Qt::Corner corner);
+    bool startSystemResize(const QPoint &pos, Qt::Corner corner) Q_DECL_OVERRIDE;
 
-    void setOpacity(qreal level);
-    void setMask(const QRegion &region);
+    void setOpacity(qreal level) Q_DECL_OVERRIDE;
+    void setMask(const QRegion &region) Q_DECL_OVERRIDE;
 
-    void setAlertState(bool enabled);
-    bool isAlertState() const { return m_alertState; }
+    void setAlertState(bool enabled) Q_DECL_OVERRIDE;
+    bool isAlertState() const Q_DECL_OVERRIDE { return m_alertState; }
 
     xcb_window_t xcb_window() const { return m_window; }
     uint depth() const { return m_depth; }
     QImage::Format imageFormat() const { return m_imageFormat; }
+    bool imageNeedsRgbSwap() const { return m_imageRgbSwap; }
 
     bool handleGenericEvent(xcb_generic_event_t *event, long *result)  Q_DECL_OVERRIDE;
 
@@ -131,6 +131,7 @@ public:
     void handleFocusInEvent(const xcb_focus_in_event_t *event) Q_DECL_OVERRIDE;
     void handleFocusOutEvent(const xcb_focus_out_event_t *event) Q_DECL_OVERRIDE;
     void handlePropertyNotifyEvent(const xcb_property_notify_event_t *event) Q_DECL_OVERRIDE;
+    void handleXIMouseEvent(xcb_ge_event_t *) Q_DECL_OVERRIDE;
 
     QXcbWindow *toWindow() Q_DECL_OVERRIDE;
 
@@ -138,26 +139,42 @@ public:
 
     void updateNetWmUserTime(xcb_timestamp_t timestamp);
 
-#if defined(XCB_USE_EGL)
-    QXcbEGLSurface *eglSurface() const;
-#endif
-
     static void setWmWindowTypeStatic(QWindow *window, QXcbWindowFunctions::WmWindowTypes windowTypes);
+    static uint visualIdStatic(QWindow *window);
 
     QXcbWindowFunctions::WmWindowTypes wmWindowTypes() const;
     void setWmWindowType(QXcbWindowFunctions::WmWindowTypes types);
+
+    uint visualId() const;
 
     bool needsSync() const;
 
     void postSyncWindowRequest();
     void clearSyncWindowRequest() { m_pendingSyncRequest = 0; }
 
-    qreal devicePixelRatio() const;
+    qreal devicePixelRatio() const Q_DECL_OVERRIDE;
+
+    QXcbScreen *xcbScreen() const;
+
+    virtual void create();
+    virtual void destroy();
+    void maybeSetScreen(QXcbScreen *screen);
+    QXcbScreen *screenForNativeGeometry(const QRect &newGeometry) const;
 
 public Q_SLOTS:
     void updateSyncRequestCounter();
 
-private:
+protected:
+    virtual void resolveFormat() { m_format = window()->requestedFormat(); }
+    virtual void *createVisual() { return Q_NULLPTR; }
+    virtual bool supportsSyncProtocol() { return !window()->supportsOpenGL(); }
+
+    QPoint mapToNative(const QPoint &pos, const QXcbScreen *screen) const;
+    QPoint mapFromNative(const QPoint &pos, const QXcbScreen *screen) const;
+    QRect mapToNative(const QRect &rect, const QXcbScreen *screen) const;
+    QRect mapFromNative(const QRect &rect, const QXcbScreen *screen) const;
+    QXcbScreen *parentScreen();
+
     void changeNetWmState(bool set, xcb_atom_t one, xcb_atom_t two = 0);
     NetWmStates netWmStates();
     void setNetWmStates(NetWmStates);
@@ -176,9 +193,6 @@ private:
                            quint32 detail = 0, quint32 data1 = 0, quint32 data2 = 0);
     void handleXEmbedMessage(const xcb_client_message_event_t *event);
 
-    void create();
-    void destroy();
-
     void show();
     void hide();
 
@@ -186,12 +200,22 @@ private:
     void doFocusIn();
     void doFocusOut();
 
-    QXcbScreen *m_screen;
+    void handleButtonPressEvent(int event_x, int event_y, int root_x, int root_y,
+                                int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp);
+
+    void handleButtonReleaseEvent(int event_x, int event_y, int root_x, int root_y,
+                                  int detail, Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp);
+
+    void handleMotionNotifyEvent(int event_x, int event_y, int root_x, int root_y,
+                                 Qt::KeyboardModifiers modifiers, xcb_timestamp_t timestamp);
 
     xcb_window_t m_window;
 
+    QXcbScreen *m_xcbScreen;
+
     uint m_depth;
     QImage::Format m_imageFormat;
+    bool m_imageRgbSwap;
 
     xcb_sync_int64_t m_syncValue;
     xcb_sync_counter_t m_syncCounter;
@@ -214,10 +238,6 @@ private:
 
     mutable bool m_dirtyFrameMargins;
     mutable QMargins m_frameMargins;
-
-#if defined(XCB_USE_EGL)
-    mutable QXcbEGLSurface *m_eglSurface;
-#endif
 
     QRegion m_exposeRegion;
 

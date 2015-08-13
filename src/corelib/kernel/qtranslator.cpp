@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -86,13 +86,13 @@ static const uchar magic[MagicLength] = {
     0xcd, 0x21, 0x1c, 0xbf, 0x60, 0xa1, 0xbd, 0xdd
 };
 
-static bool match(const uchar* found, const char* target, uint len)
+static bool match(const uchar *found, uint foundLen, const char *target, uint targetLen)
 {
     // catch the case if \a found has a zero-terminating symbol and \a len includes it.
     // (normalize it to be without the zero-terminating symbol)
-    if (len > 0 && found[len-1] == '\0')
-        --len;
-    return (memcmp(found, target, len) == 0 && target[len] == '\0');
+    if (foundLen > 0 && found[foundLen-1] == '\0')
+        --foundLen;
+    return ((targetLen == foundLen) && memcmp(found, target, foundLen) == 0);
 }
 
 static void elfHash_continue(const char *name, uint &h)
@@ -273,6 +273,7 @@ static uint numerusHelper(int n, const uchar *rules, uint rulesSize)
     }
 
     Q_ASSERT(false);
+    return 0;
 }
 
 class QTranslatorPrivate : public QObjectPrivate
@@ -877,6 +878,9 @@ static QString getMessage(const uchar *m, const uchar *end, const char *context,
 {
     const uchar *tn = 0;
     uint tn_length = 0;
+    const uint sourceTextLen = uint(strlen(sourceText));
+    const uint contextLen = uint(strlen(context));
+    const uint commentLen = uint(strlen(comment));
 
     for (;;) {
         uchar tag = 0;
@@ -903,7 +907,7 @@ static QString getMessage(const uchar *m, const uchar *end, const char *context,
         case Tag_SourceText: {
             quint32 len = read32(m);
             m += 4;
-            if (!match(m, sourceText, len))
+            if (!match(m, len, sourceText, sourceTextLen))
                 return QString();
             m += len;
         }
@@ -911,7 +915,7 @@ static QString getMessage(const uchar *m, const uchar *end, const char *context,
         case Tag_Context: {
             quint32 len = read32(m);
             m += 4;
-            if (!match(m, context, len))
+            if (!match(m, len, context, contextLen))
                 return QString();
             m += len;
         }
@@ -919,7 +923,7 @@ static QString getMessage(const uchar *m, const uchar *end, const char *context,
         case Tag_Comment: {
             quint32 len = read32(m);
             m += 4;
-            if (*m && !match(m, comment, len))
+            if (*m && !match(m, len, comment, commentLen))
                 return QString();
             m += len;
         }
@@ -969,11 +973,12 @@ QString QTranslatorPrivate::do_translate(const char *context, const char *source
             return QString();
         c = contextArray + (2 + (hTableSize << 1) + (off << 1));
 
+        const uint contextLen = uint(strlen(context));
         for (;;) {
             quint8 len = read8(c++);
             if (len == 0)
                 return QString();
-            if (match(c, context, len))
+            if (match(c, len, context, contextLen))
                 break;
             c += len;
         }

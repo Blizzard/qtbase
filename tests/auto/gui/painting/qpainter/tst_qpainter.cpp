@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -111,6 +111,7 @@ private slots:
     void drawLine_task190634();
     void drawLine_task229459();
     void drawLine_task234891();
+    void drawLineEndPoints();
 
     void drawRect_data() { fillData(); }
     void drawRect();
@@ -289,6 +290,10 @@ private slots:
     void blendARGBonRGB();
 
     void RasterOp_NotDestination();
+    void drawTextNoHinting();
+
+    void drawPolyline_data();
+    void drawPolyline();
 
 private:
     void fillData();
@@ -501,7 +506,7 @@ void tst_QPainter::drawPixmap_comp()
     destPm.fill(c1);
     srcPm.fill(c2);
 
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     if (!destPm.x11PictureHandle())
         QSKIP("Requires XRender support");
 #endif
@@ -730,6 +735,7 @@ void tst_QPainter::initFrom()
     pal.setColor(QPalette::Foreground, QColor(255, 0, 0));
     pal.setBrush(QPalette::Background, QColor(0, 255, 0));
     widget->setPalette(pal);
+    widget->show();
 
     QFont font = widget->font();
     font.setPointSize(26);
@@ -1033,6 +1039,50 @@ void tst_QPainter::drawLine_task216948()
 
     for (int i = 0; i < img.height(); ++i)
         QCOMPARE(img.pixel(0, i), QColor(Qt::black).rgba());
+}
+
+void tst_QPainter::drawLineEndPoints()
+{
+    QImage img(256, 256, QImage::Format_ARGB32_Premultiplied);
+    img.fill(0x0);
+
+    QPainter p;
+    for (int x = 0; x < img.width(); ++x) {
+        QRgb color = qRgb(x, 0, 0);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(x, 0, 255 - x, 255);
+        p.end();
+        QCOMPARE(img.pixel(x, 0), color);
+        QCOMPARE(img.pixel(255 - x, 255), color);
+    }
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb color = qRgb(0, y, 0);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(0, y, 255, 255 - y);
+        p.end();
+        QCOMPARE(img.pixel(0, y), color);
+        QCOMPARE(img.pixel(255, 255 - y), color);
+    }
+    for (int x = 0; x < img.width(); ++x) {
+        QRgb color = qRgb(x, 0, x);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(x, 255, 255 - x, 0);
+        p.end();
+        QCOMPARE(img.pixel(x, 255), color);
+        QCOMPARE(img.pixel(255 - x, 0), color);
+    }
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb color = qRgb(0, y, y);
+        p.begin(&img);
+        p.setPen(QPen(color));
+        p.drawLine(255, y, 0, 255 - y);
+        p.end();
+        QCOMPARE(img.pixel(255, y), color);
+        QCOMPARE(img.pixel(0, 255 - y), color);
+    }
 }
 
 void tst_QPainter::drawRect()
@@ -3442,7 +3492,8 @@ void tst_QPainter::drawImage_data()
 
     for (int srcFormat = QImage::Format_Mono; srcFormat < QImage::NImageFormats; ++srcFormat) {
         for (int dstFormat = QImage::Format_Mono; dstFormat < QImage::NImageFormats; ++dstFormat) {
-            if (dstFormat == QImage::Format_Indexed8)
+            // Indexed8 can't be painted to, and Alpha8 can't hold a color.
+            if (dstFormat == QImage::Format_Indexed8 || dstFormat == QImage::Format_Alpha8)
                 continue;
             for (int odd_x = 0; odd_x <= 1; ++odd_x) {
                 for (int odd_width = 0; odd_width <= 1; ++odd_width) {
@@ -4810,6 +4861,54 @@ void tst_QPainter::RasterOp_NotDestination()
 
     uint pixel = image.pixel(1, 1);
     QCOMPARE(pixel, 0xff00ffff);
+}
+
+void tst_QPainter::drawTextNoHinting()
+{
+    {
+        QImage image(250, 250, QImage::Format_RGB32);
+        QPainter p(&image);
+        QFont font("Arial", 8);
+        font.setHintingPreference(QFont::PreferNoHinting);
+        font.setStyleStrategy(QFont::PreferAntialias);
+        p.setFont(font);
+        p.drawText(image.rect(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz");
+    }
+    // Testing for a crash when DirectWrite is used on Windows
+    QVERIFY(true);
+}
+
+void tst_QPainter::drawPolyline_data()
+{
+    QTest::addColumn< QVector<QPointF> >("points");
+
+    QTest::newRow("basic") << (QVector<QPointF>() << QPointF(10, 10) << QPointF(20, 10) << QPointF(20, 20) << QPointF(10, 20));
+    QTest::newRow("clipped") << (QVector<QPointF>() << QPoint(-10, 100) << QPoint(-1, 100) << QPoint(-1,  -2) << QPoint(100, -2) << QPoint(100, 40)); // QTBUG-31579
+    QTest::newRow("shortsegment") << (QVector<QPointF>() << QPoint(20, 100) << QPoint(20, 99) << QPoint(21, 99) << QPoint(21, 104)); // QTBUG-42398
+}
+
+void tst_QPainter::drawPolyline()
+{
+    QFETCH(QVector<QPointF>, points);
+    QImage images[2];
+
+    for (int r = 0; r < 2; r++) {
+        images[r] = QImage(150, 150, QImage::Format_ARGB32);
+        images[r].fill(Qt::transparent);
+        QPainter p(images + r);
+        QPen pen(Qt::red, 0, Qt::SolidLine, Qt::FlatCap);
+        p.setPen(pen);
+        QVERIFY(p.pen().isCosmetic());
+        if (r) {
+            for (int i = 0; i < points.count()-1; i++) {
+                p.drawLine(points.at(i), points.at(i+1));
+            }
+        } else {
+            p.drawPolyline(points);
+        }
+    }
+
+    QCOMPARE(images[0], images[1]);
 }
 
 QTEST_MAIN(tst_QPainter)

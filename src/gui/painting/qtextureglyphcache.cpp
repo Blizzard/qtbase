@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -123,17 +123,6 @@ bool QTextureGlyphCache::populate(QFontEngine *fontEngine, int numGlyphs, const 
         if (listItemCoordinates.contains(GlyphAndSubPixelPosition(glyph, subPixelPosition)))
             continue;
 
-        // This is a rather crude hack, but it works.
-        // The FreeType font engine is not capable of getting precise metrics for the alphamap
-        // without first rasterizing the glyph. If we force the glyph to be rasterized before
-        // we ask for the alphaMapBoundingBox(), the glyph will be loaded, rasterized and its
-        // proper metrics will be cached and used later.
-        if (fontEngine->hasInternalCaching()) {
-            QImage *locked = fontEngine->lockedAlphaMapForGlyph(glyph, subPixelPosition, m_format);
-            if (locked && !locked->isNull())
-                fontEngine->unlockAlphaMapForGlyph();
-        }
-
         glyph_metrics_t metrics = fontEngine->alphaMapBoundingBox(glyph, subPixelPosition, m_transform, m_format);
 
 #ifdef CACHE_DEBUG
@@ -222,7 +211,7 @@ bool QTextureGlyphCache::populate(QFontEngine *fontEngine, int numGlyphs, const 
 
 void QTextureGlyphCache::fillInPendingGlyphs()
 {
-    if (m_pendingGlyphs.isEmpty())
+    if (!hasPendingGlyphs())
         return;
 
     int requiredHeight = m_h;
@@ -285,13 +274,7 @@ void QImageTextureGlyphCache::createTextureData(int width, int height)
         m_image = QImage(width, height, QImage::Format_Mono);
         break;
     case QFontEngine::Format_A8: {
-        m_image = QImage(width, height, QImage::Format_Indexed8);
-        m_image.fill(0);
-        QVector<QRgb> colors(256);
-        QRgb *it = colors.data();
-        for (int i=0; i<256; ++i, ++it)
-            *it = 0xff000000 | i | (i<<8) | (i<<16);
-        m_image.setColorTable(colors);
+        m_image = QImage(width, height, QImage::Format_Alpha8);
         break;   }
     case QFontEngine::Format_A32:
         m_image = QImage(width, height, QImage::Format_RGB32);

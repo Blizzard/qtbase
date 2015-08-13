@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,7 +42,17 @@
 #include <qevent.h>
 #include <qstring.h>
 #include <qdebug.h>
+#include <qlineedit.h>
+#include <qtextedit.h>
+#include <qplaintextedit.h>
+#include <qapplication.h>
 #include <private/qtextengine_p.h>
+#include <private/qabstractitemdelegate_p.h>
+
+#include <qpa/qplatformintegration.h>
+#include <qpa/qplatformdrag.h>
+#include <private/qguiapplication_p.h>
+#include <private/qdnd_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -165,7 +175,7 @@ QT_BEGIN_NAMESPACE
     Creates a new abstract item delegate with the given \a parent.
 */
 QAbstractItemDelegate::QAbstractItemDelegate(QObject *parent)
-    : QObject(parent)
+    : QObject(*new QAbstractItemDelegatePrivate, parent)
 {
 
 }
@@ -405,6 +415,135 @@ QVector<int> QAbstractItemDelegate::paintingRoles() const
     return QVector<int>();
 }
 
+QAbstractItemDelegatePrivate::QAbstractItemDelegatePrivate()
+    : QObjectPrivate()
+{
+}
+
+static bool editorHandlesKeyEvent(QWidget *editor, const QKeyEvent *event)
+{
+#ifndef QT_NO_TEXTEDIT
+    // do not filter enter / return / tab / backtab for QTextEdit or QPlainTextEdit
+    if (qobject_cast<QTextEdit *>(editor) || qobject_cast<QPlainTextEdit *>(editor)) {
+        switch (event->key()) {
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab:
+        case Qt::Key_Enter:
+        case Qt::Key_Return:
+            return true;
+
+        default:
+            break;
+        }
+    }
+#endif // QT_NO_TEXTEDIT
+
+    Q_UNUSED(editor);
+    Q_UNUSED(event);
+    return false;
+}
+
+bool QAbstractItemDelegatePrivate::editorEventFilter(QObject *object, QEvent *event)
+{
+    Q_Q(QAbstractItemDelegate);
+
+    QWidget *editor = qobject_cast<QWidget*>(object);
+    if (!editor)
+        return false;
+    if (event->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        if (editorHandlesKeyEvent(editor, keyEvent))
+            return false;
+
+        switch (keyEvent->key()) {
+        case Qt::Key_Tab:
+            if (tryFixup(editor)) {
+                emit q->commitData(editor);
+                emit q->closeEditor(editor, QAbstractItemDelegate::EditNextItem);
+            }
+            return true;
+        case Qt::Key_Backtab:
+            if (tryFixup(editor)) {
+                emit q->commitData(editor);
+                emit q->closeEditor(editor, QAbstractItemDelegate::EditPreviousItem);
+            }
+            return true;
+        case Qt::Key_Enter:
+        case Qt::Key_Return:
+            // We want the editor to be able to process the key press
+            // before committing the data (e.g. so it can do
+            // validation/fixup of the input).
+            if (!tryFixup(editor))
+                return true;
+
+            QMetaObject::invokeMethod(q, "_q_commitDataAndCloseEditor",
+                                      Qt::QueuedConnection, Q_ARG(QWidget*, editor));
+            return false;
+        case Qt::Key_Escape:
+            // don't commit data
+            emit q->closeEditor(editor, QAbstractItemDelegate::RevertModelCache);
+            return true;
+        default:
+            return false;
+        }
+    } else if (event->type() == QEvent::FocusOut || (event->type() == QEvent::Hide && editor->isWindow())) {
+        //the Hide event will take care of he editors that are in fact complete dialogs
+        if (!editor->isActiveWindow() || (QApplication::focusWidget() != editor)) {
+            QWidget *w = QApplication::focusWidget();
+            while (w) { // don't worry about focus changes internally in the editor
+                if (w == editor)
+                    return false;
+                w = w->parentWidget();
+            }
+#ifndef QT_NO_DRAGANDDROP
+            // The window may lose focus during an drag operation.
+            // i.e when dragging involves the taskbar on Windows.
+            QPlatformDrag *platformDrag = QGuiApplicationPrivate::instance()->platformIntegration()->drag();
+            if (platformDrag && platformDrag->currentDrag()) {
+                return false;
+            }
+#endif
+            if (tryFixup(editor))
+                emit q->commitData(editor);
+
+            emit q->closeEditor(editor, QAbstractItemDelegate::NoHint);
+        }
+    } else if (event->type() == QEvent::ShortcutOverride) {
+        if (static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+            event->accept();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool QAbstractItemDelegatePrivate::tryFixup(QWidget *editor)
+{
+#ifndef QT_NO_LINEEDIT
+    if (QLineEdit *e = qobject_cast<QLineEdit*>(editor)) {
+        if (!e->hasAcceptableInput()) {
+            if (const QValidator *validator = e->validator()) {
+                QString text = e->text();
+                validator->fixup(text);
+                e->setText(text);
+            }
+            return e->hasAcceptableInput();
+        }
+    }
+#endif // QT_NO_LINEEDIT
+
+    return true;
+}
+
+void QAbstractItemDelegatePrivate::_q_commitDataAndCloseEditor(QWidget *editor)
+{
+    Q_Q(QAbstractItemDelegate);
+    emit q->commitData(editor);
+    emit q->closeEditor(editor, QAbstractItemDelegate::SubmitModelCache);
+}
+
 QT_END_NAMESPACE
+
+#include "moc_qabstractitemdelegate.cpp"
 
 #endif // QT_NO_ITEMVIEWS

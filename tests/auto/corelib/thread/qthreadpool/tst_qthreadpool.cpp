@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -92,6 +92,7 @@ private slots:
     void priorityStart();
     void waitForDone();
     void clear();
+    void cancel();
     void waitForDoneTimeout();
     void destroyingWaitsForTasksToFinish();
     void stressTest();
@@ -956,6 +957,56 @@ void tst_QThreadPool::clear()
     sem.release(threadPool.maxThreadCount());
     threadPool.waitForDone();
     QCOMPARE(count.load(), threadPool.maxThreadCount());
+}
+
+void tst_QThreadPool::cancel()
+{
+    QSemaphore sem(0);
+    class BlockingRunnable : public QRunnable
+    {
+    public:
+        QSemaphore & sem;
+        int & dtorCounter;
+        int & runCounter;
+        int dummy;
+        BlockingRunnable(QSemaphore & s, int & c, int & r) : sem(s), dtorCounter(c), runCounter(r){}
+        ~BlockingRunnable(){dtorCounter++;}
+        void run()
+        {
+            runCounter++;
+            sem.acquire();
+            count.ref();
+        }
+    };
+    typedef BlockingRunnable* BlockingRunnablePtr;
+
+    QThreadPool threadPool;
+    threadPool.setMaxThreadCount(3);
+    int runs = 2 * threadPool.maxThreadCount();
+    BlockingRunnablePtr* runnables = new BlockingRunnablePtr[runs];
+    count.store(0);
+    int dtorCounter = 0;
+    int runCounter = 0;
+    for (int i = 0; i < runs; i++) {
+        runnables[i] = new BlockingRunnable(sem, dtorCounter, runCounter);
+        runnables[i]->setAutoDelete(i != 0 && i != (runs-1)); //one which will run and one which will not
+        threadPool.cancel(runnables[i]); //verify NOOP for jobs not in the queue
+        threadPool.start(runnables[i]);
+    }
+    for (int i = 0; i < runs; i++) {
+        threadPool.cancel(runnables[i]);
+    }
+    runnables[0]->dummy = 0; //valgrind will catch this if cancel() is crazy enough to delete currently running jobs
+    runnables[runs-1]->dummy = 0;
+    QCOMPARE(dtorCounter, runs-threadPool.maxThreadCount()-1);
+    sem.release(threadPool.maxThreadCount());
+    threadPool.waitForDone();
+    QCOMPARE(runCounter, threadPool.maxThreadCount());
+    QCOMPARE(count.load(), threadPool.maxThreadCount());
+    QCOMPARE(dtorCounter, runs-2);
+    delete runnables[0]; //if the pool deletes them then we'll get double-free crash
+    delete runnables[runs-1];
+    delete[] runnables;
 }
 
 void tst_QThreadPool::destroyingWaitsForTasksToFinish()

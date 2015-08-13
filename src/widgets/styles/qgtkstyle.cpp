@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1049,7 +1049,7 @@ void QGtkStyle::drawPrimitive(PrimitiveElement element,
         // The reason for this is that a lot of code that relies on custom item delegates will look odd having
         // a gradient on the branch but a flat shaded color on the item itself.
         QCommonStyle::drawPrimitive(element, option, painter, widget);
-        if (!option->state & State_Selected) {
+        if (!(option->state & State_Selected)) {
             break;
         } else {
             if (const QAbstractItemView *view = qobject_cast<const QAbstractItemView*>(widget)) {
@@ -2902,9 +2902,7 @@ void QGtkStyle::drawControl(ControlElement element,
 
             if (verticalTitleBar) {
                 QRect r = rect;
-                QSize s = r.size();
-                s.transpose();
-                r.setSize(s);
+                r.setSize(r.size().transposed());
 
                 titleRect = QRect(r.left() + rect.bottom()
                                     - titleRect.bottom(),
@@ -3514,15 +3512,19 @@ void QGtkStyle::drawControl(ControlElement element,
                     progressBar.setRect(rect.left(), rect.top(), width, rect.height());
                 else
                     progressBar.setRect(rect.right() - width, rect.top(), width, rect.height());
+#ifndef QT_NO_ANIMATION
                 d->stopAnimation(option->styleObject);
+#endif
             } else {
                 Q_D(const QGtkStyle);
                 int slideWidth = ((rect.width() - 4) * 2) / 3;
                 int step = 0;
+#ifndef QT_NO_ANIMATION
                 if (QProgressStyleAnimation *animation = qobject_cast<QProgressStyleAnimation*>(d->animation(option->styleObject)))
                     step = animation->progressStep(slideWidth);
                 else
                     d->startAnimation(new QProgressStyleAnimation(d->animationFps, option->styleObject));
+#endif
                 progressBar.setRect(rect.left() + step, rect.top(), slideWidth / 2, rect.height());
             }
 
@@ -3631,6 +3633,13 @@ QRect QGtkStyle::subControlRect(ComplexControl control, const QStyleOptionComple
                 QFont font = widget->font();
                 font.setBold(true);
                 fontMetrics = QFontMetrics(font);
+            } else if (QStyleHelper::isInstanceOf(groupBox->styleObject, QAccessible::Grouping)) {
+                QVariant var = groupBox->styleObject->property("font");
+                if (var.isValid() && var.canConvert<QFont>()) {
+                    QFont font = var.value<QFont>();
+                    font.setBold(true);
+                    fontMetrics = QFontMetrics(font);
+                }
             }
 
             QSize textRect = fontMetrics.boundingRect(groupBox->text).size() + QSize(4, 4);
@@ -4047,7 +4056,7 @@ QPixmap QGtkStyle::standardPixmap(StandardPixmap sp, const QStyleOption *option,
     switch (sp) {
 
     case SP_TitleBarNormalButton: {
-        QImage restoreButton((const char **)dock_widget_restore_xpm);
+        QImage restoreButton(dock_widget_restore_xpm);
         QColor alphaCorner = restoreButton.color(2);
         alphaCorner.setAlpha(80);
         restoreButton.setColor(2, alphaCorner.rgba());
@@ -4060,7 +4069,7 @@ QPixmap QGtkStyle::standardPixmap(StandardPixmap sp, const QStyleOption *option,
     case SP_TitleBarCloseButton: // Fall through
     case SP_DockWidgetCloseButton: {
 
-        QImage closeButton((const char **)dock_widget_close_xpm);
+        QImage closeButton(dock_widget_close_xpm);
         QColor alphaCorner = closeButton.color(2);
         alphaCorner.setAlpha(80);
         closeButton.setColor(2, alphaCorner.rgba());

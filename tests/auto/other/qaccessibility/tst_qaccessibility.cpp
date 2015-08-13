@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,13 +41,7 @@
 # include <servprov.h>
 # include <winuser.h>
 # ifdef QT_SUPPORTS_IACCESSIBLE2
-#  include <Accessible2.h>
-#  include <AccessibleAction.h>
-#  include <AccessibleComponent.h>
-#  include <AccessibleEditableText.h>
-#  include <AccessibleText.h>
-#  include <AccessibleTable2.h>
-#  include <AccessibleTableCell.h>
+#  include <ia2_api_all.h>
 # endif
 #endif
 #include <QtTest/QtTest>
@@ -656,13 +650,25 @@ void tst_QAccessibility::accessibleName()
 // note: color should probably always be part of the attributes
 void tst_QAccessibility::textAttributes_data()
 {
+    QTest::addColumn<QFont>("defaultFont");
     QTest::addColumn<QString>("text");
     QTest::addColumn<int>("offset");
     QTest::addColumn<int>("startOffsetResult");
     QTest::addColumn<int>("endOffsetResult");
     QTest::addColumn<QStringList>("attributeResult");
 
-    static QStringList defaults = QString("font-style:normal;font-weight:normal;text-align:left;text-position:baseline;text-underline-style:none").split(';');
+    static QFont defaultFont;
+    defaultFont.setFamily("");
+    defaultFont.setPointSize(13);
+
+    static QFont defaultComplexFont = defaultFont;
+    defaultComplexFont.setFamily("Arial");
+    defaultComplexFont.setPointSize(20);
+    defaultComplexFont.setWeight(QFont::Bold);
+    defaultComplexFont.setStyle(QFont::StyleItalic);
+    defaultComplexFont.setUnderline(true);
+
+    static QStringList defaults = QString("font-style:normal;font-weight:normal;text-align:left;text-position:baseline;font-size:13pt").split(';');
     static QStringList bold = defaults;
     bold[1] = QString::fromLatin1("font-weight:bold");
 
@@ -677,7 +683,7 @@ void tst_QAccessibility::textAttributes_data()
     monospace.append(QLatin1String("font-family:\"monospace\""));
 
     static QStringList font8pt = defaults;
-    font8pt.append(QLatin1String("font-size:8pt"));
+    font8pt[4] = (QLatin1String("font-size:8pt"));
 
     static QStringList color = defaults;
     color << QLatin1String("color:rgb(240,241,242)") << QLatin1String("background-color:rgb(20,240,30)");
@@ -685,22 +691,43 @@ void tst_QAccessibility::textAttributes_data()
     static QStringList rightAlign = defaults;
     rightAlign[2] = QStringLiteral("text-align:right");
 
-    QTest::newRow("defaults 1") << "hello" << 0 << 0 << 5 << defaults;
-    QTest::newRow("defaults 2") << "hello" << 1 << 0 << 5 << defaults;
-    QTest::newRow("defaults 3") << "hello" << 4 << 0 << 5 << defaults;
-    QTest::newRow("defaults 4") << "hello" << 5 << 0 << 5 << defaults;
-    QTest::newRow("offset -1 length") << "hello" << -1 << 0 << 5 << defaults;
-    QTest::newRow("offset -2 cursor pos") << "hello" << -2 << 0 << 5 << defaults;
-    QTest::newRow("offset -3") << "hello" << -3 << -1 << -1 << QStringList();
-    QTest::newRow("invalid offset 2") << "hello" << 6 << -1 << -1 << QStringList();
-    QTest::newRow("invalid offset 3") << "" << 1 << -1 << -1 << QStringList();
+    static QStringList defaultFontDifferent = defaults;
+    defaultFontDifferent[0] = QString::fromLatin1("font-style:italic");
+    defaultFontDifferent[1] = QString::fromLatin1("font-weight:bold");
+    defaultFontDifferent[4] = QString::fromLatin1("font-size:20pt");
+    defaultFontDifferent.append("text-underline-style:solid");
+    defaultFontDifferent.append("text-underline-type:single");
+    defaultFontDifferent.append("font-family:\"Arial\"");
+
+    static QStringList defaultFontDifferentBoldItalic = defaultFontDifferent;
+    defaultFontDifferentBoldItalic[0] = QString::fromLatin1("font-style:italic");
+    defaultFontDifferentBoldItalic[1] = QString::fromLatin1("font-weight:bold");
+
+    static QStringList defaultFontDifferentMonospace = defaultFontDifferent;
+    defaultFontDifferentMonospace[7] = (QLatin1String("font-family:\"monospace\""));
+
+    static QStringList defaultFontDifferentFont8pt = defaultFontDifferent;
+    defaultFontDifferentFont8pt[4] = (QLatin1String("font-size:8pt"));
+
+    static QStringList defaultFontDifferentColor = defaultFontDifferent;
+    defaultFontDifferentColor << QLatin1String("color:rgb(240,241,242)") << QLatin1String("background-color:rgb(20,240,30)");
+
+    QTest::newRow("defaults 1") << defaultFont << "hello" << 0 << 0 << 5 << defaults;
+    QTest::newRow("defaults 2") << defaultFont << "hello" << 1 << 0 << 5 << defaults;
+    QTest::newRow("defaults 3") << defaultFont << "hello" << 4 << 0 << 5 << defaults;
+    QTest::newRow("defaults 4") << defaultFont << "hello" << 5 << 0 << 5 << defaults;
+    QTest::newRow("offset -1 length") << defaultFont << "hello" << -1 << 0 << 5 << defaults;
+    QTest::newRow("offset -2 cursor pos") << defaultFont << "hello" << -2 << 0 << 5 << defaults;
+    QTest::newRow("offset -3") << defaultFont << "hello" << -3 << -1 << -1 << QStringList();
+    QTest::newRow("invalid offset 2") << defaultFont << "hello" << 6 << -1 << -1 << QStringList();
+    QTest::newRow("invalid offset 3") << defaultFont << "" << 1 << -1 << -1 << QStringList();
 
     QString boldText = QLatin1String("<html><b>bold</b>text");
-    QTest::newRow("bold 0") << boldText << 0 << 0 << 4 << bold;
-    QTest::newRow("bold 2") << boldText << 2 << 0 << 4 << bold;
-    QTest::newRow("bold 3") << boldText << 3 << 0 << 4 << bold;
-    QTest::newRow("bold 4") << boldText << 4 << 4 << 8 << defaults;
-    QTest::newRow("bold 6") << boldText << 6 << 4 << 8 << defaults;
+    QTest::newRow("bold 0") << defaultFont << boldText << 0 << 0 << 4 << bold;
+    QTest::newRow("bold 2") << defaultFont << boldText << 2 << 0 << 4 << bold;
+    QTest::newRow("bold 3") << defaultFont << boldText << 3 << 0 << 4 << bold;
+    QTest::newRow("bold 4") << defaultFont << boldText << 4 << 4 << 8 << defaults;
+    QTest::newRow("bold 6") << defaultFont << boldText << 6 << 4 << 8 << defaults;
 
     QString longText = QLatin1String("<html>"
                  "Hello, <b>this</b> is an <i><b>example</b> text</i>."
@@ -708,36 +735,48 @@ void tst_QAccessibility::textAttributes_data()
                  "Multiple <span style=\"font-size: 8pt\">text sizes</span> are used."
                  "Let's give some color to <span style=\"color:#f0f1f2; background-color:#14f01e\">Qt</span>.");
 
-    QTest::newRow("default 5") << longText << 6 << 0 << 7 << defaults;
-    QTest::newRow("default 6") << longText << 7 << 7 << 11 << bold;
-    QTest::newRow("bold 7") << longText << 10 << 7 << 11 << bold;
-    QTest::newRow("bold 8") << longText << 10 << 7 << 11 << bold;
-    QTest::newRow("bold italic") << longText << 18 << 18 << 25 << boldItalic;
-    QTest::newRow("monospace") << longText << 34 << 31 << 55 << monospace;
-    QTest::newRow("8pt") << longText << 65 << 64 << 74 << font8pt;
-    QTest::newRow("color") << longText << 110 << 109 << 111 << color;
+    QTest::newRow("default 5") << defaultFont << longText << 6 << 0 << 7 << defaults;
+    QTest::newRow("default 6") << defaultFont << longText << 7 << 7 << 11 << bold;
+    QTest::newRow("bold 7") << defaultFont << longText << 10 << 7 << 11 << bold;
+    QTest::newRow("bold 8") << defaultFont << longText << 10 << 7 << 11 << bold;
+    QTest::newRow("bold italic") << defaultFont << longText << 18 << 18 << 25 << boldItalic;
+    QTest::newRow("monospace") << defaultFont << longText << 34 << 31 << 55 << monospace;
+    QTest::newRow("8pt") << defaultFont << longText << 65 << 64 << 74 << font8pt;
+    QTest::newRow("color") << defaultFont << longText << 110 << 109 << 111 << color;
+
+    // make sure unset font properties default to those of document's default font
+    QTest::newRow("defaultFont default 5") << defaultComplexFont << longText << 6 << 0 << 7 << defaultFontDifferent;
+    QTest::newRow("defaultFont default 6") << defaultComplexFont << longText << 7 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold 7") << defaultComplexFont << longText << 10 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold 8") << defaultComplexFont << longText << 10 << 7 << 11 << defaultFontDifferent;
+    QTest::newRow("defaultFont bold italic") << defaultComplexFont << longText << 18 << 18 << 25 << defaultFontDifferentBoldItalic;
+    QTest::newRow("defaultFont monospace") << defaultComplexFont << longText << 34 << 31 << 55 << defaultFontDifferentMonospace;
+    QTest::newRow("defaultFont 8pt") << defaultComplexFont << longText << 65 << 64 << 74 << defaultFontDifferentFont8pt;
+    QTest::newRow("defaultFont color") << defaultComplexFont << longText << 110 << 109 << 111 << defaultFontDifferentColor;
 
     QString rightAligned = QLatin1String("<html><p align=\"right\">right</p>");
-    QTest::newRow("right aligned 1") << rightAligned << 0 << 0 << 5 << rightAlign;
-    QTest::newRow("right aligned 2") << rightAligned << 1 << 0 << 5 << rightAlign;
-    QTest::newRow("right aligned 3") << rightAligned << 5 << 0 << 5 << rightAlign;
+    QTest::newRow("right aligned 1") << defaultFont << rightAligned << 0 << 0 << 5 << rightAlign;
+    QTest::newRow("right aligned 2") << defaultFont << rightAligned << 1 << 0 << 5 << rightAlign;
+    QTest::newRow("right aligned 3") << defaultFont << rightAligned << 5 << 0 << 5 << rightAlign;
 
     // left \n right \n left, make sure bold and alignment borders coincide
     QString leftRightLeftAligned = QLatin1String("<html><p><b>left</b></p><p align=\"right\">right</p><p><b>left</b></p>");
-    QTest::newRow("left right left aligned 1") << leftRightLeftAligned << 1 << 0 << 4 << bold;
-    QTest::newRow("left right left aligned 3") << leftRightLeftAligned << 3 << 0 << 4 << bold;
-    QTest::newRow("left right left aligned 4") << leftRightLeftAligned << 4 << 4 << 5 << defaults;
-    QTest::newRow("left right left aligned 5") << leftRightLeftAligned << 5 << 5 << 10 << rightAlign;
-    QTest::newRow("left right left aligned 8") << leftRightLeftAligned << 8 << 5 << 10 << rightAlign;
-    QTest::newRow("left right left aligned 9") << leftRightLeftAligned << 9 << 5 << 10 << rightAlign;
-    QTest::newRow("left right left aligned 10") << leftRightLeftAligned << 10 << 10 << 11 << rightAlign;
-    QTest::newRow("left right left aligned 11") << leftRightLeftAligned << 11 << 11 << 15 << bold;
-    QTest::newRow("left right left aligned 15") << leftRightLeftAligned << 15 << 11 << 15 << bold;
+    QTest::newRow("left right left aligned 1") << defaultFont << leftRightLeftAligned << 1 << 0 << 4 << bold;
+    QTest::newRow("left right left aligned 3") << defaultFont << leftRightLeftAligned << 3 << 0 << 4 << bold;
+    QTest::newRow("left right left aligned 4") << defaultFont << leftRightLeftAligned << 4 << 4 << 5 << defaults;
+    QTest::newRow("left right left aligned 5") << defaultFont << leftRightLeftAligned << 5 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 8") << defaultFont << leftRightLeftAligned << 8 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 9") << defaultFont << leftRightLeftAligned << 9 << 5 << 10 << rightAlign;
+    QTest::newRow("left right left aligned 10") << defaultFont << leftRightLeftAligned << 10 << 10 << 11 << rightAlign;
+    QTest::newRow("left right left aligned 11") << defaultFont << leftRightLeftAligned << 11 << 11 << 15 << bold;
+    QTest::newRow("left right left aligned 15") << defaultFont << leftRightLeftAligned << 15 << 11 << 15 << bold;
+    QTest::newRow("empty with no fragments") << defaultFont << QString::fromLatin1("\n\n\n\n") << 0 << 0 << 1 << defaults;
 }
 
 void tst_QAccessibility::textAttributes()
 {
     {
+    QFETCH(QFont, defaultFont);
     QFETCH(QString, text);
     QFETCH(int, offset);
     QFETCH(int, startOffsetResult);
@@ -745,6 +784,7 @@ void tst_QAccessibility::textAttributes()
     QFETCH(QStringList, attributeResult);
 
     QTextEdit textEdit;
+    textEdit.document()->setDefaultFont(defaultFont);
     textEdit.setText(text);
     if (textEdit.document()->characterCount() > 1)
         textEdit.textCursor().setPosition(1);
@@ -1676,7 +1716,10 @@ static QRect characterRect(const QTextEdit &edit, int offset)
     QPointF layoutPosition = layout->position();
     int relativeOffset = offset - block.position();
     QTextLine line = layout->lineForTextPosition(relativeOffset);
-    QFontMetrics fm(edit.currentFont());
+    QTextBlock::iterator it = block.begin();
+    while (!it.fragment().contains(offset))
+        ++it;
+    QFontMetrics fm(it.fragment().charFormat().font());
     QChar ch = edit.document()->characterAt(offset);
     int w = fm.width(ch);
     int h = fm.height();
@@ -1708,6 +1751,7 @@ void tst_QAccessibility::textEditTest()
     for (int pass = 0; pass < 2; ++pass) {
         {
         QTextEdit edit;
+        edit.setMinimumSize(600, 400);
         setFrameless(&edit);
         int startOffset;
         int endOffset;
@@ -1718,7 +1762,7 @@ void tst_QAccessibility::textEditTest()
             QFont font("Helvetica");
             font.setPointSizeF(12.5);
             font.setWordSpacing(1.1);
-            edit.setCurrentFont(font);
+            edit.document()->setDefaultFont(font);
         }
 
         edit.show();
@@ -1740,7 +1784,7 @@ void tst_QAccessibility::textEditTest()
         QCOMPARE(startOffset, 13);
         QCOMPARE(endOffset, 31);
         QCOMPARE(textIface->characterCount(), 48);
-        QFontMetrics fm(edit.currentFont());
+        QFontMetrics fm(edit.document()->defaultFont());
         QCOMPARE(textIface->characterRect(0).size(), QSize(fm.width("h"), fm.height()));
         QCOMPARE(textIface->characterRect(5).size(), QSize(fm.width(" "), fm.height()));
         QCOMPARE(textIface->characterRect(6).size(), QSize(fm.width("w"), fm.height()));
@@ -2779,7 +2823,7 @@ void tst_QAccessibility::listTest()
 
     // Check for events
     QTest::mouseClick(listView->viewport(), Qt::LeftButton, 0, listView->visualItemRect(listView->item(1)).center());
-    QAccessibleEvent selectionEvent(listView, QAccessible::Selection);
+    QAccessibleEvent selectionEvent(listView, QAccessible::SelectionAdd);
     selectionEvent.setChild(1);
     QAccessibleEvent focusEvent(listView, QAccessible::Focus);
     focusEvent.setChild(1);
@@ -2787,7 +2831,7 @@ void tst_QAccessibility::listTest()
     QVERIFY(QTestAccessibility::containsEvent(&focusEvent));
     QTest::mouseClick(listView->viewport(), Qt::LeftButton, 0, listView->visualItemRect(listView->item(2)).center());
 
-    QAccessibleEvent selectionEvent2(listView, QAccessible::Selection);
+    QAccessibleEvent selectionEvent2(listView, QAccessible::SelectionAdd);
     selectionEvent2.setChild(2);
     QAccessibleEvent focusEvent2(listView, QAccessible::Focus);
     focusEvent2.setChild(2);
@@ -3281,7 +3325,7 @@ void tst_QAccessibility::tableTest()
         tableView->setSelectionBehavior(QAbstractItemView::SelectItems);
         tableView->setSelectionMode(QAbstractItemView::SingleSelection);
         tableView->selectionModel()->select(index00, QItemSelectionModel::ClearAndSelect);
-        QAccessibleEvent event(tableView, QAccessible::Selection);
+        QAccessibleEvent event(tableView, QAccessible::SelectionAdd);
         event.setChild(12);
         QCOMPARE(QTestAccessibility::containsEvent(&event), true);
         QTestAccessibility::clearEvents();

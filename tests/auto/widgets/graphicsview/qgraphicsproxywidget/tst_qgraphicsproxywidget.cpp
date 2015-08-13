@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -123,7 +123,9 @@ private slots:
     void resizeEvent_data();
     void resizeEvent();
     void paintEvent();
+#ifndef QT_NO_WHEELEVENT
     void wheelEvent();
+#endif
     void sizeHint_data();
     void sizeHint();
     void sizePolicy();
@@ -175,6 +177,8 @@ private slots:
     void windowFrameMargins();
     void QTBUG_6986_sendMouseEventToAlienWidget();
     void mapToGlobal();
+    void mapToGlobalWithoutScene();
+    void QTBUG_43780_visibility();
 };
 
 // Subclass that exposes the protected functions.
@@ -258,6 +262,7 @@ public:
     int focusOut;
 };
 
+#ifndef QT_NO_WHEELEVENT
 class WheelWidget : public QWidget
 {
 public:
@@ -267,6 +272,7 @@ public:
 
     bool wheelEventCalled;
 };
+#endif // !QT_NO_WHEELEVENT
 
 // This will be called before the first test function is executed.
 // It is only called once.
@@ -278,6 +284,8 @@ void tst_QGraphicsProxyWidget::initTestCase()
     // Disable menu animations to prevent the alpha widget from getting in the way
     // in actionsContextMenu().
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
+    // Disable combo for QTBUG_43780_visibility()/Windows Vista.
+    QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
 }
 
 // This will be called after the last test function is executed.
@@ -1304,6 +1312,7 @@ void tst_QGraphicsProxyWidget::paintEvent()
 }
 
 
+#ifndef QT_NO_WHEELEVENT
 void tst_QGraphicsProxyWidget::wheelEvent()
 {
     QGraphicsScene scene;
@@ -1327,6 +1336,7 @@ void tst_QGraphicsProxyWidget::wheelEvent()
     QVERIFY(event.isAccepted());
     QVERIFY(wheelWidget->wheelEventCalled);
 }
+#endif // !QT_NO_WHEELEVENT
 
 Q_DECLARE_METATYPE(Qt::SizeHint)
 void tst_QGraphicsProxyWidget::sizeHint_data()
@@ -2780,7 +2790,7 @@ void tst_QGraphicsProxyWidget::windowOpacity()
     // disabled on platforms without alpha channel support in QPixmap (e.g.,
     // X11 without XRender).
     int paints = 0;
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
     paints = !X11->use_xrender;
 #endif
     QTRY_COMPARE(eventSpy.counts[QEvent::UpdateRequest], 0);
@@ -3685,6 +3695,52 @@ void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
              qPrintable(QStringLiteral("%1, %2 != %3, %4")
                         .arg(viewCenter.x()).arg(viewCenter.y())
                         .arg(embeddedCenterGlobal.x()).arg(embeddedCenterGlobal.y())));
+}
+
+void tst_QGraphicsProxyWidget::mapToGlobalWithoutScene() // QTBUG-44509
+{
+    QGraphicsProxyWidget proxyWidget;
+    QWidget *embeddedWidget = new QWidget;
+    proxyWidget.setWidget(embeddedWidget);
+    const QPoint localPos(0, 0);
+    const QPoint globalPos = embeddedWidget->mapToGlobal(localPos);
+    QCOMPARE(embeddedWidget->mapFromGlobal(globalPos), localPos);
+}
+
+// QTBUG_43780: Embedded widgets have isWindow()==true but showing them should not
+// trigger the top-level widget code path of show() that closes all popups
+// (for example combo popups).
+void tst_QGraphicsProxyWidget::QTBUG_43780_visibility()
+{
+    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+    const QSize size = availableGeometry.size() / 4;
+    QWidget mainWindow;
+    QVBoxLayout *layout = new QVBoxLayout(&mainWindow);
+    QComboBox *combo = new QComboBox(&mainWindow);
+    combo->addItems(QStringList() << "i1" << "i2" << "i3");
+    layout->addWidget(combo);
+    QGraphicsScene *scene = new QGraphicsScene(&mainWindow);
+    QGraphicsView *view = new QGraphicsView(scene, &mainWindow);
+    layout->addWidget(view);
+    mainWindow.setWindowTitle(QTest::currentTestFunction());
+    mainWindow.resize(size);
+    mainWindow.move(availableGeometry.topLeft()
+                    + QPoint(availableGeometry.width() - size.width(),
+                             availableGeometry.height() - size.height()) / 2);
+    QLabel *label = new QLabel(QTest::currentTestFunction());
+    scene->addWidget(label);
+    label->hide();
+    mainWindow.show();
+    combo->setFocus();
+    mainWindow.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mainWindow));
+    combo->showPopup();
+    QWidget *comboPopup = combo->view()->window();
+    QVERIFY(comboPopup);
+    QVERIFY(QTest::qWaitForWindowExposed(comboPopup));
+    label->show();
+    QTRY_VERIFY(label->isVisible());
+    QVERIFY(comboPopup->isVisible());
 }
 
 QTEST_MAIN(tst_QGraphicsProxyWidget)

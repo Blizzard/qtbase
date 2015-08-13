@@ -17,6 +17,7 @@ HEADERS = qbenchmark.h \
     qbenchmarkvalgrind_p.h \
     qbenchmarkevent_p.h \
     qbenchmarkperfevents_p.h \
+    qbenchmarkmetric.h \
     qbenchmarkmetric_p.h \
     qsignalspy.h \
     qtestaccessible.h \
@@ -63,8 +64,7 @@ DEFINES *= QT_NO_CAST_TO_ASCII \
     QT_NO_CAST_FROM_ASCII \
     QT_NO_DATASTREAM
 embedded:QMAKE_CXXFLAGS += -fno-rtti
-wince*::LIBS += libcmt.lib \
-    corelibc.lib \
+wince: LIBS += \
     ole32.lib \
     oleaut32.lib \
     uuid.lib \
@@ -75,6 +75,30 @@ wince*::LIBS += libcmt.lib \
 mac {
     LIBS += -framework Security
     osx: LIBS += -framework ApplicationServices -framework IOKit
+
+    # XCTest support
+    !lessThan(QMAKE_XCODE_VERSION, "6.0") {
+        OBJECTIVE_SOURCES += qxctestlogger.mm
+        HEADERS += qxctestlogger_p.h
+
+        DEFINES += HAVE_XCTEST
+        LIBS += -framework Foundation
+
+        load(sdk)
+        platform_dev_frameworks_path = $${QMAKE_MAC_SDK_PLATFORM_PATH}/Developer/Library/Frameworks
+
+        # We can't put this path into LIBS (so that it propagates to the prl file), as we
+        # don't know yet if the target that links to testlib will build under Xcode or not.
+        # The corresponding flags for the target lives in xctest.prf, where we do know.
+        QMAKE_LFLAGS += -F$${platform_dev_frameworks_path} -weak_framework XCTest
+        QMAKE_OBJECTIVE_CFLAGS += -F$${platform_dev_frameworks_path}
+        MODULE_CONFIG += xctest
+    }
 }
+
+# Exclude these headers from the clean check if their dependencies aren't
+# being built
+contains(QT_CONFIG, no-widgets): HEADERSCLEAN_EXCLUDE += qtest_widgets.h
+contains(QT_CONFIG, no-gui):     HEADERSCLEAN_EXCLUDE += qtest_gui.h
 
 load(qt_module)

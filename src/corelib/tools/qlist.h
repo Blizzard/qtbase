@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -62,10 +62,23 @@ QT_BEGIN_NAMESPACE
 template <typename T> class QVector;
 template <typename T> class QSet;
 
-template <typename T> struct QListSpecialMethods { };
+template <typename T> struct QListSpecialMethods
+{
+protected:
+    ~QListSpecialMethods() {}
+};
 template <> struct QListSpecialMethods<QByteArray>;
+template <> struct QListSpecialMethods<QString>;
 
 struct Q_CORE_EXPORT QListData {
+    // tags for tag-dispatching of QList implementations,
+    // based on QList's three different memory layouts:
+    struct NotArrayCompatibleLayout {};
+    struct NotIndirectLayout {};
+    struct ArrayCompatibleLayout   : NotIndirectLayout {};                           // data laid out like a C array
+    struct InlineWithPaddingLayout : NotArrayCompatibleLayout, NotIndirectLayout {}; // data laid out like a C array with padding
+    struct IndirectLayout          : NotArrayCompatibleLayout {};                    // data allocated on the heap
+
     struct Data {
         QtPrivate::RefCount ref;
         int alloc, begin, end;
@@ -99,6 +112,17 @@ struct Q_CORE_EXPORT QListData {
 template <typename T>
 class QList : public QListSpecialMethods<T>
 {
+public:
+    struct MemoryLayout
+        : QtPrivate::if_<
+            QTypeInfo<T>::isStatic || QTypeInfo<T>::isLarge,
+            QListData::IndirectLayout,
+            typename QtPrivate::if_<
+                sizeof(T) == sizeof(void*),
+                QListData::ArrayCompatibleLayout,
+                QListData::InlineWithPaddingLayout
+             >::type>::type {};
+private:
     struct Node { void *v;
 #if defined(Q_CC_BOR)
         Q_INLINE_TEMPLATE T &t();
@@ -112,7 +136,7 @@ class QList : public QListSpecialMethods<T>
     union { QListData p; QListData::Data *d; };
 
 public:
-    inline QList() : d(const_cast<QListData::Data *>(&QListData::shared_null)) { }
+    inline QList() Q_DECL_NOTHROW : d(const_cast<QListData::Data *>(&QListData::shared_null)) { }
     QList(const QList<T> &l);
     ~QList();
     QList<T> &operator=(const QList<T> &l);
@@ -358,6 +382,14 @@ private:
     {
         return (constBegin().i <= i.i) && (i.i <= constEnd().i);
     }
+
+private:
+    inline bool op_eq_impl(const QList &other, QListData::NotArrayCompatibleLayout) const;
+    inline bool op_eq_impl(const QList &other, QListData::ArrayCompatibleLayout) const;
+    inline bool contains_impl(const T &, QListData::NotArrayCompatibleLayout) const;
+    inline bool contains_impl(const T &, QListData::ArrayCompatibleLayout) const;
+    inline int count_impl(const T &, QListData::NotArrayCompatibleLayout) const;
+    inline int count_impl(const T &, QListData::ArrayCompatibleLayout) const;
 };
 
 #if defined(Q_CC_BOR)
@@ -628,9 +660,7 @@ inline void QList<T>::swap(int i, int j)
     Q_ASSERT_X(i >= 0 && i < p.size() && j >= 0 && j < p.size(),
                 "QList<T>::swap", "index out of range");
     detach();
-    void *t = d->array[d->begin + i];
-    d->array[d->begin + i] = d->array[d->begin + j];
-    d->array[d->begin + j] = t;
+    std::swap(d->array[d->begin + i], d->array[d->begin + j]);
 }
 
 template <typename T>
@@ -773,15 +803,29 @@ Q_OUTOFLINE_TEMPLATE bool QList<T>::operator==(const QList<T> &l) const
         return true;
     if (p.size() != l.p.size())
         return false;
-    Node *i = reinterpret_cast<Node *>(p.end());
-    Node *b = reinterpret_cast<Node *>(p.begin());
-    Node *li = reinterpret_cast<Node *>(l.p.end());
-    while (i != b) {
-        --i; --li;
+    return this->op_eq_impl(l, MemoryLayout());
+}
+
+template <typename T>
+inline bool QList<T>::op_eq_impl(const QList &l, QListData::NotArrayCompatibleLayout) const
+{
+    Node *i = reinterpret_cast<Node *>(p.begin());
+    Node *e = reinterpret_cast<Node *>(p.end());
+    Node *li = reinterpret_cast<Node *>(l.p.begin());
+    for (; i != e; ++i, ++li) {
         if (!(i->t() == li->t()))
             return false;
     }
     return true;
+}
+
+template <typename T>
+inline bool QList<T>::op_eq_impl(const QList &l, QListData::ArrayCompatibleLayout) const
+{
+    const T *lb = reinterpret_cast<const T*>(l.p.begin());
+    const T *b  = reinterpret_cast<const T*>(p.begin());
+    const T *e  = reinterpret_cast<const T*>(p.end());
+    return std::equal(b, e, lb);
 }
 
 template <typename T>
@@ -925,24 +969,52 @@ Q_OUTOFLINE_TEMPLATE int QList<T>::lastIndexOf(const T &t, int from) const
 template <typename T>
 Q_OUTOFLINE_TEMPLATE bool QList<T>::contains(const T &t) const
 {
-    Node *b = reinterpret_cast<Node *>(p.begin());
-    Node *i = reinterpret_cast<Node *>(p.end());
-    while (i-- != b)
+    return contains_impl(t, MemoryLayout());
+}
+
+template <typename T>
+inline bool QList<T>::contains_impl(const T &t, QListData::NotArrayCompatibleLayout) const
+{
+    Node *e = reinterpret_cast<Node *>(p.end());
+    Node *i = reinterpret_cast<Node *>(p.begin());
+    for (; i != e; ++i)
         if (i->t() == t)
             return true;
     return false;
 }
 
 template <typename T>
+inline bool QList<T>::contains_impl(const T &t, QListData::ArrayCompatibleLayout) const
+{
+    const T *b = reinterpret_cast<const T*>(p.begin());
+    const T *e = reinterpret_cast<const T*>(p.end());
+    return std::find(b, e, t) != e;
+}
+
+template <typename T>
 Q_OUTOFLINE_TEMPLATE int QList<T>::count(const T &t) const
 {
+    return this->count_impl(t, MemoryLayout());
+}
+
+template <typename T>
+inline int QList<T>::count_impl(const T &t, QListData::NotArrayCompatibleLayout) const
+{
     int c = 0;
-    Node *b = reinterpret_cast<Node *>(p.begin());
-    Node *i = reinterpret_cast<Node *>(p.end());
-    while (i-- != b)
+    Node *e = reinterpret_cast<Node *>(p.end());
+    Node *i = reinterpret_cast<Node *>(p.begin());
+    for (; i != e; ++i)
         if (i->t() == t)
             ++c;
     return c;
+}
+
+template <typename T>
+inline int QList<T>::count_impl(const T &t, QListData::ArrayCompatibleLayout) const
+{
+    return int(std::count(reinterpret_cast<const T*>(p.begin()),
+                          reinterpret_cast<const T*>(p.end()),
+                          t));
 }
 
 Q_DECLARE_SEQUENTIAL_ITERATOR(List)
@@ -951,6 +1023,7 @@ Q_DECLARE_MUTABLE_SEQUENTIAL_ITERATOR(List)
 QT_END_NAMESPACE
 
 #include <QtCore/qbytearraylist.h>
+#include <QtCore/qstringlist.h>
 
 #ifdef Q_CC_MSVC
 #pragma warning( pop )

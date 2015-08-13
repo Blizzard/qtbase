@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -79,9 +79,7 @@
 #  include "qwindowsglcontext.h"
 #endif
 
-#ifndef Q_OS_WINCE
-#  include "qwindowsopengltester.h"
-#endif
+#include "qwindowsopengltester.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -130,7 +128,6 @@ struct QWindowsIntegrationPrivate
 {
     explicit QWindowsIntegrationPrivate(const QStringList &paramList);
     ~QWindowsIntegrationPrivate();
-    bool ensureStaticOpenGLContext();
 
     unsigned m_options;
     QWindowsContext m_context;
@@ -210,6 +207,10 @@ QWindowsIntegrationPrivate::QWindowsIntegrationPrivate(const QStringList &paramL
     : m_options(0)
     , m_fontDatabase(0)
 {
+#ifndef Q_OS_WINCE
+    Q_INIT_RESOURCE(openglblacklists);
+#endif
+
     static bool dpiAwarenessSet = false;
     int tabletAbsoluteRange = -1;
     // Default to per-monitor awareness to avoid being scaled when monitors with different DPI
@@ -228,6 +229,18 @@ QWindowsIntegrationPrivate::QWindowsIntegrationPrivate(const QStringList &paramL
     qCDebug(lcQpaWindows)
         << __FUNCTION__ << "DpiAwareness=" << dpiAwareness <<",Scaling="
         << QWindowsScaling::factor();
+
+    QTouchDevice *touchDevice = m_context.touchDevice();
+    if (touchDevice) {
+#ifdef Q_OS_WINCE
+        touchDevice->setCapabilities(touchDevice->capabilities() | QTouchDevice::MouseEmulation);
+#else
+        if (!(m_options & QWindowsIntegration::DontPassOsMouseEventsSynthesizedFromTouch)) {
+            touchDevice->setCapabilities(touchDevice->capabilities() | QTouchDevice::MouseEmulation);
+        }
+#endif
+        QWindowSystemInterface::registerTouchDevice(touchDevice);
+    }
 }
 
 QWindowsIntegrationPrivate::~QWindowsIntegrationPrivate()
@@ -236,9 +249,12 @@ QWindowsIntegrationPrivate::~QWindowsIntegrationPrivate()
         delete m_fontDatabase;
 }
 
+QWindowsIntegration *QWindowsIntegration::m_instance = Q_NULLPTR;
+
 QWindowsIntegration::QWindowsIntegration(const QStringList &paramList) :
     d(new QWindowsIntegrationPrivate(paramList))
 {
+    m_instance = this;
 #ifndef QT_NO_CLIPBOARD
     d->m_clipboard.registerViewer();
 #endif
@@ -247,6 +263,7 @@ QWindowsIntegration::QWindowsIntegration(const QStringList &paramList) :
 
 QWindowsIntegration::~QWindowsIntegration()
 {
+    m_instance = Q_NULLPTR;
 }
 
 void QWindowsIntegration::initialize()
@@ -266,7 +283,9 @@ bool QWindowsIntegration::hasCapability(QPlatformIntegration::Capability cap) co
     case OpenGL:
         return true;
     case ThreadedOpenGL:
-        return d->ensureStaticOpenGLContext() ? d->m_staticOpenGLContext->supportsThreadedOpenGL() : false;
+        if (const QWindowsStaticOpenGLContext *glContext = QWindowsIntegration::staticOpenGLContext())
+            return glContext->supportsThreadedOpenGL();
+        return false;
 #endif // !QT_NO_OPENGL
     case WindowMasks:
         return true;
@@ -299,13 +318,12 @@ QWindowsWindowData QWindowsIntegration::createWindowData(QWindow *window) const
 
     QWindowsWindowData obtained = QWindowsWindowData::create(window, requested, window->title());
     qCDebug(lcQpaWindows).nospace()
-        << __FUNCTION__ << '<' << window
-        << "\n    Requested: " << requested.geometry << "frame incl.: "
+        << __FUNCTION__ << ' ' << window
+        << "\n    Requested: " << requested.geometry << " frame incl.="
         << QWindowsGeometryHint::positionIncludesFrame(window)
-        << " Flags=" << QWindowsWindow::debugWindowFlags(requested.flags)
-        << "\n    Obtained : " << obtained.geometry << " Margins "<< obtained.frame
-        << " Flags=" << QWindowsWindow::debugWindowFlags(obtained.flags)
-        << " Handle=" << obtained.hwnd << '\n';
+        << ' ' << requested.flags
+        << "\n    Obtained : " << obtained.geometry << " margins=" << obtained.frame
+        << " handle=" << obtained.hwnd << ' ' << obtained.flags << '\n';
 
     if (obtained.hwnd) {
         if (requested.flags != obtained.flags)
@@ -314,11 +332,6 @@ QWindowsWindowData QWindowsIntegration::createWindowData(QWindow *window) const
         if ((obtained.flags & Qt::Desktop) != Qt::Desktop && requested.geometry != obtained.geometry)
             QWindowSystemInterface::handleGeometryChange(window, QWindowsScaling::mapFromNative(obtained.geometry));
     }
-
-#ifndef QT_NO_OPENGL
-    d->ensureStaticOpenGLContext();
-    obtained.staticOpenGLContext = d->m_staticOpenGLContext;
-#endif // QT_NO_OPENGL
 
     return obtained;
 }
@@ -331,61 +344,65 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
 }
 
 #ifndef QT_NO_OPENGL
-static QWindowsStaticOpenGLContext *q_staticOpenGLContext = 0;
+
+QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
+{
+#if defined(QT_OPENGL_DYNAMIC)
+    QWindowsOpenGLTester::Renderer requestedRenderer = QWindowsOpenGLTester::requestedRenderer();
+    switch (requestedRenderer) {
+    case QWindowsOpenGLTester::DesktopGl:
+        if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
+            return glCtx;
+        qCWarning(lcQpaGl, "System OpenGL failed. Falling back to Software OpenGL.");
+        return QOpenGLStaticContext::create(true);
+    // If ANGLE is requested, use it, don't try anything else.
+    case QWindowsOpenGLTester::AngleRendererD3d9:
+    case QWindowsOpenGLTester::AngleRendererD3d11:
+    case QWindowsOpenGLTester::AngleRendererD3d11Warp:
+        return QWindowsEGLStaticContext::create(requestedRenderer);
+    case QWindowsOpenGLTester::Gles:
+        return QWindowsEGLStaticContext::create(QWindowsOpenGLTester::supportedGlesRenderers());
+    case QWindowsOpenGLTester::SoftwareRasterizer:
+        if (QWindowsStaticOpenGLContext *swCtx = QOpenGLStaticContext::create(true))
+            return swCtx;
+        qCWarning(lcQpaGl, "Software OpenGL failed. Falling back to system OpenGL.");
+        if (QWindowsOpenGLTester::supportedRenderers() & QWindowsOpenGLTester::DesktopGl)
+            return QOpenGLStaticContext::create();
+        return Q_NULLPTR;
+    default:
+        break;
+    }
+
+    const QWindowsOpenGLTester::Renderers supportedRenderers = QWindowsOpenGLTester::supportedRenderers();
+    if (supportedRenderers & QWindowsOpenGLTester::DesktopGl) {
+        if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
+            return glCtx;
+    }
+    if (QWindowsOpenGLTester::Renderers glesRenderers = supportedRenderers & QWindowsOpenGLTester::GlesMask) {
+        if (QWindowsEGLStaticContext *eglCtx = QWindowsEGLStaticContext::create(glesRenderers))
+            return eglCtx;
+    }
+    return QOpenGLStaticContext::create(true);
+#elif defined(QT_OPENGL_ES_2)
+    QWindowsOpenGLTester::Renderers glesRenderers = QWindowsOpenGLTester::requestedGlesRenderer();
+    if (glesRenderers == QWindowsOpenGLTester::InvalidRenderer)
+        glesRenderers = QWindowsOpenGLTester::supportedGlesRenderers();
+    return QWindowsEGLStaticContext::create(glesRenderers);
+#elif !defined(QT_NO_OPENGL)
+    return QOpenGLStaticContext::create();
+#endif
+}
 
 QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::create()
 {
-    QWindowsStaticOpenGLContext *ctx = 0;
-
-#if defined(QT_OPENGL_DYNAMIC)
-    const QByteArray requested = qgetenv("QT_OPENGL"); // angle, desktop, software
-    const bool angleRequested = QCoreApplication::testAttribute(Qt::AA_UseOpenGLES) || requested == "angle";
-    const bool desktopRequested = QCoreApplication::testAttribute(Qt::AA_UseDesktopOpenGL) || requested == "desktop";
-    const bool softwareRequested = QCoreApplication::testAttribute(Qt::AA_UseSoftwareOpenGL) || requested == "software";
-
-    // If ANGLE is requested, use it, don't try anything else.
-    if (angleRequested) {
-        ctx = QWindowsEGLStaticContext::create();
-    } else {
-        // If opengl32.dll seems to be OpenGL 2.x capable, or desktop OpenGL is requested, use it.
-        if (!softwareRequested && (desktopRequested || QWindowsOpenGLTester::testDesktopGL()))
-            ctx = QOpenGLStaticContext::create();
-        // If failed and desktop OpenGL is not explicitly requested, try ANGLE.
-        if (!ctx && !desktopRequested && !softwareRequested)
-            ctx = QWindowsEGLStaticContext::create();
-        // Try software.
-        if (!ctx) {
-            ctx = QOpenGLStaticContext::create(true);
-            // If software was explicitly requested but failed, try the regular one.
-            if (!ctx && softwareRequested && QWindowsOpenGLTester::testDesktopGL()) {
-                qCWarning(lcQpaGl, "Software OpenGL failed. Falling back to system OpenGL.");
-                ctx = QOpenGLStaticContext::create();
-            }
-        }
-    }
-#elif defined(QT_OPENGL_ES_2)
-    ctx = QWindowsEGLStaticContext::create();
-#elif !defined(QT_NO_OPENGL)
-    ctx = QOpenGLStaticContext::create();
-#endif
-
-    q_staticOpenGLContext = ctx;
-
-    return ctx;
-}
-
-bool QWindowsIntegrationPrivate::ensureStaticOpenGLContext()
-{
-    if (m_staticOpenGLContext.isNull())
-        m_staticOpenGLContext = QSharedPointer<QWindowsStaticOpenGLContext>(QWindowsStaticOpenGLContext::create());
-    return !m_staticOpenGLContext.isNull();
+    return QWindowsStaticOpenGLContext::doCreate();
 }
 
 QPlatformOpenGLContext *QWindowsIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
     qCDebug(lcQpaGl) << __FUNCTION__ << context->format();
-    if (d->ensureStaticOpenGLContext()) {
-        QScopedPointer<QWindowsOpenGLContext> result(d->m_staticOpenGLContext->createContext(context));
+    if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext()) {
+        QScopedPointer<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context));
         if (result->isValid())
             return result.take();
     }
@@ -399,13 +416,21 @@ QOpenGLContext::OpenGLModuleType QWindowsIntegration::openGLModuleType()
 #elif !defined(QT_OPENGL_DYNAMIC)
     return QOpenGLContext::LibGL;
 #else
-    return d->ensureStaticOpenGLContext() ? d->m_staticOpenGLContext->moduleType() : QOpenGLContext::LibGL;
+    if (const QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext())
+        return staticOpenGLContext->moduleType();
+    return QOpenGLContext::LibGL;
 #endif
 }
 
 QWindowsStaticOpenGLContext *QWindowsIntegration::staticOpenGLContext()
 {
-    return q_staticOpenGLContext;
+    QWindowsIntegration *integration = QWindowsIntegration::instance();
+    if (!integration)
+        return 0;
+    QWindowsIntegrationPrivate *d = integration->d.data();
+    if (d->m_staticOpenGLContext.isNull())
+        d->m_staticOpenGLContext = QSharedPointer<QWindowsStaticOpenGLContext>(QWindowsStaticOpenGLContext::create());
+    return d->m_staticOpenGLContext.data();
 }
 #endif // !QT_NO_OPENGL
 
@@ -490,13 +515,6 @@ QVariant QWindowsIntegration::styleHint(QPlatformIntegration::StyleHint hint) co
         break;
     case QPlatformIntegration::UseRtlExtensions:
         return QVariant(d->m_context.useRTLExtensions());
-    case QPlatformIntegration::SynthesizeMouseFromTouchEvents:
-#ifdef Q_OS_WINCE
-        // We do not want Qt to synthesize mouse events as Windows also does that.
-       return false;
-#else // Q_OS_WINCE
-       return QVariant(bool(d->m_options & DontPassOsMouseEventsSynthesizedFromTouch));
-#endif // !Q_OS_WINCE
     default:
         break;
     }
@@ -537,11 +555,6 @@ QPlatformAccessibility *QWindowsIntegration::accessibility() const
     return &d->m_accessibility;
 }
 #endif
-
-QWindowsIntegration *QWindowsIntegration::instance()
-{
-    return static_cast<QWindowsIntegration *>(QGuiApplicationPrivate::platformIntegration());
-}
 
 unsigned QWindowsIntegration::options() const
 {

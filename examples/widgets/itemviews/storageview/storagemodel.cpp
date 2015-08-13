@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Ivan Komissarov
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -18,8 +18,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -43,6 +43,7 @@
 
 #include <QDir>
 #include <qmath.h>
+#include <cmath>
 
 static QString sizeToString(qint64 size)
 {
@@ -51,11 +52,11 @@ static QString sizeToString(qint64 size)
     if (size <= 0)
         return StorageModel::tr("0 b");
 
-    double power = log((double)size)/log(1024.0);
+    double power = std::log((double)size)/std::log(1024.0);
     int intPower = (int)power;
     intPower = intPower >= 8 ? 8 - 1 : intPower;
 
-    double normSize = size / pow(1024.0, intPower);
+    double normSize = size / std::pow(1024.0, intPower);
     //: this should expand to "1.23 GB"
     return StorageModel::tr("%1 %2").arg(normSize, 0, 'f', intPower > 0 ? 2 : 0).arg(strings[intPower]);
 }

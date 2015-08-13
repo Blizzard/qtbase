@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -171,10 +163,12 @@
         return self;
 
     m_inSendEventToFocusObject = NO;
+    m_inSelectionChange = NO;
     m_inputContext = inputContext;
 
-    QVariantMap platformData = [self imValue:Qt::ImPlatformData].toMap();
-    Qt::InputMethodHints hints = Qt::InputMethodHints([self imValue:Qt::ImHints].toUInt());
+    m_configuredImeState = new QInputMethodQueryEvent(m_inputContext->imeState().currentState);
+    QVariantMap platformData = m_configuredImeState->value(Qt::ImPlatformData).toMap();
+    Qt::InputMethodHints hints = Qt::InputMethodHints(m_configuredImeState->value(Qt::ImHints).toUInt());
 
     self.returnKeyType = platformData.value(kImePlatformDataReturnKeyType).isValid() ?
         UIReturnKeyType(platformData.value(kImePlatformDataReturnKeyType).toInt()) :
@@ -202,7 +196,9 @@
     else if (hints & Qt::ImhFormattedNumbersOnly)
         self.keyboardType = UIKeyboardTypeDecimalPad;
     else if (hints & Qt::ImhDialableCharactersOnly)
-        self.keyboardType = UIKeyboardTypeNumberPad;
+        self.keyboardType = UIKeyboardTypePhonePad;
+    else if (hints & Qt::ImhLatinOnly)
+        self.keyboardType = UIKeyboardTypeASCIICapable;
     else
         self.keyboardType = UIKeyboardTypeDefault;
 
@@ -218,7 +214,40 @@
 {
     self.inputView = 0;
     self.inputAccessoryView = 0;
+    delete m_configuredImeState;
+
     [super dealloc];
+}
+
+- (BOOL)needsKeyboardReconfigure:(Qt::InputMethodQueries)updatedProperties
+{
+    if ((updatedProperties & Qt::ImEnabled)) {
+        Q_ASSERT([self currentImeState:Qt::ImEnabled].toBool());
+
+        // When switching on input-methods we need to consider hints and platform data
+        // as well, as the IM state that we were based on may have been invalidated when
+        // IM was switched off.
+
+        qImDebug() << "IM was turned on, we need to check hints and platform data as well";
+        updatedProperties |= (Qt::ImHints | Qt::ImPlatformData);
+    }
+
+    // Based on what we set up in initWithInputContext above
+    updatedProperties &= (Qt::ImHints | Qt::ImPlatformData);
+
+    if (!updatedProperties)
+        return NO;
+
+    for (uint i = 0; i < (sizeof(Qt::ImQueryAll) * CHAR_BIT); ++i) {
+        if (Qt::InputMethodQuery property = Qt::InputMethodQuery(int(updatedProperties & (1 << i)))) {
+            if ([self currentImeState:property] != m_configuredImeState->value(property)) {
+                qImDebug() << property << "has changed since text responder was configured, need reconfigure";
+                return YES;
+            }
+        }
+    }
+
+    return NO;
 }
 
 - (BOOL)canBecomeFirstResponder
@@ -263,10 +292,14 @@
     // will set the new first-responder to our next-responder, and in the latter
     // case we'll have an active responder candidate.
     if ([UIResponder currentFirstResponder] == [self nextResponder]) {
-        // We have resigned the keyboard, and transferred back to the parent view, so unset focus object
+        // We have resigned the keyboard, and transferred first responder back to the parent view
         Q_ASSERT(!FirstResponderCandidate::currentCandidate());
-        qImDebug() << "keyboard was closed, clearing focus object";
-        m_inputContext->clearCurrentFocusObject();
+        if ([self currentImeState:Qt::ImEnabled].toBool()) {
+            // The current focus object expects text input, but there
+            // is no keyboard to get input from. So we clear focus.
+            qImDebug() << "no keyboard available, clearing focus object";
+            m_inputContext->clearCurrentFocusObject();
+        }
     } else {
         // We've lost responder status because another Qt window was made active,
         // another QIOSTextResponder was made first-responder, another UIView was
@@ -298,6 +331,7 @@
         return;
 
     if (updatedProperties & (Qt::ImCursorPosition | Qt::ImAnchorPosition)) {
+        QScopedValueRollback<BOOL> rollback(m_inSelectionChange, true);
         [self.inputDelegate selectionWillChange:self];
         [self.inputDelegate selectionDidChange:self];
     }
@@ -322,7 +356,7 @@
     QCoreApplication::sendEvent(focusObject, &e);
 }
 
-- (QVariant)imValue:(Qt::InputMethodQuery)query
+- (QVariant)currentImeState:(Qt::InputMethodQuery)query
 {
     return m_inputContext->imeState().currentState.value(query);
 }
@@ -339,12 +373,21 @@
 
 -(UITextPosition *)endOfDocument
 {
-    int endPosition = [self imValue:Qt::ImSurroundingText].toString().length();
+    int endPosition = [self currentImeState:Qt::ImSurroundingText].toString().length();
     return [QUITextPosition positionWithIndex:endPosition];
 }
 
 - (void)setSelectedTextRange:(UITextRange *)range
 {
+    if (m_inSelectionChange) {
+        // After [UITextInputDelegate selectionWillChange], UIKit will cancel
+        // any ongoing auto correction (if enabled) and ask us to set an empty selection.
+        // This is contradictory to our current attempt to set a selection, so we ignore
+        // the callback. UIKit will be re-notified of the new selection after
+        // [UITextInputDelegate selectionDidChange].
+        return;
+    }
+
     QUITextRange *r = static_cast<QUITextRange *>(range);
     QList<QInputMethodEvent::Attribute> attrs;
     attrs << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, r.range.location, r.range.length, 0);
@@ -354,8 +397,8 @@
 
 - (UITextRange *)selectedTextRange
 {
-    int cursorPos = [self imValue:Qt::ImCursorPosition].toInt();
-    int anchorPos = [self imValue:Qt::ImAnchorPosition].toInt();
+    int cursorPos = [self currentImeState:Qt::ImCursorPosition].toInt();
+    int anchorPos = [self currentImeState:Qt::ImAnchorPosition].toInt();
     return [QUITextRange rangeWithNSRange:NSMakeRange(qMin(cursorPos, anchorPos), qAbs(anchorPos - cursorPos))];
 }
 
@@ -363,7 +406,7 @@
 {
     int s = static_cast<QUITextPosition *>([range start]).index;
     int e = static_cast<QUITextPosition *>([range end]).index;
-    return [self imValue:Qt::ImSurroundingText].toString().mid(s, e - s).toNSString();
+    return [self currentImeState:Qt::ImSurroundingText].toString().mid(s, e - s).toNSString();
 }
 
 - (void)setMarkedText:(NSString *)markedText selectedRange:(NSRange)selectedRange
@@ -475,8 +518,8 @@
     if (!m_markedText.isEmpty())
         return CGRectZero;
 
-    int cursorPos = [self imValue:Qt::ImCursorPosition].toInt();
-    int anchorPos = [self imValue:Qt::ImAnchorPosition].toInt();
+    int cursorPos = [self currentImeState:Qt::ImCursorPosition].toInt();
+    int anchorPos = [self currentImeState:Qt::ImAnchorPosition].toInt();
 
     NSRange r = static_cast<QUITextRange*>(range).range;
     QList<QInputMethodEvent::Attribute> attrs;
@@ -540,7 +583,7 @@
     int p = static_cast<QUITextPosition *>(position).index;
     if (direction == UITextLayoutDirectionLeft)
         return [QUITextRange rangeWithNSRange:NSMakeRange(0, p)];
-    int l = [self imValue:Qt::ImSurroundingText].toString().length();
+    int l = [self currentImeState:Qt::ImSurroundingText].toString().length();
     return [QUITextRange rangeWithNSRange:NSMakeRange(p, l - p)];
 }
 
@@ -548,7 +591,7 @@
 {
     // No API in Qt for determining this. Use sensible default instead:
     Q_UNUSED(point);
-    return [QUITextPosition positionWithIndex:[self imValue:Qt::ImCursorPosition].toInt()];
+    return [QUITextPosition positionWithIndex:[self currentImeState:Qt::ImCursorPosition].toInt()];
 }
 
 - (UITextPosition *)closestPositionToPoint:(CGPoint)point withinRange:(UITextRange *)range
@@ -556,14 +599,14 @@
     // No API in Qt for determining this. Use sensible default instead:
     Q_UNUSED(point);
     Q_UNUSED(range);
-    return [QUITextPosition positionWithIndex:[self imValue:Qt::ImCursorPosition].toInt()];
+    return [QUITextPosition positionWithIndex:[self currentImeState:Qt::ImCursorPosition].toInt()];
 }
 
 - (UITextRange *)characterRangeAtPoint:(CGPoint)point
 {
     // No API in Qt for determining this. Use sensible default instead:
     Q_UNUSED(point);
-    return [QUITextRange rangeWithNSRange:NSMakeRange([self imValue:Qt::ImCursorPosition].toInt(), 0)];
+    return [QUITextRange rangeWithNSRange:NSMakeRange([self currentImeState:Qt::ImCursorPosition].toInt(), 0)];
 }
 
 - (void)setMarkedTextStyle:(NSDictionary *)style

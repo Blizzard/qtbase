@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -45,6 +45,7 @@
 
 static const char yastFileName[] ="yast2-metapackage-handler-mimetypes.xml";
 static const char qmlAgainFileName[] ="qml-again.xml";
+#define RESOURCE_PREFIX ":/qt-project.org/qmime/"
 
 void initializeLang()
 {
@@ -99,9 +100,7 @@ void tst_QMimeDatabase::initTestCase()
              << "\nGlobal XDG_DATA_DIRS: " << m_globalXdgDir;
 
     const QString freeDesktopXml = QStringLiteral("freedesktop.org.xml");
-    const QString xmlFileName = QLatin1String(CORE_SOURCES)
-                          + QStringLiteral("/mimetypes/mime/packages/")
-                          + freeDesktopXml;
+    const QString xmlFileName = QLatin1String(RESOURCE_PREFIX) + freeDesktopXml;
     QVERIFY2(QFileInfo(xmlFileName).exists(), qPrintable(xmlFileName + QStringLiteral(" does not exist")));
     QFile xml(xmlFileName);
     QVERIFY(xml.copy(globalPackageDir + '/' + freeDesktopXml));
@@ -110,14 +109,11 @@ void tst_QMimeDatabase::initTestCase()
     if (m_testSuite.isEmpty())
         qWarning("%s", qPrintable(testSuiteWarning()));
 
-    m_yastMimeTypes = QFINDTESTDATA(yastFileName);
-    QVERIFY2(!m_yastMimeTypes.isEmpty(),
-             qPrintable(QString::fromLatin1("Cannot find '%1' starting from '%2'").
-                        arg(yastFileName, QDir::currentPath())));
-    m_qmlAgainFileName = QFINDTESTDATA(qmlAgainFileName);
-    QVERIFY2(!m_qmlAgainFileName.isEmpty(),
-             qPrintable(QString::fromLatin1("Cannot find '%1' starting from '%2'").
-                        arg(qmlAgainFileName, QDir::currentPath())));
+    const QString errorMessage = QString::fromLatin1("Cannot find '%1'");
+    m_yastMimeTypes = QLatin1String(RESOURCE_PREFIX) + yastFileName;
+    QVERIFY2(QFile::exists(m_yastMimeTypes), qPrintable(errorMessage.arg(yastFileName)));
+    m_qmlAgainFileName = QLatin1String(RESOURCE_PREFIX) + qmlAgainFileName;
+    QVERIFY2(QFile::exists(m_qmlAgainFileName), qPrintable(errorMessage.arg(qmlAgainFileName)));
 
     init();
 }
@@ -464,6 +460,7 @@ void tst_QMimeDatabase::mimeTypeForData_data()
     QTest::newRow("tnef data, needs smi >= 0.20") << QByteArray("\x78\x9f\x3e\x22") << "application/vnd.ms-tnef";
     QTest::newRow("PDF magic") << QByteArray("%PDF-") << "application/pdf";
     QTest::newRow("PHP, High-priority rule") << QByteArray("<?php") << "application/x-php";
+    QTest::newRow("diff\\t") << QByteArray("diff\t") << "text/x-patch";
     QTest::newRow("unknown") << QByteArray("\001abc?}") << "application/octet-stream";
 }
 
@@ -844,7 +841,7 @@ void tst_QMimeDatabase::installNewGlobalMimeType()
     checkHasMimeType("text/x-suse-ymp");
 
     // Test that a double-definition of a mimetype doesn't lead to sniffing ("conflicting globs").
-    const QString qmlTestFile = QFINDTESTDATA("test.qml");
+    const QString qmlTestFile = QLatin1String(RESOURCE_PREFIX "test.qml");
     QVERIFY2(!qmlTestFile.isEmpty(),
              qPrintable(QString::fromLatin1("Cannot find '%1' starting from '%2'").
                         arg("test.qml", QDir::currentPath())));
@@ -893,7 +890,7 @@ void tst_QMimeDatabase::installNewLocalMimeType()
     checkHasMimeType("text/x-suse-ymp");
 
     // Test that a double-definition of a mimetype doesn't lead to sniffing ("conflicting globs").
-    const QString qmlTestFile = QFINDTESTDATA("test.qml");
+    const QString qmlTestFile = QLatin1String(RESOURCE_PREFIX "test.qml");
     QVERIFY2(!qmlTestFile.isEmpty(),
              qPrintable(QString::fromLatin1("Cannot find '%1' starting from '%2'").
                         arg("test.qml", QDir::currentPath())));

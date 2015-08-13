@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -71,20 +71,230 @@ struct QWceMenuAction {
 };
 #endif
 
+template <typename T>
+class QSetValueOnDestroy
+{
+public:
+    QSetValueOnDestroy(T &toSet, T value)
+        : toSet(toSet)
+        , value(value)
+    { }
+
+    ~QSetValueOnDestroy() { toSet = value; }
+private:
+    T &toSet;
+    T value;
+};
+
+class QMenuSloppyState
+{
+    Q_DISABLE_COPY(QMenuSloppyState)
+public:
+    QMenuSloppyState()
+        : m_menu(Q_NULLPTR)
+        , m_enabled(false)
+        , m_uni_directional(false)
+        , m_select_other_actions(false)
+        , m_first_mouse(true)
+        , m_init_guard(false)
+        , m_uni_dir_discarded_count(0)
+        , m_uni_dir_fail_at_count(0)
+        , m_timeout(0)
+        , m_reset_action(Q_NULLPTR)
+        , m_origin_action(Q_NULLPTR)
+        , m_parent(Q_NULLPTR)
+    { }
+
+    ~QMenuSloppyState() { reset(); }
+
+    void initialize(QMenu *menu)
+    {
+        m_menu = menu;
+        m_uni_directional = menu->style()->styleHint(QStyle::SH_Menu_SubMenuUniDirection, 0, menu);
+        m_uni_dir_fail_at_count = menu->style()->styleHint(QStyle::SH_Menu_SubMenuUniDirectionFailCount, 0, menu);
+        m_select_other_actions = menu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppySelectOtherActions, 0 , menu);
+        m_timeout = menu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppyCloseTimeout);
+        m_discard_state_when_entering_parent = menu->style()->styleHint(QStyle::SH_Menu_SubMenuResetWhenReenteringParent);
+        m_dont_start_time_on_leave = menu->style()->styleHint(QStyle::SH_Menu_SubMenuDontStartSloppyOnLeave);
+        reset();
+    }
+
+    void reset();
+    bool enabled() const { return m_enabled; }
+
+    void setResetAction(QAction *action) { m_reset_action = action; }
+
+    enum MouseEventResult {
+        EventIsProcessed,
+        EventShouldBePropogated,
+        EventDiscardsSloppyState
+    };
+
+    void startTimer()
+    {
+        if (m_enabled)
+            m_time.start(m_timeout, m_menu);
+    }
+
+    void startTimerIfNotRunning()
+    {
+        if (!m_time.isActive())
+            startTimer();
+    }
+
+    void stopTimer()
+    {
+        m_time.stop();
+    }
+
+    void enter();
+
+    void childEnter()
+    {
+        stopTimer();
+        if (m_parent)
+            m_parent->childEnter();
+    }
+
+    void leave()
+    {
+        if (m_dont_start_time_on_leave)
+            return;
+        if (m_parent)
+            m_parent->childLeave();
+        startTimer();
+    }
+    void childLeave();
+
+    static float slope(const QPointF &p1, const QPointF &p2)
+    {
+        const QPointF slope = p2 - p1;
+        if (slope.x()== 0)
+            return 9999;
+        return slope.y()/slope.x();
+    }
+
+    bool checkSlope(qreal oldS, qreal newS, bool wantSteeper)
+    {
+        if (wantSteeper)
+            return oldS <= newS;
+        return newS <= oldS;
+    }
+
+    MouseEventResult processMouseEvent(const QPointF &mousePos, QAction *resetAction, QAction *currentAction)
+    {
+        if (m_parent)
+            m_parent->stopTimer();
+
+        if (!m_enabled)
+            return EventShouldBePropogated;
+
+        if (!m_time.isActive())
+            startTimer();
+
+        if (!m_sub_menu) {
+            reset();
+            return EventShouldBePropogated;
+        }
+
+        QSetValueOnDestroy<bool> setFirstMouse(m_first_mouse, false);
+        QSetValueOnDestroy<QPointF> setPreviousPoint(m_previous_point, mousePos);
+
+        if (resetAction && resetAction->isSeparator())
+            m_reset_action = Q_NULLPTR;
+        else {
+            m_reset_action = resetAction;
+        }
+
+        if (m_action_rect.contains(mousePos)) {
+            startTimer();
+            return currentAction == m_menu->menuAction() ? EventIsProcessed : EventShouldBePropogated;
+        }
+
+        if (m_uni_directional && !m_first_mouse && resetAction != m_origin_action) {
+            bool left_to_right = m_menu->layoutDirection() == Qt::LeftToRight;
+            QRect sub_menu_rect = m_sub_menu->geometry();
+            QPoint sub_menu_top =
+                    left_to_right? sub_menu_rect.topLeft() : sub_menu_rect.topRight();
+            QPoint sub_menu_bottom =
+                    left_to_right? sub_menu_rect.bottomLeft() : sub_menu_rect.bottomRight();
+            qreal prev_slope_top = slope(m_previous_point, sub_menu_top);
+            qreal prev_slope_bottom = slope(m_previous_point, sub_menu_bottom);
+
+            qreal current_slope_top = slope(mousePos, sub_menu_top);
+            qreal current_slope_bottom = slope(mousePos, sub_menu_bottom);
+
+            bool slopeTop = checkSlope(prev_slope_top, current_slope_top, sub_menu_top.y() < mousePos.y());
+            bool slopeBottom = checkSlope(prev_slope_bottom, current_slope_bottom, sub_menu_bottom.y() > mousePos.y());
+            bool rightDirection = false;
+            int mouseDir = m_previous_point.y() - mousePos.y();
+            if (mouseDir >= 0) {
+                rightDirection = rightDirection || slopeTop;
+            }
+            if (mouseDir <= 0) {
+                rightDirection = rightDirection || slopeBottom;
+            }
+
+            if (m_uni_dir_discarded_count >= m_uni_dir_fail_at_count && !rightDirection) {
+                m_uni_dir_discarded_count = 0;
+                return EventDiscardsSloppyState;
+            }
+
+            if (!rightDirection)
+                m_uni_dir_discarded_count++;
+            else
+                m_uni_dir_discarded_count = 0;
+
+        }
+
+        return m_select_other_actions ? EventShouldBePropogated : EventIsProcessed;
+    }
+
+    void setSubMenuPopup(const QRect &actionRect, QAction *resetAction, QMenu *subMenu);
+    bool hasParentActiveDelayTimer() const;
+    void timeout();
+    int timeForTimeout() const { return m_timeout; }
+
+    bool isTimerId(int timerId) const { return m_time.timerId() == timerId; }
+    QMenu *subMenu() const { return m_sub_menu; }
+
+private:
+    QMenu *m_menu;
+    bool m_enabled;
+    bool m_uni_directional;
+    bool m_select_other_actions;
+    bool m_first_mouse;
+    bool m_init_guard;
+    bool m_discard_state_when_entering_parent;
+    bool m_dont_start_time_on_leave;
+    short m_uni_dir_discarded_count;
+    short m_uni_dir_fail_at_count;
+    short m_timeout;
+    QBasicTimer m_time;
+    QAction *m_reset_action;
+    QAction *m_origin_action;
+    QRectF m_action_rect;
+    QPointF m_previous_point;
+    QPointer<QMenu> m_sub_menu;
+    QMenuSloppyState *m_parent;
+};
+
 class QMenuPrivate : public QWidgetPrivate
 {
     Q_DECLARE_PUBLIC(QMenu)
 public:
     QMenuPrivate() : itemsDirty(0), maxIconWidth(0), tabWidth(0), ncols(0),
                       collapsibleSeparators(true), toolTipsVisible(false),
-                      activationRecursionGuard(false), hasHadMouse(0), aboutToHide(0), motions(0),
+                      activationRecursionGuard(false), delayedPopupGuard(false),
+                      hasReceievedEnter(false),
+                      hasHadMouse(0), aboutToHide(0), motions(0),
                       currentAction(0),
 #ifdef QT_KEYPAD_NAVIGATION
                       selectAction(0),
                       cancelAction(0),
 #endif
                       scroll(0), eventLoop(0), tearoff(0), tornoff(0), tearoffHighlighted(0),
-                      hasCheckableItems(0), sloppyDelayTimer(0), sloppyAction(0), doChildEffects(false), platformMenu(0)
+                      hasCheckableItems(0), doChildEffects(false), platformMenu(0)
 
 #if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
                       ,wce_menu(0)
@@ -127,6 +337,8 @@ public:
     int getLastVisibleAction() const;
 
     bool activationRecursionGuard;
+    bool delayedPopupGuard;
+    bool hasReceievedEnter;
 
     //selection
     static QMenu *mouseDown;
@@ -134,12 +346,39 @@ public:
     uint hasHadMouse : 1;
     uint aboutToHide : 1;
     int motions;
+    int mousePopupDelay;
     QAction *currentAction;
 #ifdef QT_KEYPAD_NAVIGATION
     QAction *selectAction;
     QAction *cancelAction;
 #endif
-    QBasicTimer menuDelayTimer;
+    struct DelayState {
+        DelayState()
+            : parent(0)
+            , action(0)
+        { }
+        void initialize(QMenu *parent)
+        {
+            this->parent = parent;
+        }
+
+        void start(int timeout, QAction *toStartAction)
+        {
+            if (timer.isActive() && toStartAction == action)
+                return;
+            action = toStartAction;
+            timer.start(timeout,parent);
+        }
+        void stop()
+        {
+            action = 0;
+            timer.stop();
+        }
+
+        QMenu *parent;
+        QBasicTimer timer;
+        QAction *action;
+    } delayState;
     enum SelectionReason {
         SelectedFromKeyboard,
         SelectedFromElsewhere
@@ -198,10 +437,7 @@ public:
 
     mutable bool hasCheckableItems;
 
-    //sloppy selection
-    int sloppyDelayTimer;
-    mutable QAction *sloppyAction;
-    QRegion sloppyRegion;
+    QMenuSloppyState sloppyState;
 
     //default action
     QPointer<QAction> defaultAction;
@@ -257,6 +493,7 @@ public:
     QAction* wceCommands(uint command);
 #endif
     QPointer<QWidget> noReplayFor;
+    static QPointer<QMenu> previousMouseMenu;
 };
 
 #endif // QT_NO_MENU

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,11 +36,42 @@
 #include "qwindowswindow.h"
 #include "qwindowsguieventdispatcher.h"
 #include "qwindowsscaling.h"
+#include "qwindowsinputcontext.h"
 
 #include <QtGui/QWindow>
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qguiapplication_p.h>
 #include <QtGui/QKeyEvent>
+
+#if defined(WM_APPCOMMAND)
+#  ifndef FAPPCOMMAND_MOUSE
+#    define FAPPCOMMAND_MOUSE 0x8000
+#  endif
+#  ifndef FAPPCOMMAND_KEY
+#    define FAPPCOMMAND_KEY   0
+#  endif
+#  ifndef FAPPCOMMAND_OEM
+#    define FAPPCOMMAND_OEM   0x1000
+#  endif
+#  ifndef FAPPCOMMAND_MASK
+#    define FAPPCOMMAND_MASK  0xF000
+#  endif
+#  ifndef GET_APPCOMMAND_LPARAM
+#    define GET_APPCOMMAND_LPARAM(lParam) ((short)(HIWORD(lParam) & ~FAPPCOMMAND_MASK))
+#  endif
+#  ifndef GET_DEVICE_LPARAM
+#    define GET_DEVICE_LPARAM(lParam)     ((WORD)(HIWORD(lParam) & FAPPCOMMAND_MASK))
+#  endif
+#  ifndef GET_MOUSEORKEY_LPARAM
+#    define GET_MOUSEORKEY_LPARAM         GET_DEVICE_LPARAM
+#  endif
+#  ifndef GET_FLAGS_LPARAM
+#    define GET_FLAGS_LPARAM(lParam)      (LOWORD(lParam))
+#  endif
+#  ifndef GET_KEYSTATE_LPARAM
+#    define GET_KEYSTATE_LPARAM(lParam)   GET_FLAGS_LPARAM(lParam)
+#  endif
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -537,16 +568,15 @@ static inline int toKeyOrUnicode(int vk, int scancode, unsigned char *kbdBuffer,
     Q_ASSERT(vk > 0 && vk < 256);
     int code = 0;
     QChar unicodeBuffer[5];
-    // While key combinations containing alt and ctrl might trigger the third assignment of a key
-    // (for example "alt+ctrl+q" causes '@' on a German layout), ToUnicode often does not return the
-    // wanted character if only the ctrl modifier is used. Thus we unset this modifier temporarily
-    // if it is not used together with alt.
-    const unsigned char controlState = kbdBuffer[VK_MENU] ? 0 : kbdBuffer[VK_CONTROL];
-    if (controlState)
-        kbdBuffer[VK_CONTROL] = 0;
     int res = ToUnicode(vk, scancode, kbdBuffer, reinterpret_cast<LPWSTR>(unicodeBuffer), 5, 0);
-    if (controlState)
+    // When Ctrl modifier is used ToUnicode does not return correct values. In order to assign the
+    // right key the control modifier is removed for just that function if the previous call failed.
+    if (res == 0 && kbdBuffer[VK_CONTROL]) {
+        const unsigned char controlState = kbdBuffer[VK_CONTROL];
+        kbdBuffer[VK_CONTROL] = 0;
+        res = ToUnicode(vk, scancode, kbdBuffer, reinterpret_cast<LPWSTR>(unicodeBuffer), 5, 0);
         kbdBuffer[VK_CONTROL] = controlState;
+    }
     if (res)
         code = unicodeBuffer[0].toUpper().unicode();
 
@@ -833,7 +863,10 @@ bool QWindowsKeyMapper::translateMultimediaKeyEventInternal(QWindow *window, con
 
     const int qtKey = CmdTbl[cmd];
     sendExtendedPressRelease(receiver, qtKey, Qt::KeyboardModifier(state), 0, 0, 0);
-    return true;
+    // QTBUG-43343: Make sure to return false if Qt does not handle the key, otherwise,
+    // the keys are not passed to the active media player.
+    const QKeySequence sequence(Qt::Modifier(state) + qtKey);
+    return QGuiApplicationPrivate::instance()->shortcutMap.hasShortcutForKeySequence(sequence);
 #else
     Q_UNREACHABLE();
     return false;
@@ -845,7 +878,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
     const int  msgType = msg.message;
 
     const quint32 scancode = (msg.lParam >> 16) & scancodeBitmask;
-    const quint32 vk_key = msg.wParam;
+    quint32 vk_key = msg.wParam;
     quint32 nModifiers = 0;
 
     QWindow *receiver = m_keyGrabber ? m_keyGrabber : window;
@@ -1039,6 +1072,8 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         // results, if we map this virtual key-code directly (for eg '?' US layouts). So try
         // to find the correct key using the current message parameters & keyboard state.
         if (uch.isNull() && msgType == WM_IME_KEYDOWN) {
+            if (!QWindowsInputContext::instance()->isComposing())
+                vk_key = ImmGetVirtualKey((HWND)window->winId());
             BYTE keyState[256];
             wchar_t newKey[3] = {0};
             GetKeyboardState(keyState);
@@ -1189,6 +1224,8 @@ Qt::KeyboardModifiers QWindowsKeyMapper::queryKeyboardModifiers()
         modifiers |= Qt::ControlModifier;
     if (GetKeyState(VK_MENU) < 0)
         modifiers |= Qt::AltModifier;
+    if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0)
+        modifiers |= Qt::MetaModifier;
     return modifiers;
 }
 

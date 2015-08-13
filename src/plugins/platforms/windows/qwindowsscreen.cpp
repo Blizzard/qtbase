@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -39,6 +39,7 @@
 
 #include "qtwindows_additional.h"
 
+#include <QtCore/QSettings>
 #include <QtGui/QPixmap>
 #include <QtGui/QGuiApplication>
 #include <qpa/qwindowsysteminterface.h>
@@ -172,31 +173,33 @@ static inline WindowsScreenDataList monitorData()
 
 static QDebug operator<<(QDebug dbg, const QWindowsScreenData &d)
 {
-    QDebug nospace =  dbg.nospace();
-    nospace << "Screen " << d.name << ' '
-            << d.geometry.width() << 'x' << d.geometry.height() << '+' << d.geometry.x() << '+' << d.geometry.y()
-            << " avail: "
-            << d.availableGeometry.width() << 'x' << d.availableGeometry.height() << '+' << d.availableGeometry.x() << '+' << d.availableGeometry.y()
-            << " physical: " << d.physicalSizeMM.width() <<  'x' << d.physicalSizeMM.height()
-            << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
-            << " Format: " << d.format;
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg.noquote();
+    dbg << "Screen \"" << d.name << "\" "
+        << d.geometry.width() << 'x' << d.geometry.height() << '+' << d.geometry.x() << '+' << d.geometry.y()
+        << " avail: "
+        << d.availableGeometry.width() << 'x' << d.availableGeometry.height() << '+' << d.availableGeometry.x() << '+' << d.availableGeometry.y()
+        << " physical: " << d.physicalSizeMM.width() << 'x' << d.physicalSizeMM.height()
+        << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
+        << " Format: " << d.format;
     if (d.flags & QWindowsScreenData::PrimaryScreen)
-        nospace << " primary";
+        dbg << " primary";
     if (d.flags & QWindowsScreenData::VirtualDesktop)
-        nospace << " virtual desktop";
+        dbg << " virtual desktop";
     if (d.flags & QWindowsScreenData::LockScreen)
-        nospace << " lock screen";
+        dbg << " lock screen";
     return dbg;
 }
 
 // Return the cursor to be shared by all screens (virtual desktop).
-static inline QSharedPointer<QWindowsCursor> sharedCursor()
+static inline QSharedPointer<QPlatformCursor> sharedCursor()
 {
 #ifndef QT_NO_CURSOR
     if (const QScreen *primaryScreen = QGuiApplication::primaryScreen())
-        return static_cast<const QWindowsScreen *>(primaryScreen->handle())->windowsCursor();
+        return static_cast<const QWindowsScreen *>(primaryScreen->handle())->cursorPtr();
 #endif
-    return QSharedPointer<QWindowsCursor>(new QWindowsCursor);
+    return QSharedPointer<QPlatformCursor>(new QWindowsCursor);
 }
 
 /*!
@@ -359,6 +362,37 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
 }
 
 /*!
+    \brief Queries ClearType settings to check the pixel layout
+*/
+QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTypeHint() const
+{
+#if defined(Q_OS_WINCE) || !defined(FT_LCD_FILTER_H) || !defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
+    return QPlatformScreen::Subpixel_None;
+#else
+    QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
+    if (type == QPlatformScreen::Subpixel_None) {
+        QSettings settings(QLatin1String("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Avalon.Graphics\\DISPLAY1"), QSettings::NativeFormat);
+        int registryValue = settings.value(QLatin1String("PixelStructure"), -1).toInt();
+        switch (registryValue) {
+        case 0:
+            type = QPlatformScreen::Subpixel_None;
+            break;
+        case 1:
+            type = QPlatformScreen::Subpixel_RGB;
+            break;
+        case 2:
+            type = QPlatformScreen::Subpixel_BGR;
+            break;
+        default:
+            type = QPlatformScreen::Subpixel_None;
+            break;
+        }
+    }
+    return type;
+#endif
+}
+
+/*!
     \class QWindowsScreenManager
     \brief Manages a list of QWindowsScreen.
 
@@ -462,7 +496,7 @@ void QWindowsScreenManager::removeScreen(int index)
         if (movedWindowCount)
             QWindowSystemInterface::flushWindowSystemEvents();
     }
-    delete m_screens.takeAt(index);
+    QWindowsIntegration::instance()->emitDestroyScreen(m_screens.takeAt(index));
 }
 
 /*!
@@ -482,7 +516,8 @@ bool QWindowsScreenManager::handleScreenChanges()
         } else {
             QWindowsScreen *newScreen = new QWindowsScreen(newData);
             m_screens.push_back(newScreen);
-            QWindowsIntegration::instance()->emitScreenAdded(newScreen);
+            QWindowsIntegration::instance()->emitScreenAdded(newScreen,
+                                                             newData.flags & QWindowsScreenData::PrimaryScreen);
             qCDebug(lcQpaWindows) << "New Monitor: " << newData;
         }    // exists
     }        // for new screens.
@@ -495,6 +530,22 @@ bool QWindowsScreenManager::handleScreenChanges()
         }     // for existing screens
     }     // not lock screen
     return true;
+}
+
+void QWindowsScreenManager::clearScreens()
+{
+    // Delete screens in reverse order to avoid crash in case of multiple screens
+    while (!m_screens.isEmpty())
+        QWindowsIntegration::instance()->emitDestroyScreen(m_screens.takeLast());
+}
+
+const QWindowsScreen *QWindowsScreenManager::screenAtDp(const QPoint &p) const
+{
+    foreach (QWindowsScreen *scr, m_screens) {
+        if (scr->geometryDp().contains(p))
+            return scr;
+    }
+    return Q_NULLPTR;
 }
 
 QT_END_NAMESPACE

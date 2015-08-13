@@ -1,7 +1,8 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure+bluesystems@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -66,9 +67,12 @@ QT_BEGIN_NAMESPACE
 
     If the process holding the lock crashes, the lock file stays on disk and can prevent
     any other process from accessing the shared resource, ever. For this reason, QLockFile
-    tries to detect such a "stale" lock file, based on the process ID written into the file,
-    and (in case that process ID got reused meanwhile), on the last modification time of
-    the lock file (30s by default, for the use case of a short-lived operation).
+    tries to detect such a "stale" lock file, based on the process ID written into the file.
+    To cover the situation that the process ID got reused meanwhile, the current process name is
+    compared to the name of the process that corresponds to the process ID from the lock file.
+    If the process names differ, the lock file is considered stale.
+    Additionally, the last modification time of the lock file (30s by default, for the use case of a
+    short-lived operation) is taken into account.
     If the lock file is found to be stale, it will be deleted.
 
     For the use case of protecting a resource over a long time, you should therefore call
@@ -122,7 +126,7 @@ QLockFile::~QLockFile()
     The value of \a staleLockTime is used by lock() and tryLock() in order
     to determine when an existing lock file is considered stale, i.e. left over
     by a crashed process. This is useful for the case where the PID got reused
-    meanwhile, so the only way to detect a stale lock file is by the fact that
+    meanwhile, so one way to detect a stale lock file is by the fact that
     it has been around for a long time.
 
     \sa staleLockTime()

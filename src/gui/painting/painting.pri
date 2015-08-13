@@ -13,6 +13,7 @@ HEADERS += \
         painting/qdrawhelper_x86_p.h \
         painting/qdrawingprimitive_sse2_p.h \
         painting/qemulationpaintengine_p.h \
+        painting/qfixed_p.h \
         painting/qgrayraster_p.h \
         painting/qmatrix.h \
         painting/qmemrotate_p.h \
@@ -41,11 +42,11 @@ HEADERS += \
         painting/qrasterdefs_p.h \
         painting/qrasterizer_p.h \
         painting/qregion.h \
+        painting/qrgb.h \
         painting/qstroker_p.h \
         painting/qtextureglyphcache_p.h \
         painting/qtransform.h \
         painting/qplatformbackingstore.h \
-        painting/qpaintbuffer_p.h \
         painting/qpathsimplifier_p.h
 
 
@@ -88,11 +89,13 @@ SOURCES += \
         painting/qtextureglyphcache.cpp \
         painting/qtransform.cpp \
         painting/qplatformbackingstore.cpp \
-        painting/qpaintbuffer.cpp \
         painting/qpathsimplifier.cpp
 
 SSE2_SOURCES += painting/qdrawhelper_sse2.cpp
 SSSE3_SOURCES += painting/qdrawhelper_ssse3.cpp
+SSE4_1_SOURCES += painting/qdrawhelper_sse4.cpp \
+                  painting/qimagescale_sse4.cpp
+AVX2_SOURCES += painting/qdrawhelper_avx2.cpp
 
 !ios {
     CONFIG += no_clang_integrated_as

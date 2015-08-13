@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
 ** Copyright (C) 2014 Intel Corporation.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -12,9 +12,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -25,8 +25,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -72,21 +72,58 @@
 # include "private/qcore_unix_p.h"
 #endif
 
-#if !defined QT_NO_REGULAREXPRESSION && !defined(QT_BOOTSTRAPPED)
-#ifdef __has_include
-#if __has_include(<cxxabi.h>) && __has_include(<execinfo.h>)
-#define QLOGGING_HAVE_BACKTRACE
+#ifndef __has_include
+#  define __has_include(x) 0
 #endif
-#elif defined(__GLIBCXX__) && defined(__GLIBC__) // (because older version of gcc don't have __has_include)
-#define QLOGGING_HAVE_BACKTRACE
+
+#ifndef QT_BOOTSTRAPPED
+#if !defined QT_NO_REGULAREXPRESSION
+#  ifdef __UCLIBC__
+#    if __UCLIBC_HAS_BACKTRACE__
+#      define QLOGGING_HAVE_BACKTRACE
+#    endif
+#  elif (defined(__GLIBC__) && defined(__GLIBCXX__)) || (__has_include(<cxxabi.h>) && __has_include(<execinfo.h>))
+#    define QLOGGING_HAVE_BACKTRACE
+#  endif
+#endif
+
+#if defined(Q_OS_LINUX) && (defined(__GLIBC__) || __has_include(<sys/syscall.h>))
+#  include <sys/syscall.h>
+static long qt_gettid()
+{
+    // no error handling
+    // this syscall has existed since Linux 2.4.11 and cannot fail
+    return syscall(SYS_gettid);
+}
+#elif defined(Q_OS_DARWIN)
+#  include <pthread.h>
+static int qt_gettid()
+{
+    // no error handling: this call cannot fail
+    __uint64_t tid;
+    pthread_threadid_np(NULL, &tid);
+    return tid;
+}
+#elif defined(Q_OS_FREEBSD_KERNEL) && defined(__FreeBSD_version) && __FreeBSD_version >= 900031
+#  include <pthread_np.h>
+static int qt_gettid()
+{
+    return pthread_getthreadid_np();
+}
+#else
+static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
+{
+    QT_USE_NAMESPACE
+    return qintptr(QThread::currentThreadId());
+}
 #endif
 
 #ifdef QLOGGING_HAVE_BACKTRACE
-#include <qregularexpression.h>
-#include <cxxabi.h>
-#include <execinfo.h>
+#  include <qregularexpression.h>
+#  include <cxxabi.h>
+#  include <execinfo.h>
 #endif
-#endif
+#endif // !QT_BOOTSTRAPPED
 
 #include <stdio.h>
 
@@ -171,7 +208,7 @@ Q_CORE_EXPORT bool qt_logging_to_console()
     \brief The QMessageLogContext class provides additional information about a log message.
     \since 5.0
 
-    The class provides information about the source code location a qDebug(), qWarning(),
+    The class provides information about the source code location a qDebug(), qInfo(), qWarning(),
     qCritical() or qFatal() message was generated.
 
     \note By default, this information is recorded only in debug builds. You can overwrite
@@ -187,7 +224,7 @@ Q_CORE_EXPORT bool qt_logging_to_console()
     \since 5.0
 
     QMessageLogger is used to generate messages for the Qt logging framework. Usually one uses
-    it through qDebug(), qWarning(), qCritical, or qFatal() functions,
+    it through qDebug(), qInfo(), qWarning(), qCritical, or qFatal() functions,
     which are actually macros: For example qDebug() expands to
     QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
     for debug builds, and QMessageLogger(0, 0, 0).debug() for release builds.
@@ -196,7 +233,7 @@ Q_CORE_EXPORT bool qt_logging_to_console()
 
     \snippet code/qlogging/qlogging.cpp 1
 
-    \sa QMessageLogContext, qDebug(), qWarning(), qCritical(), qFatal()
+    \sa QMessageLogContext, qDebug(), qInfo(), qWarning(), qCritical(), qFatal()
 */
 
 #ifdef Q_OS_WIN
@@ -218,13 +255,12 @@ static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const cha
 /*!
     \internal
 */
-static void qt_message(QtMsgType msgType, const QMessageLogContext &context, const char *msg,
-                       va_list ap, QString &buf)
+Q_NEVER_INLINE
+static QString qt_message(QtMsgType msgType, const QMessageLogContext &context, const char *msg, va_list ap)
 {
-
-    if (msg)
-        buf = QString().vsprintf(msg, ap);
+    QString buf = QString::vasprintf(msg, ap);
     qt_message_print(msgType, context, buf);
+    return buf;
 }
 
 #undef qDebug
@@ -236,15 +272,33 @@ static void qt_message(QtMsgType msgType, const QMessageLogContext &context, con
 */
 void QMessageLogger::debug(const char *msg, ...) const
 {
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtDebugMsg, context, msg, ap, message);
+    const QString message = qt_message(QtDebugMsg, context, msg, ap);
     va_end(ap);
 
     if (isFatal(QtDebugMsg))
         qt_message_fatal(QtDebugMsg, context, message);
+}
+
+
+#undef qInfo
+/*!
+    Logs an informational message specified with format \a msg. Additional
+    parameters, specified by \a msg, may be used.
+
+    \sa qInfo()
+    \since 5.5
+*/
+void QMessageLogger::info(const char *msg, ...) const
+{
+    va_list ap;
+    va_start(ap, msg); // use variable arg list
+    const QString message = qt_message(QtInfoMsg, context, msg, ap);
+    va_end(ap);
+
+    if (isFatal(QtInfoMsg))
+        qt_message_fatal(QtInfoMsg, context, message);
 }
 
 /*!
@@ -277,11 +331,9 @@ void QMessageLogger::debug(const QLoggingCategory &cat, const char *msg, ...) co
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtDebugMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtDebugMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtDebugMsg))
@@ -306,11 +358,9 @@ void QMessageLogger::debug(QMessageLogger::CategoryFunction catFunc,
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtDebugMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtDebugMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtDebugMsg))
@@ -376,6 +426,106 @@ QNoDebug QMessageLogger::noDebug() const Q_DECL_NOTHROW
 
 #endif
 
+/*!
+    Logs an informational message specified with format \a msg for the context \a cat.
+    Additional parameters, specified by \a msg, may be used.
+
+    \since 5.5
+    \sa qCInfo()
+*/
+void QMessageLogger::info(const QLoggingCategory &cat, const char *msg, ...) const
+{
+    if (!cat.isInfoEnabled())
+        return;
+
+    QMessageLogContext ctxt;
+    ctxt.copy(context);
+    ctxt.category = cat.categoryName();
+
+    va_list ap;
+    va_start(ap, msg); // use variable arg list
+    const QString message = qt_message(QtInfoMsg, ctxt, msg, ap);
+    va_end(ap);
+
+    if (isFatal(QtInfoMsg))
+        qt_message_fatal(QtInfoMsg, ctxt, message);
+}
+
+/*!
+    Logs an informational message specified with format \a msg for the context returned
+    by \a catFunc. Additional parameters, specified by \a msg, may be used.
+
+    \since 5.5
+    \sa qCInfo()
+*/
+void QMessageLogger::info(QMessageLogger::CategoryFunction catFunc,
+                           const char *msg, ...) const
+{
+    const QLoggingCategory &cat = (*catFunc)();
+    if (!cat.isInfoEnabled())
+        return;
+
+    QMessageLogContext ctxt;
+    ctxt.copy(context);
+    ctxt.category = cat.categoryName();
+
+    va_list ap;
+    va_start(ap, msg); // use variable arg list
+    const QString message = qt_message(QtInfoMsg, ctxt, msg, ap);
+    va_end(ap);
+
+    if (isFatal(QtInfoMsg))
+        qt_message_fatal(QtInfoMsg, ctxt, message);
+}
+
+#ifndef QT_NO_DEBUG_STREAM
+
+/*!
+    Logs an informational message using a QDebug stream.
+
+    \since 5.5
+    \sa qInfo(), QDebug
+*/
+QDebug QMessageLogger::info() const
+{
+    QDebug dbg = QDebug(QtInfoMsg);
+    QMessageLogContext &ctxt = dbg.stream->context;
+    ctxt.copy(context);
+    return dbg;
+}
+
+/*!
+    Logs an informational message into the category \a cat using a QDebug stream.
+
+    \since 5.5
+    \sa qCInfo(), QDebug
+*/
+QDebug QMessageLogger::info(const QLoggingCategory &cat) const
+{
+    QDebug dbg = QDebug(QtInfoMsg);
+    if (!cat.isInfoEnabled())
+        dbg.stream->message_output = false;
+
+    QMessageLogContext &ctxt = dbg.stream->context;
+    ctxt.copy(context);
+    ctxt.category = cat.categoryName();
+
+    return dbg;
+}
+
+/*!
+    Logs an informational message into category returned by \a catFunc using a QDebug stream.
+
+    \since 5.5
+    \sa qCInfo(), QDebug
+*/
+QDebug QMessageLogger::info(QMessageLogger::CategoryFunction catFunc) const
+{
+    return info((*catFunc)());
+}
+
+#endif
+
 #undef qWarning
 /*!
     Logs a warning message specified with format \a msg. Additional
@@ -385,11 +535,9 @@ QNoDebug QMessageLogger::noDebug() const Q_DECL_NOTHROW
 */
 void QMessageLogger::warning(const char *msg, ...) const
 {
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtWarningMsg, context, msg, ap, message);
+    const QString message = qt_message(QtWarningMsg, context, msg, ap);
     va_end(ap);
 
     if (isFatal(QtWarningMsg))
@@ -412,11 +560,9 @@ void QMessageLogger::warning(const QLoggingCategory &cat, const char *msg, ...) 
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtWarningMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtWarningMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtWarningMsg))
@@ -441,11 +587,9 @@ void QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc,
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtWarningMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtWarningMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtWarningMsg))
@@ -507,11 +651,9 @@ QDebug QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc) const
 */
 void QMessageLogger::critical(const char *msg, ...) const
 {
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtCriticalMsg, context, msg, ap, message);
+    const QString message = qt_message(QtCriticalMsg, context, msg, ap);
     va_end(ap);
 
     if (isFatal(QtCriticalMsg))
@@ -534,11 +676,9 @@ void QMessageLogger::critical(const QLoggingCategory &cat, const char *msg, ...)
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtCriticalMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtCriticalMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtCriticalMsg))
@@ -563,11 +703,9 @@ void QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc,
     ctxt.copy(context);
     ctxt.category = cat.categoryName();
 
-    QString message;
-
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    qt_message(QtCriticalMsg, ctxt, msg, ap, message);
+    const QString message = qt_message(QtCriticalMsg, ctxt, msg, ap);
     va_end(ap);
 
     if (isFatal(QtCriticalMsg))
@@ -633,7 +771,7 @@ void QMessageLogger::fatal(const char *msg, ...) const Q_DECL_NOTHROW
 
     va_list ap;
     va_start(ap, msg); // use variable arg list
-    QT_TERMINATE_ON_EXCEPTION(qt_message(QtFatalMsg, context, msg, ap, message));
+    QT_TERMINATE_ON_EXCEPTION(message = qt_message(QtFatalMsg, context, msg, ap));
     va_end(ap);
 
     qt_message_fatal(QtFatalMsg, context, message);
@@ -805,10 +943,12 @@ static const char functionTokenC[] = "%{function}";
 static const char pidTokenC[] = "%{pid}";
 static const char appnameTokenC[] = "%{appname}";
 static const char threadidTokenC[] = "%{threadid}";
+static const char qthreadptrTokenC[] = "%{qthreadptr}";
 static const char timeTokenC[] = "%{time"; //not a typo: this command has arguments
 static const char backtraceTokenC[] = "%{backtrace"; //ditto
 static const char ifCategoryTokenC[] = "%{if-category}";
 static const char ifDebugTokenC[] = "%{if-debug}";
+static const char ifInfoTokenC[] = "%{if-info}";
 static const char ifWarningTokenC[] = "%{if-warning}";
 static const char ifCriticalTokenC[] = "%{if-critical}";
 static const char ifFatalTokenC[] = "%{if-fatal}";
@@ -828,17 +968,16 @@ struct QMessagePattern {
     const char **literals;
     const char **tokens;
     QString timeFormat;
+#ifndef QT_BOOTSTRAPPED
+    QElapsedTimer timer;
+#endif
 #ifdef QLOGGING_HAVE_BACKTRACE
-    int backtraceDepth;
     QString backtraceSeparator;
+    int backtraceDepth;
 #endif
 
     bool fromEnvironment;
     static QBasicMutex mutex;
-#ifndef QT_BOOTSTRAPPED
-    QElapsedTimer timer;
-    QDateTime startTime;
-#endif
 };
 
 QBasicMutex QMessagePattern::mutex;
@@ -847,13 +986,10 @@ QMessagePattern::QMessagePattern()
     : literals(0)
     , tokens(0)
 #ifdef QLOGGING_HAVE_BACKTRACE
-    , backtraceDepth(5)
     , backtraceSeparator(QLatin1Char('|'))
+    , backtraceDepth(5)
 #endif
     , fromEnvironment(false)
-#ifndef QT_BOOTSTRAPPED
-    , startTime(QDateTime::currentDateTime())
-#endif
 {
 #ifndef QT_BOOTSTRAPPED
     timer.start();
@@ -869,7 +1005,7 @@ QMessagePattern::QMessagePattern()
 
 QMessagePattern::~QMessagePattern()
 {
-    for (int i = 0; literals[i] != 0; ++i)
+    for (int i = 0; literals[i]; ++i)
         delete [] literals[i];
     delete [] literals;
     literals = 0;
@@ -879,8 +1015,12 @@ QMessagePattern::~QMessagePattern()
 
 void QMessagePattern::setPattern(const QString &pattern)
 {
+    if (literals) {
+        for (int i = 0; literals[i]; ++i)
+            delete [] literals[i];
+        delete [] literals;
+    }
     delete [] tokens;
-    delete [] literals;
 
     // scanner
     QList<QString> lexemes;
@@ -945,6 +1085,8 @@ void QMessagePattern::setPattern(const QString &pattern)
                 tokens[i] = appnameTokenC;
             else if (lexeme == QLatin1String(threadidTokenC))
                 tokens[i] = threadidTokenC;
+            else if (lexeme == QLatin1String(qthreadptrTokenC))
+                tokens[i] = qthreadptrTokenC;
             else if (lexeme.startsWith(QLatin1String(timeTokenC))) {
                 tokens[i] = timeTokenC;
                 int spaceIdx = lexeme.indexOf(QChar::fromLatin1(' '));
@@ -980,6 +1122,7 @@ void QMessagePattern::setPattern(const QString &pattern)
             }
             IF_TOKEN(ifCategoryTokenC)
             IF_TOKEN(ifDebugTokenC)
+            IF_TOKEN(ifInfoTokenC)
             IF_TOKEN(ifWarningTokenC)
             IF_TOKEN(ifCriticalTokenC)
             IF_TOKEN(ifFatalTokenC)
@@ -1058,6 +1201,9 @@ static void slog2_default_handler(QtMsgType msgType, const char *message)
     //Determines the severity level
     switch (msgType) {
     case QtDebugMsg:
+        severity = SLOG2_DEBUG1;
+        break;
+    case QtInfoMsg:
         severity = SLOG2_INFO;
         break;
     case QtWarningMsg:
@@ -1120,6 +1266,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (token == typeTokenC) {
             switch (type) {
             case QtDebugMsg:   message.append(QLatin1String("debug")); break;
+            case QtInfoMsg:    message.append(QLatin1String("info")); break;
             case QtWarningMsg: message.append(QLatin1String("warning")); break;
             case QtCriticalMsg:message.append(QLatin1String("critical")); break;
             case QtFatalMsg:   message.append(QLatin1String("fatal")); break;
@@ -1142,17 +1289,20 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (token == appnameTokenC) {
             message.append(QCoreApplication::applicationName());
         } else if (token == threadidTokenC) {
+            // print the TID as decimal
+            message.append(QString::number(qt_gettid()));
+        } else if (token == qthreadptrTokenC) {
             message.append(QLatin1String("0x"));
             message.append(QString::number(qlonglong(QThread::currentThread()->currentThread()), 16));
 #ifdef QLOGGING_HAVE_BACKTRACE
         } else if (token == backtraceTokenC) {
-            QVarLengthArray<void*, 32> buffer(15 + pattern->backtraceDepth);
+            QVarLengthArray<void*, 32> buffer(7 + pattern->backtraceDepth);
             int n = backtrace(buffer.data(), buffer.size());
             if (n > 0) {
-                QScopedPointer<char*, QScopedPointerPodDeleter> strings(backtrace_symbols(buffer.data(), n));
                 int numberPrinted = 0;
                 for (int i = 0; i < n && numberPrinted < pattern->backtraceDepth; ++i) {
-                    QString trace = QString::fromLatin1(strings.data()[i]);
+                    QScopedPointer<char*, QScopedPointerPodDeleter> strings(backtrace_symbols(buffer.data() + i, 1));
+                    QString trace = QString::fromLatin1(strings.data()[0]);
                     // The results of backtrace_symbols looks like this:
                     //    /lib/libc.so.6(__libc_start_main+0xf3) [0x4a937413]
                     // The offset and function name are optional.
@@ -1203,7 +1353,13 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (token == timeTokenC) {
             if (pattern->timeFormat == QLatin1String("process")) {
                 quint64 ms = pattern->timer.elapsed();
-                message.append(QString().sprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+                message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+            } else if (pattern->timeFormat == QLatin1String("boot")) {
+                // just print the milliseconds since the elapsed timer reference
+                // like the Linux kernel does
+                pattern->timer.elapsed();
+                uint ms = pattern->timer.msecsSinceReference();
+                message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
             } else if (pattern->timeFormat.isEmpty()) {
                 message.append(QDateTime::currentDateTime().toString(Qt::ISODate));
             } else {
@@ -1217,6 +1373,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
         } else if (token == if##LEVEL##TokenC) { \
             skip = type != Qt##LEVEL##Msg;
         HANDLE_IF_TOKEN(Debug)
+        HANDLE_IF_TOKEN(Info)
         HANDLE_IF_TOKEN(Warning)
         HANDLE_IF_TOKEN(Critical)
         HANDLE_IF_TOKEN(Fatal)
@@ -1252,6 +1409,9 @@ static void systemd_default_message_handler(QtMsgType type,
     case QtDebugMsg:
         priority = LOG_DEBUG; // Debug-level messages
         break;
+    case QtInfoMsg:
+        priority = LOG_INFO; // Informational conditions
+        break;
     case QtWarningMsg:
         priority = LOG_WARNING; // Warning conditions
         break;
@@ -1281,13 +1441,14 @@ static void android_default_message_handler(QtMsgType type,
     android_LogPriority priority = ANDROID_LOG_DEBUG;
     switch (type) {
     case QtDebugMsg: priority = ANDROID_LOG_DEBUG; break;
+    case QtInfoMsg: priority = ANDROID_LOG_INFO; break;
     case QtWarningMsg: priority = ANDROID_LOG_WARN; break;
     case QtCriticalMsg: priority = ANDROID_LOG_ERROR; break;
     case QtFatalMsg: priority = ANDROID_LOG_FATAL; break;
     };
 
-    __android_log_print(priority, "Qt", "%s:%d (%s): %s\n",
-                        context.file, context.line,
+    __android_log_print(priority, qPrintable(QCoreApplication::applicationName()),
+                        "%s:%d (%s): %s\n", context.file, context.line,
                         context.function, qPrintable(message));
 }
 #endif //Q_OS_ANDROID
@@ -1432,11 +1593,9 @@ void qErrnoWarning(const char *msg, ...)
 {
     // qt_error_string() will allocate anyway, so we don't have
     // to be careful here (like we do in plain qWarning())
-    QString buf;
     va_list ap;
     va_start(ap, msg);
-    if (msg)
-        buf.vsprintf(msg, ap);
+    QString buf = QString::vasprintf(msg, ap);
     va_end(ap);
 
     buf += QLatin1String(" (") + qt_error_string(-1) + QLatin1Char(')');
@@ -1448,11 +1607,9 @@ void qErrnoWarning(int code, const char *msg, ...)
 {
     // qt_error_string() will allocate anyway, so we don't have
     // to be careful here (like we do in plain qWarning())
-    QString buf;
     va_list ap;
     va_start(ap, msg);
-    if (msg)
-        buf.vsprintf(msg, ap);
+    QString buf = QString::vasprintf(msg, ap);
     va_end(ap);
 
     buf += QLatin1String(" (") + qt_error_string(code) + QLatin1Char(')');
@@ -1551,9 +1708,13 @@ void qErrnoWarning(int code, const char *msg, ...)
     \row \li \c %{line} \li Line in source file
     \row \li \c %{message} \li The actual message
     \row \li \c %{pid} \li QCoreApplication::applicationPid()
-    \row \li \c %{threadid} \li ID of current thread
+    \row \li \c %{threadid} \li The system-wide ID of current thread (if it can be obtained)
+    \row \li \c %{qthreadptr} \li A pointer to the current QThread (result of QThread::currentThread())
     \row \li \c %{type} \li "debug", "warning", "critical" or "fatal"
     \row \li \c %{time process} \li time of the message, in seconds since the process started (the token "process" is literal)
+    \row \li \c %{time boot} \li the time of the message, in seconds since the system boot if that
+        can be determined (the token "boot" is literal). If the time since boot could not be obtained,
+        the output is indeterminate (see QElapsedTimer::msecsSinceReference()).
     \row \li \c %{time [format]} \li system time when the message occurred, formatted by
         passing the \c format to \l QDateTime::toString(). If the format is
         not specified, the format of Qt::ISODate is used.
@@ -1567,7 +1728,7 @@ void qErrnoWarning(int code, const char *msg, ...)
         tail call optimization.
     \endtable
 
-    You can also use conditionals on the type of the message using \c %{if-debug},
+    You can also use conditionals on the type of the message using \c %{if-debug}, \c %{if-info}
     \c %{if-warning}, \c %{if-critical} or \c %{if-fatal} followed by an \c %{endif}.
     What is inside the \c %{if-*} and \c %{endif} will only be printed if the type matches.
 
@@ -1576,7 +1737,7 @@ void qErrnoWarning(int code, const char *msg, ...)
 
     Example:
     \code
-    QT_MESSAGE_PATTERN="[%{time yyyyMMdd h:mm:ss.zzz t} %{if-debug}D%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] %{file}:%{line} - %{message}"
+    QT_MESSAGE_PATTERN="[%{time yyyyMMdd h:mm:ss.zzz t} %{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] %{file}:%{line} - %{message}"
     \endcode
 
     The default \a pattern is "%{if-category}%{category}: %{endif}%{message}".

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -52,6 +52,7 @@ private Q_SLOTS:
     void cleanup();
     void autoShow_data();
     void autoShow();
+    void autoShowCtor();
     void getSetCheck();
     void task198202();
     void QTBUG_31046();
@@ -68,28 +69,60 @@ void tst_QProgressDialog::autoShow_data()
 {
     QTest::addColumn<int>("min");
     QTest::addColumn<int>("max");
-    QTest::addColumn<int>("delay");
+    QTest::addColumn<int>("value"); // initial setValue call
+    QTest::addColumn<int>("delay"); // then we wait for this long, and setValue(min+1)
+    QTest::addColumn<int>("minDuration");
     QTest::addColumn<bool>("expectedAutoShow");
 
-    QTest::newRow("50_to_100_long") << 50 << 100 << 100 << true; // 50*100ms = 5s
-    QTest::newRow("50_to_100_short") << 50 << 1 << 100 << false; // 50*1ms = 50ms
+    // Check that autoshow works even when not starting at 0
+    QTest::newRow("50_to_100_slow_shown") << 50 << 100 << 50 << 100 << 100 << true; // 50*100ms = 5s
+    QTest::newRow("50_to_100_fast_not_shown") << 50 << 100 << 50 << 1 << 100 << false; // 1ms is too short to even start estimating
+    QTest::newRow("50_to_60_high_minDuration_not_shown") << 50 << 60 << 50 << 100 << 2000 << false; // 10*100ms = 1s < 2s
 
-    QTest::newRow("0_to_100_long") << 0 << 100 << 100 << true; // 100*100ms = 10s
-    QTest::newRow("0_to_10_short") << 0 << 10 << 100 << false; // 10*100ms = 1s
+    // Check that setValue(0) still starts the timer as previously documented
+    QTest::newRow("50_to_100_slow_0_compat") << 50 << 100 << 0 << 100 << 100 << true; // 50*100ms = 5s
+    QTest::newRow("50_to_100_fast_0_compat") << 50 << 100 << 0 << 1 << 100 << false; // 1ms is too short to even start estimating
+    QTest::newRow("50_to_60_high_minDuration_0_compat") << 50 << 60 << 0 << 100 << 2000 << false; // 10*100ms = 1s < 2s
+
+    // Check the typical case of starting at 0
+    QTest::newRow("0_to_100_slow_shown") << 0 << 100 << 0 << 100 << 100 << true; // 100*100ms = 10s > 100ms
+    QTest::newRow("0_to_10_slow_shown") << 0 << 10 << 0 << 100 << 500 << true; // 10*100ms = 1s > 0.5s
+    QTest::newRow("0_to_10_high_minDuration_not_shown") << 0 << 10 << 0 << 100 << 2000 << false; // 10*100ms = 1s < 2s
+
+    // Check the special case of going via 0 at some point
+    QTest::newRow("-1_to_1_slow_shown") << -1 << 1 << -1 << 200 << 100 << true; // 1*200ms = 200ms > 100ms
+    QTest::newRow("-1_to_1_fast_not_shown") << -1 << 1 << -1 << 10 << 100 << false; // 10ms is too short to even start estimating
+    QTest::newRow("-1_to_1_high_minDuration_not_shown") << -1 << 1 << -1 << 100 << 2000 << false; // 1*100ms = 100ms < 2s
+
 }
 
 void tst_QProgressDialog::autoShow()
 {
     QFETCH(int, min);
     QFETCH(int, max);
+    QFETCH(int, value);
     QFETCH(int, delay);
+    QFETCH(int, minDuration);
     QFETCH(bool, expectedAutoShow);
 
     QProgressDialog dlg("", "", min, max);
-    dlg.setValue(0);
+    if (minDuration != dlg.minimumDuration())
+        dlg.setMinimumDuration(minDuration);
+    dlg.reset(); // cancel the timer started in the constructor,
+                 // in order to test for the setValue() behavior instead
+                 // See autoShowCtor() for the ctor timer check
+    dlg.setValue(value);
     QThread::msleep(delay);
     dlg.setValue(min+1);
     QCOMPARE(dlg.isVisible(), expectedAutoShow);
+}
+
+void tst_QProgressDialog::autoShowCtor()
+{
+    QProgressDialog dlg;
+    QVERIFY(!dlg.isVisible());
+    QThread::msleep(dlg.minimumDuration());
+    QTRY_VERIFY(dlg.isVisible());
 }
 
 // Testing get/set functions

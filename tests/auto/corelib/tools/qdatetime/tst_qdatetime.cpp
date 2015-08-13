@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -142,8 +142,13 @@ private slots:
     void isDaylightTime() const;
     void daylightTransitions() const;
     void timeZones() const;
+#if defined(Q_OS_UNIX)
+    void systemTimeZoneChange() const;
+#endif
 
     void invalid() const;
+
+    void macTypes();
 
 private:
     enum { LocalTimeIsUtc = 0, LocalTimeAheadOfUtc = 1, LocalTimeBehindUtc = -1} localTimeType;
@@ -606,13 +611,11 @@ void tst_QDateTime::setMSecsSinceEpoch()
         dt2.setTimeZone(europe);
         dt2.setMSecsSinceEpoch(msecs);
         QCOMPARE(dt2.date(), european.date());
-#ifdef Q_OS_MAC
-        // NSTimeZone doesn't apply DST to high values
-        if (msecs < (Q_INT64_C(123456) << 32))
-#else
-        // Linux and Win are OK except when they overflow
-        if (msecs != std::numeric_limits<qint64>::max())
-#endif
+
+        // don't compare the time if the date is too early or too late: prior
+        // to 1916, timezones in Europe were not standardised and some OS APIs
+        // have hard limits. Let's restrict it to the 32-bit Unix range
+        if (dt2.date().year() >= 1970 && dt2.date().year() <= 2037)
             QCOMPARE(dt2.time(), european.time());
         QCOMPARE(dt2.timeSpec(), Qt::TimeZone);
         QCOMPARE(dt2.timeZone(), europe);
@@ -1901,6 +1904,14 @@ void tst_QDateTime::fromStringDateFormat_data()
         << Qt::ISODate << QDateTime(QDate(1970, 1, 1), QTime(0, 12, 34), Qt::UTC);
     QTest::newRow("ISO +00:00") << QString::fromLatin1("1970-01-01T00:12:34+00:00")
         << Qt::ISODate << QDateTime(QDate(1970, 1, 1), QTime(0, 12, 34), Qt::UTC);
+    QTest::newRow("ISO -03") << QString::fromLatin1("2014-12-15T12:37:09-03")
+        << Qt::ISODate << QDateTime(QDate(2014, 12, 15), QTime(15, 37, 9), Qt::UTC);
+    QTest::newRow("ISO zzz-03") << QString::fromLatin1("2014-12-15T12:37:09.745-03")
+        << Qt::ISODate << QDateTime(QDate(2014, 12, 15), QTime(15, 37, 9, 745), Qt::UTC);
+    QTest::newRow("ISO -3") << QString::fromLatin1("2014-12-15T12:37:09-3")
+        << Qt::ISODate << QDateTime(QDate(2014, 12, 15), QTime(15, 37, 9), Qt::UTC);
+    QTest::newRow("ISO zzz-3") << QString::fromLatin1("2014-12-15T12:37:09.745-3")
+        << Qt::ISODate << QDateTime(QDate(2014, 12, 15), QTime(15, 37, 9, 745), Qt::UTC);
     // No time specified - defaults to Qt::LocalTime.
     QTest::newRow("ISO data3") << QString::fromLatin1("2002-10-01")
         << Qt::ISODate << QDateTime(QDate(2002, 10, 1), QTime(0, 0, 0, 0), Qt::LocalTime);
@@ -2621,10 +2632,10 @@ void tst_QDateTime::daylightTransitions() const
         QVERIFY(test.isValid());
         QCOMPARE(test.date(), QDate(2012, 10, 28));
         QCOMPARE(test.time(), QTime(2, 0, 0));
-#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX)
-        // Linux mktime bug uses last calculation
+#ifdef Q_OS_WIN
+        // Windows uses SecondOccurrence
         QEXPECT_FAIL("", "QDateTime doesn't properly support Daylight Transitions", Continue);
-#endif // Q_OS_MAC
+#endif // Q_OS_WIN
         QCOMPARE(test.toMSecsSinceEpoch(), standard2012 - msecsOneHour);
 
         // Add year to get to after tran FirstOccurrence
@@ -2663,10 +2674,10 @@ void tst_QDateTime::daylightTransitions() const
         QVERIFY(test.isValid());
         QCOMPARE(test.date(), QDate(2012, 10, 28));
         QCOMPARE(test.time(), QTime(2, 0, 0));
-#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX)
-        // Linux mktime bug uses last calculation
+#ifdef Q_OS_WIN
+        // Windows uses SecondOccurrence
         QEXPECT_FAIL("", "QDateTime doesn't properly support Daylight Transitions", Continue);
-#endif // Q_OS_MAC
+#endif // Q_OS_WIN
         QCOMPARE(test.toMSecsSinceEpoch(), standard2012 - msecsOneHour);
 
         // Add month to get to after tran FirstOccurrence
@@ -2705,10 +2716,10 @@ void tst_QDateTime::daylightTransitions() const
         QVERIFY(test.isValid());
         QCOMPARE(test.date(), QDate(2012, 10, 28));
         QCOMPARE(test.time(), QTime(2, 0, 0));
-#if !defined(Q_OS_MAC) && !defined(Q_OS_QNX)
-        // Linux mktime bug uses last calculation
+#ifdef Q_OS_WIN
+        // Windows uses SecondOccurrence
         QEXPECT_FAIL("", "QDateTime doesn't properly support Daylight Transitions", Continue);
-#endif // Q_OS_MAC
+#endif // Q_OS_WIN
         QCOMPARE(test.toMSecsSinceEpoch(), standard2012 - msecsOneHour);
 
         // Add day to get to after tran FirstOccurrence
@@ -2796,10 +2807,12 @@ void tst_QDateTime::timeZones() const
     QCOMPARE(invalidDateTime.time(), QTime(0, 0, 0));
 
     QTimeZone nzTz = QTimeZone("Pacific/Auckland");
+    QTimeZone nzTzOffset = QTimeZone(12 * 3600);
 
     // During Standard Time NZ is +12:00
     QDateTime utcStd(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC);
     QDateTime nzStd(QDate(2012, 6, 1), QTime(12, 0, 0), nzTz);
+    QDateTime nzStdOffset(QDate(2012, 6, 1), QTime(12, 0, 0), nzTzOffset);
 
     QCOMPARE(nzStd.isValid(), true);
     QCOMPARE(nzStd.timeSpec(), Qt::TimeZone);
@@ -2810,6 +2823,16 @@ void tst_QDateTime::timeZones() const
     QCOMPARE(nzStd.offsetFromUtc(), 43200);
     QCOMPARE(nzStd.isDaylightTime(), false);
     QCOMPARE(nzStd.toMSecsSinceEpoch(), utcStd.toMSecsSinceEpoch());
+
+    QCOMPARE(nzStdOffset.isValid(), true);
+    QCOMPARE(nzStdOffset.timeSpec(), Qt::TimeZone);
+    QCOMPARE(nzStdOffset.date(), QDate(2012, 6, 1));
+    QCOMPARE(nzStdOffset.time(), QTime(12, 0, 0));
+    QVERIFY(nzStdOffset.timeZone() == nzTzOffset);
+    QCOMPARE(nzStdOffset.timeZone().id(), QByteArray("UTC+12:00"));
+    QCOMPARE(nzStdOffset.offsetFromUtc(), 43200);
+    QCOMPARE(nzStdOffset.isDaylightTime(), false);
+    QCOMPARE(nzStdOffset.toMSecsSinceEpoch(), utcStd.toMSecsSinceEpoch());
 
     // During Daylight Time NZ is +13:00
     QDateTime utcDst(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
@@ -2962,6 +2985,56 @@ void tst_QDateTime::timeZones() const
     QCOMPARE(future.offsetFromUtc(), 28800);
 }
 
+#if defined(Q_OS_UNIX)
+// Currently disabled on Windows as adjusting the timezone
+// requires additional privileges that aren't normally
+// enabled for a process. This can be achieved by calling
+// AdjustTokenPrivileges() and then SetTimeZoneInformation(),
+// which will require linking to a different library to access that API.
+static void setTimeZone(const QByteArray &tz)
+{
+    qputenv("TZ", tz);
+    ::tzset();
+
+// following left for future reference, see comment above
+// #if defined(Q_OS_WIN32)
+//     ::_tzset();
+// #endif
+}
+
+void tst_QDateTime::systemTimeZoneChange() const
+{
+    struct ResetTZ {
+        QByteArray original;
+        ResetTZ() : original(qgetenv("TZ")) {}
+        ~ResetTZ() { setTimeZone(original); }
+    } scopedReset;
+
+    // Set the timezone to Brisbane time
+    setTimeZone(QByteArray("AEST-10:00"));
+
+    QDateTime localDate = QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), Qt::LocalTime);
+    QDateTime utcDate = QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), Qt::UTC);
+    QDateTime tzDate = QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), QTimeZone("Australia/Brisbane"));
+    qint64 localMsecs = localDate.toMSecsSinceEpoch();
+    qint64 utcMsecs = utcDate.toMSecsSinceEpoch();
+    qint64 tzMsecs = tzDate.toMSecsSinceEpoch();
+
+    // check that Australia/Brisbane is known
+    QVERIFY(tzDate.timeZone().isValid());
+
+    // Change to Indian time
+    setTimeZone(QByteArray("IST-05:30"));
+
+    QCOMPARE(localDate, QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), Qt::LocalTime));
+    QVERIFY(localMsecs != localDate.toMSecsSinceEpoch());
+    QCOMPARE(utcDate, QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), Qt::UTC));
+    QCOMPARE(utcDate.toMSecsSinceEpoch(), utcMsecs);
+    QCOMPARE(tzDate, QDateTime(QDate(2012, 6, 1), QTime(2, 15, 30), QTimeZone("Australia/Brisbane")));
+    QCOMPARE(tzDate.toMSecsSinceEpoch(), tzMsecs);
+}
+#endif
+
 void tst_QDateTime::invalid() const
 {
     QDateTime invalidDate = QDateTime(QDate(0, 0, 0), QTime(-1, -1, -1));
@@ -2979,6 +3052,16 @@ void tst_QDateTime::invalid() const
     QDateTime tzDate = invalidDate.toTimeZone(QTimeZone("Europe/Oslo"));
     QCOMPARE(tzDate.isValid(), false);
     QCOMPARE(tzDate.timeSpec(), Qt::TimeZone);
+}
+
+void tst_QDateTime::macTypes()
+{
+#ifndef Q_OS_MAC
+    QSKIP("This is a Apple-only test");
+#else
+    extern void tst_QDateTime_macTypes(); // in qdatetime_mac.mm
+    tst_QDateTime_macTypes();
+#endif
 }
 
 QTEST_APPLESS_MAIN(tst_QDateTime)

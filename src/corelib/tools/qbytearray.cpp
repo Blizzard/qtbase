@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Intel Corporation.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,11 +39,13 @@
 #include "qlist.h"
 #include "qlocale.h"
 #include "qlocale_p.h"
+#include "qstringalgorithms_p.h"
 #include "qscopedpointer.h"
 #include <qdatastream.h>
 #include <qmath.h>
 
 #ifndef QT_NO_COMPRESS
+#include <zconf.h>
 #include <zlib.h>
 #endif
 #include <ctype.h>
@@ -54,6 +57,64 @@
 
 QT_BEGIN_NAMESPACE
 
+// Latin 1 case system, used by QByteArray::to{Upper,Lower}() and qstr(n)icmp():
+/*
+#!/usr/bin/perl -l
+use feature "unicode_strings";
+for (0..255) {
+    $up = uc(chr($_));
+    $up = chr($_) if ord($up) > 0x100 || length $up > 1;
+    printf "0x%02x,", ord($up);
+    print "" if ($_ & 0xf) == 0xf;
+}
+*/
+static const uchar latin1_uppercased[256] = {
+    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+    0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+    0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+    0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
+    0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+    0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x5b,0x5c,0x5d,0x5e,0x5f,
+    0x60,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+    0x50,0x51,0x52,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5a,0x7b,0x7c,0x7d,0x7e,0x7f,
+    0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
+    0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,
+    0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,
+    0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd,0xbe,0xbf,
+    0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xce,0xcf,
+    0xd0,0xd1,0xd2,0xd3,0xd4,0xd5,0xd6,0xd7,0xd8,0xd9,0xda,0xdb,0xdc,0xdd,0xde,0xdf,
+    0xc0,0xc1,0xc2,0xc3,0xc4,0xc5,0xc6,0xc7,0xc8,0xc9,0xca,0xcb,0xcc,0xcd,0xce,0xcf,
+    0xd0,0xd1,0xd2,0xd3,0xd4,0xd5,0xd6,0xf7,0xd8,0xd9,0xda,0xdb,0xdc,0xdd,0xde,0xff
+};
+
+/*
+#!/usr/bin/perl -l
+use feature "unicode_strings";
+for (0..255) {
+    $up = lc(chr($_));
+    $up = chr($_) if ord($up) > 0x100 || length $up > 1;
+    printf "0x%02x,", ord($up);
+    print "" if ($_ & 0xf) == 0xf;
+}
+*/
+static const uchar latin1_lowercased[256] = {
+    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+    0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
+    0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,
+    0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,0x3f,
+    0x40,0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6a,0x6b,0x6c,0x6d,0x6e,0x6f,
+    0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x5b,0x5c,0x5d,0x5e,0x5f,
+    0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6a,0x6b,0x6c,0x6d,0x6e,0x6f,
+    0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7a,0x7b,0x7c,0x7d,0x7e,0x7f,
+    0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f,
+    0x90,0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,
+    0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf,
+    0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd,0xbe,0xbf,
+    0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef,
+    0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xd7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xdf,
+    0xe0,0xe1,0xe2,0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xef,
+    0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa,0xfb,0xfc,0xfd,0xfe,0xff
+};
 
 int qFindByteArray(
     const char *haystack0, int haystackLen, int from,
@@ -63,7 +124,7 @@ int qFindByteArray(
 int qAllocMore(int alloc, int extra) Q_DECL_NOTHROW
 {
     Q_ASSERT(alloc >= 0 && extra >= 0);
-    Q_ASSERT_X(alloc < (1 << 30) - extra, "qAllocMore", "Requested size is too large!");
+    Q_ASSERT_X(uint(alloc) < QByteArray::MaxSize, "qAllocMore", "Requested size is too large!");
 
     unsigned nalloc = qNextPowerOfTwo(alloc + extra);
 
@@ -248,7 +309,7 @@ int qstricmp(const char *str1, const char *str2)
     uchar c;
     if (!s1 || !s2)
         return s1 ? 1 : (s2 ? -1 : 0);
-    for (; !(res = (c = QChar::toLower((ushort)*s1)) - QChar::toLower((ushort)*s2)); s1++, s2++)
+    for (; !(res = (c = latin1_lowercased[*s1]) - latin1_lowercased[*s2]); s1++, s2++)
         if (!c)                                // strings are equal
             break;
     return res;
@@ -283,7 +344,7 @@ int qstrnicmp(const char *str1, const char *str2, uint len)
     if (!s1 || !s2)
         return s1 ? 1 : (s2 ? -1 : 0);
     for (; len--; s1++, s2++) {
-        if ((res = (c = QChar::toLower((ushort)*s1)) - QChar::toLower((ushort)*s2)))
+        if ((res = (c = latin1_lowercased[*s1]) - latin1_lowercased[*s2]))
             return res;
         if (!c)                                // strings are equal
             break;
@@ -725,7 +786,7 @@ static inline char qToLower(char c)
     occurrences of a particular value with another, use one of the
     two-parameter replace() overloads.
 
-    {QByteArray}s can be compared using overloaded operators such as
+    \l{QByteArray}s can be compared using overloaded operators such as
     operator<(), operator<=(), operator==(), operator>=(), and so on.
     The comparison is based exclusively on the numeric values
     of the characters and is very fast, but is not what a human would
@@ -770,10 +831,19 @@ static inline char qToLower(char c)
     lastIndexOf(), operator<(), operator<=(), operator>(),
     operator>=(), toLower() and toUpper().
 
-    This issue does not apply to {QString}s since they represent
+    This issue does not apply to \l{QString}s since they represent
     characters using Unicode.
 
     \sa QString, QBitArray
+*/
+
+/*!
+    \variable QByteArray::MaxSize
+    \internal
+    \since 5.4
+
+    The maximum size of a QByteArray, in bytes. Also applies to a the maximum
+    storage size of QString and QVector, though not the number of elements.
 */
 
 /*!
@@ -799,44 +869,62 @@ static inline char qToLower(char c)
 
 /*! \fn QByteArray::iterator QByteArray::begin()
 
-    \internal
+    Returns an \l{STL-style iterators}{STL-style iterator} pointing to the first character in
+    the byte-array.
+
+    \sa constBegin(), end()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::begin() const
 
-    \internal
+    \overload begin()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::cbegin() const
     \since 5.0
 
-    \internal
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the first character
+    in the byte-array.
+
+    \sa begin(), cend()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::constBegin() const
 
-    \internal
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the first character
+    in the byte-array.
+
+    \sa begin(), constEnd()
 */
 
 /*! \fn QByteArray::iterator QByteArray::end()
 
-    \internal
+    Returns an \l{STL-style iterators}{STL-style iterator} pointing to the imaginary character
+    after the last character in the byte-array.
+
+    \sa begin(), constEnd()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::end() const
 
-    \internal
+    \overload end()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::cend() const
     \since 5.0
 
-    \internal
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the imaginary
+    character after the last character in the list.
+
+    \sa cbegin(), end()
 */
 
 /*! \fn QByteArray::const_iterator QByteArray::constEnd() const
 
-    \internal
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the imaginary
+    character after the last character in the list.
+
+    \sa constBegin(), end()
 */
 
 /*! \fn void QByteArray::push_back(const QByteArray &other)
@@ -915,7 +1003,7 @@ static inline char qToLower(char c)
     Assigns \a other to this byte array and returns a reference to
     this byte array.
 */
-QByteArray &QByteArray::operator=(const QByteArray & other)
+QByteArray &QByteArray::operator=(const QByteArray & other) Q_DECL_NOTHROW
 {
     other.d->ref.ref();
     if (!d->ref.deref())
@@ -1485,8 +1573,11 @@ void QByteArray::reallocData(uint alloc, Data::AllocationOptions options)
             Data::deallocate(d);
         d = x;
     } else {
-        if (options & Data::Grow)
+        if (options & Data::Grow) {
+            if (alloc > uint(MaxAllocSize) - uint(sizeof(Data)))
+                qBadAlloc();
             alloc = qAllocMore(alloc, sizeof(Data));
+        }
         Data *x = static_cast<Data *>(::realloc(d, sizeof(Data) + alloc));
         Q_CHECK_PTR(x);
         x->alloc = alloc;
@@ -2677,6 +2768,8 @@ QByteArray QByteArray::mid(int pos, int len) const
 }
 
 /*!
+    \fn QByteArray QByteArray::toLower() const
+
     Returns a lowercase copy of the byte array. The bytearray is
     interpreted as a Latin-1 encoded string.
 
@@ -2685,21 +2778,52 @@ QByteArray QByteArray::mid(int pos, int len) const
 
     \sa toUpper(), {8-bit Character Comparisons}
 */
-QByteArray QByteArray::toLower() const
+
+// prevent the compiler from inlining the function in each of
+// toLower and toUpper when the only difference is the table being used
+// (even with constant propagation, there's no gain in performance).
+template <typename T>
+Q_NEVER_INLINE
+static QByteArray toCase_template(T &input, const uchar * table)
 {
-    QByteArray s(*this);
-    uchar *p = reinterpret_cast<uchar *>(s.data());
-    uchar *e = reinterpret_cast<uchar *>(s.end());
-    if (p) {
-        while (p != e) {
-            *p = QChar::toLower((ushort)*p);
-            p++;
-        }
+    // find the first bad character in input
+    const char *orig_begin = input.constBegin();
+    const char *firstBad = orig_begin;
+    const char *e = input.constEnd();
+    for ( ; firstBad != e ; ++firstBad) {
+        uchar ch = uchar(*firstBad);
+        uchar converted = table[ch];
+        if (ch != converted)
+            break;
+    }
+
+    if (firstBad == e)
+        return qMove(input);
+
+    // transform the rest
+    QByteArray s = qMove(input);    // will copy if T is const QByteArray
+    char *b = s.begin();            // will detach if necessary
+    char *p = b + (firstBad - orig_begin);
+    e = b + s.size();
+    for ( ; p != e; ++p) {
+        *p = char(uchar(table[uchar(*p)]));
     }
     return s;
 }
 
+QByteArray QByteArray::toLower_helper(const QByteArray &a)
+{
+    return toCase_template(a, latin1_lowercased);
+}
+
+QByteArray QByteArray::toLower_helper(QByteArray &a)
+{
+    return toCase_template(a, latin1_lowercased);
+}
+
 /*!
+    \fn QByteArray QByteArray::toUpper() const
+
     Returns an uppercase copy of the byte array. The bytearray is
     interpreted as a Latin-1 encoded string.
 
@@ -2709,18 +2833,14 @@ QByteArray QByteArray::toLower() const
     \sa toLower(), {8-bit Character Comparisons}
 */
 
-QByteArray QByteArray::toUpper() const
+QByteArray QByteArray::toUpper_helper(const QByteArray &a)
 {
-    QByteArray s(*this);
-    uchar *p = reinterpret_cast<uchar *>(s.data());
-    uchar *e = reinterpret_cast<uchar *>(s.end());
-    if (p) {
-        while (p != e) {
-            *p = QChar::toUpper((ushort)*p);
-            p++;
-        }
-    }
-    return s;
+    return toCase_template(a, latin1_uppercased);
+}
+
+QByteArray QByteArray::toUpper_helper(QByteArray &a)
+{
+    return toCase_template(a, latin1_uppercased);
 }
 
 /*! \fn void QByteArray::clear()
@@ -3100,6 +3220,8 @@ QDataStream &operator>>(QDataStream &in, QByteArray &ba)
 */
 
 /*!
+    \fn QByteArray QByteArray::simplified() const
+
     Returns a byte array that has whitespace removed from the start
     and the end, and which has each sequence of internal whitespace
     replaced with a single space.
@@ -3114,32 +3236,19 @@ QDataStream &operator>>(QDataStream &in, QByteArray &ba)
 
     \sa trimmed()
 */
-QByteArray QByteArray::simplified() const
+QByteArray QByteArray::simplified_helper(const QByteArray &a)
 {
-    if (d->size == 0)
-        return *this;
-    QByteArray result(d->size, Qt::Uninitialized);
-    const char *from = d->data();
-    const char *fromend = from + d->size;
-    int outc=0;
-    char *to = result.d->data();
-    for (;;) {
-        while (from!=fromend && ascii_isspace(uchar(*from)))
-            from++;
-        while (from!=fromend && !ascii_isspace(uchar(*from)))
-            to[outc++] = *from++;
-        if (from!=fromend)
-            to[outc++] = ' ';
-        else
-            break;
-    }
-    if (outc > 0 && to[outc-1] == ' ')
-        outc--;
-    result.resize(outc);
-    return result;
+    return QStringAlgorithms<const QByteArray>::simplified_helper(a);
+}
+
+QByteArray QByteArray::simplified_helper(QByteArray &a)
+{
+    return QStringAlgorithms<QByteArray>::simplified_helper(a);
 }
 
 /*!
+    \fn QByteArray QByteArray::trimmed() const
+
     Returns a byte array that has whitespace removed from the start
     and the end.
 
@@ -3154,28 +3263,16 @@ QByteArray QByteArray::simplified() const
 
     \sa simplified()
 */
-QByteArray QByteArray::trimmed() const
+QByteArray QByteArray::trimmed_helper(const QByteArray &a)
 {
-    if (d->size == 0)
-        return *this;
-    const char *s = d->data();
-    if (!ascii_isspace(uchar(*s)) && !ascii_isspace(uchar(s[d->size-1])))
-        return *this;
-    int start = 0;
-    int end = d->size - 1;
-    while (start<=end && ascii_isspace(uchar(s[start])))  // skip white space from start
-        start++;
-    if (start <= end) {                          // only white space
-        while (end && ascii_isspace(uchar(s[end])))           // skip white space from end
-            end--;
-    }
-    int l = end - start + 1;
-    if (l <= 0) {
-        QByteArrayDataPtr empty = { Data::allocate(0) };
-        return QByteArray(empty);
-    }
-    return QByteArray(s+start, l);
+    return QStringAlgorithms<const QByteArray>::trimmed_helper(a);
 }
+
+QByteArray QByteArray::trimmed_helper(QByteArray &a)
+{
+    return QStringAlgorithms<QByteArray>::trimmed_helper(a);
+}
+
 
 /*!
     Returns a byte array of size \a width that contains this byte
@@ -3571,7 +3668,7 @@ QByteArray QByteArray::toBase64(Base64Options options) const
     const char padchar = '=';
     int padlen = 0;
 
-    QByteArray tmp((d->size * 4) / 3 + 3, Qt::Uninitialized);
+    QByteArray tmp((d->size + 2) / 3 * 4, Qt::Uninitialized);
 
     int i = 0;
     char *out = tmp.data();
@@ -3609,8 +3706,9 @@ QByteArray QByteArray::toBase64(Base64Options options) const
             *out++ = alphabet[m];
         }
     }
-
-    tmp.truncate(out - tmp.data());
+    Q_ASSERT((options & OmitTrailingEquals) || (out == tmp.size() + tmp.data()));
+    if (options & OmitTrailingEquals)
+        tmp.truncate(out - tmp.data());
     return tmp;
 }
 
@@ -3934,7 +4032,7 @@ QByteArray QByteArray::fromRawData(const char *data, int size)
     copies of it exist that have not been modified.
 
     This function can be used instead of fromRawData() to re-use
-    existings QByteArray objects to save memory re-allocations.
+    existing QByteArray objects to save memory re-allocations.
 
     \sa fromRawData(), data(), constData()
 */
@@ -4051,15 +4149,9 @@ QByteArray QByteArray::fromHex(const QByteArray &hexEncoded)
 
     bool odd_digit = true;
     for (int i = hexEncoded.size() - 1; i >= 0; --i) {
-        int ch = hexEncoded.at(i);
-        int tmp;
-        if (ch >= '0' && ch <= '9')
-            tmp = ch - '0';
-        else if (ch >= 'a' && ch <= 'f')
-            tmp = ch - 'a' + 10;
-        else if (ch >= 'A' && ch <= 'F')
-            tmp = ch - 'A' + 10;
-        else
+        uchar ch = uchar(hexEncoded.at(i));
+        int tmp = QtMiscUtils::fromHex(ch);
+        if (tmp == -1)
             continue;
         if (odd_digit) {
             --result;
@@ -4087,16 +4179,8 @@ QByteArray QByteArray::toHex() const
     char *hexData = hex.data();
     const uchar *data = (const uchar *)d->data();
     for (int i = 0; i < d->size; ++i) {
-        int j = (data[i] >> 4) & 0xf;
-        if (j <= 9)
-            hexData[i*2] = (j + '0');
-         else
-            hexData[i*2] = (j + 'a' - 10);
-        j = data[i] & 0xf;
-        if (j <= 9)
-            hexData[i*2+1] = (j + '0');
-         else
-            hexData[i*2+1] = (j + 'a' - 10);
+        hexData[i*2] = QtMiscUtils::toHexLower(data[i] >> 4);
+        hexData[i*2+1] = QtMiscUtils::toHexLower(data[i] & 0xf);
     }
     return hex;
 }
@@ -4291,12 +4375,6 @@ static inline bool q_strchr(const char str[], char chr)
     return false;
 }
 
-static inline char toHexHelper(char c)
-{
-    static const char hexnumbers[] = "0123456789ABCDEF";
-    return hexnumbers[c & 0xf];
-}
-
 static void q_toPercentEncoding(QByteArray *ba, const char *dontEncode, const char *alsoEncode, char percent)
 {
     if (ba->isEmpty())
@@ -4329,8 +4407,8 @@ static void q_toPercentEncoding(QByteArray *ba, const char *dontEncode, const ch
                 output = ba->data();
             }
             output[length++] = percent;
-            output[length++] = toHexHelper((c & 0xf0) >> 4);
-            output[length++] = toHexHelper(c & 0xf);
+            output[length++] = QtMiscUtils::toHexUpper((c & 0xf0) >> 4);
+            output[length++] = QtMiscUtils::toHexUpper(c & 0xf);
         }
     }
     if (output)

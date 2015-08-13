@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -93,6 +93,7 @@ private slots:
     void task219380_removeLastRow();
     void task262056_sortDuplicate();
     void itemWithHeaderItems();
+    void mimeData();
 
 private:
     QTableWidget *testWidget;
@@ -280,21 +281,21 @@ void tst_QTableWidget::itemAssignment()
 {
     QTableWidgetItem itemInWidget("inWidget");
     testWidget->setItem(0, 0, &itemInWidget);
-    itemInWidget.setFlags(itemInWidget.flags() | Qt::ItemIsTristate);
+    itemInWidget.setFlags(itemInWidget.flags() | Qt::ItemIsUserTristate);
     QTableWidgetItem itemOutsideWidget("outsideWidget");
 
     QVERIFY(itemInWidget.tableWidget());
     QCOMPARE(itemInWidget.text(), QString("inWidget"));
-    QVERIFY(itemInWidget.flags() & Qt::ItemIsTristate);
+    QVERIFY(itemInWidget.flags() & Qt::ItemIsUserTristate);
 
     QVERIFY(!itemOutsideWidget.tableWidget());
     QCOMPARE(itemOutsideWidget.text(), QString("outsideWidget"));
-    QVERIFY(!(itemOutsideWidget.flags() & Qt::ItemIsTristate));
+    QVERIFY(!(itemOutsideWidget.flags() & Qt::ItemIsUserTristate));
 
     itemOutsideWidget = itemInWidget;
     QVERIFY(!itemOutsideWidget.tableWidget());
     QCOMPARE(itemOutsideWidget.text(), QString("inWidget"));
-    QVERIFY(itemOutsideWidget.flags() & Qt::ItemIsTristate);
+    QVERIFY(itemOutsideWidget.flags() & Qt::ItemIsUserTristate);
 }
 
 void tst_QTableWidget::item_data()
@@ -1495,6 +1496,73 @@ void tst_QTableWidget::itemWithHeaderItems()
     table.setItem(1, 0, item1_0);
 
     QCOMPARE(table.item(0, 1), static_cast<QTableWidgetItem *>(0));
+}
+
+class TestTableWidget : public QTableWidget
+{
+    Q_OBJECT
+public:
+    TestTableWidget(int rows, int columns, QWidget *parent = 0)
+        : QTableWidget(rows, columns, parent)
+    {
+    }
+
+    using QTableWidget::mimeData;
+    using QTableWidget::indexFromItem;
+};
+
+void tst_QTableWidget::mimeData()
+{
+    TestTableWidget table(10, 10);
+
+    for (int x = 0; x < 10; ++x) {
+        for (int y = 0; y < 10; ++y) {
+            QTableWidgetItem *item = new QTableWidgetItem(QStringLiteral("123"));
+            table.setItem(y, x, item);
+        }
+    }
+
+    QList<QTableWidgetItem *> tableWidgetItemList;
+    QModelIndexList modelIndexList;
+
+    // do these checks more than once to ensure that the "cached indexes" work as expected
+    QVERIFY(!table.mimeData(tableWidgetItemList));
+    QVERIFY(!table.model()->mimeData(modelIndexList));
+    QVERIFY(!table.model()->mimeData(modelIndexList));
+    QVERIFY(!table.mimeData(tableWidgetItemList));
+
+    tableWidgetItemList << table.item(1, 1);
+    modelIndexList << table.indexFromItem(table.item(1, 1));
+
+    QMimeData *data;
+
+    QVERIFY(data = table.mimeData(tableWidgetItemList));
+    delete data;
+
+    QVERIFY(data = table.model()->mimeData(modelIndexList));
+    delete data;
+
+    QVERIFY(data = table.model()->mimeData(modelIndexList));
+    delete data;
+
+    QVERIFY(data = table.mimeData(tableWidgetItemList));
+    delete data;
+
+    // check the saved data is actually the same
+
+    QMimeData *data2;
+
+    data = table.mimeData(tableWidgetItemList);
+    data2 = table.model()->mimeData(modelIndexList);
+
+    const QString format = QStringLiteral("application/x-qabstractitemmodeldatalist");
+
+    QVERIFY(data->hasFormat(format));
+    QVERIFY(data2->hasFormat(format));
+    QVERIFY(data->data(format) == data2->data(format));
+
+    delete data;
+    delete data2;
 }
 
 QTEST_MAIN(tst_QTableWidget)

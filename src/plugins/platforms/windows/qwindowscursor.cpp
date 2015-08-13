@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -126,13 +126,15 @@ HCURSOR QWindowsCursor::createPixmapCursor(const QPixmap &pixmap, const QPoint &
 
 // Create a cursor from image and mask of the format QImage::Format_Mono.
 static HCURSOR createBitmapCursor(const QImage &bbits, const QImage &mbits,
-                                  QPoint hotSpot = QPoint(),
+                                  QPoint hotSpot = QPoint(-1, -1),
                                   bool invb = false, bool invm = false)
 {
     const int width = bbits.width();
     const int height = bbits.height();
-    if (hotSpot.isNull())
-        hotSpot = QPoint(width / 2, height / 2);
+    if (hotSpot.x() < 0)
+        hotSpot.setX(width / 2);
+    if (hotSpot.y() < 0)
+        hotSpot.setY(height / 2);
     const int n = qMax(1, width / 8);
 #if !defined(Q_OS_WINCE)
     QScopedArrayPointer<uchar> xBits(new uchar[height * n]);
@@ -570,8 +572,21 @@ QWindowsWindowCursor QWindowsCursor::pixmapWindowCursor(const QCursor &c)
 {
     const  QWindowsCursorCacheKey cacheKey(c);
     CursorCache::iterator it = m_cursorCache.find(cacheKey);
-    if (it == m_cursorCache.end())
+    if (it == m_cursorCache.end()) {
+        if (m_cursorCache.size() > 50) {
+            // Prevent the cursor cache from growing indefinitely hitting GDI resource
+            // limits if new pixmap cursors are created repetitively by purging out
+            // all-noncurrent pixmap cursors (QTBUG-43515)
+            const HCURSOR currentCursor = GetCursor();
+            for (it = m_cursorCache.begin(); it != m_cursorCache.end() ; ) {
+                if (it.key().bitmapCacheKey && it.value().handle() != currentCursor)
+                    it = m_cursorCache.erase(it);
+                else
+                    ++it;
+            }
+        }
         it = m_cursorCache.insert(cacheKey, QWindowsWindowCursor(c));
+    }
     return it.value();
 }
 

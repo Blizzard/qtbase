@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -384,6 +384,26 @@ QMimeData* QAbstractProxyModel::mimeData(const QModelIndexList &indexes) const
     return d->model->mimeData(list);
 }
 
+void QAbstractProxyModelPrivate::mapDropCoordinatesToSource(int row, int column, const QModelIndex &parent,
+                                                            int *sourceRow, int *sourceColumn, QModelIndex *sourceParent) const
+{
+    Q_Q(const QAbstractProxyModel);
+    *sourceRow = -1;
+    *sourceColumn = -1;
+    if (row == -1 && column == -1) {
+        *sourceParent = q->mapToSource(parent);
+    } else if (row == q->rowCount(parent)) {
+        *sourceParent = q->mapToSource(parent);
+        *sourceRow = model->rowCount(*sourceParent);
+    } else {
+        QModelIndex proxyIndex = q->index(row, column, parent);
+        QModelIndex sourceIndex = q->mapToSource(proxyIndex);
+        *sourceRow = sourceIndex.row();
+        *sourceColumn = sourceIndex.column();
+        *sourceParent = sourceIndex.parent();
+    }
+}
+
 /*!
     \reimp
     \since 5.4
@@ -392,8 +412,11 @@ bool QAbstractProxyModel::canDropMimeData(const QMimeData *data, Qt::DropAction 
                                           int row, int column, const QModelIndex &parent) const
 {
     Q_D(const QAbstractProxyModel);
-    const QModelIndex source = mapToSource(index(row, column, parent));
-    return d->model->canDropMimeData(data, action, source.row(), source.column(), source.parent());
+    int sourceDestinationRow;
+    int sourceDestinationColumn;
+    QModelIndex sourceParent;
+    d->mapDropCoordinatesToSource(row, column, parent, &sourceDestinationRow, &sourceDestinationColumn, &sourceParent);
+    return d->model->canDropMimeData(data, action, sourceDestinationRow, sourceDestinationColumn, sourceParent);
 }
 
 /*!
@@ -404,8 +427,11 @@ bool QAbstractProxyModel::dropMimeData(const QMimeData *data, Qt::DropAction act
                                        int row, int column, const QModelIndex &parent)
 {
     Q_D(QAbstractProxyModel);
-    const QModelIndex source = mapToSource(index(row, column, parent));
-    return d->model->dropMimeData(data, action, source.row(), source.column(), source.parent());
+    int sourceDestinationRow;
+    int sourceDestinationColumn;
+    QModelIndex sourceParent;
+    d->mapDropCoordinatesToSource(row, column, parent, &sourceDestinationRow, &sourceDestinationColumn, &sourceParent);
+    return d->model->dropMimeData(data, action, sourceDestinationRow, sourceDestinationColumn, sourceParent);
 }
 
 /*!

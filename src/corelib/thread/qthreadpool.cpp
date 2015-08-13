@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -50,7 +50,7 @@ class QThreadPoolThread : public QThread
 {
 public:
     QThreadPoolThread(QThreadPoolPrivate *manager);
-    void run();
+    void run() Q_DECL_OVERRIDE;
     void registerThreadInactive();
 
     QWaitCondition runnableReady;
@@ -311,14 +311,12 @@ void QThreadPoolPrivate::clear()
 /*!
     \internal
     Searches for \a runnable in the queue, removes it from the queue and
-    runs it if found. This function does not return until the runnable
-    has completed.
+    returns \c true if it was found in the queue
 */
-void QThreadPoolPrivate::stealRunnable(QRunnable *runnable)
+bool QThreadPoolPrivate::stealRunnable(QRunnable *runnable)
 {
     if (runnable == 0)
-        return;
-    bool found = false;
+        return false;
     {
         QMutexLocker locker(&mutex);
         QList<QPair<QRunnable *, int> >::iterator it = queue.begin();
@@ -326,17 +324,26 @@ void QThreadPoolPrivate::stealRunnable(QRunnable *runnable)
 
         while (it != end) {
             if (it->first == runnable) {
-                found = true;
                 queue.erase(it);
-                break;
+                return true;
             }
             ++it;
         }
     }
 
-    if (!found)
-        return;
+    return false;
+}
 
+    /*!
+     \internal
+     Searches for \a runnable in the queue, removes it from the queue and
+     runs it if found. This function does not return until the runnable
+     has completed.
+     */
+void QThreadPoolPrivate::stealAndRunRunnable(QRunnable *runnable)
+{
+    if (!stealRunnable(runnable))
+        return;
     const bool autoDelete = runnable->autoDelete();
     bool del = autoDelete && !--runnable->ref;
 
@@ -626,6 +633,25 @@ void QThreadPool::clear()
 {
     Q_D(QThreadPool);
     d->clear();
+}
+
+/*!
+    \since 5.5
+
+    Removes the specified \a runnable from the queue if it is not yet started.
+    The runnables for which \l{QRunnable::autoDelete()}{runnable->autoDelete()}
+    returns \c true are deleted.
+
+    \sa start()
+*/
+void QThreadPool::cancel(QRunnable *runnable)
+{
+    Q_D(QThreadPool);
+    if (!d->stealRunnable(runnable))
+        return;
+    if (runnable->autoDelete() && !--runnable->ref) {
+        delete runnable;
+    }
 }
 
 QT_END_NAMESPACE

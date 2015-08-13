@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,6 +69,8 @@ enum EngineMode {
 QT_BEGIN_NAMESPACE
 
 #define GL_STENCIL_HIGH_BIT         GLuint(0x80)
+#define QT_UNKNOWN_TEXTURE_UNIT     GLuint(-1)
+#define QT_DEFAULT_TEXTURE_UNIT     GLuint(0)
 #define QT_BRUSH_TEXTURE_UNIT       GLuint(0)
 #define QT_IMAGE_TEXTURE_UNIT       GLuint(0) //Can be the same as brush texture unit
 #define QT_MASK_TEXTURE_UNIT        GLuint(1)
@@ -104,37 +106,37 @@ public:
     QOpenGL2PaintEngineEx();
     ~QOpenGL2PaintEngineEx();
 
-    bool begin(QPaintDevice *device);
+    bool begin(QPaintDevice *device) Q_DECL_OVERRIDE;
     void ensureActive();
-    bool end();
+    bool end() Q_DECL_OVERRIDE;
 
-    virtual void clipEnabledChanged();
-    virtual void penChanged();
-    virtual void brushChanged();
-    virtual void brushOriginChanged();
-    virtual void opacityChanged();
-    virtual void compositionModeChanged();
-    virtual void renderHintsChanged();
-    virtual void transformChanged();
+    virtual void clipEnabledChanged() Q_DECL_OVERRIDE;
+    virtual void penChanged() Q_DECL_OVERRIDE;
+    virtual void brushChanged() Q_DECL_OVERRIDE;
+    virtual void brushOriginChanged() Q_DECL_OVERRIDE;
+    virtual void opacityChanged() Q_DECL_OVERRIDE;
+    virtual void compositionModeChanged() Q_DECL_OVERRIDE;
+    virtual void renderHintsChanged() Q_DECL_OVERRIDE;
+    virtual void transformChanged() Q_DECL_OVERRIDE;
 
-    virtual void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr);
+    virtual void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr) Q_DECL_OVERRIDE;
     virtual void drawPixmapFragments(const QPainter::PixmapFragment *fragments, int fragmentCount, const QPixmap &pixmap,
-                                     QPainter::PixmapFragmentHints hints);
+                                     QPainter::PixmapFragmentHints hints) Q_DECL_OVERRIDE;
     virtual void drawImage(const QRectF &r, const QImage &pm, const QRectF &sr,
-                           Qt::ImageConversionFlags flags = Qt::AutoColor);
-    virtual void drawTextItem(const QPointF &p, const QTextItem &textItem);
-    virtual void fill(const QVectorPath &path, const QBrush &brush);
-    virtual void stroke(const QVectorPath &path, const QPen &pen);
-    virtual void clip(const QVectorPath &path, Qt::ClipOperation op);
+                           Qt::ImageConversionFlags flags = Qt::AutoColor) Q_DECL_OVERRIDE;
+    virtual void drawTextItem(const QPointF &p, const QTextItem &textItem) Q_DECL_OVERRIDE;
+    virtual void fill(const QVectorPath &path, const QBrush &brush) Q_DECL_OVERRIDE;
+    virtual void stroke(const QVectorPath &path, const QPen &pen) Q_DECL_OVERRIDE;
+    virtual void clip(const QVectorPath &path, Qt::ClipOperation op) Q_DECL_OVERRIDE;
 
-    virtual void drawStaticTextItem(QStaticTextItem *textItem);
+    virtual void drawStaticTextItem(QStaticTextItem *textItem) Q_DECL_OVERRIDE;
 
     bool drawTexture(const QRectF &r, GLuint textureId, const QSize &size, const QRectF &sr);
 
-    Type type() const { return OpenGL2; }
+    Type type() const Q_DECL_OVERRIDE { return OpenGL2; }
 
-    virtual void setState(QPainterState *s);
-    virtual QPainterState *createState(QPainterState *orig) const;
+    virtual void setState(QPainterState *s) Q_DECL_OVERRIDE;
+    virtual QPainterState *createState(QPainterState *orig) const Q_DECL_OVERRIDE;
     inline QOpenGL2PaintEngineState *state() {
         return static_cast<QOpenGL2PaintEngineState *>(QPaintEngineEx::state());
     }
@@ -142,16 +144,16 @@ public:
         return static_cast<const QOpenGL2PaintEngineState *>(QPaintEngineEx::state());
     }
 
-    void beginNativePainting();
-    void endNativePainting();
+    void beginNativePainting() Q_DECL_OVERRIDE;
+    void endNativePainting() Q_DECL_OVERRIDE;
 
     void invalidateState();
 
     void setRenderTextActive(bool);
 
     bool isNativePaintingActive() const;
-    bool requiresPretransformedGlyphPositions(QFontEngine *, const QTransform &) const { return false; }
-    bool shouldDrawCachedGlyphs(QFontEngine *, const QTransform &) const;
+    bool requiresPretransformedGlyphPositions(QFontEngine *, const QTransform &) const Q_DECL_OVERRIDE { return false; }
+    bool shouldDrawCachedGlyphs(QFontEngine *, const QTransform &) const Q_DECL_OVERRIDE;
 
 private:
     Q_DISABLE_COPY(QOpenGL2PaintEngineEx)
@@ -184,7 +186,7 @@ public:
             snapToPixelGrid(false),
             nativePaintingActive(false),
             inverseScale(1),
-            lastMaskTextureUsed(0)
+            lastTextureUnitUsed(QT_UNKNOWN_TEXTURE_UNIT)
     { }
 
     ~QOpenGL2PaintEngineExPrivate();
@@ -193,7 +195,13 @@ public:
     void updateBrushUniforms();
     void updateMatrix();
     void updateCompositionMode();
-    void updateTextureFilter(GLenum target, GLenum wrapMode, bool smoothPixmapTransform, GLuint id = GLuint(-1));
+
+    enum TextureUpdateMode { UpdateIfNeeded, ForceUpdate };
+    template<typename T>
+    void updateTexture(GLenum textureUnit, const T &texture, GLenum wrapMode, GLenum filterMode, TextureUpdateMode updateMode = UpdateIfNeeded);
+    template<typename T>
+    GLuint bindTexture(const T &texture);
+    void activateTextureUnit(GLenum textureUnit);
 
     void resetGLState();
 
@@ -242,7 +250,7 @@ public:
     void updateClipScissorTest();
     void setScissor(const QRect &rect);
     void regenerateClip();
-    void systemStateChanged();
+    void systemStateChanged() Q_DECL_OVERRIDE;
 
     void setVertexAttribArrayEnabled(int arrayIndex, bool enabled = true);
     void syncGlState();
@@ -295,8 +303,8 @@ public:
     GLfloat pmvMatrix[3][3];
     GLfloat inverseScale;
 
+    GLenum lastTextureUnitUsed;
     GLuint lastTextureUsed;
-    GLuint lastMaskTextureUsed;
 
     bool needsSync;
     bool multisamplingAlwaysEnabled;

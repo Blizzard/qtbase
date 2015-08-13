@@ -1,8 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2014 Governikus GmbH & Co. KG.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -11,9 +12,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +25,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,6 +37,7 @@
 #include <QtNetwork/qsslsocket.h>
 #include <QtCore/qmutex.h>
 
+#include "private/qssl_p.h"
 #include "private/qsslcontext_openssl_p.h"
 #include "private/qsslsocket_p.h"
 #include "private/qsslsocket_openssl_p.h"
@@ -47,49 +49,18 @@ QT_BEGIN_NAMESPACE
 extern int q_X509Callback(int ok, X509_STORE_CTX *ctx);
 extern QString getErrorsFromOpenSsl();
 
-// Default DH params
-// 1024-bit MODP Group with 160-bit Prime Order Subgroup
-// From RFC 5114
-static unsigned const char dh1024_p[]={
-    0xB1,0x0B,0x8F,0x96,0xA0,0x80,0xE0,0x1D,0xDE,0x92,0xDE,0x5E,
-    0xAE,0x5D,0x54,0xEC,0x52,0xC9,0x9F,0xBC,0xFB,0x06,0xA3,0xC6,
-    0x9A,0x6A,0x9D,0xCA,0x52,0xD2,0x3B,0x61,0x60,0x73,0xE2,0x86,
-    0x75,0xA2,0x3D,0x18,0x98,0x38,0xEF,0x1E,0x2E,0xE6,0x52,0xC0,
-    0x13,0xEC,0xB4,0xAE,0xA9,0x06,0x11,0x23,0x24,0x97,0x5C,0x3C,
-    0xD4,0x9B,0x83,0xBF,0xAC,0xCB,0xDD,0x7D,0x90,0xC4,0xBD,0x70,
-    0x98,0x48,0x8E,0x9C,0x21,0x9A,0x73,0x72,0x4E,0xFF,0xD6,0xFA,
-    0xE5,0x64,0x47,0x38,0xFA,0xA3,0x1A,0x4F,0xF5,0x5B,0xCC,0xC0,
-    0xA1,0x51,0xAF,0x5F,0x0D,0xC8,0xB4,0xBD,0x45,0xBF,0x37,0xDF,
-    0x36,0x5C,0x1A,0x65,0xE6,0x8C,0xFD,0xA7,0x6D,0x4D,0xA7,0x08,
-    0xDF,0x1F,0xB2,0xBC,0x2E,0x4A,0x43,0x71
-};
-
-static unsigned const char dh1024_g[]={
-    0xA4,0xD1,0xCB,0xD5,0xC3,0xFD,0x34,0x12,0x67,0x65,0xA4,0x42,
-    0xEF,0xB9,0x99,0x05,0xF8,0x10,0x4D,0xD2,0x58,0xAC,0x50,0x7F,
-    0xD6,0x40,0x6C,0xFF,0x14,0x26,0x6D,0x31,0x26,0x6F,0xEA,0x1E,
-    0x5C,0x41,0x56,0x4B,0x77,0x7E,0x69,0x0F,0x55,0x04,0xF2,0x13,
-    0x16,0x02,0x17,0xB4,0xB0,0x1B,0x88,0x6A,0x5E,0x91,0x54,0x7F,
-    0x9E,0x27,0x49,0xF4,0xD7,0xFB,0xD7,0xD3,0xB9,0xA9,0x2E,0xE1,
-    0x90,0x9D,0x0D,0x22,0x63,0xF8,0x0A,0x76,0xA6,0xA2,0x4C,0x08,
-    0x7A,0x09,0x1F,0x53,0x1D,0xBF,0x0A,0x01,0x69,0xB6,0xA2,0x8A,
-    0xD6,0x62,0xA4,0xD1,0x8E,0x73,0xAF,0xA3,0x2D,0x77,0x9D,0x59,
-    0x18,0xD0,0x8B,0xC8,0x85,0x8F,0x4D,0xCE,0xF9,0x7C,0x2A,0x24,
-    0x85,0x5E,0x6E,0xEB,0x22,0xB3,0xB2,0xE5
-};
-
 static DH *get_dh1024()
 {
-    DH *dh = q_DH_new();
-    if (!dh)
-        return 0;
+    // Default DH params
+    // 1024-bit MODP Group
+    // From RFC 2409
+    QByteArray params = QByteArray::fromBase64(
+       QByteArrayLiteral("MIGHAoGBAP//////////yQ/aoiFowjTExmKLgNwc0SkCTgiKZ8x0Agu+pjsTmyJR" \
+                         "Sgh5jjQE3e+VGbPNOkMbMCsKbfJfFDdP4TVtbVHCReSFtXZiXn7G9ExC6aY37WsL" \
+                         "/1y29Aa37e44a/taiZ+lrp8kEXxLH+ZJKGZR7OZTgf//////////AgEC"));
 
-    dh->p = q_BN_bin2bn(dh1024_p, sizeof(dh1024_p), 0);
-    dh->g = q_BN_bin2bn(dh1024_g, sizeof(dh1024_g), 0);
-    if (!dh->p || !dh->g) {
-        q_DH_free(dh);
-        return 0;
-    }
+    const char *ptr = params.constData();
+    DH *dh = q_d2i_DHparams(NULL, reinterpret_cast<const unsigned char **>(&ptr), params.length());
 
     return dh;
 }
@@ -115,6 +86,11 @@ QSslContext::~QSslContext()
         q_SSL_SESSION_free(session);
 }
 
+static inline QString msgErrorSettingEllipticCurves(const QString &why)
+{
+    return QSslSocket::tr("Error when setting the elliptic curves (%1)").arg(why);
+}
+
 QSslContext* QSslContext::fromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
 {
     QSslContext *sslContext = new QSslContext();
@@ -137,7 +113,13 @@ init_context:
 #endif
         break;
     case QSsl::SslV3:
+#ifndef OPENSSL_NO_SSL3_METHOD
         sslContext->ctx = q_SSL_CTX_new(client ? q_SSLv3_client_method() : q_SSLv3_server_method());
+#else
+        // SSL 3 not supported by the system, but chosen deliberately -> error
+        sslContext->ctx = 0;
+        unsupportedProtocol = true;
+#endif
         break;
     case QSsl::SecureProtocols:
         // SSLv2 and SSLv3 will be disabled by SSL options
@@ -169,7 +151,23 @@ init_context:
         unsupportedProtocol = true;
 #endif
         break;
+    case QSsl::TlsV1_0OrLater:
+        // Specific protocols will be specified via SSL options.
+        sslContext->ctx = q_SSL_CTX_new(client ? q_SSLv23_client_method() : q_SSLv23_server_method());
+        break;
+    case QSsl::TlsV1_1OrLater:
+    case QSsl::TlsV1_2OrLater:
+#if OPENSSL_VERSION_NUMBER >= 0x10001000L
+        // Specific protocols will be specified via SSL options.
+        sslContext->ctx = q_SSL_CTX_new(client ? q_SSLv23_client_method() : q_SSLv23_server_method());
+#else
+        // TLS 1.1/1.2 not supported by the system, but chosen deliberately -> error
+        sslContext->ctx = 0;
+        unsupportedProtocol = true;
+#endif
+        break;
     }
+
     if (!sslContext->ctx) {
         // After stopping Flash 10 the SSL library looses its ciphers. Try re-adding them
         // by re-initializing the library.
@@ -199,7 +197,7 @@ init_context:
 
     // Initialize ciphers
     QByteArray cipherString;
-    int first = true;
+    bool first = true;
     QList<QSslCipher> ciphers = sslContext->sslConfiguration.ciphers();
     if (ciphers.isEmpty())
         ciphers = QSslSocketPrivate::defaultCiphers();
@@ -231,7 +229,7 @@ init_context:
         //
         // See also: QSslSocketBackendPrivate::verify()
         if (caCertificate.expiryDate() >= QDateTime::currentDateTime()) {
-            q_X509_STORE_add_cert(sslContext->ctx->cert_store, (X509 *)caCertificate.handle());
+            q_X509_STORE_add_cert(q_SSL_CTX_get_cert_store(sslContext->ctx), (X509 *)caCertificate.handle());
         }
     }
 
@@ -267,8 +265,12 @@ init_context:
             // take ownership of the RSA/DSA key instance because the QSslKey already has ownership.
             if (configuration.d->privateKey.algorithm() == QSsl::Rsa)
                 q_EVP_PKEY_set1_RSA(sslContext->pkey, reinterpret_cast<RSA *>(configuration.d->privateKey.handle()));
-            else
+            else if (configuration.d->privateKey.algorithm() == QSsl::Dsa)
                 q_EVP_PKEY_set1_DSA(sslContext->pkey, reinterpret_cast<DSA *>(configuration.d->privateKey.handle()));
+#ifndef OPENSSL_NO_EC
+            else if (configuration.d->privateKey.algorithm() == QSsl::Ec)
+                q_EVP_PKEY_set1_EC_KEY(sslContext->pkey, reinterpret_cast<EC_KEY *>(configuration.d->privateKey.handle()));
+#endif
         }
 
         if (!q_SSL_CTX_use_PrivateKey(sslContext->ctx, sslContext->pkey)) {
@@ -320,17 +322,49 @@ init_context:
     q_DH_free(dh);
 
 #ifndef OPENSSL_NO_EC
-    // Set temp ECDH params
-    EC_KEY *ecdh = 0;
-    ecdh = q_EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-    q_SSL_CTX_set_tmp_ecdh(sslContext->ctx, ecdh);
-    q_EC_KEY_free(ecdh);
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    if (q_SSLeay() >= 0x10002000L) {
+        q_SSL_CTX_ctrl(sslContext->ctx, SSL_CTRL_SET_ECDH_AUTO, 1, NULL);
+    } else
+#endif
+    {
+        // Set temp ECDH params
+        EC_KEY *ecdh = 0;
+        ecdh = q_EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+        q_SSL_CTX_set_tmp_ecdh(sslContext->ctx, ecdh);
+        q_EC_KEY_free(ecdh);
+    }
 #endif // OPENSSL_NO_EC
+
+    const QVector<QSslEllipticCurve> qcurves = sslContext->sslConfiguration.ellipticCurves();
+    if (!qcurves.isEmpty()) {
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(OPENSSL_NO_EC)
+        // Set the curves to be used
+        if (q_SSLeay() >= 0x10002000L) {
+            // SSL_CTX_ctrl wants a non-const pointer as last argument,
+            // but let's avoid a copy into a temporary array
+            if (!q_SSL_CTX_ctrl(sslContext->ctx,
+                                SSL_CTRL_SET_CURVES,
+                                qcurves.size(),
+                                const_cast<int *>(reinterpret_cast<const int *>(qcurves.data())))) {
+                sslContext->errorStr = msgErrorSettingEllipticCurves(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
+                sslContext->errorCode = QSslError::UnspecifiedError;
+                return sslContext;
+            }
+        } else
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(OPENSSL_NO_EC)
+        {
+            // specific curves requested, but not possible to set -> error
+            sslContext->errorStr = msgErrorSettingEllipticCurves(QSslSocket::tr("OpenSSL version too old, need at least v1.0.2"));
+            sslContext->errorCode = QSslError::UnspecifiedError;
+            return sslContext;
+        }
+    }
 
     return sslContext;
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
+#if OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_NEXTPROTONEG)
 
 static int next_proto_cb(SSL *, unsigned char **out, unsigned char *outlen,
                          const unsigned char *in, unsigned int inlen, void *arg)
@@ -357,7 +391,7 @@ static int next_proto_cb(SSL *, unsigned char **out, unsigned char *outlen,
         ctx->status = QSslConfiguration::NextProtocolNegotiationUnsupported;
         break;
     default:
-        qWarning("OpenSSL sent unknown NPN status");
+        qCWarning(lcSsl, "OpenSSL sent unknown NPN status");
     }
 
     return SSL_TLSEXT_ERR_OK;
@@ -384,20 +418,20 @@ SSL* QSslContext::createSsl()
     if (session) {
         // Try to resume the last session we cached
         if (!q_SSL_set_session(ssl, session)) {
-            qWarning("could not set SSL session");
+            qCWarning(lcSsl, "could not set SSL session");
             q_SSL_SESSION_free(session);
             session = 0;
         }
     }
 
-#if OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
+#if OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_NEXTPROTONEG)
     QList<QByteArray> protocols = sslConfiguration.d->nextAllowedProtocols;
     if (!protocols.isEmpty()) {
         m_supportedNPNVersions.clear();
         for (int a = 0; a < protocols.count(); ++a) {
             if (protocols.at(a).size() > 255) {
-                qWarning() << "TLS NPN extension" << protocols.at(a)
-                           << "is too long and will be truncated to 255 characters.";
+                qCWarning(lcSsl) << "TLS NPN extension" << protocols.at(a)
+                                 << "is too long and will be truncated to 255 characters.";
                 protocols[a] = protocols.at(a).left(255);
             }
             m_supportedNPNVersions.append(protocols.at(a).size()).append(protocols.at(a));
@@ -433,7 +467,7 @@ bool QSslContext::cacheSession(SSL* ssl)
             m_sessionASN1.resize(sessionSize);
             unsigned char *data = reinterpret_cast<unsigned char *>(m_sessionASN1.data());
             if (!q_i2d_SSL_SESSION(session, &data))
-                qWarning("could not store persistent version of SSL session");
+                qCWarning(lcSsl, "could not store persistent version of SSL session");
             m_sessionTicketLifeTimeHint = session->tlsext_tick_lifetime_hint;
         }
     }

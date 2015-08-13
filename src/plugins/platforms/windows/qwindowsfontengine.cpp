@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -194,10 +194,10 @@ void QWindowsFontEngine::getCMap()
     _faceId.index = 0;
     if(cmap) {
         OUTLINETEXTMETRIC *otm = getOutlineTextMetric(hdc);
-        designToDevice = QFixed((int)otm->otmEMSquare)/int(otm->otmTextMetrics.tmHeight);
+        designToDevice = QFixed((int)otm->otmEMSquare)/QFixed::fromReal(fontDef.pixelSize);
         unitsPerEm = otm->otmEMSquare;
         x_height = (int)otm->otmsXHeight;
-        loadKerningPairs(designToDevice);
+        loadKerningPairs(QFixed((int)otm->otmEMSquare)/int(otm->otmTextMetrics.tmHeight));
         _faceId.filename = QFile::encodeName(QString::fromWCharArray((wchar_t *)((char *)otm + (quintptr)otm->otmpFullName)));
         lineWidth = otm->otmsUnderscoreSize;
         fsType = otm->otmfsType;
@@ -239,7 +239,7 @@ int QWindowsFontEngine::getGlyphIndexes(const QChar *str, int numChars, QGlyphLa
             while (it.hasNext()) {
                 const uint uc = it.next();
                 if (
-#ifdef Q_WS_WINCE
+#ifdef Q_DEAD_CODE_FROM_QT4_WINCE
                     tm.tmFirstChar > 60000 ||
 #endif
                          uc >= first && uc <= last)
@@ -264,14 +264,13 @@ int QWindowsFontEngine::getGlyphIndexes(const QChar *str, int numChars, QGlyphLa
 */
 
 QWindowsFontEngine::QWindowsFontEngine(const QString &name,
-                               HFONT _hfont, bool stockFontIn, LOGFONT lf,
+                                       LOGFONT lf,
                                const QSharedPointer<QWindowsFontEngineData> &fontEngineData)
     : QFontEngine(Win),
     m_fontEngineData(fontEngineData),
     _name(name),
-    hfont(_hfont),
+    hfont(0),
     m_logfont(lf),
-    stockFont(stockFontIn),
     ttf(0),
     hasOutline(0),
     lw(0),
@@ -287,15 +286,22 @@ QWindowsFontEngine::QWindowsFontEngine(const QString &name,
     designAdvancesSize(0)
 {
     qCDebug(lcQpaFonts) << __FUNCTION__ << name << lf.lfHeight;
+    hfont = CreateFontIndirect(&m_logfont);
+    if (!hfont) {
+        qErrnoWarning("%s: CreateFontIndirect failed for family '%s'", __FUNCTION__, qPrintable(name));
+        hfont = QWindowsFontDatabase::systemFont();
+    }
+
     HDC hdc = m_fontEngineData->hdc;
     SelectObject(hdc, hfont);
-    fontDef.pixelSize = -lf.lfHeight;
     const BOOL res = GetTextMetrics(hdc, &tm);
-    fontDef.fixedPitch = !(tm.tmPitchAndFamily & TMPF_FIXED_PITCH);
     if (!res) {
         qErrnoWarning("%s: GetTextMetrics failed", __FUNCTION__);
         ZeroMemory(&tm, sizeof(TEXTMETRIC));
     }
+
+    fontDef.pixelSize = -lf.lfHeight;
+    fontDef.fixedPitch = !(tm.tmPitchAndFamily & TMPF_FIXED_PITCH);
 
     cache_cost = tm.tmHeight * tm.tmAveCharWidth * 2000;
     getCMap();
@@ -322,12 +328,10 @@ QWindowsFontEngine::~QWindowsFontEngine()
         free(widthCache);
 
     // make sure we aren't by accident still selected
-    SelectObject(m_fontEngineData->hdc, (HFONT)GetStockObject(SYSTEM_FONT));
+    SelectObject(m_fontEngineData->hdc, QWindowsFontDatabase::systemFont());
 
-    if (!stockFont) {
-        if (!DeleteObject(hfont))
-            qErrnoWarning("%s: QFontEngineWin: failed to delete non-stock font... failed", __FUNCTION__);
-    }
+    if (!DeleteObject(hfont))
+        qErrnoWarning("%s: QFontEngineWin: failed to delete font...", __FUNCTION__);
     qCDebug(lcQpaFonts) << __FUNCTION__ << _name;
 
     if (!uniqueFamilyName.isEmpty()) {
@@ -363,7 +367,7 @@ glyph_t QWindowsFontEngine::glyphIndex(uint ucs4) const
 HGDIOBJ QWindowsFontEngine::selectDesignFont() const
 {
     LOGFONT f = m_logfont;
-    f.lfHeight = unitsPerEm;
+    f.lfHeight = -unitsPerEm;
     f.lfWidth = 0;
     HFONT designFont = CreateFontIndirect(&f);
     return SelectObject(m_fontEngineData->hdc, designFont);
@@ -804,10 +808,8 @@ static bool addGlyphToPath(glyph_t glyph, const QFixedPoint &position, HDC hdc,
         uint format = GGO_METRICS;
         if (ttf)
             format |= GGO_GLYPH_INDEX;
-        int res = GetGlyphOutline(hdc, glyph, format, &gMetric, 0, 0, &mat);
-        if (res == GDI_ERROR) {
+        if (GetGlyphOutline(hdc, glyph, format, &gMetric, 0, 0, &mat) == GDI_ERROR)
             return false;
-        }
         // #### obey scale
         *metric = glyph_metrics_t(gMetric.gmptGlyphOrigin.x, -gMetric.gmptGlyphOrigin.y,
                                   (int)gMetric.gmBlackBoxX, (int)gMetric.gmBlackBoxY,
@@ -1018,7 +1020,7 @@ QFontEngine::Properties QWindowsFontEngine::properties() const
 void QWindowsFontEngine::getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_metrics_t *metrics)
 {
     LOGFONT lf = m_logfont;
-    lf.lfHeight = unitsPerEm;
+    lf.lfHeight = -unitsPerEm;
     int flags = synthesized();
     if(flags & SynthesizedItalic)
         lf.lfItalic = false;
@@ -1183,19 +1185,13 @@ QImage QWindowsFontEngine::alphaMapForGlyph(glyph_t glyph, const QTransform &xfo
         return QImage();
     }
 
-    QImage indexed(mask->width(), mask->height(), QImage::Format_Indexed8);
+    QImage alphaMap(mask->width(), mask->height(), QImage::Format_Alpha8);
 
-    // ### This part is kinda pointless, but we'll crash later if we don't because some
-    // code paths expects there to be colortables for index8-bit...
-    QVector<QRgb> colors(256);
-    for (int i=0; i<256; ++i)
-        colors[i] = qRgba(0, 0, 0, i);
-    indexed.setColorTable(colors);
 
     // Copy data... Cannot use QPainter here as GDI has messed up the
     // Alpha channel of the ni.image pixels...
     for (int y=0; y<mask->height(); ++y) {
-        uchar *dest = indexed.scanLine(y);
+        uchar *dest = alphaMap.scanLine(y);
         if (mask->image().format() == QImage::Format_RGB16) {
             const qint16 *src = (qint16 *) ((const QImage &) mask->image()).scanLine(y);
             for (int x=0; x<mask->width(); ++x)
@@ -1217,7 +1213,7 @@ QImage QWindowsFontEngine::alphaMapForGlyph(glyph_t glyph, const QTransform &xfo
         DeleteObject(font);
     }
 
-    return indexed;
+    return alphaMap;
 }
 
 #define SPI_GETFONTSMOOTHINGCONTRAST           0x200C
@@ -1266,9 +1262,9 @@ QFontEngine *QWindowsFontEngine::cloneWithSize(qreal pixelSize) const
     request.pixelSize = pixelSize;
 
     QFontEngine *fontEngine =
-        QWindowsFontDatabase::createEngine(request, 0,
+        QWindowsFontDatabase::createEngine(request,
                                            QWindowsContext::instance()->defaultDPI(),
-                                           false, m_fontEngineData);
+                                           m_fontEngineData);
     if (fontEngine) {
         fontEngine->fontDef.family = actualFontName;
         if (!uniqueFamilyName.isEmpty()) {
@@ -1281,11 +1277,10 @@ QFontEngine *QWindowsFontEngine::cloneWithSize(qreal pixelSize) const
 }
 
 void QWindowsFontEngine::initFontInfo(const QFontDef &request,
-                                      HDC fontHdc,
                                       int dpi)
 {
     fontDef = request; // most settings are equal
-    HDC dc = ((request.styleStrategy & QFont::PreferDevice) && fontHdc) ? fontHdc : m_fontEngineData->hdc;
+    HDC dc = m_fontEngineData->hdc;
     SelectObject(dc, hfont);
     wchar_t n[64];
     GetTextFace(dc, 64, n);
@@ -1310,17 +1305,13 @@ void QWindowsFontEngine::initFontInfo(const QFontDef &request,
     Will probably be superseded by a common Free Type font engine in Qt 5.X.
 */
 QWindowsMultiFontEngine::QWindowsMultiFontEngine(QFontEngine *fe, int script)
-    : QFontEngineMultiBasicImpl(fe, script)
+    : QFontEngineMulti(fe, script)
 {
 }
 
-void QWindowsMultiFontEngine::loadEngine(int at)
+QFontEngine *QWindowsMultiFontEngine::loadEngine(int at)
 {
-    ensureFallbackFamiliesQueried();
-    Q_ASSERT(at < engines.size());
-    Q_ASSERT(engines.at(at) == 0);
-
-    QFontEngine *fontEngine = engines.at(0);
+    QFontEngine *fontEngine = engine(0);
     QSharedPointer<QWindowsFontEngineData> data;
     LOGFONT lf;
 
@@ -1340,56 +1331,44 @@ void QWindowsMultiFontEngine::loadEngine(int at)
     }
 
     const QString fam = fallbackFamilyAt(at - 1);
-    memcpy(lf.lfFaceName, fam.utf16(), sizeof(wchar_t) * qMin(fam.length() + 1, 32));  // 32 = Windows hard-coded
+    const int faceNameLength = qMin(fam.length(), LF_FACESIZE - 1);
+    memcpy(lf.lfFaceName, fam.utf16(), faceNameLength * sizeof(wchar_t));
+    lf.lfFaceName[faceNameLength] = 0;
 
 #ifndef QT_NO_DIRECTWRITE
     if (fontEngine->type() == QFontEngine::DirectWrite) {
-        const QString nameSubstitute = QWindowsFontEngineDirectWrite::fontNameSubstitute(QString::fromWCharArray(lf.lfFaceName));
-        memcpy(lf.lfFaceName, nameSubstitute.utf16(),
-               sizeof(wchar_t) * qMin(nameSubstitute.length() + 1, LF_FACESIZE));
+        const QString nameSubstitute = QWindowsFontEngineDirectWrite::fontNameSubstitute(fam);
+        if (nameSubstitute != fam) {
+            const int nameSubstituteLength = qMin(nameSubstitute.length(), LF_FACESIZE - 1);
+            memcpy(lf.lfFaceName, nameSubstitute.utf16(), nameSubstituteLength * sizeof(wchar_t));
+            lf.lfFaceName[nameSubstituteLength] = 0;
+        }
 
         IDWriteFont *directWriteFont = 0;
         HRESULT hr = data->directWriteGdiInterop->CreateFontFromLOGFONT(&lf, &directWriteFont);
         if (FAILED(hr)) {
             qErrnoWarning("%s: CreateFontFromLOGFONT failed", __FUNCTION__);
         } else {
+            Q_ASSERT(directWriteFont);
             IDWriteFontFace *directWriteFontFace = NULL;
             HRESULT hr = directWriteFont->CreateFontFace(&directWriteFontFace);
             if (SUCCEEDED(hr)) {
+                Q_ASSERT(directWriteFontFace);
                 QWindowsFontEngineDirectWrite *fedw = new QWindowsFontEngineDirectWrite(directWriteFontFace,
                                                                                         fontEngine->fontDef.pixelSize,
                                                                                         data);
-                fedw->fontDef = fontDef;
-                fedw->fontDef.family = fam;
-                fedw->ref.ref();
-                engines[at] = fedw;
-
-                qCDebug(lcQpaFonts) << __FUNCTION__ << at << fam;
-                return;
+                return fedw;
             } else {
                 qErrnoWarning("%s: CreateFontFace failed", __FUNCTION__);
             }
-
         }
     }
 #endif
 
     // Get here if original font is not DirectWrite or DirectWrite creation failed for some
     // reason
-    HFONT hfont = CreateFontIndirect(&lf);
 
-    bool stockFont = false;
-    if (hfont == 0) {
-        hfont = (HFONT)GetStockObject(ANSI_VAR_FONT);
-        stockFont = true;
-    }
-    engines[at] = new QWindowsFontEngine(fam, hfont, stockFont, lf, data);
-    engines[at]->ref.ref();
-    engines[at]->fontDef = fontDef;
-    engines[at]->fontDef.family = fam;
-    qCDebug(lcQpaFonts) << __FUNCTION__ << at << fam;
-
-    // TODO: increase cost in QFontCache for the font engine loaded here
+    return new QWindowsFontEngine(fam, lf, data);
 }
 
 bool QWindowsFontEngine::supportsTransformation(const QTransform &transform) const

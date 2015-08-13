@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -29,7 +29,7 @@
     \title Qt Homepage
 */
 /*!
-    \externalpage http://bugreports.qt-project.org
+    \externalpage http://bugreports.qt.io
     \title Qt Bug Tracker
 */
 /*!
@@ -49,16 +49,16 @@
     \title Qt Quarterly: Plural Form in Translation
 */
 /*!
-    \externalpage http://qt.gitorious.org
+    \externalpage https://code.qt.io/
     \title Public Qt Repository
 */
 /*!
-    \externalpage http://qt.gitorious.org/qt-labs/qtestlib-tools
+    \externalpage https://code.qt.io/cgit/%7bnon-gerrit%7d/qt-labs/qtestlib-tools.git/
     \title qtestlib-tools
 */
 
 /*!
-    \externalpage http://qt-project.org/wiki/Qt_Coding_Style
+    \externalpage http://wiki.qt.io/Qt_Coding_Style
     \title Qt Coding Style
 */
 /*!
@@ -74,39 +74,43 @@
     \title Livecoding video effects with Qt5
 */
 /*!
-    \externalpage http://blog.qt.digia.com/2012/02/29/pimp-my-video-shader-effects-and-multimedia/
+    \externalpage http://blog.qt.io/2012/02/29/pimp-my-video-shader-effects-and-multimedia/
     \title Pimp my video
 */
 /*!
-    \externalpage http://qt-project.org/wiki/QtMediaHub
+    \externalpage http://wiki.qt.io/QtMediaHub
     \title QtMediaHub
 */
 /*!
-    \externalpage http://qt-project.org/wiki/Qt-RaspberryPi
+    \externalpage http://wiki.qt.io/Qt_RaspberryPi
     \title QtonPi
 */
 
 /*!
-    \externalpage http://qt-project.org/wiki/jom
+    \externalpage http://wiki.qt.io/jom
     \title jom
 */
 
 /*!
-    \externalpage http://qt-project.org/doc/qt-4.8
+    \externalpage http://doc.qt.io/qt-4.8
     \title Qt 4.8 Reference Documentation
 */
 
 /*!
-    \externalpage http://qt-project.org/doc/qt-4.8/qtquick.html
+    \externalpage http://doc.qt.io/qt-4.8/qtquick.html
     \title Qt Quick 1 Reference Documentation
 */
 
 /*!
-    \externalpage http://qt-project.org/wiki/Qt-Localization
+    \externalpage http://wiki.qt.io/Qt_Localization
     \title external: Translating Qt Into Other Languages
 */
 
 /*!
-    \externalpage http://qt-project.org/wiki/BlackBerry
+    \externalpage http://wiki.qt.io/BlackBerry
     \title Qt for BlackBerry
+*/
+/*!
+    \externalpage http://wiki.qt.io/Qt_Multimedia_Backends
+    \title Qt Multimedia Backends
 */

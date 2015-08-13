@@ -2,39 +2,31 @@
 #############################################################################
 ##
 ## Copyright (C) 2012 Giuseppe D'Angelo <dangelog@gmail.com>.
-## Contact: http://www.qt-project.org/legal
+## Contact: http://www.qt.io/licensing/
 ##
 ## This file is the build configuration utility of the Qt Toolkit.
 ##
-## $QT_BEGIN_LICENSE:LGPL$
+## $QT_BEGIN_LICENSE:LGPL21$
 ## Commercial License Usage
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
-## a written agreement between you and Digia.  For licensing terms and
-## conditions see http://qt.digia.com/licensing.  For further information
-## use the contact form at http://qt.digia.com/contact-us.
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see http://www.qt.io/terms-conditions. For further
+## information use the contact form at http://www.qt.io/contact-us.
 ##
 ## GNU Lesser General Public License Usage
 ## Alternatively, this file may be used under the terms of the GNU Lesser
-## General Public License version 2.1 as published by the Free Software
-## Foundation and appearing in the file LICENSE.LGPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU Lesser General Public License version 2.1 requirements
-## will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+## General Public License version 2.1 or version 3 as published by the Free
+## Software Foundation and appearing in the file LICENSE.LGPLv21 and
+## LICENSE.LGPLv3 included in the packaging of this file. Please review the
+## following information to ensure the GNU Lesser General Public License
+## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 ##
-## In addition, as a special exception, Digia gives you certain additional
-## rights.  These rights are described in the Digia Qt LGPL Exception
+## As a special exception, The Qt Company gives you certain additional
+## rights. These rights are described in The Qt Company LGPL Exception
 ## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-##
-## GNU General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU
-## General Public License version 3.0 as published by the Free Software
-## Foundation and appearing in the file LICENSE.GPL included in the
-## packaging of this file.  Please review the following information to
-## ensure the GNU General Public License version 3.0 requirements will be
-## met: http://www.gnu.org/copyleft/gpl.html.
-##
 ##
 ## $QT_END_LICENSE$
 ##
@@ -43,8 +35,6 @@
 # This is a small script to copy the required files from a PCRE tarball
 # into 3rdparty/pcre/ , following the instructions found in the NON-UNIX-USE
 # file. Documentation, tests, demos etc. are not imported.
-# Also, a global s/HAVE_CONFIG_H/PCRE_HAVE_CONFIG_H/g is performed, to avoid
-# tampering QtCore compilation with a -DHAVE_CONFIG_H.
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 pcre_tarball_dir/ \$QTDIR/src/3rdparty/pcre/"
@@ -62,10 +52,9 @@ fi
 
 # with 1 argument, copies PCRE_DIR/$1 to TARGET_DIR/$1
 # with 2 arguments, copies PCRE_DIR/$1 to TARGET_DIR/$2
-# every file copied gets a s/HAVE_CONFIG_H/PCRE_HAVE_CONFIG_H/g
-copy_and_convert_file() {
+copy_file() {
     if [ $# -lt 1 -o $# -gt 2  ]; then
-        echo "Wrong number of arguments to copy_and_convert_file"
+        echo "Wrong number of arguments to copy_file"
         exit 3
     fi
 
@@ -77,11 +66,11 @@ copy_and_convert_file() {
     fi
 
     mkdir -p "$TARGET_DIR/$(dirname "$SOURCE_FILE")"
-    sed 's/HAVE_CONFIG_H/PCRE_HAVE_CONFIG_H/g' < "$PCRE_DIR/$SOURCE_FILE" > "$TARGET_DIR/$DEST_FILE"
+    cp "$PCRE_DIR/$SOURCE_FILE" "$TARGET_DIR/$DEST_FILE"
 }
 
-copy_and_convert_file "pcre.h.generic" "pcre.h"
-copy_and_convert_file "pcre_chartables.c.dist" "pcre_chartables.c"
+copy_file "pcre.h.generic" "pcre.h"
+copy_file "pcre_chartables.c.dist" "pcre_chartables.c"
 
 FILES="
     AUTHORS
@@ -156,5 +145,5 @@ FILES="
 "
 
 for i in $FILES; do
-    copy_and_convert_file "$i"
+    copy_file "$i"
 done

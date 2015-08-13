@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -33,7 +33,8 @@
 
 #include "qpoint.h"
 #include "qdatastream.h"
-#include "qdebug.h"
+
+#include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -447,14 +448,20 @@ QDataStream &operator>>(QDataStream &s, QPoint &p)
 QDebug operator<<(QDebug dbg, const QPoint &p)
 {
     QDebugStateSaver saver(dbg);
-    dbg.nospace() << "QPoint(" << p.x() << ',' << p.y() << ')';
+    dbg.nospace();
+    dbg << "QPoint" << '(';
+    QtDebugUtils::formatQPoint(dbg, p);
+    dbg << ')';
     return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QPointF &p)
 {
     QDebugStateSaver saver(dbg);
-    dbg.nospace() << "QPointF(" << p.x() << ',' << p.y() << ')';
+    dbg.nospace();
+    dbg << "QPointF" << '(';
+    QtDebugUtils::formatQPoint(dbg, p);
+    dbg << ')';
     return dbg;
 }
 #endif
@@ -521,12 +528,8 @@ QDebug operator<<(QDebug dbg, const QPointF &p)
 /*!
     \fn bool QPointF::isNull() const
 
-    Returns \c true if both the x and y coordinates are set to +0.0;
-    otherwise returns \c false.
-
-    \note Since this function treats +0.0 and -0.0 differently, points
-    with zero-valued coordinates where either or both values have a
-    negative sign are not defined to be null points.
+    Returns \c true if both the x and y coordinates are set to 0.0 (ignoring
+    the sign); otherwise returns \c false.
 */
 
 

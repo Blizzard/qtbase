@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -130,10 +130,17 @@ static bool currentProcessIsService()
         DWORD size = UNLEN;
         if (ptrGetUserName(userName, &size)) {
             SID_NAME_USE type = SidTypeUser;
-            DWORD dummy = MAX_PATH;
-            wchar_t dummyStr[MAX_PATH] = L"";
-            PSID psid = 0;
-            if (ptrLookupAccountName(NULL, userName, &psid, &dummy, dummyStr, &dummy, &type))
+            DWORD sidSize = 0;
+            DWORD domainSize = 0;
+            // first call is to get the correct size
+            bool bRet = ptrLookupAccountName(NULL, userName, NULL, &sidSize, NULL, &domainSize, &type);
+            if (bRet == FALSE && ERROR_INSUFFICIENT_BUFFER != GetLastError())
+                return false;
+            QVarLengthArray<BYTE, 68> buff(sidSize);
+            QVarLengthArray<wchar_t, MAX_PATH> domainName(domainSize);
+            // second call to LookupAccountNameW actually gets the SID
+            // both the pointer to the buffer and the pointer to the domain name should not be NULL
+            if (ptrLookupAccountName(NULL, userName, buff.data(), &sidSize, domainName.data(), &domainSize, &type))
                 return type != SidTypeUser; //returns true if the current user is not a user
         }
     }
@@ -345,12 +352,66 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
     return removeDuplicateProxies(result);
 }
 
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+namespace {
+class QRegistryWatcher {
+public:
+    void addLocation(HKEY hive, const QString& path)
+    {
+        HKEY openedKey;
+        if (RegOpenKeyEx(hive, reinterpret_cast<const wchar_t*>(path.utf16()), 0, KEY_READ, &openedKey) != ERROR_SUCCESS)
+            return;
+
+        const DWORD filter = REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_ATTRIBUTES |
+                REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_CHANGE_SECURITY;
+
+        // Watch the registry key for a change of value.
+        HANDLE handle = CreateEvent(NULL, true, false, NULL);
+        if (RegNotifyChangeKeyValue(openedKey, true, filter, handle, true) != ERROR_SUCCESS) {
+            CloseHandle(handle);
+            return;
+        }
+        m_watchEvents.append(handle);
+        m_registryHandles.append(openedKey);
+    }
+
+    bool hasChanged() const {
+        return !isEmpty() &&
+               WaitForMultipleObjects(m_watchEvents.size(), m_watchEvents.data(), false, 0) < WAIT_OBJECT_0 + m_watchEvents.size();
+    }
+
+    bool isEmpty() const {
+        return m_watchEvents.isEmpty();
+    }
+
+    void clear() {
+        foreach (HANDLE event, m_watchEvents)
+            CloseHandle(event);
+        foreach (HKEY key, m_registryHandles)
+            RegCloseKey(key);
+
+        m_watchEvents.clear();
+        m_registryHandles.clear();
+    }
+
+    ~QRegistryWatcher() {
+        clear();
+    }
+
+private:
+    QVector<HANDLE> m_watchEvents;
+    QVector<HKEY> m_registryHandles;
+};
+} // namespace
+#endif // !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+
 class QWindowsSystemProxy
 {
 public:
     QWindowsSystemProxy();
     ~QWindowsSystemProxy();
     void init();
+    void reset();
 
     QMutex mutex;
 
@@ -361,7 +422,9 @@ public:
     QStringList proxyServerList;
     QStringList proxyBypass;
     QList<QNetworkProxy> defaultResult;
-
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    QRegistryWatcher proxySettingsWatcher;
+#endif
     bool initialized;
     bool functional;
     bool isAutoConfig;
@@ -381,16 +444,42 @@ QWindowsSystemProxy::~QWindowsSystemProxy()
         ptrWinHttpCloseHandle(hHttpSession);
 }
 
+void QWindowsSystemProxy::reset()
+{
+    autoConfigUrl.clear();
+    proxyServerList.clear();
+    proxyBypass.clear();
+    defaultResult.clear();
+    defaultResult << QNetworkProxy::NoProxy;
+    functional = false;
+    isAutoConfig = false;
+}
+
 void QWindowsSystemProxy::init()
 {
-    if (initialized)
+    bool proxySettingsChanged = false;
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    proxySettingsChanged = proxySettingsWatcher.hasChanged();
+#endif
+
+    if (initialized && !proxySettingsChanged)
         return;
     initialized = true;
+
+    reset();
 
 #ifdef Q_OS_WINCE
     // Windows CE does not have any of the following API
     return;
 #else
+
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    proxySettingsWatcher.clear(); // needs reset to trigger a new detection
+    proxySettingsWatcher.addLocation(HKEY_CURRENT_USER,  QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+    proxySettingsWatcher.addLocation(HKEY_LOCAL_MACHINE, QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+    proxySettingsWatcher.addLocation(HKEY_LOCAL_MACHINE, QStringLiteral("Software\\Policies\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
+#endif
+
     // load the winhttp.dll library
     QSystemLibrary lib(L"winhttp");
     if (!lib.load())

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -285,6 +285,11 @@ QVariant QMimeDataPrivate::retrieveTypedData(const QString &format, QVariant::Ty
 
     The \c value declaration of each format describes the way in which the
     data is encoded.
+
+    In some cases (e.g. dropping multiple email attachments), multiple data
+    values are available. They can be accessed by adding an \c index value:
+
+    \snippet code/src_corelib_kernel_qmimedata.cpp 8
 
     On Windows, the MIME format does not always map directly to the
     clipboard formats. Qt provides QWinMime to map clipboard
@@ -561,7 +566,22 @@ QByteArray QMimeData::data(const QString &mimeType) const
 void QMimeData::setData(const QString &mimeType, const QByteArray &data)
 {
     Q_D(QMimeData);
-    d->setData(mimeType, QVariant(data));
+
+    if (mimeType == QLatin1String("text/uri-list")) {
+        QByteArray ba = data;
+        if (ba.endsWith('\0'))
+            ba.chop(1);
+        QList<QByteArray> urls = ba.split('\n');
+        QList<QVariant> list;
+        for (int i = 0; i < urls.size(); ++i) {
+            QByteArray ba = urls.at(i).trimmed();
+            if (!ba.isEmpty())
+                list.append(QUrl::fromEncoded(ba));
+        }
+        d->setData(mimeType, list);
+    } else {
+        d->setData(mimeType, QVariant(data));
+    }
 }
 
 /*!

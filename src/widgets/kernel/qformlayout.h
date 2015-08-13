@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -44,7 +44,6 @@ class QFormLayoutPrivate;
 class Q_WIDGETS_EXPORT QFormLayout : public QLayout
 {
     Q_OBJECT
-    Q_ENUMS(FieldGrowthPolicy RowWrapPolicy ItemRole)
     Q_DECLARE_PRIVATE(QFormLayout)
     Q_PROPERTY(FieldGrowthPolicy fieldGrowthPolicy READ fieldGrowthPolicy WRITE setFieldGrowthPolicy RESET resetFieldGrowthPolicy)
     Q_PROPERTY(RowWrapPolicy rowWrapPolicy READ rowWrapPolicy WRITE setRowWrapPolicy RESET resetRowWrapPolicy)
@@ -59,18 +58,21 @@ public:
         ExpandingFieldsGrow,
         AllNonFixedFieldsGrow
     };
+    Q_ENUM(FieldGrowthPolicy)
 
     enum RowWrapPolicy {
         DontWrapRows,
         WrapLongRows,
         WrapAllRows
     };
+    Q_ENUM(RowWrapPolicy)
 
     enum ItemRole {
         LabelRole = 0,
         FieldRole = 1,
         SpanningRole = 2
     };
+    Q_ENUM(ItemRole)
 
     explicit QFormLayout(QWidget *parent = 0);
     ~QFormLayout();
@@ -118,19 +120,19 @@ public:
     QWidget *labelForField(QLayout *field) const;
 
     // reimplemented from QLayout
-    void addItem(QLayoutItem *item);
-    QLayoutItem *itemAt(int index) const;
-    QLayoutItem *takeAt(int index);
+    void addItem(QLayoutItem *item) Q_DECL_OVERRIDE;
+    QLayoutItem *itemAt(int index) const Q_DECL_OVERRIDE;
+    QLayoutItem *takeAt(int index) Q_DECL_OVERRIDE;
 
-    void setGeometry(const QRect &rect);
-    QSize minimumSize() const;
-    QSize sizeHint() const;
-    void invalidate();
+    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE;
+    QSize minimumSize() const Q_DECL_OVERRIDE;
+    QSize sizeHint() const Q_DECL_OVERRIDE;
+    void invalidate() Q_DECL_OVERRIDE;
 
-    bool hasHeightForWidth() const;
-    int heightForWidth(int width) const;
-    Qt::Orientations expandingDirections() const;
-    int count() const;
+    bool hasHeightForWidth() const Q_DECL_OVERRIDE;
+    int heightForWidth(int width) const Q_DECL_OVERRIDE;
+    Qt::Orientations expandingDirections() const Q_DECL_OVERRIDE;
+    int count() const Q_DECL_OVERRIDE;
 
     int rowCount() const;
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -63,7 +63,7 @@ public:
     }
 
     inline const char *readPointer() const {
-        return buffers.isEmpty() ? 0 : (buffers.first().constData() + head);
+        return bufferSize == 0 ? Q_NULLPTR : (buffers.first().constData() + head);
     }
 
     // access the bytes at a specified position
@@ -91,11 +91,20 @@ public:
             int blockSize = buffers.first().size() - head;
 
             if (tailBuffer == 0 || blockSize > bytes) {
-                bufferSize -= bytes;
-                if (bufferSize <= 0)
-                    clear(); // try to minify/squeeze us
-                else
+                // keep a single block around if it does not exceed
+                // the basic block size, to avoid repeated allocations
+                // between uses of the buffer
+                if (bufferSize <= bytes) {
+                    if (buffers.first().size() <= basicBlockSize) {
+                        bufferSize = 0;
+                        head = tail = 0;
+                    } else {
+                        clear(); // try to minify/squeeze us
+                    }
+                } else {
                     head += bytes;
+                    bufferSize -= bytes;
+                }
                 return;
             }
 
@@ -113,7 +122,7 @@ public:
 
         // if need buffer reallocation
         if (tail + bytes > buffers.last().size()) {
-            if (tail >= basicBlockSize) {
+            if (tail + bytes > buffers.last().capacity() && tail >= basicBlockSize) {
                 // shrink this buffer to its current size
                 buffers.last().resize(tail);
 
@@ -139,11 +148,20 @@ public:
     inline void chop(int bytes) {
         while (bytes > 0) {
             if (tailBuffer == 0 || tail > bytes) {
-                bufferSize -= bytes;
-                if (bufferSize <= 0)
-                    clear(); // try to minify/squeeze us
-                else
+                // keep a single block around if it does not exceed
+                // the basic block size, to avoid repeated allocations
+                // between uses of the buffer
+                if (bufferSize <= bytes) {
+                    if (buffers.first().size() <= basicBlockSize) {
+                        bufferSize = 0;
+                        head = tail = 0;
+                    } else {
+                        clear(); // try to minify/squeeze us
+                    }
+                } else {
                     tail -= bytes;
+                    bufferSize -= bytes;
+                }
                 return;
             }
 
@@ -156,7 +174,7 @@ public:
     }
 
     inline bool isEmpty() const {
-        return tailBuffer == 0 && tail == 0;
+        return bufferSize == 0;
     }
 
     inline int getChar() {
@@ -175,10 +193,14 @@ public:
     inline void ungetChar(char c) {
         --head;
         if (head < 0) {
-            buffers.prepend(QByteArray());
+            if (bufferSize != 0) {
+                buffers.prepend(QByteArray());
+                ++tailBuffer;
+            } else {
+                tail = basicBlockSize;
+            }
             buffers.first().resize(basicBlockSize);
             head = basicBlockSize - 1;
-            ++tailBuffer;
         }
         buffers.first()[head] = c;
         ++bufferSize;

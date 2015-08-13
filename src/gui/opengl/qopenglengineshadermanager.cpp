@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,13 +61,13 @@ public:
         delete m_shaders;
     }
 
-    void invalidateResource()
+    void invalidateResource() Q_DECL_OVERRIDE
     {
         delete m_shaders;
         m_shaders = 0;
     }
 
-    void freeResource(QOpenGLContext *)
+    void freeResource(QOpenGLContext *) Q_DECL_OVERRIDE
     {
     }
 
@@ -154,6 +154,8 @@ QOpenGLEngineSharedShaders::QOpenGLEngineSharedShaders(QOpenGLContext* context)
         code[ImageSrcFragmentShader] = qopenglslImageSrcFragmentShader;
         code[ImageSrcWithPatternFragmentShader] = qopenglslImageSrcWithPatternFragmentShader;
         code[NonPremultipliedImageSrcFragmentShader] = qopenglslNonPremultipliedImageSrcFragmentShader;
+        code[GrayscaleImageSrcFragmentShader] = qopenglslGrayscaleImageSrcFragmentShader;
+        code[AlphaImageSrcFragmentShader] = qopenglslAlphaImageSrcFragmentShader;
         code[CustomImageSrcFragmentShader] = qopenglslCustomSrcFragmentShader; // Calls "customShader", which must be appended
         code[SolidBrushSrcFragmentShader] = qopenglslSolidBrushSrcFragmentShader;
         if (context->isOpenGLES())
@@ -509,7 +511,7 @@ GLuint QOpenGLEngineShaderManager::getUniformLocation(Uniform id)
     if (uniformLocations.isEmpty())
         uniformLocations.fill(GLuint(-1), NumUniforms);
 
-    static const char *uniformNames[] = {
+    static const char *const uniformNames[] = {
         "imageTexture",
         "patternColor",
         "globalOpacity",
@@ -697,6 +699,16 @@ bool QOpenGLEngineShaderManager::useCorrectShaderProg()
             break;
         case QOpenGLEngineShaderManager::NonPremultipliedImageSrc:
             requiredProgram.srcPixelFragShader = QOpenGLEngineSharedShaders::NonPremultipliedImageSrcFragmentShader;
+            requiredProgram.positionVertexShader = QOpenGLEngineSharedShaders::PositionOnlyVertexShader;
+            texCoords = true;
+            break;
+        case QOpenGLEngineShaderManager::GrayscaleImageSrc:
+            requiredProgram.srcPixelFragShader = QOpenGLEngineSharedShaders::GrayscaleImageSrcFragmentShader;
+            requiredProgram.positionVertexShader = QOpenGLEngineSharedShaders::PositionOnlyVertexShader;
+            texCoords = true;
+            break;
+        case QOpenGLEngineShaderManager::AlphaImageSrc:
+            requiredProgram.srcPixelFragShader = QOpenGLEngineSharedShaders::AlphaImageSrcFragmentShader;
             requiredProgram.positionVertexShader = QOpenGLEngineSharedShaders::PositionOnlyVertexShader;
             texCoords = true;
             break;

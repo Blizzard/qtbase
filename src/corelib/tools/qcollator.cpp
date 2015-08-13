@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Aleix Pol Gonzalez <aleixpol@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -87,7 +87,7 @@ QCollator::QCollator(const QCollator &other)
 }
 
 /*!
-    Destroys the collator.
+   Destructor for QCollator.
  */
 QCollator::~QCollator()
 {
@@ -109,8 +109,8 @@ QCollator &QCollator::operator=(const QCollator &other)
     return *this;
 }
 
-/*
-    \fn void QCollator::QCollator(QCollator &&other)
+/*!
+    \fn QCollator::QCollator(QCollator &&other)
 
     Move constructor. Moves from \a other into this collator.
 
@@ -119,8 +119,8 @@ QCollator &QCollator::operator=(const QCollator &other)
     one of the assignment operators is undefined.
 */
 
-/*
-    \fn QCollator &QCollator::operator=(QCollator &&other)
+/*!
+    \fn QCollator & QCollator::operator=(QCollator && other)
 
     Move-assigns from \a other to this collator.
 
@@ -275,8 +275,8 @@ bool QCollator::ignorePunctuation() const
 /*!
     \fn int QCollator::compare(const QString &s1, const QString &s2) const
 
-    Compares \a s1 with \a s2. Returns -1, 0 or 1 depending on whether \a s1 is
-    smaller, equal or larger than \a s2.
+    Compares \a s1 with \a s2. Returns an integer less than, equal to, or greater than zero
+    depending on whether \a s1 is smaller, equal or larger than \a s2.
  */
 
 /*!
@@ -288,8 +288,8 @@ bool QCollator::ignorePunctuation() const
     \fn int QCollator::compare(const QStringRef &s1, const QStringRef &s2) const
     \overload
 
-    Compares \a s1 with \a s2. Returns -1, 0 or 1 depending on whether \a s1 is
-    smaller, equal or larger than \a s2.
+    Compares \a s1 with \a s2. Returns an integer less than, equal to, or greater than zero
+    depending on whether \a s1 is smaller, equal or larger than \a s2.
  */
 
 /*!
@@ -299,8 +299,9 @@ bool QCollator::ignorePunctuation() const
     Compares \a s1 with \a s2. \a len1 and \a len2 specify the length of the
     QChar arrays pointer to by \a s1 and \a s2.
 
-    Returns -1, 0 or 1 depending on whether \a s1 is smaller, equal or larger than \a s2.
- */
+    Returns an integer less than, equal to, or greater than zero
+    depending on whether \a s1 is smaller, equal or larger than \a s2.
+*/
 
 /*!
     \fn QCollatorSortKey QCollator::sortKey(const QString &string) const
@@ -366,6 +367,12 @@ QCollatorSortKey& QCollatorSortKey::operator=(const QCollatorSortKey &other)
 }
 
 /*!
+    \fn QCollatorSortKey &QCollatorSortKey::operator=(QCollatorSortKey && other)
+
+    Move-assigns \a other to this collator key.
+*/
+
+/*!
     \fn bool operator<(const QCollatorSortKey &lhs, const QCollatorSortKey &rhs)
     \relates QCollatorSortKey
 
@@ -374,6 +381,12 @@ QCollatorSortKey& QCollatorSortKey::operator=(const QCollatorSortKey &other)
 
     \sa QCollatorSortKey::compare()
  */
+
+/*!
+    \fn void QCollatorSortKey::swap(QCollatorSortKey & other)
+
+    Swaps this collator key with \a other.
+*/
 
 /*!
     \fn int QCollatorSortKey::compare(const QCollatorSortKey &otherKey) const

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -209,7 +209,10 @@ static QPixmap colorizedImage(const QString &fileName, const QColor &color, int 
                 unsigned char green = gray + qt_div_255(sourceGreen * colorDiff);
                 unsigned char blue = gray + qt_div_255(sourceBlue * colorDiff);
                 unsigned char alpha = qt_div_255(qAlpha(col) * qAlpha(source));
-                data[x] = qRgba(red, green, blue, alpha);
+                data[x] = qRgba(std::min(alpha, red),
+                                std::min(alpha, green),
+                                std::min(alpha, blue),
+                                alpha);
             }
         }
         if (rotation != 0) {
@@ -514,6 +517,9 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
             break;
         }
         arrow = colorizedImage(QLatin1String(":/qt-project.org/styles/commonstyle/images/fusion_arrow.png"), arrowColor, rotation);
+        if (arrow.isNull())
+            break;
+
         QRect rect = option->rect;
         QRect arrowRect;
         int imageMax = qMin(arrow.height(), arrow.width());
@@ -553,7 +559,9 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
                 arrow = colorizedImage(QLatin1String(":/qt-project.org/styles/commonstyle/images/fusion_arrow.png"), arrowColor);
             } else if (header->sortIndicator & QStyleOptionHeader::SortDown) {
                 arrow = colorizedImage(QLatin1String(":/qt-project.org/styles/commonstyle/images/fusion_arrow.png"), arrowColor, 180);
-            } if (!arrow.isNull()) {
+            }
+
+            if (!arrow.isNull()) {
                 r.setSize(QSize(arrow.width()/2, arrow.height()/2));
                 r.moveCenter(header->rect.center());
                 painter->drawPixmap(r.translated(offset), arrow);
@@ -1208,9 +1216,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
             if (verticalTitleBar) {
                 QRect rect = dwOpt->rect;
                 QRect r = rect;
-                QSize s = r.size();
-                s.transpose();
-                r.setSize(s);
+                r.setSize(r.size().transposed());
                 titleRect = QRect(r.left() + rect.bottom()
                                   - titleRect.bottom(),
                                   r.top() + titleRect.left() - rect.left(),
@@ -1401,7 +1407,9 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 painter->drawRoundedRect(progressBar.adjusted(1, 1, -1, -1), 1, 1);
 
                 if (!indeterminate) {
+#ifndef QT_NO_ANIMATION
                     (const_cast<QFusionStylePrivate*>(d))->stopAnimation(option->styleObject);
+#endif
                 } else {
                     highlightedGradientStartColor.setAlpha(120);
                     painter->setPen(QPen(highlightedGradientStartColor, 9.0));
@@ -1537,7 +1545,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
             bool ignoreCheckMark = false;
             int checkcol = qMax(menuItem->maxIconWidth, 20);
 
-            if (qobject_cast<const QComboBox*>(widget))
+            if (qobject_cast<const QComboBox*>(widget) ||
+                (option->styleObject && option->styleObject->property("_q_isComboBoxPopupItem").toBool()))
                 ignoreCheckMark = true; //ignore the checkmarks provided by the QComboMenuDelegate
 
             if (!ignoreCheckMark) {
@@ -1606,7 +1615,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 QRect pmr(0, 0, pixw, pixh);
                 pmr.moveCenter(vCheckRect.center());
                 painter->setPen(menuItem->palette.text().color());
-                if (checkable && checked) {
+                if (!ignoreCheckMark && checkable && checked) {
                     QStyleOption opt = *option;
                     if (act) {
                         QColor activeColor = mergedColors(option->palette.background().color(),
@@ -1731,8 +1740,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                     state = QIcon::On;
 
                 QPixmap pixmap = button->icon.pixmap(button->iconSize, mode, state);
-                int w = pixmap.width();
-                int h = pixmap.height();
+                int w = pixmap.width() / pixmap.devicePixelRatio();
+                int h = pixmap.height() / pixmap.devicePixelRatio();
 
                 if (!button->text.isEmpty())
                     w += button->fontMetrics.boundingRect(option->rect, tf, button->text).width() + 2;
@@ -1740,15 +1749,17 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 point = QPoint(ir.x() + ir.width() / 2 - w / 2,
                                ir.y() + ir.height() / 2 - h / 2);
 
+                w = pixmap.width() / pixmap.devicePixelRatio();
+
                 if (button->direction == Qt::RightToLeft)
-                    point.rx() += pixmap.width();
+                    point.rx() += w;
 
                 painter->drawPixmap(visualPos(button->direction, button->rect, point), pixmap);
 
                 if (button->direction == Qt::RightToLeft)
                     ir.translate(-point.x() - 2, 0);
                 else
-                    ir.translate(point.x() + pixmap.width(), 0);
+                    ir.translate(point.x() + w, 0);
 
                 // left-align text if there is
                 if (!button->text.isEmpty())
@@ -2428,6 +2439,7 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
                     styleObject->setProperty("_q_stylestate", static_cast<int>(scrollBar->state));
                     styleObject->setProperty("_q_stylecontrols", static_cast<uint>(scrollBar->activeSubControls));
 
+#ifndef QT_NO_ANIMATION
                     QScrollbarStyleAnimation *anim  = qobject_cast<QScrollbarStyleAnimation *>(d->animation(styleObject));
                     if (transient) {
                         if (!anim) {
@@ -2441,8 +2453,10 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
                     } else if (anim && anim->mode() == QScrollbarStyleAnimation::Deactivating) {
                         d->stopAnimation(styleObject);
                     }
+#endif // !QT_NO_ANIMATION
                 }
 
+#ifndef QT_NO_ANIMATION
                 QScrollbarStyleAnimation *anim = qobject_cast<QScrollbarStyleAnimation *>(d->animation(styleObject));
                 if (anim && anim->mode() == QScrollbarStyleAnimation::Deactivating) {
                     // once a scrollbar was active (hovered/pressed), it retains
@@ -2471,6 +2485,7 @@ void QFusionStyle::drawComplexControl(ComplexControl control, const QStyleOption
                     }
                 }
                 painter->setOpacity(opacity);
+#endif // !QT_NO_ANIMATION
             }
 
             bool transient = proxy()->styleHint(SH_ScrollBar_Transient, option, widget);
@@ -3596,6 +3611,11 @@ int QFusionStyle::styleHint(StyleHint hint, const QStyleOption *option, const QW
     case SH_Menu_SupportsSections:
         return 1;
 
+#if defined(Q_OS_IOS)
+    case SH_ComboBox_UseNativePopup:
+        return 1;
+#endif
+
     case SH_ToolBox_SelectedPageTitleBold:
     case SH_ScrollView_FrameOnlyAroundContents:
     case SH_Menu_AllowActiveAndDisabled:
@@ -3695,12 +3715,12 @@ QPixmap QFusionStyle::standardPixmap(StandardPixmap standardPixmap, const QStyle
 #ifndef QT_NO_IMAGEFORMAT_XPM
     switch (standardPixmap) {
     case SP_TitleBarNormalButton:
-        return QPixmap((const char **)dock_widget_restore_xpm);
+        return QPixmap(dock_widget_restore_xpm);
     case SP_TitleBarMinButton:
-        return QPixmap((const char **)workspace_minimize);
+        return QPixmap(workspace_minimize);
     case SP_TitleBarCloseButton:
     case SP_DockWidgetCloseButton:
-        return QPixmap((const char **)dock_widget_close_xpm);
+        return QPixmap(dock_widget_close_xpm);
 
     default:
         break;

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -327,16 +327,13 @@ Q_GLOBAL_STATIC(QUrl, lastVisitedDir)
   This signal is emitted when the user selects a \a filter.
 */
 
-//#if defined(Q_WS_WIN) || defined(Q_WS_MAC)
-//bool Q_WIDGETS_EXPORT qt_use_native_dialogs = true; // for the benefit of testing tools, until we have a proper API
-//#endif
-
 QT_BEGIN_INCLUDE_NAMESPACE
-#ifdef Q_WS_WIN
+#ifdef Q_DEAD_CODE_FROM_QT4_WIN
 #include <qwindowsstyle_p.h>
 #endif
+#include <QMetaEnum>
 #include <qshortcut.h>
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
 #include <qmacstyle_mac_p.h>
 #endif
 QT_END_INCLUDE_NAMESPACE
@@ -389,9 +386,8 @@ QFileDialog::QFileDialog(const QFileDialogArgs &args)
 QFileDialog::~QFileDialog()
 {
 #ifndef QT_NO_SETTINGS
-    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    settings.beginGroup(QLatin1String("Qt"));
-    settings.setValue(QLatin1String("filedialog"), saveState());
+    Q_D(QFileDialog);
+    d->saveSettings();
 #endif
 }
 
@@ -507,34 +503,7 @@ bool QFileDialog::restoreState(const QByteArray &state)
     if (!d->usingWidgets())
         return true;
 
-    if (!d->qFileDialogUi->splitter->restoreState(d->splitterState))
-        return false;
-    QList<int> list = d->qFileDialogUi->splitter->sizes();
-    if (list.count() >= 2 && (list.at(0) == 0 || list.at(1) == 0)) {
-        for (int i = 0; i < list.count(); ++i)
-            list[i] = d->qFileDialogUi->splitter->widget(i)->sizeHint().width();
-        d->qFileDialogUi->splitter->setSizes(list);
-    }
-
-    d->qFileDialogUi->sidebar->setUrls(d->sidebarUrls);
-    while (history.count() > 5)
-        history.pop_front();
-    setHistory(history);
-    QHeaderView *headerView = d->qFileDialogUi->treeView->header();
-    if (!headerView->restoreState(d->headerData))
-        return false;
-
-    QList<QAction*> actions = headerView->actions();
-    QAbstractItemModel *abstractModel = d->model;
-#ifndef QT_NO_PROXYMODEL
-    if (d->proxyModel)
-        abstractModel = d->proxyModel;
-#endif
-    int total = qMin(abstractModel->columnCount(QModelIndex()), actions.count() + 1);
-    for (int i = 1; i < total; ++i)
-        actions.at(i - 1)->setChecked(!headerView->isSectionHidden(i));
-
-    return true;
+    return d->restoreWidgetState(history, -1);
 }
 
 /*!
@@ -590,10 +559,6 @@ void QFileDialogPrivate::helperPrepareShow(QPlatformDialogHelper *)
     options->setHistory(q->history());
     if (usingWidgets())
         options->setSidebarUrls(qFileDialogUi->sidebar->urls());
-    const QDir directory = q->directory();
-    options->setInitialDirectory(directory.exists() ?
-                                 QUrl::fromLocalFile(directory.absolutePath()) :
-                                 QUrl());
     if (options->initiallySelectedNameFilter().isEmpty())
         options->setInitiallySelectedNameFilter(q->selectedNameFilter());
     if (options->initiallySelectedFiles().isEmpty())
@@ -928,12 +893,17 @@ void QFileDialogPrivate::_q_goToUrl(const QUrl &url)
 
 /*!
     Sets the file dialog's current \a directory.
+
+    \note On iOS, if you set \a directory to \l{QStandardPaths::standardLocations()}
+        {QStandardPaths::standardLocations(QStandardPaths::PicturesLocation).last()},
+        a native image picker dialog will be used for accessing the user's photo album.
+        The filename returned can be loaded using QFile and related APIs.
+        This feature was added in Qt 5.5.
 */
 void QFileDialog::setDirectory(const QString &directory)
 {
     Q_D(QFileDialog);
     QString newDirectory = directory;
-    QFileInfo info(directory);
     //we remove .. and . from the given path if exist
     if (!directory.isEmpty())
         newDirectory = QDir::cleanPath(directory);
@@ -942,7 +912,7 @@ void QFileDialog::setDirectory(const QString &directory)
         return;
 
     QUrl newDirUrl = QUrl::fromLocalFile(newDirectory);
-    d->setLastVisitedDirectory(newDirUrl);
+    QFileDialogPrivate::setLastVisitedDirectory(newDirUrl);
 
     d->options->setInitialDirectory(QUrl::fromLocalFile(directory));
     if (!d->usingWidgets()) {
@@ -985,6 +955,16 @@ QDir QFileDialog::directory() const
 
     \note The non-native QFileDialog supports only local files.
 
+    \note On Windows, it is possible to pass URLs representing
+    one of the \e {virtual folders}, such as "Computer" or "Network".
+    This is done by passing a QUrl using the scheme \c clsid followed
+    by the CLSID value with the curly braces removed. For example the URL
+    \c clsid:374DE290-123F-4565-9164-39C4925E467B denotes the download
+    location. For a complete list of possible values, see the MSDN documentation on
+    \l{https://msdn.microsoft.com/en-us/library/windows/desktop/dd378457.aspx}{KNOWNFOLDERID}.
+    This feature was added in Qt 5.5.
+
+    \sa QUuid
     \since 5.2
 */
 void QFileDialog::setDirectoryUrl(const QUrl &directory)
@@ -993,14 +973,14 @@ void QFileDialog::setDirectoryUrl(const QUrl &directory)
     if (!directory.isValid())
         return;
 
-    d->setLastVisitedDirectory(directory);
+    QFileDialogPrivate::setLastVisitedDirectory(directory);
     d->options->setInitialDirectory(directory);
 
     if (d->nativeDialogInUse)
         d->setDirectory_sys(directory);
     else if (directory.isLocalFile())
         setDirectory(directory.toLocalFile());
-    else
+    else if (d->usingWidgets())
         qWarning() << "Non-native QFileDialog supports only local files";
 }
 
@@ -1219,7 +1199,7 @@ QList<QUrl> QFileDialogPrivate::userSelectedFiles() const
     return files;
 }
 
-QStringList QFileDialogPrivate::addDefaultSuffixToFiles(const QStringList filesToFix) const
+QStringList QFileDialogPrivate::addDefaultSuffixToFiles(const QStringList &filesToFix) const
 {
     QStringList files;
     for (int i=0; i<filesToFix.size(); ++i) {
@@ -1525,6 +1505,8 @@ void QFileDialog::setFilter(QDir::Filters filters)
     d->showHiddenAction->setChecked((filters & QDir::Hidden));
 }
 
+#ifndef QT_NO_MIMETYPE
+
 static QString nameFilterForMime(const QString &mimeType)
 {
     QMimeDatabase db;
@@ -1593,6 +1575,8 @@ void QFileDialog::selectMimeTypeFilter(const QString &filter)
     if (!text.isEmpty())
         selectNameFilter(text);
 }
+
+#endif // QT_NO_MIMETYPE
 
 /*!
     \property QFileDialog::viewMode
@@ -2665,6 +2649,104 @@ void QFileDialog::accept()
     }
 }
 
+#ifndef QT_NO_SETTINGS
+void QFileDialogPrivate::saveSettings()
+{
+    Q_Q(QFileDialog);
+    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+    settings.beginGroup(QLatin1String("FileDialog"));
+
+    if (usingWidgets()) {
+        settings.setValue(QLatin1String("sidebarWidth"), qFileDialogUi->splitter->sizes().first());
+        settings.setValue(QLatin1String("shortcuts"), QUrl::toStringList(qFileDialogUi->sidebar->urls()));
+        settings.setValue(QLatin1String("treeViewHeader"), qFileDialogUi->treeView->header()->saveState());
+    }
+    QStringList historyUrls;
+    foreach (const QString &path, q->history())
+        historyUrls << QUrl::fromLocalFile(path).toString();
+    settings.setValue(QLatin1String("history"), historyUrls);
+    settings.setValue(QLatin1String("lastVisited"), lastVisitedDir()->toString());
+    const QMetaEnum &viewModeMeta = q->metaObject()->enumerator(q->metaObject()->indexOfEnumerator("ViewMode"));
+    settings.setValue(QLatin1String("viewMode"), QLatin1String(viewModeMeta.key(q->viewMode())));
+    settings.setValue(QLatin1String("qtVersion"), QLatin1String(QT_VERSION_STR));
+}
+
+bool QFileDialogPrivate::restoreFromSettings()
+{
+    Q_Q(QFileDialog);
+    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+    if (!settings.childGroups().contains(QLatin1String("FileDialog")))
+        return false;
+    settings.beginGroup(QLatin1String("FileDialog"));
+
+    q->setDirectoryUrl(lastVisitedDir()->isEmpty() ? settings.value(QLatin1String("lastVisited")).toUrl() : *lastVisitedDir());
+
+    QByteArray viewModeStr = settings.value(QLatin1String("viewMode")).toString().toLatin1();
+    const QMetaEnum &viewModeMeta = q->metaObject()->enumerator(q->metaObject()->indexOfEnumerator("ViewMode"));
+    bool ok = false;
+    int viewMode = viewModeMeta.keyToValue(viewModeStr.constData(), &ok);
+    if (!ok)
+        viewMode = QFileDialog::List;
+    q->setViewMode(static_cast<QFileDialog::ViewMode>(viewMode));
+
+    sidebarUrls = QUrl::fromStringList(settings.value(QLatin1String("shortcuts")).toStringList());
+    headerData = settings.value(QLatin1String("treeViewHeader")).toByteArray();
+
+    if (!usingWidgets())
+        return true;
+
+    QStringList history;
+    foreach (const QString &urlStr, settings.value(QLatin1String("history")).toStringList()) {
+        QUrl url(urlStr);
+        if (url.isLocalFile())
+            history << url.toLocalFile();
+    }
+
+    return restoreWidgetState(history, settings.value(QLatin1String("sidebarWidth"), -1).toInt());
+}
+#endif // QT_NO_SETTINGS
+
+bool QFileDialogPrivate::restoreWidgetState(QStringList &history, int splitterPosition)
+{
+    Q_Q(QFileDialog);
+    if (splitterPosition >= 0) {
+        QList<int> splitterSizes;
+        splitterSizes.append(splitterPosition);
+        splitterSizes.append(qFileDialogUi->splitter->widget(1)->sizeHint().width());
+        qFileDialogUi->splitter->setSizes(splitterSizes);
+    } else {
+        if (!qFileDialogUi->splitter->restoreState(splitterState))
+            return false;
+        QList<int> list = qFileDialogUi->splitter->sizes();
+        if (list.count() >= 2 && (list.at(0) == 0 || list.at(1) == 0)) {
+            for (int i = 0; i < list.count(); ++i)
+                list[i] = qFileDialogUi->splitter->widget(i)->sizeHint().width();
+            qFileDialogUi->splitter->setSizes(list);
+        }
+    }
+
+    qFileDialogUi->sidebar->setUrls(sidebarUrls);
+    while (history.count() > 5)
+        history.pop_front();
+    q->setHistory(history);
+
+    QHeaderView *headerView = qFileDialogUi->treeView->header();
+    if (!headerView->restoreState(headerData))
+        return false;
+
+    QList<QAction*> actions = headerView->actions();
+    QAbstractItemModel *abstractModel = model;
+#ifndef QT_NO_PROXYMODEL
+    if (proxyModel)
+        abstractModel = proxyModel;
+#endif
+    int total = qMin(abstractModel->columnCount(QModelIndex()), actions.count() + 1);
+    for (int i = 1; i < total; ++i)
+        actions.at(i - 1)->setChecked(!headerView->isSectionHidden(i));
+
+    return true;
+}
+
 /*!
     \internal
 
@@ -2691,8 +2773,12 @@ void QFileDialogPrivate::init(const QUrl &directory, const QString &nameFilter,
     q->selectFile(initialSelection(directory));
 
 #ifndef QT_NO_SETTINGS
-    const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
+    // Try to restore from the FileDialog settings group; if it fails, fall back
+    // to the pre-5.5 QByteArray serialized settings.
+    if (!restoreFromSettings()) {
+        const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+        q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
+    }
 #endif
 
 #if defined(Q_EMBEDDED_SMALLSCREEN)
@@ -2716,7 +2802,7 @@ void QFileDialogPrivate::createWidgets()
         return;
     Q_Q(QFileDialog);
     model = new QFileSystemModel(q);
-    options->setFilter(model->filter());
+    model->setFilter(options->filter());
     model->setObjectName(QLatin1String("qt_filesystem_model"));
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         model->setNameFilterDisables(helper->defaultNameFilterDisables());
@@ -2840,8 +2926,12 @@ void QFileDialogPrivate::createWidgets()
     createMenuActions();
 
 #ifndef QT_NO_SETTINGS
-    const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
+    // Try to restore from the FileDialog settings group; if it fails, fall back
+    // to the pre-5.5 QByteArray serialized settings.
+    if (!restoreFromSettings()) {
+        const QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+        q->restoreState(settings.value(QLatin1String("Qt/filedialog")).toByteArray());
+    }
 #endif
 
     // Initial widget states from options
@@ -2852,9 +2942,12 @@ void QFileDialogPrivate::createWidgets()
     if (!options->sidebarUrls().isEmpty())
         q->setSidebarUrls(options->sidebarUrls());
     q->setDirectoryUrl(options->initialDirectory());
+#ifndef QT_NO_MIMETYPE
     if (!options->mimeTypeFilters().isEmpty())
         q->setMimeTypeFilters(options->mimeTypeFilters());
-    else if (!options->nameFilters().isEmpty())
+    else
+#endif
+    if (!options->nameFilters().isEmpty())
         q->setNameFilters(options->nameFilters());
     q->selectNameFilter(options->initiallySelectedNameFilter());
     q->setDefaultSuffix(options->defaultSuffix());
@@ -3595,7 +3688,7 @@ void QFileDialogPrivate::_q_rowsInserted(const QModelIndex &parent)
         return;
 }
 
-void QFileDialogPrivate::_q_fileRenamed(const QString &path, const QString oldName, const QString newName)
+void QFileDialogPrivate::_q_fileRenamed(const QString &path, const QString &oldName, const QString &newName)
 {
     const QFileDialog::FileMode fileMode = q_func()->fileMode();
     if (fileMode == QFileDialog::Directory || fileMode == QFileDialog::DirectoryOnly) {

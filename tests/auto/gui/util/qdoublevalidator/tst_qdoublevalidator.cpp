@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -59,30 +59,39 @@ void tst_QDoubleValidator::validateThouSep_data()
 {
     QTest::addColumn<QString>("localeName");
     QTest::addColumn<QString>("value");
+    QTest::addColumn<bool>("rejectGroupSeparator");
     QTest::addColumn<QValidator::State>("result");
 
-    QTest::newRow("1,000C") << "C" << QString("1,000") << ACC;
-    QTest::newRow("1.000C") << "C" << QString("1.000") << ACC;
+    QTest::newRow("1,000C") << "C" << QString("1,000") << false << ACC;
+    QTest::newRow("1,000.1C") << "C" << QString("1,000.1") << false << ACC;
+    QTest::newRow("1,000.1C_reject") << "C" << QString("1,000.1") << true << INV;
+    QTest::newRow("1.000C") << "C" << QString("1.000") << false << ACC;
 
-    QTest::newRow("1,000de") << "de" << QString("1,000") << ACC;
-    QTest::newRow("1.000de") << "de" << QString("1.000") << ACC;
+    QTest::newRow("1,000de") << "de" << QString("1,000") << false << ACC;
+    QTest::newRow("1.000de") << "de" << QString("1.000") << false << ACC;
 
-    QTest::newRow(".C") << "C" << QString(".") << ITM;
-    QTest::newRow(".de") << "de" << QString(".") << INV;
-    QTest::newRow(",C") << "C" << QString(",") << INV;
-    QTest::newRow(",de") << "de" << QString(",") << ITM;
+    QTest::newRow(".C") << "C" << QString(".") << false << ITM;
+    QTest::newRow(".de") << "de" << QString(".") << false << INV;
+    QTest::newRow("1.000,1de") << "de" << QString("1.000,1") << false << ACC;
+    QTest::newRow("1.000,1de_reject") << "de" << QString("1.000,1") << true << INV;
+    QTest::newRow(",C") << "C" << QString(",") << false << INV;
+    QTest::newRow(",de") << "de" << QString(",") << false << ITM;
 }
 
 void tst_QDoubleValidator::validateThouSep()
 {
     QFETCH(QString, localeName);
     QFETCH(QString, value);
+    QFETCH(bool, rejectGroupSeparator);
     QFETCH(QValidator::State, result);
     int dummy = 0;
 
     QDoubleValidator iv(-10000, 10000, 3, 0);
     iv.setNotation(QDoubleValidator::ScientificNotation);
-    iv.setLocale(QLocale(localeName));
+    QLocale locale(localeName);
+    if (rejectGroupSeparator)
+        locale.setNumberOptions(QLocale::RejectGroupSeparator);
+    iv.setLocale(locale);
 
     QCOMPARE(iv.validate(value, dummy), result);
 }

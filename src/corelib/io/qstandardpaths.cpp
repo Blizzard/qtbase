@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -77,15 +77,10 @@ QT_BEGIN_NAMESPACE
     this user, but should still be assumed to be unreachable by applications by
     other users.
 
-    The only exception is QStandardPaths::TempLocation (which is the same as
-    QDir::tempPath()): the path returned may be application-specific, but files
-    stored there may be accessed by other applications run by the same user.
-
     Data interchange with other users is out of the scope of QStandardPaths.
 
     \value DesktopLocation Returns the user's desktop directory. This is a generic value.
-           On systems with no concept of a desktop, this is the same as
-           QStandardPaths::HomeLocation.
+           On systems with no concept of a desktop.
     \value DocumentsLocation Returns the directory containing user document files.
            This is a generic value. The returned path is never empty.
     \value FontsLocation Returns the directory containing user's fonts. This is a generic value.
@@ -142,6 +137,10 @@ QT_BEGIN_NAMESPACE
     \value AppLocalDataLocation Returns the local settings path on the Windows operating
            system. On all other platforms, it returns the same value as AppDataLocation.
            This enum value was added in Qt 5.4.
+    \value AppConfigLocation Returns a directory location where user-specific
+           configuration files should be written. This is an application-specific directory,
+           and the returned path is never empty.
+           This enum value was added in Qt 5.5.
 
     The following table gives examples of paths on different operating systems.
     The first path is the writable path (unless noted). Other, additional
@@ -195,7 +194,7 @@ QT_BEGIN_NAMESPACE
          \li "~/Library/Preferences"
          \li "C:/Users/<USER>/AppData/Local", "C:/ProgramData"
     \row \li DownloadLocation
-         \li "~/Documents"
+         \li "~/Downloads"
          \li "C:/Users/<USER>/Documents"
     \row \li GenericCacheLocation
          \li "~/Library/Caches", "/Library/Caches"
@@ -206,6 +205,9 @@ QT_BEGIN_NAMESPACE
     \row \li AppLocalDataLocation
          \li "~/Library/Application Support/<APPNAME>", "/Library/Application Support/<APPNAME>". "<APPDIR>/../Resources"
          \li "C:/Users/<USER>/AppData/Local/<APPNAME>", "C:/ProgramData/<APPNAME>", "<APPDIR>", "<APPDIR>/data"
+    \row \li AppConfigLocation
+         \li "~/Library/Preferences/<APPNAME>"
+         \li "C:/Users/<USER>/AppData/Local/<APPNAME>", "C:/ProgramData/<APPNAME>"
     \endtable
 
     \table
@@ -267,46 +269,73 @@ QT_BEGIN_NAMESPACE
     \row \li AppLocalDataLocation
          \li "<APPROOT>/data", "<APPROOT>/app/native/assets"
          \li "~/.local/share/<APPNAME>", "/usr/local/share/<APPNAME>", "/usr/share/<APPNAME>"
+    \row \li AppConfigLocation
+         \li "<APPROOT>/data/Settings"
+         \li "~/.config/<APPNAME>", "/etc/xdg/<APPNAME>"
     \endtable
 
     \table
-    \header \li Path type \li Android
+    \header \li Path type \li Android \li iOS
     \row \li DesktopLocation
          \li "<APPROOT>/files"
+         \li "<APPROOT>/<APPDIR>" (not writable)
     \row \li DocumentsLocation
          \li "<USER>/Documents", "<USER>/<APPNAME>/Documents"
+         \li "<APPROOT>/Documents"
     \row \li FontsLocation
          \li "/system/fonts" (not writable)
+         \li "<APPROOT>/Documents/.fonts"
     \row \li ApplicationsLocation
          \li not supported (directory not readable)
+         \li not supported
     \row \li MusicLocation
          \li "<USER>/Music", "<USER>/<APPNAME>/Music"
+         \li "<APPROOT>/Documents/Music"
     \row \li MoviesLocation
          \li "<USER>/Movies", "<USER>/<APPNAME>/Movies"
+         \li "<APPROOT>/Documents/Movies"
     \row \li PicturesLocation
          \li "<USER>/Pictures", "<USER>/<APPNAME>/Pictures"
+         \li "<APPROOT>/Documents/Pictures", "assets-library://"
     \row \li TempLocation
          \li "<APPROOT>/cache"
+         \li "<APPROOT>/tmp"
     \row \li HomeLocation
          \li "<APPROOT>/files"
+         \li "<APPROOT>/<APPDIR>" (not writable)
     \row \li DataLocation
          \li "<APPROOT>/files", "<USER>/<APPNAME>/files"
+         \li "<APPROOT>/Library/Application Support"
     \row \li CacheLocation
          \li "<APPROOT>/cache", "<USER>/<APPNAME>/cache"
+         \li "<APPROOT>/Library/Caches"
     \row \li GenericDataLocation
          \li "<USER>"
+         \li "<APPROOT>/Documents"
     \row \li RuntimeLocation
          \li "<APPROOT>/cache"
+         \li not supported
     \row \li ConfigLocation
          \li "<APPROOT>/files/settings"
+         \li "<APPROOT>/Documents"
     \row \li GenericConfigLocation
          \li "<APPROOT>/files/settings" (there is no shared settings)
+         \li "<APPROOT>/Documents"
     \row \li DownloadLocation
          \li "<USER>/Downloads", "<USER>/<APPNAME>/Downloads"
+         \li "<APPROOT>/Documents/Download"
     \row \li GenericCacheLocation
          \li "<APPROOT>/cache" (there is no shared cache)
+         \li "<APPROOT>/Library/Caches"
     \row \li AppDataLocation
          \li "<APPROOT>/files", "<USER>/<APPNAME>/files"
+         \li "<APPROOT>/Library/Application Support"
+    \row \li AppConfigLocation
+         \li "<APPROOT>/files/settings"
+         \li "<APPROOT>/Documents"
+    \row \li AppLocalDataLocation
+         \li "<APPROOT>/files", "<USER>/<APPNAME>/files"
+         \li "<APPROOT>/Library/Application Support"
     \endtable
 
     In the table above, \c <APPNAME> is usually the organization name, the
@@ -320,6 +349,12 @@ QT_BEGIN_NAMESPACE
 
     \note On Android, applications with open files on the external storage (<USER> locations),
           will be killed if the external storage is unmounted.
+
+    \note On iOS, if you do pass \c {QStandardPaths::standardLocations(QStandardPaths::PicturesLocation).last()}
+        as argument to \l{QFileDialog::setDirectory()},
+        a native image picker dialog will be used for accessing the user's photo album.
+        The filename returned can be loaded using QFile and related APIs.
+        This feature was added in Qt 5.5.
 
     \sa writableLocation(), standardLocations(), displayName(), locate(), locateAll()
 */
@@ -565,6 +600,8 @@ QString QStandardPaths::displayName(StandardLocation type)
     case AppDataLocation:
     case AppLocalDataLocation:
         return QCoreApplication::translate("QStandardPaths", "Application Data");
+    case AppConfigLocation:
+        return QCoreApplication::translate("QStandardPaths", "Application Configuration");
     }
     // not reached
     return QString();
@@ -585,7 +622,7 @@ QString QStandardPaths::displayName(StandardLocation type)
 
   This affects the locations into which test programs might write files:
   GenericDataLocation, DataLocation, ConfigLocation, GenericConfigLocation,
-  GenericCacheLocation, CacheLocation.
+  AppConfigLocation, GenericCacheLocation, CacheLocation.
   Other locations are not affected.
 
   On Unix, \c XDG_DATA_HOME is set to \e ~/.qttest/share, \c XDG_CONFIG_HOME is

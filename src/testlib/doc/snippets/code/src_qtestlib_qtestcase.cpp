@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -153,6 +153,19 @@ namespace QTest {
 }
 //! [16]
 
+//! [toString-overload]
+namespace MyNamespace {
+    char *toString(const MyPoint &point)
+    {
+        // bring QTest::toString overloads into scope:
+        using QTest::toString;
+        // delegate char* handling to QTest::toString(QByteArray):
+        return toString("MyPoint(" +
+                        QByteArray::number(point.x()) + ", " +
+                        QByteArray::number(point.y()) + ')');
+    }
+}
+//! [toString-overload]
 
 //! [17]
 int i = 0;

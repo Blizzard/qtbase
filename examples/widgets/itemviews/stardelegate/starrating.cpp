@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -39,7 +39,7 @@
 ****************************************************************************/
 
 #include <QtWidgets>
-#include <math.h>
+#include <cmath>
 
 #include "starrating.h"
 
@@ -53,8 +53,8 @@ StarRating::StarRating(int starCount, int maxStarCount)
 
     starPolygon << QPointF(1.0, 0.5);
     for (int i = 1; i < 5; ++i)
-        starPolygon << QPointF(0.5 + 0.5 * cos(0.8 * i * 3.14),
-                               0.5 + 0.5 * sin(0.8 * i * 3.14));
+        starPolygon << QPointF(0.5 + 0.5 * std::cos(0.8 * i * 3.14),
+                               0.5 + 0.5 * std::sin(0.8 * i * 3.14));
 
     diamondPolygon << QPointF(0.4, 0.5) << QPointF(0.5, 0.4)
                    << QPointF(0.6, 0.5) << QPointF(0.5, 0.6)

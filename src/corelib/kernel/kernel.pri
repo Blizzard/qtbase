@@ -99,20 +99,22 @@ winrt {
 }
 
 mac {
+    HEADERS += \
+        kernel/qcore_mac_p.h
+
     SOURCES += \
-        kernel/qcoreapplication_mac.cpp
-}
+        kernel/qcoreapplication_mac.cpp \
+        kernel/qcore_mac.cpp
 
-mac:!nacl {
-       HEADERS += \
-                kernel/qcore_mac_p.h
-       SOURCES += \
-                kernel/qcore_mac.cpp
-       OBJECTIVE_SOURCES += \
-                kernel/qcore_mac_objc.mm
+    OBJECTIVE_SOURCES += \
+        kernel/qcore_mac_objc.mm
 
-       # We need UIKit for UIDevice
-       ios: LIBS_PRIVATE += -framework UIKit
+    LIBS_PRIVATE += -framework Foundation
+
+    osx: LIBS_PRIVATE += -framework CoreServices
+
+    # We need UIKit for UIDevice
+    ios: LIBS_PRIVATE += -framework UIKit
 }
 
 nacl {
@@ -147,7 +149,11 @@ unix|integrity {
    contains(QT_CONFIG, clock-gettime):include($$QT_SOURCE_TREE/config.tests/unix/clock-gettime/clock-gettime.pri)
 
     !android {
-        SOURCES += kernel/qsharedmemory_unix.cpp \
+        SOURCES += kernel/qsharedmemory_posix.cpp \
+                   kernel/qsharedmemory_systemv.cpp \
+                   kernel/qsharedmemory_unix.cpp \
+                   kernel/qsystemsemaphore_posix.cpp \
+                   kernel/qsystemsemaphore_systemv.cpp \
                    kernel/qsystemsemaphore_unix.cpp
     } else {
         SOURCES += kernel/qsharedmemory_android.cpp \
@@ -169,7 +175,7 @@ blackberry {
                 kernel/qeventdispatcher_blackberry_p.h
 }
 
-qqnx_pps:!blackberry-playbook {
+qqnx_pps {
         LIBS_PRIVATE += -lpps
         SOURCES += \
                 kernel/qppsattribute.cpp \

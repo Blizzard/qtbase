@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,8 +34,10 @@
 #include "qtestresult_p.h"
 
 #include <QtTest/qtestcase.h>
+#include <QtTest/qtest.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qfile.h>
+#include <QtCore/QSysInfo>
 
 #include <set>
 
@@ -110,6 +104,15 @@ const char *matchedConditions[] =
 #endif
 #ifdef Q_CC_MSVC
     "msvc",
+    #ifdef _MSC_VER
+        #if _MSC_VER == 1800
+            "msvc-2013",
+        #elif _MSC_VER == 1700
+            "msvc-2012",
+        #elif _MSC_VER == 1600
+            "msvc-2010",
+        #endif
+    #endif
 #endif
 
 #ifdef Q_AUTOTEST_EXPORT
@@ -129,6 +132,14 @@ static bool checkCondition(const QByteArray &condition)
         ++m;
     }
 
+    QByteArray distributionName = QSysInfo::productType().toLower().toUtf8();
+    QByteArray distributionRelease = QSysInfo::productVersion().toLower().toUtf8();
+    if (!distributionName.isEmpty()) {
+        if (matches.find(distributionName) == matches.end())
+            matches.insert(distributionName);
+        matches.insert(distributionName + "-" + distributionRelease);
+    }
+
     for (int i = 0; i < conds.size(); ++i) {
         QByteArray c = conds.at(i);
         bool result = c.startsWith('!');
@@ -144,6 +155,9 @@ static bool checkCondition(const QByteArray &condition)
 
 static bool ignoreAll = false;
 static std::set<QByteArray> *ignoredTests = 0;
+static std::set<QByteArray> *gpuFeatures = 0;
+
+Q_TESTLIB_EXPORT std::set<QByteArray> *(*qgpu_features_ptr)(const QString &) = 0;
 
 namespace QTestPrivate {
 
@@ -179,7 +193,18 @@ void parseBlackList()
     }
 }
 
-void checkBlackList(const char *slot, const char *data)
+void parseGpuBlackList()
+{
+    if (!qgpu_features_ptr)
+        return;
+    QString filename = QTest::qFindTestData(QStringLiteral("GPU_BLACKLIST"));
+    if (filename.isEmpty())
+        return;
+    if (!gpuFeatures)
+        gpuFeatures = qgpu_features_ptr(filename);
+}
+
+void checkBlackLists(const char *slot, const char *data)
 {
     bool ignore = ignoreAll;
 
@@ -194,6 +219,16 @@ void checkBlackList(const char *slot, const char *data)
     }
 
     QTestResult::setBlacklistCurrentTest(ignore);
+
+    // Tests blacklisted in GPU_BLACKLIST are to be skipped. Just ignoring the result is
+    // not sufficient since these are expected to crash or behave in undefined ways.
+    if (!ignore && gpuFeatures) {
+        const QByteArray disableKey = QByteArrayLiteral("disable_") + QByteArray(slot);
+        if (gpuFeatures->find(disableKey) != gpuFeatures->end()) {
+            const QByteArray msg = QByteArrayLiteral("Skipped due to GPU blacklist: ") + disableKey;
+            QTest::qSkip(msg.constData(), __FILE__, __LINE__);
+        }
+    }
 }
 
 }

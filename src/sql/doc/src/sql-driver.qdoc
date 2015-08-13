@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -471,7 +471,7 @@
 
     By default the Microsoft library is used on Windows, if you want to
     force the use of the Sybase Open Client, you must define \c
-    Q_USE_SYBASE in \c{%QTDIR%\src\sql\drivers\tds\qsql_tds.cpp}. If you
+    Q_USE_SYBASE in \c{%QTDIR%\qtbase\src\sql\drivers\tds\qsql_tds.cpp}. If you
     are not using a Microsoft compiler, replace \c nmake with \c make in
     the line above.
 
@@ -713,9 +713,8 @@
 
     \snippet code/doc_src_sql-driver.cpp 31
 
-    the problem is usually that the plugin had the wrong \l{Deploying
-    Plugins#The Build Key}{build key}. This might require removing an
-    entry from the \l{Deploying Plugins#The Plugin Cache} {plugin cache}.
+    the problem is usually that the plugin had the wrong build key.
+    This might require removing an entry from the plugin cache.
 
     \target development
     \section1 How to Write Your Own Database Driver
@@ -752,7 +751,7 @@
     must use the Q_PLUGIN_METADATA() macro. Read \l{How to Create Qt
     Plugins} for more information on this. You can also check out how
     this is done in the SQL plugins that are provided with Qt in
-    \c{QTDIR/src/plugins/sqldrivers} and \c{QTDIR/src/sql/drivers}.
+    \c{QTDIR/qtbase/src/plugins/sqldrivers} and \c{QTDIR/qtbase/src/sql/drivers}.
 
     The following code can be used as a skeleton for a SQL driver:
 

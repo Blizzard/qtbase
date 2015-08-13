@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -67,7 +67,6 @@
 #include <private/qopengl_p.h>
 #include <private/qopenglcontext_p.h>
 #include <private/qopenglextensions_p.h>
-#include <private/qmath_p.h>
 #include <private/qpaintengineex_p.h>
 #include <QPaintEngine>
 #include <private/qpainter_p.h>
@@ -106,26 +105,6 @@ QOpenGL2PaintEngineExPrivate::~QOpenGL2PaintEngineExPrivate()
         elementIndicesVBOId = 0;
     }
 }
-
-void QOpenGL2PaintEngineExPrivate::updateTextureFilter(GLenum target, GLenum wrapMode, bool smoothPixmapTransform, GLuint id)
-{
-//    funcs.glActiveTexture(GL_TEXTURE0 + QT_BRUSH_TEXTURE_UNIT); //### Is it always this texture unit?
-    if (id != GLuint(-1) && id == lastTextureUsed)
-        return;
-
-    lastTextureUsed = id;
-
-    if (smoothPixmapTransform) {
-        funcs.glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        funcs.glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    } else {
-        funcs.glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        funcs.glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    }
-    funcs.glTexParameteri(target, GL_TEXTURE_WRAP_S, wrapMode);
-    funcs.glTexParameteri(target, GL_TEXTURE_WRAP_T, wrapMode);
-}
-
 
 inline QColor qt_premultiplyColor(QColor c, GLfloat opacity)
 {
@@ -173,38 +152,129 @@ void QOpenGL2PaintEngineExPrivate::useSimpleShader()
         updateMatrix();
 }
 
+/*
+    Single entry-point for activating, binding, and setting properties.
+
+    Allows keeping track of (caching) the latest texture unit and bound
+    texture in a central place, so that we can skip re-binding unless
+    needed.
+
+    \note Any code or Qt API that internally activates or binds will
+    not affect the cache used by this function, which means they will
+    lead to inconsisent state. QPainter::beginNativePainting() takes
+    care of resetting the cache, so for user–code this is fine, but
+    internally in the paint engine care must be taken to not call
+    functions that may activate or bind under our feet.
+*/
+template<typename T>
+void QOpenGL2PaintEngineExPrivate::updateTexture(GLenum textureUnit, const T &texture, GLenum wrapMode, GLenum filterMode, TextureUpdateMode updateMode)
+{
+    static const GLenum target = GL_TEXTURE_2D;
+
+    activateTextureUnit(textureUnit);
+
+    GLuint textureId = bindTexture(texture);
+
+    if (updateMode == UpdateIfNeeded && textureId == lastTextureUsed)
+        return;
+
+    lastTextureUsed = textureId;
+
+    funcs.glTexParameteri(target, GL_TEXTURE_WRAP_S, wrapMode);
+    funcs.glTexParameteri(target, GL_TEXTURE_WRAP_T, wrapMode);
+
+    funcs.glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filterMode);
+    funcs.glTexParameteri(target, GL_TEXTURE_MIN_FILTER, filterMode);
+}
+
+void QOpenGL2PaintEngineExPrivate::activateTextureUnit(GLenum textureUnit)
+{
+    if (textureUnit != lastTextureUnitUsed) {
+        funcs.glActiveTexture(GL_TEXTURE0 + textureUnit);
+        lastTextureUnitUsed = textureUnit;
+
+        // We simplify things by keeping a single cached value of the last
+        // texture that was bound, instead of one per texture unit. This
+        // means that switching texture units could potentially mean we
+        // need a re-bind and corresponding parameter updates.
+        lastTextureUsed = GLuint(-1);
+    }
+}
+
+template<>
+GLuint QOpenGL2PaintEngineExPrivate::bindTexture(const GLuint &textureId)
+{
+    if (textureId != lastTextureUsed)
+        funcs.glBindTexture(GL_TEXTURE_2D, textureId);
+
+    return textureId;
+}
+
+template<>
+GLuint QOpenGL2PaintEngineExPrivate::bindTexture(const QImage &image)
+{
+    return QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, image);
+}
+
+template<>
+GLuint QOpenGL2PaintEngineExPrivate::bindTexture(const QPixmap &pixmap)
+{
+    return QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, pixmap);
+}
+
+template<>
+GLuint QOpenGL2PaintEngineExPrivate::bindTexture(const QGradient &gradient)
+{
+    // We apply global opacity in the fragment shaders, so we always pass 1.0
+    // for opacity to the cache.
+    GLuint textureId = QOpenGL2GradientCache::cacheForContext(ctx)->getBuffer(gradient, 1.0);
+
+    // QOpenGL2GradientCache::getBuffer() may bind and generate a new texture if it
+    // hasn't been cached yet, but will otherwise return an unbound texture id. To
+    // be sure that the texture is bound, we unfortunately have to bind again,
+    // which results in the initial generation of the texture doing two binds.
+    return bindTexture(textureId);
+}
+
+struct ImageWithBindOptions
+{
+    const QImage &image;
+    QOpenGLTextureCache::BindOptions options;
+};
+
+template<>
+GLuint QOpenGL2PaintEngineExPrivate::bindTexture(const ImageWithBindOptions &imageWithOptions)
+{
+    return QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, imageWithOptions.image, imageWithOptions.options);
+}
+
 void QOpenGL2PaintEngineExPrivate::updateBrushTexture()
 {
     Q_Q(QOpenGL2PaintEngineEx);
 //     qDebug("QOpenGL2PaintEngineExPrivate::updateBrushTexture()");
     Qt::BrushStyle style = currentBrush.style();
 
+    bool smoothPixmapTransform = q->state()->renderHints & QPainter::SmoothPixmapTransform;
+    GLenum filterMode = smoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
+
     if ( (style >= Qt::Dense1Pattern) && (style <= Qt::DiagCrossPattern) ) {
         // Get the image data for the pattern
-        QImage texImage = qt_imageForBrush(style, false);
+        QImage textureImage = qt_imageForBrush(style, false);
 
-        funcs.glActiveTexture(GL_TEXTURE0 + QT_BRUSH_TEXTURE_UNIT);
-        QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, texImage);
-        updateTextureFilter(GL_TEXTURE_2D, GL_REPEAT, q->state()->renderHints & QPainter::SmoothPixmapTransform);
+        updateTexture(QT_BRUSH_TEXTURE_UNIT, textureImage, GL_REPEAT, filterMode, ForceUpdate);
     }
     else if (style >= Qt::LinearGradientPattern && style <= Qt::ConicalGradientPattern) {
         // Gradiant brush: All the gradiants use the same texture
 
-        const QGradient* g = currentBrush.gradient();
+        const QGradient *gradient = currentBrush.gradient();
 
-        // We apply global opacity in the fragment shaders, so we always pass 1.0
-        // for opacity to the cache.
-        GLuint texId = QOpenGL2GradientCache::cacheForContext(ctx)->getBuffer(*g, 1.0);
+        GLenum wrapMode = GL_CLAMP_TO_EDGE;
+        if (gradient->spread() == QGradient::RepeatSpread || gradient->type() == QGradient::ConicalGradient)
+            wrapMode = GL_REPEAT;
+        else if (gradient->spread() == QGradient::ReflectSpread)
+            wrapMode = GL_MIRRORED_REPEAT;
 
-        funcs.glActiveTexture(GL_TEXTURE0 + QT_BRUSH_TEXTURE_UNIT);
-        funcs.glBindTexture(GL_TEXTURE_2D, texId);
-
-        if (g->spread() == QGradient::RepeatSpread || g->type() == QGradient::ConicalGradient)
-            updateTextureFilter(GL_TEXTURE_2D, GL_REPEAT, q->state()->renderHints & QPainter::SmoothPixmapTransform);
-        else if (g->spread() == QGradient::ReflectSpread)
-            updateTextureFilter(GL_TEXTURE_2D, GL_MIRRORED_REPEAT, q->state()->renderHints & QPainter::SmoothPixmapTransform);
-        else
-            updateTextureFilter(GL_TEXTURE_2D, GL_CLAMP_TO_EDGE, q->state()->renderHints & QPainter::SmoothPixmapTransform);
+        updateTexture(QT_BRUSH_TEXTURE_UNIT, *gradient, wrapMode, filterMode, ForceUpdate);
     }
     else if (style == Qt::TexturePattern) {
         currentBrushImage = currentBrush.textureImage();
@@ -221,9 +291,8 @@ void QOpenGL2PaintEngineExPrivate::updateBrushTexture()
             wrapMode = GL_CLAMP_TO_EDGE;
         }
 
-        funcs.glActiveTexture(GL_TEXTURE0 + QT_BRUSH_TEXTURE_UNIT);
-        QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, currentBrushImage);
-        updateTextureFilter(GL_TEXTURE_2D, wrapMode, q->state()->renderHints & QPainter::SmoothPixmapTransform);
+        updateTexture(QT_BRUSH_TEXTURE_UNIT, currentBrushImage, wrapMode, filterMode, ForceUpdate);
+
         textureInvertedY = false;
     }
     brushTextureDirty = false;
@@ -280,7 +349,7 @@ void QOpenGL2PaintEngineExPrivate::updateBrushUniforms()
             const QConicalGradient *g = static_cast<const QConicalGradient *>(currentBrush.gradient());
             translationPoint   = g->center();
 
-            GLfloat angle = -(g->angle() * 2 * Q_PI) / 360.0;
+            GLfloat angle = -qDegreesToRadians(g->angle());
 
             shaderManager->currentProgram()->setUniformValue(location(QOpenGLEngineShaderManager::Angle), angle);
 
@@ -392,8 +461,8 @@ void QOpenGL2PaintEngineExPrivate::updateMatrix()
     // anti-aliased text rendering. In such cases, we snap the translate to the pixel grid.
     if (snapToPixelGrid && transform.type() == QTransform::TxTranslate) {
         // 0.50 needs to rounded down to 0.0 for consistency with raster engine:
-        dx = ceilf(dx - 0.5f);
-        dy = ceilf(dy - 0.5f);
+        dx = std::ceil(dx - 0.5f);
+        dy = std::ceil(dy - 0.5f);
     }
     pmvMatrix[0][0] = (wfactor * transform.m11())  - transform.m13();
     pmvMatrix[1][0] = (wfactor * transform.m21())  - transform.m23();
@@ -565,9 +634,15 @@ void QOpenGL2PaintEngineEx::beginNativePainting()
     }
 #endif // QT_OPENGL_ES_2
 
-    d->lastTextureUsed = GLuint(-1);
-    d->dirtyStencilRegion = QRect(0, 0, d->width, d->height);
     d->resetGLState();
+
+    // We don't know what texture units and textures the native painting
+    // will activate and bind, so we can't assume anything when we return
+    // from the native painting.
+    d->lastTextureUnitUsed = QT_UNKNOWN_TEXTURE_UNIT;
+    d->lastTextureUsed = GLuint(-1);
+
+    d->dirtyStencilRegion = QRect(0, 0, d->width, d->height);
 
     d->shaderManager->setDirty();
 
@@ -576,8 +651,9 @@ void QOpenGL2PaintEngineEx::beginNativePainting()
 
 void QOpenGL2PaintEngineExPrivate::resetGLState()
 {
+    activateTextureUnit(QT_DEFAULT_TEXTURE_UNIT);
+
     funcs.glDisable(GL_BLEND);
-    funcs.glActiveTexture(GL_TEXTURE0);
     funcs.glDisable(GL_STENCIL_TEST);
     funcs.glDisable(GL_DEPTH_TEST);
     funcs.glDisable(GL_SCISSOR_TEST);
@@ -619,10 +695,6 @@ void QOpenGL2PaintEngineExPrivate::transferMode(EngineMode newMode)
 {
     if (newMode == mode)
         return;
-
-    if (mode != BrushDrawingMode) {
-        lastTextureUsed = GLuint(-1);
-    }
 
     if (newMode == TextDrawingMode) {
         shaderManager->setHasComplexGeometry(true);
@@ -1157,7 +1229,7 @@ void QOpenGL2PaintEngineExPrivate::drawVertexArrays(const float *data, int *stop
                                                 GLenum primitive)
 {
     // Now setup the pointer to the vertex array:
-    setVertexAttributePointer(QT_VERTEX_COORDS_ATTR, (GLfloat*)data);
+    setVertexAttributePointer(QT_VERTEX_COORDS_ATTR, data);
 
     int previousStop = 0;
     for (int i=0; i<stopCount; ++i) {
@@ -1336,7 +1408,12 @@ void QOpenGL2PaintEngineEx::renderHintsChanged()
 #endif // QT_OPENGL_ES_2
 
     Q_D(QOpenGL2PaintEngineEx);
+
+    // This is a somewhat sneaky way of conceptually making the next call to
+    // updateTexture() use FoceUpdate for the TextureUpdateMode. We need this
+    // as new render hints may require updating the filter mode.
     d->lastTextureUsed = GLuint(-1);
+
     d->brushTextureDirty = true;
 //    qDebug("QOpenGL2PaintEngineEx::renderHintsChanged() not implemented!");
 }
@@ -1378,18 +1455,15 @@ void QOpenGL2PaintEngineEx::drawPixmap(const QRectF& dest, const QPixmap & pixma
     ensureActive();
     d->transferMode(ImageDrawingMode);
 
-    d->funcs.glActiveTexture(GL_TEXTURE0 + QT_IMAGE_TEXTURE_UNIT);
-    GLuint id = QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, pixmap);
-
-    QOpenGLRect srcRect(src.left(), src.top(), src.right(), src.bottom());
+    GLenum filterMode = state()->renderHints & QPainter::SmoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
+    d->updateTexture(QT_IMAGE_TEXTURE_UNIT, pixmap, GL_CLAMP_TO_EDGE, filterMode);
 
     bool isBitmap = pixmap.isQBitmap();
     bool isOpaque = !isBitmap && !pixmap.hasAlpha();
 
-    d->updateTextureFilter(GL_TEXTURE_2D, GL_CLAMP_TO_EDGE,
-                           state()->renderHints & QPainter::SmoothPixmapTransform, id);
-
     d->shaderManager->setSrcPixelType(isBitmap ? QOpenGLEngineShaderManager::PatternSrc : QOpenGLEngineShaderManager::ImageSrc);
+
+    QOpenGLRect srcRect(src.left(), src.top(), src.right(), src.bottom());
     d->drawTexture(dest, srcRect, pixmap.size(), isOpaque, isBitmap);
 }
 
@@ -1421,16 +1495,28 @@ void QOpenGL2PaintEngineEx::drawImage(const QRectF& dest, const QImage& image, c
         d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::NonPremultipliedImageSrc);
         bindOption = 0;
         break;
+    case QImage::Format_Alpha8:
+        if (ctx->functions()->hasOpenGLFeature(QOpenGLFunctions::TextureRGFormats)) {
+            d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::AlphaImageSrc);
+            bindOption = QOpenGLTextureCache::UseRedFor8BitBindOption;
+        } else
+            d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::ImageSrc);
+        break;
+    case QImage::Format_Grayscale8:
+        if (ctx->functions()->hasOpenGLFeature(QOpenGLFunctions::TextureRGFormats)) {
+            d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::GrayscaleImageSrc);
+            bindOption = QOpenGLTextureCache::UseRedFor8BitBindOption;
+        } else
+            d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::ImageSrc);
+        break;
     default:
         d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::ImageSrc);
         break;
     }
 
-    d->funcs.glActiveTexture(GL_TEXTURE0 + QT_IMAGE_TEXTURE_UNIT);
-    GLuint id = QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, image, bindOption);
-
-    d->updateTextureFilter(GL_TEXTURE_2D, GL_CLAMP_TO_EDGE,
-                           state()->renderHints & QPainter::SmoothPixmapTransform, id);
+    ImageWithBindOptions imageWithOptions = { image, bindOption };
+    GLenum filterMode = state()->renderHints & QPainter::SmoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
+    d->updateTexture(QT_IMAGE_TEXTURE_UNIT, imageWithOptions, GL_CLAMP_TO_EDGE, filterMode);
 
     d->drawTexture(dest, src, image.size(), !image.hasAlphaChannel());
 }
@@ -1471,15 +1557,14 @@ bool QOpenGL2PaintEngineEx::drawTexture(const QRectF &dest, GLuint textureId, co
     ensureActive();
     d->transferMode(ImageDrawingMode);
 
-    d->funcs.glActiveTexture(GL_TEXTURE0 + QT_IMAGE_TEXTURE_UNIT);
-    d->funcs.glBindTexture(GL_TEXTURE_2D, textureId);
+    GLenum filterMode = state()->renderHints & QPainter::SmoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
+    d->updateTexture(QT_IMAGE_TEXTURE_UNIT, textureId, GL_CLAMP_TO_EDGE, filterMode);
+
+    d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::ImageSrc);
 
     QOpenGLRect srcRect(src.left(), src.bottom(), src.right(), src.top());
-
-    d->updateTextureFilter(GL_TEXTURE_2D, GL_CLAMP_TO_EDGE,
-                           state()->renderHints & QPainter::SmoothPixmapTransform, textureId);
-    d->shaderManager->setSrcPixelType(QOpenGLEngineShaderManager::ImageSrc);
     d->drawTexture(dest, srcRect, size, false);
+
     return true;
 }
 
@@ -1514,10 +1599,8 @@ void QOpenGL2PaintEngineEx::drawTextItem(const QPointF &p, const QTextItem &text
 
         {
             QStaticTextItem staticTextItem;
-            staticTextItem.chars = const_cast<QChar *>(ti.chars);
             staticTextItem.setFontEngine(ti.fontEngine);
             staticTextItem.glyphs = glyphs.data();
-            staticTextItem.numChars = ti.num_chars;
             staticTextItem.numGlyphs = glyphs.size();
             staticTextItem.glyphPositions = positions.data();
 
@@ -1639,7 +1722,25 @@ void QOpenGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngine::GlyphFormat gly
             cache->populate(fe, staticTextItem->numGlyphs,
                             staticTextItem->glyphs, staticTextItem->glyphPositions);
         }
-        cache->fillInPendingGlyphs();
+
+        if (cache->hasPendingGlyphs()) {
+            // Filling in the glyphs binds and sets parameters, so we need to
+            // ensure that the glyph cache doesn't mess with whatever unit
+            // is currently active. Note that the glyph cache internally
+            // uses the image texture unit for blitting to the cache, while
+            // we switch between image and mask units when drawing.
+            static const GLenum glypchCacheTextureUnit = QT_IMAGE_TEXTURE_UNIT;
+            activateTextureUnit(glypchCacheTextureUnit);
+
+            cache->fillInPendingGlyphs();
+
+            // We assume the cache can be trusted on which texture was bound
+            lastTextureUsed = cache->texture();
+
+            // But since the brush and image texture units are possibly shared
+            // we may have to re-bind brush textures after filling in the cache.
+            brushTextureDirty = (QT_BRUSH_TEXTURE_UNIT == glypchCacheTextureUnit);
+        }
     }
 
     if (cache->width() == 0 || cache->height() == 0)
@@ -1805,9 +1906,7 @@ void QOpenGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngine::GlyphFormat gly
             funcs.glEnable(GL_BLEND);
             funcs.glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
 
-            funcs.glActiveTexture(GL_TEXTURE0 + QT_MASK_TEXTURE_UNIT);
-            funcs.glBindTexture(GL_TEXTURE_2D, cache->texture());
-            updateTextureFilter(GL_TEXTURE_2D, GL_REPEAT, false);
+            updateTexture(QT_MASK_TEXTURE_UNIT, cache->texture(), GL_REPEAT, GL_NEAREST, ForceUpdate);
 
 #if defined(QT_OPENGL_DRAWCACHEDGLYPHS_INDEX_ARRAY_VBO)
             funcs.glDrawElements(GL_TRIANGLE_STRIP, 6 * numGlyphs, GL_UNSIGNED_SHORT, 0);
@@ -1842,30 +1941,22 @@ void QOpenGL2PaintEngineExPrivate::drawCachedGlyphs(QFontEngine::GlyphFormat gly
         prepareForCachedGlyphDraw(*cache);
     }
 
-    QOpenGLTextureGlyphCache::FilterMode filterMode = (s->matrix.type() > QTransform::TxTranslate)?QOpenGLTextureGlyphCache::Linear:QOpenGLTextureGlyphCache::Nearest;
-    if (lastMaskTextureUsed != cache->texture() || cache->filterMode() != filterMode) {
+    GLenum textureUnit = QT_MASK_TEXTURE_UNIT;
+    if (glyphFormat == QFontEngine::Format_ARGB)
+        textureUnit = QT_IMAGE_TEXTURE_UNIT;
 
-        if (glyphFormat == QFontEngine::Format_ARGB)
-            funcs.glActiveTexture(GL_TEXTURE0 + QT_IMAGE_TEXTURE_UNIT);
-        else
-            funcs.glActiveTexture(GL_TEXTURE0 + QT_MASK_TEXTURE_UNIT);
+    QOpenGLTextureGlyphCache::FilterMode filterMode = (s->matrix.type() > QTransform::TxTranslate) ?
+        QOpenGLTextureGlyphCache::Linear : QOpenGLTextureGlyphCache::Nearest;
 
-        if (lastMaskTextureUsed != cache->texture()) {
-            funcs.glBindTexture(GL_TEXTURE_2D, cache->texture());
-            lastMaskTextureUsed = cache->texture();
-        }
+    GLenum glFilterMode = filterMode == QOpenGLTextureGlyphCache::Linear ? GL_LINEAR : GL_NEAREST;
 
-        if (cache->filterMode() != filterMode) {
-            if (filterMode == QOpenGLTextureGlyphCache::Linear) {
-                funcs.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                funcs.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            } else {
-                funcs.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                funcs.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            }
-            cache->setFilterMode(filterMode);
-        }
+    TextureUpdateMode updateMode = UpdateIfNeeded;
+    if (cache->filterMode() != filterMode) {
+        updateMode = ForceUpdate;
+        cache->setFilterMode(filterMode);
     }
+
+    updateTexture(textureUnit, cache->texture(), GL_REPEAT, glFilterMode, updateMode);
 
 #if defined(QT_OPENGL_DRAWCACHEDGLYPHS_INDEX_ARRAY_VBO)
     funcs.glDrawElements(GL_TRIANGLE_STRIP, 6 * numGlyphs, GL_UNSIGNED_SHORT, 0);
@@ -1918,8 +2009,8 @@ void QOpenGL2PaintEngineExPrivate::drawPixmapFragments(const QPainter::PixmapFra
         qreal s = 0;
         qreal c = 1;
         if (fragments[i].rotation != 0) {
-            s = qFastSin(fragments[i].rotation * Q_PI / 180);
-            c = qFastCos(fragments[i].rotation * Q_PI / 180);
+            s = qFastSin(qDegreesToRadians(fragments[i].rotation));
+            c = qFastCos(qDegreesToRadians(fragments[i].rotation));
         }
 
         qreal right = 0.5 * fragments[i].scaleX * fragments[i].width;
@@ -1950,15 +2041,13 @@ void QOpenGL2PaintEngineExPrivate::drawPixmapFragments(const QPainter::PixmapFra
         allOpaque &= (opacity >= 0.99f);
     }
 
-    funcs.glActiveTexture(GL_TEXTURE0 + QT_IMAGE_TEXTURE_UNIT);
-    GLuint id = QOpenGLTextureCache::cacheForContext(ctx)->bindTexture(ctx, pixmap);
     transferMode(ImageOpacityArrayDrawingMode);
+
+    GLenum filterMode = q->state()->renderHints & QPainter::SmoothPixmapTransform ? GL_LINEAR : GL_NEAREST;
+    updateTexture(QT_IMAGE_TEXTURE_UNIT, pixmap, GL_CLAMP_TO_EDGE, filterMode);
 
     bool isBitmap = pixmap.isQBitmap();
     bool isOpaque = !isBitmap && (!pixmap.hasAlpha() || (hints & QPainter::OpaqueHint)) && allOpaque;
-
-    updateTextureFilter(GL_TEXTURE_2D, GL_CLAMP_TO_EDGE,
-                           q->state()->renderHints & QPainter::SmoothPixmapTransform, id);
 
     // Setup for texture drawing
     currentBrush = noBrush;
@@ -2091,7 +2180,6 @@ void QOpenGL2PaintEngineEx::ensureActive()
         d->transferMode(BrushDrawingMode);
         d->funcs.glViewport(0, 0, d->width, d->height);
         d->needsSync = false;
-        d->lastMaskTextureUsed = 0;
         d->shaderManager->setDirty();
         d->syncGlState();
         for (int i = 0; i < 3; ++i)

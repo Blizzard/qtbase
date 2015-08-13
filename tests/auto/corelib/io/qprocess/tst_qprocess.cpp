@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -44,6 +44,7 @@
 #include <stdlib.h>
 
 #ifndef QT_NO_PROCESS
+# include <private/qprocess_p.h>    // only so we get QPROCESS_USE_SPAWN
 # if defined(Q_OS_WIN)
 #  include <windows.h>
 # endif
@@ -325,6 +326,9 @@ void tst_QProcess::startDetached()
     QProcess proc;
     QVERIFY(proc.startDetached("testProcessNormal/testProcessNormal",
                                QStringList() << "arg1" << "arg2"));
+#ifdef QPROCESS_USE_SPAWN
+    QEXPECT_FAIL("", "QProcess cannot detect failure to start when using posix_spawn()", Continue);
+#endif
     QCOMPARE(QProcess::startDetached("nonexistingexe"), false);
 }
 
@@ -713,6 +717,9 @@ void tst_QProcess::waitForFinished()
     QCOMPARE(output.count("\n"), 10*1024);
 
     process.start("blurdybloop");
+#if defined(QPROCESS_USE_SPAWN) && !defined(Q_OS_QNX)
+    QEXPECT_FAIL("", "QProcess cannot detect failure to start when using posix_spawn()", Abort);
+#endif
     QVERIFY(!process.waitForFinished());
     QCOMPARE(process.error(), QProcess::FailedToStart);
 }
@@ -1223,21 +1230,24 @@ void tst_QProcess::processInAThread()
 void tst_QProcess::processesInMultipleThreads()
 {
     for (int i = 0; i < 10; ++i) {
-        TestThread thread1;
-        TestThread thread2;
-        TestThread thread3;
+        // run from 1 to 10 threads, but run at least some tests
+        // with more threads than the ideal
+        int threadCount = i;
+        if (i > 7)
+            threadCount = qMax(threadCount, QThread::idealThreadCount() + 2);
 
-        thread1.start();
-        thread2.start();
-        thread3.start();
-
-        QVERIFY(thread2.wait(10000));
-        QVERIFY(thread3.wait(10000));
-        QVERIFY(thread1.wait(10000));
-
-        QCOMPARE(thread1.code(), 0);
-        QCOMPARE(thread2.code(), 0);
-        QCOMPARE(thread3.code(), 0);
+        QVector<TestThread *> threads(threadCount);
+        for (int j = 0; j < threadCount; ++j)
+            threads[j] = new TestThread;
+        for (int j = 0; j < threadCount; ++j)
+            threads[j]->start();
+        for (int j = 0; j < threadCount; ++j) {
+            QVERIFY(threads[j]->wait(10000));
+        }
+        for (int j = 0; j < threadCount; ++j) {
+            QCOMPARE(threads[j]->code(), 0);
+        }
+        qDeleteAll(threads);
     }
 }
 
@@ -1514,6 +1524,11 @@ void tst_QProcess::nativeArguments()
 void tst_QProcess::exitCodeTest()
 {
     for (int i = 0; i < 255; ++i) {
+#ifdef QPROCESS_USE_SPAWN
+        // POSIX reserves exit code 127 when using posix_spawn
+        if (i == 127)
+            continue;
+#endif
         QProcess process;
         process.start("testExitCodes/testExitCodes " + QString::number(i));
         QVERIFY(process.waitForFinished(5000));
@@ -1525,6 +1540,9 @@ void tst_QProcess::exitCodeTest()
 //-----------------------------------------------------------------------------
 void tst_QProcess::failToStart()
 {
+#if defined(QPROCESS_USE_SPAWN) && !defined(Q_OS_QNX)
+    QSKIP("QProcess cannot detect failure to start when using posix_spawn()");
+#endif
     qRegisterMetaType<QProcess::ProcessError>("QProcess::ProcessError");
     qRegisterMetaType<QProcess::ExitStatus>("QProcess::ExitStatus");
     qRegisterMetaType<QProcess::ProcessState>("QProcess::ProcessState");
@@ -1592,6 +1610,9 @@ void tst_QProcess::failToStart()
 //-----------------------------------------------------------------------------
 void tst_QProcess::failToStartWithWait()
 {
+#if defined(QPROCESS_USE_SPAWN) && !defined(Q_OS_QNX)
+    QSKIP("QProcess cannot detect failure to start when using posix_spawn()");
+#endif
     qRegisterMetaType<QProcess::ProcessError>("QProcess::ProcessError");
     qRegisterMetaType<QProcess::ExitStatus>("QProcess::ExitStatus");
 
@@ -1619,6 +1640,9 @@ void tst_QProcess::failToStartWithWait()
 //-----------------------------------------------------------------------------
 void tst_QProcess::failToStartWithEventLoop()
 {
+#if defined(QPROCESS_USE_SPAWN) && !defined(Q_OS_QNX)
+    QSKIP("QProcess cannot detect failure to start when using posix_spawn()");
+#endif
     qRegisterMetaType<QProcess::ProcessError>("QProcess::ProcessError");
     qRegisterMetaType<QProcess::ExitStatus>("QProcess::ExitStatus");
 
@@ -1867,6 +1891,9 @@ void tst_QProcess::waitForReadyReadForNonexistantProcess()
     QVERIFY(!process.waitForReadyRead()); // used to crash
     process.start("doesntexist");
     QVERIFY(!process.waitForReadyRead());
+#if defined(QPROCESS_USE_SPAWN) && !defined(Q_OS_QNX)
+    QEXPECT_FAIL("", "QProcess cannot detect failure to start when using posix_spawn()", Abort);
+#endif
     QCOMPARE(errorSpy.count(), 1);
     QCOMPARE(errorSpy.at(0).at(0).toInt(), 0);
     QCOMPARE(finishedSpy1.count(), 0);

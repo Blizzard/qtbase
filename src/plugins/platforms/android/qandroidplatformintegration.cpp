@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 BogDan Vatra <bogdan@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,6 +34,7 @@
 #include "qandroidplatformintegration.h"
 
 #include <QtCore/private/qjni_p.h>
+#include <QtGui/private/qguiapplication_p.h>
 #include <QGuiApplication>
 #include <QOpenGLContext>
 #include <QThread>
@@ -72,6 +73,8 @@ int QAndroidPlatformIntegration::m_defaultPhysicalSizeHeight = 71;
 Qt::ScreenOrientation QAndroidPlatformIntegration::m_orientation = Qt::PrimaryOrientation;
 Qt::ScreenOrientation QAndroidPlatformIntegration::m_nativeOrientation = Qt::PrimaryOrientation;
 
+Qt::ApplicationState QAndroidPlatformIntegration::m_defaultApplicationState = Qt::ApplicationActive;
+
 void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteArray &resource)
 {
     if (resource=="JavaVM")
@@ -79,22 +82,25 @@ void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteA
     if (resource == "QtActivity")
         return QtAndroid::activity();
     if (resource == "AndroidStyleData") {
-        if (m_androidStyle)
+        if (m_androidStyle) {
+            if (m_androidStyle->m_styleData.isEmpty())
+                m_androidStyle->m_styleData = AndroidStyle::loadStyleData();
             return &m_androidStyle->m_styleData;
+        }
         else
-            return Q_NULLPTR;
+            return nullptr;
     }
     if (resource == "AndroidStandardPalette") {
         if (m_androidStyle)
             return &m_androidStyle->m_standardPalette;
         else
-            return Q_NULLPTR;
+            return nullptr;
     }
     if (resource == "AndroidQWidgetFonts") {
         if (m_androidStyle)
             return &m_androidStyle->m_QWidgetsFonts;
         else
-            return Q_NULLPTR;
+            return nullptr;
     }
     if (resource == "AndroidDeviceName") {
         static QString deviceName = QtAndroid::deviceName();
@@ -104,9 +110,9 @@ void *QAndroidPlatformNativeInterface::nativeResourceForIntegration(const QByteA
 }
 
 QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &paramList)
-    : m_touchDevice(0)
+    : m_touchDevice(nullptr)
 #ifndef QT_NO_ACCESSIBILITY
-    , m_accessibility(0)
+    , m_accessibility(nullptr)
 #endif
 {
     Q_UNUSED(paramList);
@@ -142,6 +148,10 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
 
     m_androidSystemLocale = new QAndroidSystemLocale;
 
+#ifndef QT_NO_ACCESSIBILITY
+        m_accessibility = new QAndroidPlatformAccessibility();
+#endif // QT_NO_ACCESSIBILITY
+
     QJNIObjectPrivate javaActivity(QtAndroid::activity());
     if (javaActivity.isValid()) {
         QJNIObjectPrivate resources = javaActivity.callObjectMethod("getResources", "()Landroid/content/res/Resources;");
@@ -173,9 +183,11 @@ QAndroidPlatformIntegration::QAndroidPlatformIntegration(const QStringList &para
             QWindowSystemInterface::registerTouchDevice(m_touchDevice);
         }
     }
+
+    QGuiApplicationPrivate::instance()->setApplicationState(m_defaultApplicationState);
 }
 
-bool QAndroidPlatformIntegration::needsBasicRenderloopWorkaround()
+static bool needsBasicRenderloopWorkaround()
 {
     static bool needsWorkaround =
             QtAndroid::deviceName().compare(QLatin1String("samsung SM-T211"), Qt::CaseInsensitive) == 0
@@ -192,11 +204,7 @@ bool QAndroidPlatformIntegration::hasCapability(Capability cap) const
         case NativeWidgets: return true;
         case OpenGL: return true;
         case ForeignWindows: return true;
-        case ThreadedOpenGL:
-            if (needsBasicRenderloopWorkaround())
-                return false;
-            else
-                return true;
+        case ThreadedOpenGL: return !needsBasicRenderloopWorkaround();
         case RasterGLSurface: return true;
         default:
             return QPlatformIntegration::hasCapability(cap);
@@ -344,8 +352,6 @@ void QAndroidPlatformIntegration::setScreenOrientation(Qt::ScreenOrientation cur
 #ifndef QT_NO_ACCESSIBILITY
 QPlatformAccessibility *QAndroidPlatformIntegration::accessibility() const
 {
-    if (!m_accessibility)
-        m_accessibility = new QAndroidPlatformAccessibility();
     return m_accessibility;
 }
 #endif

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -455,13 +455,12 @@ QT_BEGIN_NAMESPACE
     Synonym for unsigned, used by the QAccessibleInterface cache.
 */
 
+#ifndef QT_NO_ACCESSIBILITY
 
 /* accessible widgets plugin discovery stuff */
-#ifndef QT_NO_ACCESSIBILITY
 #ifndef QT_NO_LIBRARY
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
     (QAccessibleFactoryInterface_iid, QLatin1String("/accessible")))
-#endif
 #endif
 
 // FIXME turn this into one global static struct
@@ -475,13 +474,11 @@ QAccessible::RootObjectHandler QAccessible::rootObjectHandler = 0;
 
 static bool cleanupAdded = false;
 
-#ifndef QT_NO_ACCESSIBILITY
 static QPlatformAccessibility *platformAccessibility()
 {
     QPlatformIntegration *pfIntegration = QGuiApplicationPrivate::platformIntegration();
     return pfIntegration ? pfIntegration->accessibility() : 0;
 }
-#endif
 
 /*!
     \fn QAccessible::QAccessible()
@@ -497,10 +494,8 @@ static QPlatformAccessibility *platformAccessibility()
 */
 void QAccessible::cleanup()
 {
-#ifndef QT_NO_ACCESSIBILITY
     if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
         pfAccessibility->cleanup();
-#endif
 }
 
 static void qAccessibleCleanup()
@@ -684,7 +679,6 @@ QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
                 return iface;
             }
         }
-#ifndef QT_NO_ACCESSIBILITY
 #ifndef QT_NO_LIBRARY
         // Find a QAccessiblePlugin (factory) for the class name. If there's
         // no entry in the cache try to create it using the plugin loader.
@@ -708,18 +702,15 @@ QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
             return result;
         }
 #endif
-#endif
         mo = mo->superClass();
     }
 
-#ifndef QT_NO_ACCESSIBILITY
     if (object == qApp) {
         QAccessibleInterface *appInterface = new QAccessibleApplication;
         QAccessibleCache::instance()->insert(object, appInterface);
         Q_ASSERT(QAccessibleCache::instance()->objectToId.contains(qApp));
         return appInterface;
     }
-#endif
 
     return 0;
 }
@@ -789,10 +780,8 @@ QAccessibleInterface *QAccessible::accessibleInterface(Id id)
 */
 bool QAccessible::isActive()
 {
-#ifndef QT_NO_ACCESSIBILITY
     if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
         return pfAccessibility->isActive();
-#endif
     return false;
 }
 
@@ -827,10 +816,8 @@ void QAccessible::setRootObject(QObject *object)
         return;
     }
 
-#ifndef QT_NO_ACCESSIBILITY
     if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
         pfAccessibility->setRootObject(object);
-#endif
 }
 
 /*!
@@ -863,7 +850,6 @@ void QAccessible::updateAccessibility(QAccessibleEvent *event)
     if (!isActive() || !event->accessibleInterface())
         return;
 
-#ifndef QT_NO_ACCESSIBILITY
     if (event->type() == QAccessible::TableModelChanged) {
         QAccessibleInterface *iface = event->accessibleInterface();
         if (iface && iface->tableInterface())
@@ -877,7 +863,6 @@ void QAccessible::updateAccessibility(QAccessibleEvent *event)
 
     if (QPlatformAccessibility *pfAccessibility = platformAccessibility())
         pfAccessibility->notifyAccessibilityUpdate(event);
-#endif
 }
 
 #if QT_DEPRECATED_SINCE(5, 0)
@@ -1425,6 +1410,12 @@ QAccessible::Id QAccessibleEvent::uniqueId() const
     The difference to the object's previous state is in \a state.
 */
 /*!
+    \fn QAccessibleStateChangeEvent::QAccessibleStateChangeEvent(QAccessibleInterface *iface, QAccessible::State state)
+    Constructs a new QAccessibleStateChangeEvent.
+    \a iface is the interface associated with the event
+    \a state is the state of the accessible object.
+*/
+/*!
     \fn QAccessible::State QAccessibleStateChangeEvent::changedStates() const
     \brief Returns the states that have been changed.
 
@@ -1728,17 +1719,18 @@ bool operator==(const QAccessible::State &first, const QAccessible::State &secon
 /*! \internal */
 Q_GUI_EXPORT QDebug operator<<(QDebug d, const QAccessibleInterface *iface)
 {
+    QDebugStateSaver saver(d);
     if (!iface) {
         d << "QAccessibleInterface(null)";
         return d;
     }
     d.nospace();
-    d << "QAccessibleInterface(" << hex << (void *) iface << dec;
+    d << "QAccessibleInterface(" << hex << (const void *) iface << dec;
     if (iface->isValid()) {
-        d << " name=" << iface->text(QAccessible::Name) << " ";
-        d << "role=" << qAccessibleRoleString(iface->role()) << " ";
+        d << " name=" << iface->text(QAccessible::Name) << ' ';
+        d << "role=" << qAccessibleRoleString(iface->role()) << ' ';
         if (iface->childCount())
-            d << "childc=" << iface->childCount() << " ";
+            d << "childc=" << iface->childCount() << ' ';
         if (iface->object()) {
             d << "obj=" << iface->object();
         }
@@ -1762,13 +1754,14 @@ Q_GUI_EXPORT QDebug operator<<(QDebug d, const QAccessibleInterface *iface)
     } else {
         d << " invalid";
     }
-    d << ")";
-    return d.space();
+    d << ')';
+    return d;
 }
 
 /*! \internal */
 QDebug operator<<(QDebug d, const QAccessibleEvent &ev)
 {
+    QDebugStateSaver saver(d);
     d.nospace() << "QAccessibleEvent(";
     if (ev.object()) {
         d.nospace() << "object=" << hex << ev.object() << dec;
@@ -1821,10 +1814,10 @@ QDebug operator<<(QDebug d, const QAccessibleEvent &ev)
         if (changed.supportsAutoCompletion) d << "supportsAutoCompletion";
 
     }
-    d.nospace() << ")";
-    return d.space();
+    d << ')';
+    return d;
 }
-
+#endif // QT_NO_DEBUGSTREAM
 
 /*!
     \class QAccessibleTextInterface
@@ -2626,7 +2619,14 @@ struct QAccessibleActionStrings
         decreaseAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Decrease"))),
         showMenuAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "ShowMenu"))),
         setFocusAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "SetFocus"))),
-        toggleAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Toggle"))) {}
+        toggleAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Toggle"))),
+        scrollLeftAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Scroll Left"))),
+        scrollRightAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Scroll Right"))),
+        scrollUpAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Scroll Up"))),
+        scrollDownAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Scroll Down"))),
+        previousPageAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Previous Page"))),
+        nextPageAction(QStringLiteral(QT_TRANSLATE_NOOP("QAccessibleActionInterface", "Next Page")))
+    {}
 
     const QString pressAction;
     const QString increaseAction;
@@ -2634,6 +2634,12 @@ struct QAccessibleActionStrings
     const QString showMenuAction;
     const QString setFocusAction;
     const QString toggleAction;
+    const QString scrollLeftAction;
+    const QString scrollRightAction;
+    const QString scrollUpAction;
+    const QString scrollDownAction;
+    const QString previousPageAction;
+    const QString nextPageAction;
 
     QString localizedDescription(const QString &actionName)
     {
@@ -2649,6 +2655,20 @@ struct QAccessibleActionStrings
             return QAccessibleActionInterface::tr("Sets the focus");
         else if (actionName == toggleAction)
             return QAccessibleActionInterface::tr("Toggles the state");
+        else if (actionName == scrollLeftAction)
+            return QAccessibleActionInterface::tr("Scrolls to the left");
+        else if (actionName == scrollRightAction)
+            return QAccessibleActionInterface::tr("Scrolls to the right");
+        else if (actionName == scrollUpAction)
+            return QAccessibleActionInterface::tr("Scrolls up");
+        else if (actionName == scrollDownAction)
+            return QAccessibleActionInterface::tr("Scrolls down");
+        else if (actionName == previousPageAction)
+            return QAccessibleActionInterface::tr("Goes back a page");
+        else if (actionName == nextPageAction)
+            return QAccessibleActionInterface::tr("Goes to the next page");
+
+
         return QString();
     }
 };
@@ -2719,14 +2739,67 @@ const QString &QAccessibleActionInterface::toggleAction()
     return accessibleActionStrings()->toggleAction;
 }
 
+/*!
+    Returns the name of the scroll left default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::scrollLeftAction()
+{
+    return accessibleActionStrings()->scrollLeftAction;
+}
+
+/*!
+    Returns the name of the scroll right default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::scrollRightAction()
+{
+    return accessibleActionStrings()->scrollRightAction;
+}
+
+/*!
+    Returns the name of the scroll up default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::scrollUpAction()
+{
+    return accessibleActionStrings()->scrollUpAction;
+}
+
+/*!
+    Returns the name of the scroll down default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::scrollDownAction()
+{
+    return accessibleActionStrings()->scrollDownAction;
+}
+
+/*!
+    Returns the name of the previous page default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::previousPageAction()
+{
+    return accessibleActionStrings()->previousPageAction;
+}
+
+/*!
+    Returns the name of the next page default action.
+    \sa actionNames(), localizedActionName()
+  */
+QString QAccessibleActionInterface::nextPageAction()
+{
+    return accessibleActionStrings()->nextPageAction;
+}
+
 /*! \internal */
 QString qAccessibleLocalizedActionDescription(const QString &actionName)
 {
     return accessibleActionStrings()->localizedDescription(actionName);
 }
 
-
-#endif
+#endif // QT_NO_ACCESSIBILITY
 
 QT_END_NAMESPACE
 

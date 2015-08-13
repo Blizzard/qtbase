@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,12 @@
 
 #include <stdio.h>
 #include <X11/keysym.h>
+
+#ifdef XCB_USE_XINPUT22
+#include <X11/extensions/XI2proto.h>
+#undef KeyPress
+#undef KeyRelease
+#endif
 
 #ifndef XK_ISO_Left_Tab
 #define XK_ISO_Left_Tab         0xFE20
@@ -437,6 +443,7 @@ static const unsigned int KeyTbl[] = {
     XF86XK_AudioPrev,           Qt::Key_MediaPrevious,
     XF86XK_AudioNext,           Qt::Key_MediaNext,
     XF86XK_AudioRecord,         Qt::Key_MediaRecord,
+    XF86XK_AudioPause,          Qt::Key_MediaPause,
     XF86XK_Mail,                Qt::Key_LaunchMail,
     XF86XK_MyComputer,          Qt::Key_Launch0,  // ### Qt 6: remap properly
     XF86XK_Calculator,          Qt::Key_Launch1,
@@ -680,7 +687,7 @@ void QXcbKeyboard::updateKeymap()
         if (qEnvironmentVariableIsSet("QT_XKB_CONFIG_ROOT")) {
             xkb_context = xkb_context_new((xkb_context_flags)XKB_CONTEXT_NO_DEFAULT_INCLUDES);
             QList<QByteArray> xkbRootList = QByteArray(qgetenv("QT_XKB_CONFIG_ROOT")).split(':');
-            foreach (QByteArray xkbRoot, xkbRootList)
+            foreach (const QByteArray &xkbRoot, xkbRootList)
                 xkb_context_include_path_append(xkb_context, xkbRoot.constData());
         } else {
             xkb_context = xkb_context_new((xkb_context_flags)0);
@@ -788,6 +795,31 @@ void QXcbKeyboard::updateXKBStateFromCore(quint16 state)
             //qWarning("TODO: Support KeyboardLayoutChange on QPA (QTBUG-27681)");
         }
     }
+}
+
+void QXcbKeyboard::updateXKBStateFromXI(void *modInfo, void *groupInfo)
+{
+#ifdef XCB_USE_XINPUT22
+    if (m_config && !connection()->hasXKB()) {
+        xXIModifierInfo *mods = static_cast<xXIModifierInfo *>(modInfo);
+        xXIGroupInfo *group = static_cast<xXIGroupInfo *>(groupInfo);
+        const xkb_state_component newState = xkb_state_update_mask(xkb_state,
+                                                                   mods->base_mods,
+                                                                   mods->latched_mods,
+                                                                   mods->locked_mods,
+                                                                   group->base_group,
+                                                                   group->latched_group,
+                                                                   group->locked_group);
+
+        if ((newState & XKB_STATE_LAYOUT_EFFECTIVE) == XKB_STATE_LAYOUT_EFFECTIVE) {
+            //qWarning("TODO: Support KeyboardLayoutChange on QPA (QTBUG-27681)");
+        }
+    }
+#else
+    Q_UNUSED(modInfo);
+    Q_UNUSED(groupInfo);
+    Q_ASSERT(false); // this can't be
+#endif
 }
 
 quint32 QXcbKeyboard::xkbModMask(quint16 state)
@@ -933,7 +965,7 @@ xkb_keysym_t QXcbKeyboard::lookupLatinKeysym(xkb_keycode_t keycode) const
 QList<int> QXcbKeyboard::possibleKeys(const QKeyEvent *event) const
 {
     // turn off the modifier bits which doesn't participate in shortcuts
-    Qt::KeyboardModifiers notNeeded = Qt::MetaModifier | Qt::KeypadModifier | Qt::GroupSwitchModifier;
+    Qt::KeyboardModifiers notNeeded = Qt::KeypadModifier | Qt::GroupSwitchModifier;
     Qt::KeyboardModifiers modifiers = event->modifiers() &= ~notNeeded;
     // create a fresh kb state and test against the relevant modifier combinations
     struct xkb_state *kb_state = xkb_state_new(xkb_keymap);
@@ -957,15 +989,18 @@ QList<int> QXcbKeyboard::possibleKeys(const QKeyEvent *event) const
 
     QList<int> result;
     int baseQtKey = keysymToQtKey(sym, modifiers, lookupString(kb_state, keycode));
-    result += (baseQtKey + modifiers); // The base key is _always_ valid, of course
+    if (baseQtKey)
+        result += (baseQtKey + modifiers);
 
     xkb_mod_index_t shiftMod = xkb_keymap_mod_get_index(xkb_keymap, "Shift");
     xkb_mod_index_t altMod = xkb_keymap_mod_get_index(xkb_keymap, "Alt");
     xkb_mod_index_t controlMod = xkb_keymap_mod_get_index(xkb_keymap, "Control");
+    xkb_mod_index_t metaMod = xkb_keymap_mod_get_index(xkb_keymap, "Meta");
 
     Q_ASSERT(shiftMod < 32);
     Q_ASSERT(altMod < 32);
     Q_ASSERT(controlMod < 32);
+    Q_ASSERT(metaMod < 32);
 
     xkb_mod_mask_t depressed;
     int qtKey = 0;
@@ -986,6 +1021,8 @@ QList<int> QXcbKeyboard::possibleKeys(const QKeyEvent *event) const
                     depressed |= (1 << shiftMod);
                 if (neededMods & Qt::ControlModifier)
                     depressed |= (1 << controlMod);
+                if (neededMods & Qt::MetaModifier)
+                    depressed |= (1 << metaMod);
                 xkb_state_update_mask(kb_state, depressed, latchedMods, lockedMods, 0, 0, lockedLayout);
                 sym = xkb_state_key_get_one_sym(kb_state, keycode);
             }
@@ -1040,7 +1077,7 @@ int QXcbKeyboard::keysymToQtKey(xcb_keysym_t key) const
     return code;
 }
 
-int QXcbKeyboard::keysymToQtKey(xcb_keysym_t keysym, Qt::KeyboardModifiers &modifiers, QString text) const
+int QXcbKeyboard::keysymToQtKey(xcb_keysym_t keysym, Qt::KeyboardModifiers &modifiers, const QString &text) const
 {
     int code = 0;
 #ifndef QT_NO_TEXTCODEC

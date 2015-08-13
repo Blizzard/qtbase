@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -1479,10 +1479,10 @@
                \printuntil hello
 
                First we create a \l
-               {http://qt-project.org/doc/qt-5.0/qtwidgets/qapplication.html} {QApplication}
+               {http://doc.qt.io/qt-5/qapplication.html} {QApplication}
                object using the \c argc and \c argv parameters, then we
                create a \l
-               {http://qt-project.org/doc/qt-5.0/qtwidgets/qpushbutton.html} {QPushButton}.
+               {http://doc.qt.io/qt-5/qpushbutton.html} {QPushButton}.
            \endquotation
 
     See also \l {printline-command} {\\printline} and \l
@@ -1771,12 +1771,18 @@
     different kinds of targets. The command's general syntax is:
 
     \code
-      \l {link target} {link text}
+      \l [ link criteria ] { link target } { link text }
     \endcode
+
+    ...where the \c {link criteria} in square brackets are optional
+    but may be required when the \c {link target} is ambiguous. See
+    \l {Fixing Ambiguous Links} below.
+
+    Here is an example using the \\l command to link to an external page:
 
     \code
        / *!
-          Read the \l {http://qt-project.org/doc/qt-5.0/}
+          Read the \l {http://doc.qt.io/qt-5/}
           {Qt 5.0 Documentation} carefully.
        * /
     \endcode
@@ -1784,7 +1790,7 @@
     QDoc renders this as:
 
     \quotation
-       Read the \l {http://qt-project.org/doc/qt-5.0/}
+       Read the \l {http://doc.qt.io/qt-5/}
        {Qt 5.0 Documentation} carefully.
     \endquotation
 
@@ -1876,6 +1882,101 @@
     \quotation
     \l {QWidget::} {sizeHint()}
     \endquotation
+
+    \section2 Fixing Ambiguous Links
+
+    Because of the modularization of Qt beginning with Qt 5.0, The
+    possibility that qdoc will have to deal with ambiguous links has
+    increased. An ambiguous link is one that has a matching target in
+    more than one Qt module, e.g. the same section title can appear in
+    more than one Qt module, or the name of a C++ class in one module
+    can also be the name of a QML type in another module. A real
+    example in Qt5 is the name Qt itself. Qt is the name of both a C++
+    namespace in QtCore and a QML type in QtQml.
+
+    Suppose we want to link to the \l {Qt} {Qt C++ namespace}.  At the
+    time qdoc generated this HTML page, that link was correct.  Does
+    it still go to the C++ namespace? Qdoc generated that link from
+    this link command:
+
+    \list
+        \li \c {\l {Qt} {Qt C++ namespace}}
+    \endlist
+
+    Now suppose we want to link to the \l [QML] {Qt} {Qt QML type}.
+    At the time qdoc generated this HTML page, that link was also
+    correct, but we had to use this link command:
+
+    \list
+        \li \c {\l [QML] {Qt} {Qt QML type}}
+    \endlist
+
+    The \e {QML} in \e {square brackets} tells qdoc to accept a
+    matching target only if the traget is on a QML page. Qdoc actually
+    finds the C++ namespace target first, but since that target is on
+    a C++ page, qdoc ignores it and keeps looking until it finds the
+    same target on a QML page.
+
+    Without the guidance in the \e{\\l command} in the optional \e
+    {square bracket} argument, qdoc links to the first matching target
+    it finds. qdoc can't warn that the link was ambiguous in such
+    cases because it doesn't know that another matching target exists.
+
+    \section2 What arguments can appear in square brackets?
+
+    A link command with square bracket argument has the following syntax:
+    \list
+    \c {\l [QML|CPP|DOC|QtModuleName] {link target} {link text}}
+    \endlist
+
+    The \e {square bracket} argument is only allowed in the \c {\\l
+    (link)} command. The example above shows how \c QML is used as the
+    \e {square brackets} argument to force qdoc to match a QML target.
+    Most often, this will be a QML type, but it can also be a QML
+    member function of property.
+
+    In the example, qdoc didn't need a \e {square bracket} argument to
+    find the Qt C++ namespace page, because that one was the first
+    matching target qdoc found anyway. However, to force qdoc to find
+    a C++ target when a matching QML target gets in the way, \c CPP
+    can be used as the \e {square bracket} argument. For example:
+
+    \list
+        \li \c {\l [CPP] {Qt} {Qt C++ namespace}}
+    \endlist
+
+    ...will force qdoc to ignore the Qt QML type and continue
+    searching until it matches the Qt C++ namespace.
+
+    If the link target is neither a C++ nor a QML entity, \c {DOC} can
+    be used as the \e {square bracket} argument to prevent qdoc from
+    matching either of those. At this writing, there were no cases of
+    ambiguous links where using \c {DOC} was required.
+
+    Often, the documentor knows which Qt module the link target is
+    in. When the module name is known, use the module name as the \e
+    {square bracket} argument. In the example above, if we know that
+    the QML type named Qt is located in the QtQml module, we can write
+    the link command like this:
+
+    \list
+        \li \c {\l [QtQml] {Qt} {Qt QML type}}
+    \endlist
+
+    When a module name is used as the \e {square bracket} argument,
+    qdoc will search for link the target in that module only. This
+    makes searching for link targets more efficient.
+
+    Finally, the module name and entity type arguments can be
+    combined, separated by a blank, so something like this is also
+    allowed:
+
+    \list
+        \li \c {\l [CPP QtQml] {Window} {C++ class Window}}
+    \endlist
+
+    As of this writing, there were no cases where combining the two
+    was required.
 
     See also \l {sa-command} {\\sa}, \l {target-command} {\\target},
     and \l {keyword-command} {\\keyword}.
@@ -2008,7 +2109,6 @@
         \ingroup tools
         \ingroup misc
         \ingroup shared
-        \mainclass
 
         \keyword regular expression
 
@@ -2318,7 +2418,7 @@
 
                <tr valign="top" bgcolor="#d0d0d0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtcore/signalsandslots.html">
+                   <a href="http://doc.qt.io/qt-5/signalsandslots.html">
                        Signals and Slots</a>
                    </td>
                    <td>Signals and slots are used for communication
@@ -2327,7 +2427,7 @@
 
                <tr valign="top" bgcolor="#c0c0c0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtwidgets/layout.html">
+                   <a href="http://doc.qt.io/qt-5/layout.html">
                        Layout Management</a></td>
                    <td>The Qt layout system provides a simple
                        and powerful way of specifying the layout
@@ -2336,7 +2436,7 @@
 
                <tr valign="top" bgcolor="#d0d0d0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtgui/dnd.html">
+                   <a href="http://doc.qt.io/qt-5/dnd.html">
                        Drag and Drop</a></td>
                    <td>Drag and drop provides a simple visual
                        mechanism which users can use to transfer
@@ -2437,7 +2537,7 @@
 
                <tr valign="top" bgcolor="#d0d0d0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtcore/signalsandslots.html">
+                   <a href="http://doc.qt.io/qt-5/signalsandslots.html">
                        Signals and Slots</a>
                    </td>
                    <td>Signals and slots are used for communication
@@ -2499,7 +2599,7 @@
 
                <tr valign="top" bgcolor="#d0d0d0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtcore/signalsandslots.html">
+                   <a href="http://doc.qt.io/qt-5/signalsandslots.html">
                        Signals and Slots</a>
                    </td>
                    <td>Signals and slots are used for communication
@@ -2508,7 +2608,7 @@
 
                <tr valign="top" bgcolor="#c0c0c0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtwidgets/layout.html">
+                   <a href="http://doc.qt.io/qt-5/layout.html">
                        Layout Management</a></td>
                    <td>The Qt layout system provides a simple
                        and powerful way of specifying the layout
@@ -2517,7 +2617,7 @@
 
                <tr valign="top" bgcolor="#d0d0d0">
                    <td>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtgui/dnd.html">
+                   <a href="http://doc.qt.io/qt-5/dnd.html">
                        Drag and Drop</a></td>
                    <td>Drag and drop provides a simple visual
                        mechanism which users can use to transfer
@@ -2935,7 +3035,7 @@
            \quotation
                \raw HTML
                    <h3>geometry :
-                   <a href="http://qt-project.org/doc/qt-5.0/qtcore/qrect.html">QRect</a>
+                   <a href="http://doc.qt.io/qt-5/qrect.html">QRect</a>
                    </h3>
                \endraw
 
@@ -3433,11 +3533,11 @@
         \l{GNU Lesser General Public License (LGPL)} or the
         \l{Qt Commercial Edition}{Qt Commercial License Agreement}, but rather under
         specific licenses from the original authors. Some pieces of code were developed
-        by Digia and others originated from third parties.
+        by The Qt Company and others originated from third parties.
         This page lists the licenses used, names the authors, and links
         to the places where it is used.
 
-        Digia gratefully acknowledges these and other contributions
+        The Qt Company gratefully acknowledges these and other contributions
         to Qt. We recommend that programs that use Qt also acknowledge
         these contributions, and quote these license statements in an
         appendix to the documentation.
@@ -3447,16 +3547,6 @@
         \generatelist legalese
     * /
     \endcode
-
-    \section2 \c mainclasses
-
-    The \c mainclasses argument tells QDoc to generate an alphabetical
-    list of the main classes. A class is marked as a main class by
-    including a \l {mainclass-command} {\\mainclass} command in the
-    \\class comment.
-
-    \note The Qt documentation no longer includes a main classes page,
-    but you can generate one for your main classes if you want it.
 
     \section2 \c overviews
 
@@ -3505,18 +3595,6 @@
     \code
         \ingroup qt-basic-concepts
     \endcode
-
-    \section2 \c service
-
-    The \c service argument tells QDoc to generate an alphabetical
-    list of the services. Each service name is a link to the service's
-    reference documentation.
-
-    A service is identified with the \l {service-command} {\\service}
-    command.
-
-    \note This command and the \l {service-command} {\\service}
-    command are not used in the Qt documentation.
 
     \target if-command
     \section1 \\if
@@ -3789,7 +3867,7 @@
            <author>Qt Development Frameworks</author>
            <publisher>Qt Project</publisher>
            <copyright>
-               <copyryear year="2014"/>
+               <copyryear year="2015"/>
                <copyrholder>Qt Project</copyrholder>
            </copyright>
            <permissions view="all"/>

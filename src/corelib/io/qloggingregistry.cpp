@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -124,6 +124,10 @@ void QLoggingRule::parse(const QStringRef &pattern)
         p = QStringRef(pattern.string(), pattern.position(),
                        pattern.length() - 6); // strlen(".debug")
         messageType = QtDebugMsg;
+    } else if (pattern.endsWith(QLatin1String(".info"))) {
+        p = QStringRef(pattern.string(), pattern.position(),
+                       pattern.length() - 5); // strlen(".info")
+        messageType = QtInfoMsg;
     } else if (pattern.endsWith(QLatin1String(".warning"))) {
         p = QStringRef(pattern.string(), pattern.position(),
                        pattern.length() - 8); // strlen(".warning")
@@ -392,6 +396,7 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     QtMsgType enableForLevel = reg->categories.value(cat);
 
     bool debug = (enableForLevel == QtDebugMsg);
+    bool info = (enableForLevel <= QtInfoMsg);
     bool warning = (enableForLevel <= QtWarningMsg);
     bool critical = (enableForLevel <= QtCriticalMsg);
 
@@ -409,6 +414,9 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
         int filterpass = item.pass(categoryName, QtDebugMsg);
         if (filterpass != 0)
             debug = (filterpass > 0);
+        filterpass = item.pass(categoryName, QtInfoMsg);
+        if (filterpass != 0)
+            info = (filterpass > 0);
         filterpass = item.pass(categoryName, QtWarningMsg);
         if (filterpass != 0)
             warning = (filterpass > 0);
@@ -418,6 +426,7 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     }
 
     cat->setEnabled(QtDebugMsg, debug);
+    cat->setEnabled(QtInfoMsg, info);
     cat->setEnabled(QtWarningMsg, warning);
     cat->setEnabled(QtCriticalMsg, critical);
 }

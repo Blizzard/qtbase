@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 #include "qplatformscreen.h"
+#include <QtCore/qdebug.h>
 #include <QtGui/qguiapplication.h>
 #include <qpa/qplatformcursor.h>
 #include <QtGui/private/qguiapplication_p.h>
@@ -52,9 +53,11 @@ QPlatformScreen::QPlatformScreen()
 QPlatformScreen::~QPlatformScreen()
 {
     Q_D(QPlatformScreen);
-
-    QGuiApplicationPrivate::screen_list.removeOne(d->screen);
-    delete d->screen;
+    if (d->screen) {
+        qWarning("Manually deleting a QPlatformScreen. Call QPlatformIntegration::destroyScreen instead.");
+        QGuiApplicationPrivate::screen_list.removeOne(d->screen);
+        delete d->screen;
+    }
 }
 
 /*!
@@ -302,6 +305,119 @@ void QPlatformScreen::resizeMaximizedWindows()
         else if (w->windowState() & Qt::WindowFullScreen || w->geometry() == oldGeometry)
             w->setGeometry(newGeometry);
     }
+}
+
+// i must be power of two
+static int log2(uint i)
+{
+    if (i == 0)
+        return -1;
+
+    int result = 0;
+    while (!(i & 1)) {
+        ++result;
+        i >>= 1;
+    }
+    return result;
+}
+
+int QPlatformScreen::angleBetween(Qt::ScreenOrientation a, Qt::ScreenOrientation b)
+{
+    if (a == Qt::PrimaryOrientation || b == Qt::PrimaryOrientation) {
+        qWarning() << "Use QScreen version of" << __FUNCTION__ << "when passing Qt::PrimaryOrientation";
+        return 0;
+    }
+
+    if (a == b)
+        return 0;
+
+    int ia = log2(uint(a));
+    int ib = log2(uint(b));
+
+    int delta = ia - ib;
+
+    if (delta < 0)
+        delta = delta + 4;
+
+    int angles[] = { 0, 90, 180, 270 };
+    return angles[delta];
+}
+
+QTransform QPlatformScreen::transformBetween(Qt::ScreenOrientation a, Qt::ScreenOrientation b, const QRect &target)
+{
+    if (a == Qt::PrimaryOrientation || b == Qt::PrimaryOrientation) {
+        qWarning() << "Use QScreen version of" << __FUNCTION__ << "when passing Qt::PrimaryOrientation";
+        return QTransform();
+    }
+
+    if (a == b)
+        return QTransform();
+
+    int angle = angleBetween(a, b);
+
+    QTransform result;
+    switch (angle) {
+    case 90:
+        result.translate(target.width(), 0);
+        break;
+    case 180:
+        result.translate(target.width(), target.height());
+        break;
+    case 270:
+        result.translate(0, target.height());
+        break;
+    default:
+        Q_ASSERT(false);
+    }
+    result.rotate(angle);
+
+    return result;
+}
+
+QRect QPlatformScreen::mapBetween(Qt::ScreenOrientation a, Qt::ScreenOrientation b, const QRect &rect)
+{
+    if (a == Qt::PrimaryOrientation || b == Qt::PrimaryOrientation) {
+        qWarning() << "Use QScreen version of" << __FUNCTION__ << "when passing Qt::PrimaryOrientation";
+        return rect;
+    }
+
+    if (a == b)
+        return rect;
+
+    if ((a == Qt::PortraitOrientation || a == Qt::InvertedPortraitOrientation)
+        != (b == Qt::PortraitOrientation || b == Qt::InvertedPortraitOrientation))
+    {
+        return QRect(rect.y(), rect.x(), rect.height(), rect.width());
+    }
+
+    return rect;
+}
+
+/*!
+  Returns a hint about this screen's subpixel layout structure.
+
+  The default implementation queries the \b{QT_SUBPIXEL_AA_TYPE} env variable.
+  This is just a hint because most platforms don't have a way to retrieve the correct value from hardware
+  and instead rely on font configurations.
+*/
+QPlatformScreen::SubpixelAntialiasingType QPlatformScreen::subpixelAntialiasingTypeHint() const
+{
+    static int type = -1;
+    if (type == -1) {
+        QByteArray env = qgetenv("QT_SUBPIXEL_AA_TYPE");
+        if (env == "RGB")
+            type = QPlatformScreen::Subpixel_RGB;
+        else if (env == "BGR")
+            type = QPlatformScreen::Subpixel_BGR;
+        else if (env == "VRGB")
+            type = QPlatformScreen::Subpixel_VRGB;
+        else if (env == "VBGR")
+            type = QPlatformScreen::Subpixel_VBGR;
+        else
+            type = QPlatformScreen::Subpixel_None;
+    }
+
+    return static_cast<QPlatformScreen::SubpixelAntialiasingType>(type);
 }
 
 QT_END_NAMESPACE

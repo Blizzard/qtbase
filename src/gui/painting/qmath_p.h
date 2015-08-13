@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -45,20 +45,12 @@
 // We mean it.
 //
 
-#include <math.h>
 #include <qmath.h>
 
 QT_BEGIN_NAMESPACE
 
-static const qreal Q_PI   = qreal(3.14159265358979323846);   // pi
-static const qreal Q_2PI  = qreal(6.28318530717958647693);   // 2*pi
-static const qreal Q_PI2  = qreal(1.57079632679489661923);   // pi/2
+static const qreal Q_PI   = qreal(M_PI);     // pi
 static const qreal Q_MM_PER_INCH = 25.4;
-
-inline int qIntSqrtInt(int v)
-{
-    return static_cast<int>(qSqrt(static_cast<qreal>(v)));
-}
 
 QT_END_NAMESPACE
 

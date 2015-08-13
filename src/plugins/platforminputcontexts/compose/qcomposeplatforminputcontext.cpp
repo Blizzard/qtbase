@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -80,28 +80,24 @@ static const int composingKeys[] = {
 };
 
 QComposeInputContext::QComposeInputContext()
+    : m_tableState(TableGenerator::EmptyTable)
+    , m_compositionTableInitialized(false)
 {
-    TableGenerator reader;
-    m_tableState = reader.tableState();
-
-    if ((m_tableState & TableGenerator::NoErrors) == TableGenerator::NoErrors) {
-        m_composeTable = reader.composeTable();
-        clearComposeBuffer();
-    }
+    clearComposeBuffer();
 }
 
 bool QComposeInputContext::filterEvent(const QEvent *event)
 {
-    // if there were errors when generating the compose table input
-    // context should not try to filter anything, simply return false
-    if ((m_tableState & TableGenerator::NoErrors) != TableGenerator::NoErrors)
-        return false;
-
-    QKeyEvent *keyEvent = (QKeyEvent *)event;
+    const QKeyEvent *keyEvent = (const QKeyEvent *)event;
     // should pass only the key presses
     if (keyEvent->type() != QEvent::KeyPress) {
         return false;
     }
+
+    // if there were errors when generating the compose table input
+    // context should not try to filter anything, simply return false
+    if (m_compositionTableInitialized && (m_tableState & TableGenerator::NoErrors) != TableGenerator::NoErrors)
+        return false;
 
     int keyval = keyEvent->key();
     int keysym = 0;
@@ -109,8 +105,7 @@ bool QComposeInputContext::filterEvent(const QEvent *event)
     if (ignoreKey(keyval))
         return false;
 
-    QString text = keyEvent->text();
-    if (!composeKey(keyval) && text.isEmpty())
+    if (!composeKey(keyval) && keyEvent->text().isEmpty())
         return false;
 
     keysym = keyEvent->nativeVirtualKey();
@@ -163,6 +158,15 @@ static bool isDuplicate(const QComposeTableElement &lhs, const QComposeTableElem
 
 bool QComposeInputContext::checkComposeTable()
 {
+    if (!m_compositionTableInitialized) {
+        TableGenerator reader;
+        m_tableState = reader.tableState();
+
+        if ((m_tableState & TableGenerator::NoErrors) == TableGenerator::NoErrors)
+            m_composeTable = reader.composeTable();
+
+        m_compositionTableInitialized = true;
+    }
     QVector<QComposeTableElement>::const_iterator it =
             std::lower_bound(m_composeTable.constBegin(), m_composeTable.constEnd(), m_composeBuffer, Compare());
 

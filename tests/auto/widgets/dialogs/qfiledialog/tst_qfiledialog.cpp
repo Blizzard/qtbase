@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -54,10 +54,10 @@
 #include <qsortfilterproxymodel.h>
 #include <qlineedit.h>
 #include <qlayout.h>
+#include <private/qfiledialog_p.h>
 #if defined QT_BUILD_INTERNAL
 #include <private/qsidebar_p.h>
 #include <private/qfilesystemmodel_p.h>
-#include <private/qfiledialog_p.h>
 #endif
 #include <private/qguiapplication_p.h>
 #include <qpa/qplatformtheme.h>
@@ -108,6 +108,7 @@ public:
 public slots:
     void initTestCase();
     void init();
+    void cleanup();
 
 private slots:
     void currentChangedSignal();
@@ -166,7 +167,7 @@ private slots:
     void rejectModalDialogs();
 
 private:
-    QByteArray userSettings;
+    void cleanupSettingsFile();
 };
 
 tst_QFiledialog::tst_QFiledialog()
@@ -177,23 +178,37 @@ tst_QFiledialog::~tst_QFiledialog()
 {
 }
 
+void tst_QFiledialog::cleanupSettingsFile()
+{
+    // clean up the sidebar between each test
+    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+    settings.beginGroup(QLatin1String("FileDialog"));
+    settings.remove(QString());
+    settings.endGroup();
+    settings.beginGroup(QLatin1String("Qt")); // Compatibility settings
+    settings.remove(QLatin1String("filedialog"));
+    settings.endGroup();
+}
+
 void tst_QFiledialog::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    cleanupSettingsFile();
 }
 
 void tst_QFiledialog::init()
 {
-    // clean up the sidebar between each test
-    QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-    settings.beginGroup(QLatin1String("Qt"));
-    settings.remove(QLatin1String("filedialog"));
-
+    QFileDialogPrivate::setLastVisitedDirectory(QUrl());
     // populate the sidebar with some default settings
     QNonNativeFileDialog fd;
 #if defined(Q_OS_WINCE)
     QTest::qWait(1000);
 #endif
+}
+
+void tst_QFiledialog::cleanup()
+{
+    cleanupSettingsFile();
 }
 
 class MyAbstractItemDelegate : public QAbstractItemDelegate
@@ -235,13 +250,16 @@ void tst_QFiledialog::directoryEnteredSignal()
 {
     QNonNativeFileDialog fd(0, "", QDir::root().path());
     fd.setOptions(QFileDialog::DontUseNativeDialog);
+    QSidebar *sidebar = fd.findChild<QSidebar*>("sidebar");
+    QVERIFY(sidebar);
+    if (sidebar->model()->rowCount() < 2)
+        QSKIP("This test requires at least 2 side bar entries.");
+
     fd.show();
     QTRY_COMPARE(fd.isVisible(), true);
     QSignalSpy spyDirectoryEntered(&fd, SIGNAL(directoryEntered(QString)));
 
     // sidebar
-    QSidebar *sidebar = fd.findChild<QSidebar*>("sidebar");
-    QVERIFY(sidebar->model()->rowCount() >= 2);
     QModelIndex secondItem = sidebar->model()->index(1, 0);
     QVERIFY(secondItem.isValid());
     sidebar->setCurrentIndex(secondItem);
@@ -1299,9 +1317,6 @@ void tst_QFiledialog::clearLineEdit()
 #endif
 
     QTest::qWait(2000);
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "QTBUG-23703", Abort);
-#endif
     QVERIFY(fd.directory().absolutePath() != QDir::home().absolutePath());
     QVERIFY(!lineEdit->text().isEmpty());
 

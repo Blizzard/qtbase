@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -258,20 +258,6 @@ private:
     friend QDataStream &operator>>(QDataStream &, QTextFormat &);
 };
 
-// this is only safe because sizeof(int) == sizeof(float)
-static inline uint hash(float d)
-{
-#ifdef Q_CC_GNU
-    // this is a GCC extension and isn't guaranteed to work in other compilers
-    // the reinterpret_cast below generates a strict-aliasing warning with GCC
-    union { float f; uint u; } cvt;
-    cvt.f = d;
-    return cvt.u;
-#else
-    return reinterpret_cast<uint&>(d);
-#endif
-}
-
 static inline uint hash(const QColor &color)
 {
     return (color.isValid()) ? color.rgba() : 0x234109;
@@ -279,7 +265,7 @@ static inline uint hash(const QColor &color)
 
 static inline uint hash(const QPen &pen)
 {
-    return hash(pen.color()) + hash(pen.widthF());
+    return hash(pen.color()) + qHash(pen.widthF());
 }
 
 static inline uint hash(const QBrush &brush)
@@ -292,7 +278,7 @@ static inline uint variantHash(const QVariant &variant)
     // simple and fast hash functions to differentiate between type and value
     switch (variant.userType()) { // sorted by occurrence frequency
     case QVariant::String: return qHash(variant.toString());
-    case QVariant::Double: return hash(variant.toDouble());
+    case QVariant::Double: return qHash(variant.toDouble());
     case QVariant::Int: return 0x811890 + variant.toInt();
     case QVariant::Brush:
         return 0x01010101 + hash(qvariant_cast<QBrush>(variant));
@@ -303,7 +289,7 @@ static inline uint variantHash(const QVariant &variant)
     case QVariant::Color: return hash(qvariant_cast<QColor>(variant));
       case QVariant::TextLength:
         return 0x377 + hash(qvariant_cast<QTextLength>(variant).rawValue());
-    case QMetaType::Float: return hash(variant.toFloat());
+    case QMetaType::Float: return qHash(variant.toFloat());
     case QVariant::Invalid: return 0;
     default: break;
     }
@@ -319,7 +305,7 @@ uint QTextFormatPrivate::recalcHash() const
 {
     hashValue = 0;
     for (QVector<Property>::ConstIterator it = props.constBegin(); it != props.constEnd(); ++it)
-        hashValue += (it->key << 16) + variantHash(it->value);
+        hashValue += (static_cast<quint32>(it->key) << 16) + variantHash(it->value);
 
     hashDirty = false;
 
@@ -1904,7 +1890,7 @@ void QTextCharFormat::setFont(const QFont &font)
 
     If \a behavior is QTextCharFormat::FontPropertiesAll, the font property that
     has not been explicitly set is treated like as it were set with default value;
-    If \a behavior is QTextCharFormat::FontPropertiesAll, the font property that
+    If \a behavior is QTextCharFormat::FontPropertiesSpecifiedOnly, the font property that
     has not been explicitly set is ignored and the respective property value
     remains unchanged.
 
@@ -1942,7 +1928,7 @@ void QTextCharFormat::setFont(const QFont &font, FontPropertiesInheritanceBehavi
         setFontFixedPitch(font.fixedPitch());
     if (mask & QFont::CapitalizationResolved)
         setFontCapitalization(font.capitalization());
-    if (mask & QFont::LetterSpacingResolved)
+    if (mask & QFont::WordSpacingResolved)
         setFontWordSpacing(font.wordSpacing());
     if (mask & QFont::LetterSpacingResolved) {
         setFontLetterSpacingType(font.letterSpacingType());
@@ -3041,8 +3027,8 @@ QTextTableFormat::QTextTableFormat(const QTextFormat &fmt)
     \ingroup richtext-processing
     \ingroup shared
 
-    Inline images are represented by an object replacement character
-    (0xFFFC in Unicode) which has an associated QTextImageFormat. The
+    Inline images are represented by a Unicode value U+FFFC (OBJECT
+    REPLACEMENT CHARACTER) which has an associated QTextImageFormat. The
     image format specifies a name with setName() that is used to
     locate the image. The size of the rectangle that the image will
     occupy is specified using setWidth() and setHeight().
@@ -3472,14 +3458,16 @@ void QTextFormatCollection::setDefaultFont(const QFont &f)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QTextLength &l)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QTextLength(QTextLength::Type(" << l.type() << "))";
-    return dbg.space();
+    return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QTextFormat &f)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QTextFormat(QTextFormat::FormatType(" << f.type() << "))";
-    return dbg.space();
+    return dbg;
 }
 
 #endif

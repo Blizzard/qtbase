@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -97,6 +97,9 @@ QT_BEGIN_NAMESPACE
   \value ImageText
   \value ImportantNote
   \value InlineImage
+  \value JavaScript
+  \value EndJavaScript
+  \value Keyword
   \value LineBreak
   \value Link
   \value LinkNode
@@ -107,6 +110,8 @@ QT_BEGIN_NAMESPACE
   \value ListItemLeft
   \value ListItemRight
   \value ListRight
+  \value NavAutoLink
+  \value NavLink
   \value Nop
   \value Note
   \value ParaLeft
@@ -181,6 +186,7 @@ static const struct {
     { "InlineImage", Atom::InlineImage },
     { "JavaScript", Atom::JavaScript },
     { "EndJavaScript", Atom::EndJavaScript },
+    { "Keyword", Atom::Keyword },
     { "LegaleseLeft", Atom::LegaleseLeft },
     { "LegaleseRight", Atom::LegaleseRight },
     { "LineBreak", Atom::LineBreak },
@@ -193,6 +199,8 @@ static const struct {
     { "ListItemLeft", Atom::ListItemLeft },
     { "ListItemRight", Atom::ListItemRight },
     { "ListRight", Atom::ListRight },
+    { "NavAutoLink", Atom::NavAutoLink },
+    { "NavLink", Atom::NavLink },
     { "Nop", Atom::Nop },
     { "NoteLeft", Atom::NoteLeft },
     { "NoteRight", Atom::NoteRight },
@@ -371,15 +379,33 @@ void Atom::dump() const
   the space character.
  */
 LinkAtom::LinkAtom(const QString& p1, const QString& p2)
-    : Atom(p1), genus_(Node::DontCare), goal_(Node::NoType), domain_(0)
+    : Atom(p1),
+      resolved_(false),
+      genus_(Node::DontCare),
+      goal_(Node::NoType),
+      domain_(0),
+      squareBracketParams_(p2)
 {
-    QStringList params = p2.toLower().split(QLatin1Char(' '));
-    foreach (const QString& p, params) {
+    // nada.
+}
+
+/*!
+  This function resolves the parameters that were enclosed in
+  square brackets. If the parameters have already been resolved,
+  it does nothing and returns immediately.
+ */
+void LinkAtom::resolveSquareBracketParams()
+{
+    if (resolved_)
+        return;
+    QStringList params = squareBracketParams_.toLower().split(QLatin1Char(' '));
+     foreach (const QString& p, params) {
         if (!domain_) {
             domain_ = QDocDatabase::qdocDB()->findTree(p);
-            if (domain_)
-                continue;
-        }
+            if (domain_) {
+                 continue;
+            }
+         }
         if (goal_ == Node::NoType) {
             goal_ = Node::goal(p);
             if (goal_ != Node::NoType)
@@ -393,9 +419,14 @@ LinkAtom::LinkAtom(const QString& p1, const QString& p2)
             genus_ = Node::CPP;
             continue;
         }
-        error_ = p2;
+        if (p == "doc") {
+            genus_ = Node::DOC;
+            continue;
+        }
+        error_ = squareBracketParams_;
         break;
     }
+    resolved_ = true;
 }
 
 /*!
@@ -403,10 +434,12 @@ LinkAtom::LinkAtom(const QString& p1, const QString& p2)
  */
 LinkAtom::LinkAtom(const LinkAtom& t)
     : Atom(Link, t.string()),
+      resolved_(t.resolved_),
       genus_(t.genus_),
       goal_(t.goal_),
       domain_(t.domain_),
-      error_(t.error_)
+      error_(t.error_),
+      squareBracketParams_(t.squareBracketParams_)
 {
     // nothing
 }
@@ -418,10 +451,12 @@ LinkAtom::LinkAtom(const LinkAtom& t)
  */
 LinkAtom::LinkAtom(Atom* previous, const LinkAtom& t)
     : Atom(previous, Link, t.string()),
+      resolved_(t.resolved_),
       genus_(t.genus_),
       goal_(t.goal_),
       domain_(t.domain_),
-      error_(t.error_)
+      error_(t.error_),
+      squareBracketParams_(t.squareBracketParams_)
 {
     previous->next_ = this;
 }

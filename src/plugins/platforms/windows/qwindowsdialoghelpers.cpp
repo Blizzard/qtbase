@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -58,15 +58,13 @@
 #include <QtCore/QExplicitlySharedDataPointer>
 #include <QtCore/QMutex>
 #include <QtCore/QMutexLocker>
+#include <QtCore/QUuid>
+#include <QtCore/QRegularExpression>
 #include <QtCore/private/qsystemlibrary_p.h>
 
 #include <algorithm>
 
 #include "qtwindows_additional.h"
-
-#define STRICT_TYPED_ITEMIDS
-#include <shlobj.h>
-#include <shlwapi.h>
 
 // #define USE_NATIVE_COLOR_DIALOG /* Testing purposes only */
 
@@ -381,7 +379,12 @@ static inline QString guidToString(const GUID &g)
 }
 
 inline QDebug operator<<(QDebug d, const GUID &g)
-{ d.nospace() << guidToString(g); return d; }
+{
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << guidToString(g);
+    return d;
+}
 
 // Return an allocated wchar_t array from a QString, reserve more memory if desired.
 static wchar_t *qStringToWCharArray(const QString &s, size_t reserveSize = 0)
@@ -873,8 +876,8 @@ public:
 
     virtual void setWindowTitle(const QString &title);
     inline void setMode(QFileDialogOptions::FileMode mode, QFileDialogOptions::AcceptMode acceptMode, QFileDialogOptions::FileDialogOptions options);
-    inline void setDirectory(const QString &directory);
-    inline void updateDirectory() { setDirectory(m_data.directory().toLocalFile()); }
+    inline void setDirectory(const QUrl &directory);
+    inline void updateDirectory() { setDirectory(m_data.directory()); }
     inline QString directory() const;
     virtual void doExec(HWND owner = 0);
     virtual void setNameFilters(const QStringList &f);
@@ -916,7 +919,7 @@ protected:
     static QList<QUrl> libraryItemFolders(IShellItem *item);
     static QString libraryItemDefaultSaveFolder(IShellItem *item);
     static int itemPaths(IShellItemArray *items, QList<QUrl> *fileResult = 0);
-    static IShellItem *shellItem(const QString &path);
+    static IShellItem *shellItem(const QUrl &url);
 
     const QWindowsFileDialogSharedData &data() const { return m_data; }
     QWindowsFileDialogSharedData &data() { return m_data; }
@@ -976,25 +979,58 @@ void QWindowsNativeFileDialogBase::setWindowTitle(const QString &title)
     m_fileDialog->SetTitle(reinterpret_cast<const wchar_t *>(title.utf16()));
 }
 
-IShellItem *QWindowsNativeFileDialogBase::shellItem(const QString &path)
+IShellItem *QWindowsNativeFileDialogBase::shellItem(const QUrl &url)
 {
 #ifndef Q_OS_WINCE
-    if (QWindowsContext::shell32dll.sHCreateItemFromParsingName) {
-        IShellItem *result = 0;
-        const QString native = QDir::toNativeSeparators(path);
+    if (url.isLocalFile()) {
+        if (!QWindowsContext::shell32dll.sHCreateItemFromParsingName)
+            return Q_NULLPTR;
+        IShellItem *result = Q_NULLPTR;
+        const QString native = QDir::toNativeSeparators(url.toLocalFile());
         const HRESULT hr =
-            QWindowsContext::shell32dll.sHCreateItemFromParsingName(reinterpret_cast<const wchar_t *>(native.utf16()),
-                                                                    NULL, IID_IShellItem,
-                                                                    reinterpret_cast<void **>(&result));
-        if (SUCCEEDED(hr))
-            return result;
+                QWindowsContext::shell32dll.sHCreateItemFromParsingName(reinterpret_cast<const wchar_t *>(native.utf16()),
+                                                                        NULL, IID_IShellItem,
+                                                                        reinterpret_cast<void **>(&result));
+        if (FAILED(hr)) {
+            qErrnoWarning("%s: SHCreateItemFromParsingName(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
+            return Q_NULLPTR;
+        }
+        return result;
+    } else if (url.scheme() == QLatin1String("clsid")) {
+        if (!QWindowsContext::shell32dll.sHGetKnownFolderIDList || !QWindowsContext::shell32dll.sHCreateItemFromIDList)
+            return Q_NULLPTR;
+        // Support for virtual folders via GUID
+        // (see https://msdn.microsoft.com/en-us/library/windows/desktop/dd378457(v=vs.85).aspx)
+        // specified as "clsid:<GUID>" (without '{', '}').
+        IShellItem *result = Q_NULLPTR;
+        const QUuid uuid(url.path());
+        if (uuid.isNull()) {
+            qWarning() << __FUNCTION__ << ": Invalid CLSID: " << url.path();
+            return Q_NULLPTR;
+        }
+        PIDLIST_ABSOLUTE idList;
+        HRESULT hr = QWindowsContext::shell32dll.sHGetKnownFolderIDList(uuid, 0, 0, &idList);
+        if (FAILED(hr)) {
+            qErrnoWarning("%s: SHGetKnownFolderIDList(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
+            return Q_NULLPTR;
+        }
+        hr = QWindowsContext::shell32dll.sHCreateItemFromIDList(idList, IID_IShellItem, reinterpret_cast<void **>(&result));
+        CoTaskMemFree(idList);
+        if (FAILED(hr)) {
+            qErrnoWarning("%s: SHCreateItemFromIDList(%s)) failed", __FUNCTION__, qPrintable(url.toString()));
+            return Q_NULLPTR;
+        }
+        return result;
+    } else {
+        qWarning() << __FUNCTION__ << ": Unhandled scheme: " << url.scheme();
     }
+#else // !Q_OS_WINCE
+    Q_UNUSED(url)
 #endif
-    qErrnoWarning("%s: SHCreateItemFromParsingName(%s)) failed", __FUNCTION__, qPrintable(path));
     return 0;
 }
 
-void QWindowsNativeFileDialogBase::setDirectory(const QString &directory)
+void QWindowsNativeFileDialogBase::setDirectory(const QUrl &directory)
 {
     if (!directory.isEmpty()) {
         if (IShellItem *psi = QWindowsNativeFileDialogBase::shellItem(directory)) {
@@ -1284,9 +1320,20 @@ void QWindowsNativeFileDialogBase::setLabelText(QFileDialogOptions::DialogLabel 
     }
 }
 
+static inline bool isClsid(const QString &s)
+{
+    // detect "374DE290-123F-4565-9164-39C4925E467B".
+   static const QRegularExpression pattern(QLatin1String("[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{8}"));
+   Q_ASSERT(pattern.isValid());
+   return pattern.match(s).hasMatch();
+}
+
 void QWindowsNativeFileDialogBase::selectFile(const QString &fileName) const
 {
-    m_fileDialog->SetFileName((wchar_t*)fileName.utf16());
+    // Hack to prevent CLSIDs from being set as file name due to
+    // QFileDialogPrivate::initialSelection() being QString-based.
+    if (!isClsid(fileName))
+        m_fileDialog->SetFileName((wchar_t*)fileName.utf16());
 }
 
 // Return the index of the selected filter, accounting for QFileDialog
@@ -1580,14 +1627,14 @@ QWindowsNativeDialogBase *QWindowsFileDialogHelper::createNativeDialog()
     QWindowsNativeFileDialogBase *result = QWindowsNativeFileDialogBase::create(options()->acceptMode(), m_data);
     if (!result)
         return 0;
-    QObject::connect(result, SIGNAL(accepted()), this, SIGNAL(accept()));
-    QObject::connect(result, SIGNAL(rejected()), this, SIGNAL(reject()));
-    QObject::connect(result, SIGNAL(directoryEntered(QUrl)),
-                     this, SIGNAL(directoryEntered(QUrl)));
-    QObject::connect(result, SIGNAL(currentChanged(QUrl)),
-                     this, SIGNAL(currentChanged(QUrl)));
-    QObject::connect(result, SIGNAL(filterSelected(QString)),
-                     this, SIGNAL(filterSelected(QString)));
+    QObject::connect(result, &QWindowsNativeDialogBase::accepted, this, &QPlatformDialogHelper::accept);
+    QObject::connect(result, &QWindowsNativeDialogBase::rejected, this, &QPlatformDialogHelper::reject);
+    QObject::connect(result, &QWindowsNativeFileDialogBase::directoryEntered,
+                     this, &QPlatformFileDialogHelper::directoryEntered);
+    QObject::connect(result, &QWindowsNativeFileDialogBase::currentChanged,
+                     this, &QPlatformFileDialogHelper::currentChanged);
+    QObject::connect(result, &QWindowsNativeFileDialogBase::filterSelected,
+                     this, &QPlatformFileDialogHelper::filterSelected);
 
     // Apply settings.
     const QSharedPointer<QFileDialogOptions> &opts = options();
@@ -1961,8 +2008,8 @@ QWindowsNativeDialogBase *QWindowsXpFileDialogHelper::createNativeDialog()
 {
     m_data.fromOptions(options());
     if (QWindowsXpNativeFileDialog *result = QWindowsXpNativeFileDialog::create(options(), m_data)) {
-        QObject::connect(result, SIGNAL(accepted()), this, SIGNAL(accept()));
-        QObject::connect(result, SIGNAL(rejected()), this, SIGNAL(reject()));
+        QObject::connect(result, &QWindowsNativeDialogBase::accepted, this, &QPlatformDialogHelper::accept);
+        QObject::connect(result, &QWindowsNativeDialogBase::rejected, this, &QPlatformDialogHelper::reject);
         return result;
     }
     return 0;
@@ -2117,8 +2164,8 @@ QWindowsNativeDialogBase *QWindowsColorDialogHelper::createNativeDialog()
 {
     QWindowsNativeColorDialog *nativeDialog = new QWindowsNativeColorDialog(m_currentColor);
     nativeDialog->setWindowTitle(options()->windowTitle());
-    connect(nativeDialog, SIGNAL(accepted()), this, SIGNAL(accept()));
-    connect(nativeDialog, SIGNAL(rejected()), this, SIGNAL(reject()));
+    connect(nativeDialog, &QWindowsNativeDialogBase::accepted, this, &QPlatformDialogHelper::accept);
+    connect(nativeDialog, &QWindowsNativeDialogBase::rejected, this, &QPlatformDialogHelper::reject);
     return nativeDialog;
 }
 #endif // USE_NATIVE_COLOR_DIALOG

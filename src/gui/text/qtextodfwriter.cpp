@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -88,7 +88,7 @@ public:
         if (contentStream)
             contentStream->close();
     }
-    virtual void addFile(const QString &, const QString &, const QByteArray &)
+    virtual void addFile(const QString &, const QString &, const QByteArray &) Q_DECL_OVERRIDE
     {
         // we ignore this...
     }
@@ -131,7 +131,7 @@ public:
         zip.close();
     }
 
-    virtual void addFile(const QString &fileName, const QString &mimeType, const QByteArray &bytes)
+    virtual void addFile(const QString &fileName, const QString &mimeType, const QByteArray &bytes) Q_DECL_OVERRIDE
     {
         zip.addFile(fileName, bytes);
         addFile(fileName, mimeType);
@@ -278,7 +278,7 @@ void QTextOdfWriter::writeBlock(QXmlStreamWriter &writer, const QTextBlock &bloc
     writer.writeStartElement(textNS, QString::fromLatin1("p"));
     writer.writeAttribute(textNS, QString::fromLatin1("style-name"), QString::fromLatin1("p%1")
         .arg(block.blockFormatIndex()));
-    for (QTextBlock::Iterator frag= block.begin(); !frag.atEnd(); frag++) {
+    for (QTextBlock::Iterator frag = block.begin(); !frag.atEnd(); ++frag) {
         writer.writeCharacters(QString()); // Trick to make sure that the span gets no linefeed in front of it.
         writer.writeStartElement(textNS, QString::fromLatin1("span"));
 

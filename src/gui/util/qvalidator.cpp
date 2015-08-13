@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,7 +40,7 @@
 #include "private/qlocale_p.h"
 
 #include <limits.h>
-#include <math.h>
+#include <cmath>
 
 QT_BEGIN_NAMESPACE
 
@@ -316,7 +316,12 @@ void QValidator::fixup(QString &) const
     QIntValidator uses its locale() to interpret the number. For example,
     in Arabic locales, QIntValidator will accept Arabic digits.
 
-    \sa QDoubleValidator, QRegExpValidator, {Line Edits Example}
+    \note The QLocale::NumberOptions set on the locale() also affect the
+    way the number is interpreted. For example, since QLocale::RejectGroupSeparator
+    is not set by default, the validator will accept group separators. It is thus
+    recommended to use QLocale::toInt() to obtain the numeric value.
+
+    \sa QDoubleValidator, QRegExpValidator, QLocale::toInt(), {Line Edits Example}
 */
 
 /*!
@@ -379,7 +384,7 @@ static int numDigits(qlonglong n)
 {
     if (n == 0)
         return 1;
-    return (int)log10(double(n)) + 1;
+    return (int)std::log10(double(n)) + 1;
 }
 
 static qlonglong pow10(int exp)
@@ -393,7 +398,8 @@ static qlonglong pow10(int exp)
 QValidator::State QIntValidator::validate(QString & input, int&) const
 {
     QByteArray buff;
-    if (!locale().d->m_data->validateChars(input, QLocaleData::IntegerMode, &buff)) {
+    if (!locale().d->m_data->validateChars(input, QLocaleData::IntegerMode, &buff,
+                                           -1, locale().numberOptions() & QLocale::RejectGroupSeparator)) {
         return Invalid;
     }
 
@@ -432,7 +438,8 @@ QValidator::State QIntValidator::validate(QString & input, int&) const
 void QIntValidator::fixup(QString &input) const
 {
     QByteArray buff;
-    if (!locale().d->m_data->validateChars(input, QLocaleData::IntegerMode, &buff)) {
+    if (!locale().d->m_data->validateChars(input, QLocaleData::IntegerMode, &buff,
+                                           -1, locale().numberOptions() & QLocale::RejectGroupSeparator)) {
         return;
     }
     bool ok, overflow;
@@ -440,6 +447,8 @@ void QIntValidator::fixup(QString &input) const
     if (ok && !overflow)
         input = locale().toString(entered);
 }
+
+// FIXME: Qt 6: Make QIntValidator::setRange() non-virtual
 
 /*!
     Sets the range of the validator to only accept integers between \a
@@ -548,7 +557,12 @@ public:
     in the German locale, "1,234" will be accepted as the fractional number
     1.234. In Arabic locales, QDoubleValidator will accept Arabic digits.
 
-    \sa QIntValidator, QRegExpValidator, {Line Edits Example}
+    \note The QLocale::NumberOptions set on the locale() also affect the
+    way the number is interpreted. For example, since QLocale::RejectGroupSeparator
+    is not set by default, the validator will accept group separators. It is thus
+    recommended to use QLocale::toDouble() to obtain the numeric value.
+
+    \sa QIntValidator, QRegExpValidator, QLocale::toDouble(), {Line Edits Example}
 */
 
  /*!
@@ -648,8 +662,10 @@ QValidator::State QDoubleValidatorPrivate::validateWithLocale(QString &input, QL
 {
     Q_Q(const QDoubleValidator);
     QByteArray buff;
-    if (!locale.d->m_data->validateChars(input, numMode, &buff, q->dec))
+    if (!locale.d->m_data->validateChars(input, numMode, &buff, q->dec,
+                                         locale.numberOptions() & QLocale::RejectGroupSeparator)) {
         return QValidator::Invalid;
+    }
 
     if (buff.isEmpty())
         return QValidator::Intermediate;
@@ -682,6 +698,7 @@ QValidator::State QDoubleValidatorPrivate::validateWithLocale(QString &input, QL
     return QValidator::Intermediate;
 }
 
+// FIXME: Qt 6: Make QDoubleValidator::setRange() non-virtual
 
 /*!
     Sets the validator to accept doubles from \a minimum to \a maximum
@@ -1003,7 +1020,7 @@ QValidator::State QRegularExpressionValidator::validate(QString &input, int &pos
     const QRegularExpressionMatch m = d->usedRe.match(input, 0, QRegularExpression::PartialPreferCompleteMatch);
     if (m.hasMatch()) {
         return Acceptable;
-    } else if (m.hasPartialMatch()) {
+    } else if (input.isEmpty() || m.hasPartialMatch()) {
         return Intermediate;
     } else {
         pos = input.size();

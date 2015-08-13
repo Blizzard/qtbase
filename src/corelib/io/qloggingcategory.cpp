@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -64,8 +64,8 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     QLoggingCategory represents a certain logging category - identified by a
     string - at runtime. A category can be configured to enable or disable
     logging of messages per message type. Whether a message type is enabled or
-    not can be checked with the \l isDebugEnabled(), \l isWarningEnabled(), and
-    \l isCriticalEnabled() methods.
+    not can be checked with the \l isDebugEnabled(), \l isInfoEnabled(),
+    \l isWarningEnabled(), and \l isCriticalEnabled() methods.
 
     All objects are meant to be configured by a common registry (see also
     \l{Configuring Categories}). Different objects can also represent the same
@@ -82,8 +82,8 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
 
     \section1 Checking Category Configuration
 
-    QLoggingCategory provides \l isDebugEnabled(), \l isWarningEnabled(),
-    \l isCriticalEnabled(), as well as \l isEnabled()
+    QLoggingCategory provides \l isDebugEnabled(), \l isInfoEnabled(),
+    \l isWarningEnabled(), \l isCriticalEnabled(), as well as \l isEnabled()
     to check whether messages for the given message type should be logged.
 
     \note The qCDebug(), qCWarning(), qCCritical() macros prevent arguments
@@ -101,7 +101,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     \snippet qloggingcategory/main.cpp 5
 
     will log messages of type \c QtWarningMsg, \c QtCriticalMsg, \c QtFatalMsg, but will
-    ignore messages of type \c QtDebugMsg.
+    ignore messages of type \c QtDebugMsg and \c QtInfoMsg.
 
     If no argument is passed, all messages will be logged.
 
@@ -122,7 +122,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
 
     \c <category> is the name of the category, potentially with \c{*} as a
     wildcard symbol as the first or last character (or at both positions).
-    The optional \c <type> must be either \c debug, \c warning, or \c critical.
+    The optional \c <type> must be either \c debug, \c info, \c warning, or \c critical.
     Lines that do not fit this scheme are ignored.
 
     Rules are evaluated in text order, from first to last. That is, if two rules
@@ -159,7 +159,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     by QStandardPaths::GenericConfigLocation, e.g.
 
     \list
-    \li on Mac OS X: \c ~/Library/Preferences
+    \li on OS X and iOS: \c ~/Library/Preferences
     \li on Unix: \c ~/.config, \c /etc/xdg
     \li on Windows: \c %LOCALAPPDATA%, \c %ProgramData%,
         \l QCoreApplication::applicationDirPath(),
@@ -250,6 +250,21 @@ QLoggingCategory::~QLoggingCategory()
     expensive generation of data that is only used for debug output.
 */
 
+
+/*!
+    \fn bool QLoggingCategory::isInfoEnabled() const
+
+    Returns \c true if informational messages should be shown for this category.
+    Returns \c false otherwise.
+
+    \note The \l qCInfo() macro already does this check before executing any
+    code. However, calling this method may be useful to avoid
+    expensive generation of data that is only used for debug output.
+
+    \since 5.5
+*/
+
+
 /*!
     \fn bool QLoggingCategory::isWarningEnabled() const
 
@@ -280,6 +295,7 @@ bool QLoggingCategory::isEnabled(QtMsgType msgtype) const
 {
     switch (msgtype) {
     case QtDebugMsg: return isDebugEnabled();
+    case QtInfoMsg: return isInfoEnabled();
     case QtWarningMsg: return isWarningEnabled();
     case QtCriticalMsg: return isCriticalEnabled();
     case QtFatalMsg: return true;
@@ -302,10 +318,12 @@ void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
     switch (type) {
 #ifdef Q_ATOMIC_INT8_IS_SUPPORTED
     case QtDebugMsg: bools.enabledDebug.store(enable); break;
+    case QtInfoMsg: bools.enabledInfo.store(enable); break;
     case QtWarningMsg: bools.enabledWarning.store(enable); break;
     case QtCriticalMsg: bools.enabledCritical.store(enable); break;
 #else
     case QtDebugMsg: setBoolLane(&enabled, enable, DebugShift); break;
+    case QtInfoMsg: setBoolLane(&enabled, enable, InfoShift); break;
     case QtWarningMsg: setBoolLane(&enabled, enable, WarningShift); break;
     case QtCriticalMsg: setBoolLane(&enabled, enable, CriticalShift); break;
 #endif
@@ -331,7 +349,7 @@ void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 
 /*!
     Returns a pointer to the global category \c "default" that
-    is used e.g. by qDebug(), qWarning(), qCritical(), qFatal().
+    is used e.g. by qDebug(), qInfo(), qWarning(), qCritical(), qFatal().
 
     \note The returned pointer may be null during destruction of
     static objects.
@@ -436,6 +454,47 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     not enabled, so do not rely on any side effects.
 
     \sa qDebug()
+*/
+
+/*!
+    \macro qCInfo(category)
+    \relates QLoggingCategory
+    \since 5.5
+
+    Returns an output stream for informational messages in the logging category
+    \a category.
+
+    The macro expands to code that checks whether
+    \l QLoggingCategory::isInfoEnabled() evaluates to \c true.
+    If so, the stream arguments are processed and sent to the message handler.
+
+    Example:
+
+    \snippet qloggingcategory/main.cpp qcinfo_stream
+
+    \note Arguments are not processed if debug output for the category is not
+    enabled, so do not rely on any side effects.
+
+    \sa qInfo()
+*/
+
+/*!
+    \macro qCInfo(category, const char *message, ...)
+    \relates QLoggingCategory
+    \since 5.5
+
+    Logs an informational message \a message in the logging category \a category.
+    \a message might contain place holders that are replaced by additional
+    arguments, similar to the C printf() function.
+
+    Example:
+
+    \snippet qloggingcategory/main.cpp qcinfo_printf
+
+    \note Arguments might not be processed if debug output for the category is
+    not enabled, so do not rely on any side effects.
+
+    \sa qInfo()
 */
 
 /*!

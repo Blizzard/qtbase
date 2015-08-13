@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -45,6 +45,7 @@
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformdialoghelper.h>
 
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -132,8 +133,9 @@ QT_BEGIN_NAMESPACE
     \value SpellCheckUnderlineStyle (int) A QTextCharFormat::UnderlineStyle specifying
                                     the underline style used misspelled words when spell checking.
 
-    \value TabAllWidgets (bool) Whether tab navigation should go through all the widgets or components,
-                         or just through text boxes and list views. This is mostly a Mac feature.
+    \value TabFocusBehavior (int) A Qt::TabFocusBehavior specifying
+                         the behavior of focus change when tab key was pressed.
+                         This enum value was added in Qt 5.5.
 
     \value DialogSnapToDefaultButton (bool) Whether the mouse should snap to the default button when a dialog
                                      becomes visible.
@@ -313,14 +315,15 @@ const QKeyBinding QPlatformThemePrivate::keyBindings[] = {
     {QKeySequence::InsertLineSeparator,     0,          Qt::META | Qt::Key_O,                   KB_Mac},
     {QKeySequence::SaveAs,                  0,          Qt::CTRL | Qt::SHIFT | Qt::Key_S,       KB_Gnome | KB_Mac},
     {QKeySequence::Preferences,             0,          Qt::CTRL | Qt::Key_Comma,               KB_Mac},
-    {QKeySequence::Quit,                    0,          Qt::CTRL | Qt::Key_Q,                   KB_Gnome | KB_KDE | KB_Mac},
+    {QKeySequence::Quit,                    0,          Qt::CTRL | Qt::Key_Q,                   KB_X11 | KB_Gnome | KB_KDE | KB_Mac},
     {QKeySequence::FullScreen,              1,          Qt::META | Qt::CTRL | Qt::Key_F,        KB_Mac},
     {QKeySequence::FullScreen,              0,          Qt::ALT  | Qt::Key_Enter,               KB_Win},
     {QKeySequence::FullScreen,              0,          Qt::CTRL | Qt::SHIFT | Qt::Key_F,       KB_KDE},
     {QKeySequence::FullScreen,              1,          Qt::CTRL | Qt::Key_F11,                 KB_Gnome},
     {QKeySequence::FullScreen,              1,          Qt::Key_F11,                            KB_Win | KB_KDE},
     {QKeySequence::Deselect,                0,          Qt::CTRL | Qt::SHIFT | Qt::Key_A,       KB_X11},
-    {QKeySequence::DeleteCompleteLine,      0,          Qt::CTRL | Qt::Key_U,                   KB_X11}
+    {QKeySequence::DeleteCompleteLine,      0,          Qt::CTRL | Qt::Key_U,                   KB_X11},
+    {QKeySequence::Backspace,               0,          Qt::META | Qt::Key_H,                   KB_Mac}
 };
 
 const uint QPlatformThemePrivate::numberOfKeyBindings = sizeof(QPlatformThemePrivate::keyBindings)/(sizeof(QKeyBinding));
@@ -431,6 +434,8 @@ QVariant QPlatformTheme::themeHint(ThemeHint hint) const
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::PasswordMaskCharacter);
     case QPlatformTheme::MousePressAndHoldInterval:
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::MousePressAndHoldInterval);
+    case QPlatformTheme::ItemViewActivateItemOnSingleClick:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ItemViewActivateItemOnSingleClick);
     default:
         return QPlatformTheme::defaultThemeHint(hint);
     }
@@ -490,8 +495,8 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
         return QVariant(int(0));
     case SpellCheckUnderlineStyle:
         return QVariant(int(QTextCharFormat::SpellCheckUnderline));
-    case TabAllWidgets:
-        return QVariant(true);
+    case TabFocusBehavior:
+        return QVariant(int(Qt::TabFocusAllControls));
     case IconPixmapSizes:
         return QVariant::fromValue(QList<int>());
     case DialogSnapToDefaultButton:
@@ -502,9 +507,11 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
     case MouseDoubleClickDistance:
         {
             bool ok = false;
-            int dist = qgetenv("QT_DBL_CLICK_DIST").toInt(&ok);
+            const int dist = qEnvironmentVariableIntValue("QT_DBL_CLICK_DIST", &ok);
             return QVariant(ok ? dist : 5);
         }
+    case WheelScrollLines:
+        return QVariant(3);
     }
     return QVariant();
 }
@@ -565,6 +572,23 @@ static inline int maybeSwapShortcut(int shortcut)
 }
 #endif
 
+// mixed-mode predicate: all of these overloads are actually needed (but not all for every compiler)
+struct ByStandardKey {
+    typedef bool result_type;
+
+    bool operator()(QKeySequence::StandardKey lhs, QKeySequence::StandardKey rhs) const
+    { return lhs < rhs; }
+
+    bool operator()(const QKeyBinding& lhs, const QKeyBinding& rhs) const
+    { return operator()(lhs.standardKey, rhs.standardKey); }
+
+    bool operator()(QKeySequence::StandardKey lhs, const QKeyBinding& rhs) const
+    { return operator()(lhs, rhs.standardKey); }
+
+    bool operator()(const QKeyBinding& lhs, QKeySequence::StandardKey rhs) const
+    { return operator()(lhs.standardKey, rhs); }
+};
+
 /*!
    Returns the key sequence that should be used for a standard action.
 
@@ -575,62 +599,27 @@ QList<QKeySequence> QPlatformTheme::keyBindings(QKeySequence::StandardKey key) c
     const uint platform = QPlatformThemePrivate::currentKeyPlatforms();
     QList <QKeySequence> list;
 
-    uint N = QPlatformThemePrivate::numberOfKeyBindings;
-    int first = 0;
-    int last = N - 1;
+    std::pair<const QKeyBinding *, const QKeyBinding *> range =
+        std::equal_range(QPlatformThemePrivate::keyBindings,
+                         QPlatformThemePrivate::keyBindings + QPlatformThemePrivate::numberOfKeyBindings,
+                         key, ByStandardKey());
 
-    while (first <= last) {
-        int mid = (first + last) / 2;
-        const QKeyBinding &midVal = QPlatformThemePrivate::keyBindings[mid];
+    for (const QKeyBinding *it = range.first; it < range.second; ++it) {
+        if (!(it->platform & platform))
+            continue;
 
-        if (key > midVal.standardKey){
-            first = mid + 1;  // Search in top half
-        }
-        else if (key < midVal.standardKey){
-            last = mid - 1; // Search in bottom half
-        }
-        else {
-            //We may have several equal values for different platforms, so we must search in both directions
-            //search forward including current location
-            for (unsigned int i = mid; i < N ; ++i) {
-                QKeyBinding current = QPlatformThemePrivate::keyBindings[i];
-                if (current.standardKey != key)
-                    break;
-                else if (current.platform & platform && current.standardKey == key) {
-                    uint shortcut =
+        uint shortcut =
 #if defined(Q_OS_MACX)
-                        maybeSwapShortcut(current.shortcut);
+            maybeSwapShortcut(it->shortcut);
 #else
-                        current.shortcut;
+            it->shortcut;
 #endif
-                    if (current.priority > 0)
-                        list.prepend(QKeySequence(shortcut));
-                    else
-                        list.append(QKeySequence(shortcut));
-                }
-            }
-
-            //search back
-            for (int i = mid - 1 ; i >= 0 ; --i) {
-                QKeyBinding current = QPlatformThemePrivate::keyBindings[i];
-                if (current.standardKey != key)
-                    break;
-                else if (current.platform & platform && current.standardKey == key) {
-                    uint shortcut =
-#if defined(Q_OS_MACX)
-                        maybeSwapShortcut(current.shortcut);
-#else
-                        current.shortcut;
-#endif
-                    if (current.priority > 0)
-                        list.prepend(QKeySequence(shortcut));
-                    else
-                        list.append(QKeySequence(shortcut));
-                }
-            }
-            break;
-        }
+        if (it->priority > 0)
+            list.prepend(QKeySequence(shortcut));
+        else
+            list.append(QKeySequence(shortcut));
     }
+
     return list;
 }
 

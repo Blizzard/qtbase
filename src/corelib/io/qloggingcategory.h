@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -53,10 +53,12 @@ public:
 
 #ifdef Q_ATOMIC_INT8_IS_SUPPORTED
     bool isDebugEnabled() const { return bools.enabledDebug.load(); }
+    bool isInfoEnabled() const { return bools.enabledInfo.load(); }
     bool isWarningEnabled() const { return bools.enabledWarning.load(); }
     bool isCriticalEnabled() const { return bools.enabledCritical.load(); }
 #else
     bool isDebugEnabled() const { return enabled.load() >> DebugShift & 1; }
+    bool isInfoEnabled() const { return enabled.load() >> InfoShift & 1; }
     bool isWarningEnabled() const { return enabled.load() >> WarningShift & 1; }
     bool isCriticalEnabled() const { return enabled.load() >> CriticalShift & 1; }
 #endif
@@ -80,9 +82,9 @@ private:
     const char *name;
 
 #ifdef Q_BIG_ENDIAN
-    enum { DebugShift = 0, WarningShift = 8, CriticalShift = 16 };
+    enum { DebugShift = 0, WarningShift = 8, CriticalShift = 16, InfoShift = 24 };
 #else
-    enum { DebugShift = 24, WarningShift = 16, CriticalShift = 8 };
+    enum { DebugShift = 24, WarningShift = 16, CriticalShift = 8, InfoShift = 0};
 #endif
 
     struct AtomicBools {
@@ -90,6 +92,7 @@ private:
         QBasicAtomicInteger<bool> enabledDebug;
         QBasicAtomicInteger<bool> enabledWarning;
         QBasicAtomicInteger<bool> enabledCritical;
+        QBasicAtomicInteger<bool> enabledInfo;
 #endif
     };
     union {
@@ -114,6 +117,9 @@ private:
 #define qCDebug(category, ...) \
     for (bool qt_category_enabled = category().isDebugEnabled(); qt_category_enabled; qt_category_enabled = false) \
         QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, category().categoryName()).debug(__VA_ARGS__)
+#define qCInfo(category, ...) \
+    for (bool qt_category_enabled = category().isInfoEnabled(); qt_category_enabled; qt_category_enabled = false) \
+        QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, category().categoryName()).info(__VA_ARGS__)
 #define qCWarning(category, ...) \
     for (bool qt_category_enabled = category().isWarningEnabled(); qt_category_enabled; qt_category_enabled = false) \
         QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, category().categoryName()).warning(__VA_ARGS__)
@@ -133,6 +139,7 @@ private:
 
 // check for enabled category inside QMessageLogger.
 #define qCDebug qDebug
+#define qCInfo qInfo
 #define qCWarning qWarning
 #define qCCritical qCritical
 
@@ -142,9 +149,13 @@ private:
 #  undef qCDebug
 #  define qCDebug(category) QT_NO_QDEBUG_MACRO()
 #endif
+#if defined(QT_NO_INFO_OUTPUT)
+#  undef qCInfo
+#  define qCInfo(category) QT_NO_QDEBUG_MACRO()
+#endif
 #if defined(QT_NO_WARNING_OUTPUT)
 #  undef qCWarning
-#  define qCWarning(category) QT_NO_QWARNING_MACRO()
+#  define qCWarning(category) QT_NO_QDEBUG_MACRO()
 #endif
 
 QT_END_NAMESPACE

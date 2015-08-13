@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -52,37 +52,6 @@
 
 QT_BEGIN_NAMESPACE
 
-typedef struct {
-    quint16 majorVersion;
-    quint16 minorVersion;
-    quint16 numTables;
-    quint16 searchRange;
-    quint16 entrySelector;
-    quint16 rangeShift;
-} OFFSET_TABLE;
-
-typedef struct {
-    quint32 tag;
-    quint32 checkSum;
-    quint32 offset;
-    quint32 length;
-} TABLE_DIRECTORY;
-
-typedef struct {
-    quint16 fontSelector;
-    quint16 nrCount;
-    quint16 storageOffset;
-} NAME_TABLE_HEADER;
-
-typedef struct {
-    quint16 platformID;
-    quint16 encodingID;
-    quint16 languageID;
-    quint16 nameID;
-    quint16 stringLength;
-    quint16 stringOffset;
-} NAME_RECORD;
-
 void QBasicFontDatabase::populateFontDatabase()
 {
     QString fontpath = fontDir();
@@ -106,6 +75,24 @@ void QBasicFontDatabase::populateFontDatabase()
     }
 }
 
+inline static void setHintingPreference(QFontEngine *engine, QFont::HintingPreference hintingPreference)
+{
+    switch (hintingPreference) {
+    case QFont::PreferNoHinting:
+        engine->setDefaultHintStyle(QFontEngineFT::HintNone);
+        break;
+    case QFont::PreferFullHinting:
+        engine->setDefaultHintStyle(QFontEngineFT::HintFull);
+        break;
+    case QFont::PreferVerticalHinting:
+        engine->setDefaultHintStyle(QFontEngineFT::HintLight);
+        break;
+    case QFont::PreferDefaultHinting:
+        // Leave it as it is
+        break;
+    }
+}
+
 QFontEngine *QBasicFontDatabase::fontEngine(const QFontDef &fontDef, void *usrPtr)
 {
     FontFile *fontfile = static_cast<FontFile *> (usrPtr);
@@ -114,12 +101,24 @@ QFontEngine *QBasicFontDatabase::fontEngine(const QFontDef &fontDef, void *usrPt
     fid.index = fontfile->indexValue;
 
     bool antialias = !(fontDef.styleStrategy & QFont::NoAntialias);
-    QFontEngineFT::GlyphFormat format = antialias? QFontEngineFT::Format_A8 : QFontEngineFT::Format_Mono;
-
     QFontEngineFT *engine = new QFontEngineFT(fontDef);
+    QFontEngineFT::GlyphFormat format = QFontEngineFT::Format_Mono;
+    if (antialias) {
+        QFontEngine::SubpixelAntialiasingType subpixelType = subpixelAntialiasingTypeHint();
+        if (subpixelType == QFontEngine::Subpixel_None || (fontDef.styleStrategy & QFont::NoSubpixelAntialias)) {
+            format = QFontEngineFT::Format_A8;
+            engine->subpixelType = QFontEngine::Subpixel_None;
+        } else {
+            format = QFontEngineFT::Format_A32;
+            engine->subpixelType = subpixelType;
+        }
+    }
+
     if (!engine->init(fid, antialias, format) || engine->invalid()) {
         delete engine;
         engine = 0;
+    } else {
+        setHintingPreference(engine, static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
     }
 
     return engine;
@@ -172,21 +171,7 @@ QFontEngine *QBasicFontDatabase::fontEngine(const QByteArray &fontData, qreal pi
     }
 
     fe->updateFamilyNameAndStyle();
-
-    switch (hintingPreference) {
-    case QFont::PreferNoHinting:
-        fe->setDefaultHintStyle(QFontEngineFT::HintNone);
-        break;
-    case QFont::PreferFullHinting:
-        fe->setDefaultHintStyle(QFontEngineFT::HintFull);
-        break;
-    case QFont::PreferVerticalHinting:
-        fe->setDefaultHintStyle(QFontEngineFT::HintLight);
-        break;
-    default:
-        // Leave it as it is
-        break;
-    }
+    setHintingPreference(fe, hintingPreference);
 
     return fe;
 }
@@ -275,41 +260,26 @@ QStringList QBasicFontDatabase::addTTFile(const QByteArray &fontData, const QByt
             if (supportedWritingSystems)
                 *supportedWritingSystems = writingSystems;
 
-            if (os2->usWeightClass == 0)
-                ;
-            else if (os2->usWeightClass < 150)
-                weight = qt_thinFontWeight;
-            else if (os2->usWeightClass < 250)
-                weight = qt_extralightFontWeight;
-            else if (os2->usWeightClass < 350)
-                weight = QFont::Light;
-            else if (os2->usWeightClass < 450)
-                weight = QFont::Normal;
-            else if (os2->usWeightClass < 550)
-                    weight = qt_mediumFontWeight;
-            else if (os2->usWeightClass < 650)
-                weight = QFont::DemiBold;
-            else if (os2->usWeightClass < 750)
-                weight = QFont::Bold;
-            else if (os2->usWeightClass < 1000)
-                weight = QFont::Black;
-
-            if (os2->panose[2] >= 2) {
+            if (os2->usWeightClass) {
+                weight = QPlatformFontDatabase::weightFromInteger(os2->usWeightClass);
+            } else if (os2->panose[2]) {
                 int w = os2->panose[2];
                 if (w <= 1)
-                    weight = qt_thinFontWeight;
+                    weight = QFont::Thin;
                 else if (w <= 2)
-                    weight = qt_extralightFontWeight;
+                    weight = QFont::ExtraLight;
                 else if (w <= 3)
                     weight = QFont::Light;
                 else if (w <= 5)
                     weight = QFont::Normal;
                 else if (w <= 6)
-                    weight = qt_mediumFontWeight;
+                    weight = QFont::Medium;
                 else if (w <= 7)
                     weight = QFont::DemiBold;
                 else if (w <= 8)
                     weight = QFont::Bold;
+                else if (w <= 9)
+                    weight = QFont::ExtraBold;
                 else if (w <= 10)
                     weight = QFont::Black;
             }
@@ -330,94 +300,6 @@ QStringList QBasicFontDatabase::addTTFile(const QByteArray &fontData, const QByt
         ++index;
     } while (index < numFaces);
     return families;
-}
-
-QString QBasicFontDatabase::fontNameFromTTFile(const QString &filename)
-{
-    QFile f(filename);
-    QString retVal;
-    qint64 bytesRead;
-    qint64 bytesToRead;
-
-    if (f.open(QIODevice::ReadOnly)) {
-        OFFSET_TABLE ttOffsetTable;
-        bytesToRead = sizeof(OFFSET_TABLE);
-        bytesRead = f.read((char*)&ttOffsetTable, bytesToRead);
-        if (bytesToRead != bytesRead)
-            return retVal;
-        ttOffsetTable.numTables = qFromBigEndian(ttOffsetTable.numTables);
-        ttOffsetTable.majorVersion = qFromBigEndian(ttOffsetTable.majorVersion);
-        ttOffsetTable.minorVersion = qFromBigEndian(ttOffsetTable.minorVersion);
-
-        if (ttOffsetTable.majorVersion != 1 || ttOffsetTable.minorVersion != 0)
-            return retVal;
-
-        TABLE_DIRECTORY tblDir;
-        bool found = false;
-
-        for (int i = 0; i < ttOffsetTable.numTables; i++) {
-            bytesToRead = sizeof(TABLE_DIRECTORY);
-            bytesRead = f.read((char*)&tblDir, bytesToRead);
-            if (bytesToRead != bytesRead)
-                return retVal;
-            if (qFromBigEndian(tblDir.tag) == MAKE_TAG('n', 'a', 'm', 'e')) {
-                found = true;
-                tblDir.length = qFromBigEndian(tblDir.length);
-                tblDir.offset = qFromBigEndian(tblDir.offset);
-                break;
-            }
-        }
-
-        if (found) {
-            f.seek(tblDir.offset);
-            NAME_TABLE_HEADER ttNTHeader;
-            bytesToRead = sizeof(NAME_TABLE_HEADER);
-            bytesRead = f.read((char*)&ttNTHeader, bytesToRead);
-            if (bytesToRead != bytesRead)
-                return retVal;
-            ttNTHeader.nrCount = qFromBigEndian(ttNTHeader.nrCount);
-            ttNTHeader.storageOffset = qFromBigEndian(ttNTHeader.storageOffset);
-            NAME_RECORD ttRecord;
-            found = false;
-
-            for (int i = 0; i < ttNTHeader.nrCount; i++) {
-                bytesToRead = sizeof(NAME_RECORD);
-                bytesRead = f.read((char*)&ttRecord, bytesToRead);
-                if (bytesToRead != bytesRead)
-                    return retVal;
-                ttRecord.nameID = qFromBigEndian(ttRecord.nameID);
-                if (ttRecord.nameID == 1) {
-                    ttRecord.stringLength = qFromBigEndian(ttRecord.stringLength);
-                    ttRecord.stringOffset = qFromBigEndian(ttRecord.stringOffset);
-                    int nPos = f.pos();
-                    f.seek(tblDir.offset + ttRecord.stringOffset + ttNTHeader.storageOffset);
-
-                    QByteArray nameByteArray = f.read(ttRecord.stringLength);
-                    if (!nameByteArray.isEmpty()) {
-                        if (ttRecord.encodingID == 256 || ttRecord.encodingID == 768) {
-                            //This is UTF-16 in big endian
-                            int stringLength = ttRecord.stringLength / 2;
-                            retVal.resize(stringLength);
-                            QChar *data = retVal.data();
-                            const ushort *srcData = (const ushort *)nameByteArray.data();
-                            for (int i = 0; i < stringLength; ++i)
-                                data[i] = qFromBigEndian(srcData[i]);
-                            return retVal;
-                        } else if (ttRecord.encodingID == 0) {
-                            //This is Latin1
-                            retVal = QString::fromLatin1(nameByteArray);
-                        } else {
-                            qWarning("Could not retrieve Font name from file: %s", qPrintable(QDir::toNativeSeparators(filename)));
-                        }
-                        break;
-                    }
-                    f.seek(nPos);
-                }
-            }
-        }
-        f.close();
-    }
-    return retVal;
 }
 
 QT_END_NAMESPACE

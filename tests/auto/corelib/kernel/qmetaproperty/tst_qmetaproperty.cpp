@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -50,6 +51,8 @@ private slots:
     void hasStdCppSet();
     void isConstant();
     void isFinal();
+    void gadget();
+    void readAndWriteWithLazyRegistration();
 
 public:
     enum EnumType { EnumType1 };
@@ -102,6 +105,83 @@ void tst_QMetaProperty::isFinal()
     QVERIFY(prop.isValid());
     QVERIFY(!prop.isFinal());
 }
+
+class MyGadget {
+    Q_GADGET
+    Q_PROPERTY(QString value READ getValue WRITE setValue RESET resetValue)
+public:
+    QString m_value;
+    void setValue(const QString &value) { m_value = value; }
+    QString getValue() { return m_value; }
+    void resetValue() { m_value = QLatin1Literal("reset"); }
+};
+
+void tst_QMetaProperty::gadget()
+{
+    const QMetaObject *mo = &MyGadget::staticMetaObject;
+    QMetaProperty valueProp = mo->property(mo->indexOfProperty("value"));
+    QVERIFY(valueProp.isValid());
+    {
+        MyGadget g;
+        QString hello = QLatin1Literal("hello");
+        QVERIFY(valueProp.writeOnGadget(&g, hello));
+        QCOMPARE(g.m_value, QLatin1String("hello"));
+        QCOMPARE(valueProp.readOnGadget(&g), QVariant(hello));
+        QVERIFY(valueProp.resetOnGadget(&g));
+        QCOMPARE(valueProp.readOnGadget(&g), QVariant(QLatin1String("reset")));
+    }
+}
+
+struct CustomReadObject : QObject
+{
+    Q_OBJECT
+};
+
+struct CustomWriteObject : QObject
+{
+    Q_OBJECT
+};
+
+struct CustomWriteObjectChild : CustomWriteObject
+{
+    Q_OBJECT
+};
+
+struct TypeLazyRegistration : QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(CustomReadObject *read MEMBER _read)
+    Q_PROPERTY(CustomWriteObject *write MEMBER _write)
+
+    CustomReadObject *_read;
+    CustomWriteObject *_write;
+
+public:
+    TypeLazyRegistration()
+        : _read()
+        , _write()
+    {}
+};
+
+void tst_QMetaProperty::readAndWriteWithLazyRegistration()
+{
+    QCOMPARE(QMetaType::type("CustomReadObject*"), int(QMetaType::UnknownType));
+    QCOMPARE(QMetaType::type("CustomWriteObject*"), int(QMetaType::UnknownType));
+
+    TypeLazyRegistration o;
+    QVERIFY(o.property("read").isValid());
+    QVERIFY(QMetaType::type("CustomReadObject*") != QMetaType::UnknownType);
+    QCOMPARE(QMetaType::type("CustomWriteObject*"), int(QMetaType::UnknownType));
+
+    CustomWriteObjectChild data;
+    QVariant value = QVariant::fromValue(&data); // this register CustomWriteObjectChild
+    // check if base classes are not registered automatically, otherwise this test would be meaningless
+    QCOMPARE(QMetaType::type("CustomWriteObject*"), int(QMetaType::UnknownType));
+    QVERIFY(o.setProperty("write", value));
+    QVERIFY(QMetaType::type("CustomWriteObject*") != QMetaType::UnknownType);
+    QCOMPARE(o.property("write").value<CustomWriteObjectChild*>(), &data);
+}
+
 
 QTEST_MAIN(tst_QMetaProperty)
 #include "tst_qmetaproperty.moc"

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -76,6 +76,12 @@ class Q_CORE_EXPORT QDebug
         // added in 5.4
         int flags;
     } *stream;
+
+    enum Latin1Content { ContainsBinary = 0, ContainsLatin1 };
+
+    void putUcs4(uint ucs4);
+    void putString(const QChar *begin, size_t length);
+    void putByteArray(const char *begin, size_t length, Latin1Content content);
 public:
     inline QDebug(QIODevice *device) : stream(new Stream(device)) {}
     inline QDebug(QString *string) : stream(new Stream(string)) {}
@@ -83,7 +89,7 @@ public:
     inline QDebug(const QDebug &o):stream(o.stream) { ++stream->ref; }
     inline QDebug &operator=(const QDebug &other);
     ~QDebug();
-    inline void swap(QDebug &other) { qSwap(stream, other.stream); }
+    inline void swap(QDebug &other) Q_DECL_NOTHROW { qSwap(stream, other.stream); }
 
     QDebug &resetFormat();
 
@@ -98,11 +104,15 @@ public:
     inline QDebug &noquote() { stream->setFlag(Stream::NoQuotes); return *this; }
     inline QDebug &maybeQuote(char c = '"') { if (!(stream->testFlag(Stream::NoQuotes))) stream->ts << c; return *this; }
 
-    inline QDebug &operator<<(QChar t) { maybeQuote('\''); stream->ts << t; maybeQuote('\''); return maybeSpace(); }
+    inline QDebug &operator<<(QChar t) { putUcs4(t.unicode()); return maybeSpace(); }
     inline QDebug &operator<<(bool t) { stream->ts << (t ? "true" : "false"); return maybeSpace(); }
     inline QDebug &operator<<(char t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(signed short t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(unsigned short t) { stream->ts << t; return maybeSpace(); }
+#ifdef Q_COMPILER_UNICODE_STRINGS
+    inline QDebug &operator<<(char16_t t) { return *this << QChar(t); }
+    inline QDebug &operator<<(char32_t t) { putUcs4(t); return maybeSpace(); }
+#endif
     inline QDebug &operator<<(signed int t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(unsigned int t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(signed long t) { stream->ts << t; return maybeSpace(); }
@@ -112,11 +122,14 @@ public:
     inline QDebug &operator<<(float t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(double t) { stream->ts << t; return maybeSpace(); }
     inline QDebug &operator<<(const char* t) { stream->ts << QString::fromUtf8(t); return maybeSpace(); }
-    inline QDebug &operator<<(const QString & t) { maybeQuote(); stream->ts << t; maybeQuote(); return maybeSpace(); }
-    inline QDebug &operator<<(const QStringRef & t) { return operator<<(t.toString()); }
-    inline QDebug &operator<<(QLatin1String t) { maybeQuote(); stream->ts << t; maybeQuote(); return maybeSpace(); }
-    inline QDebug &operator<<(const QByteArray & t) { maybeQuote(); stream->ts << t; maybeQuote(); return maybeSpace(); }
+    inline QDebug &operator<<(const QString & t) { putString(t.constData(), uint(t.length())); return maybeSpace(); }
+    inline QDebug &operator<<(const QStringRef & t) { putString(t.constData(), uint(t.length())); return maybeSpace(); }
+    inline QDebug &operator<<(QLatin1String t) { putByteArray(t.latin1(), t.size(), ContainsLatin1); return maybeSpace(); }
+    inline QDebug &operator<<(const QByteArray & t) { putByteArray(t.constData(), t.size(), ContainsBinary); return maybeSpace(); }
     inline QDebug &operator<<(const void * t) { stream->ts << t; return maybeSpace(); }
+#ifdef Q_COMPILER_NULLPTR
+    inline QDebug &operator<<(std::nullptr_t) { stream->ts << "(nullptr)"; return maybeSpace(); }
+#endif
     inline QDebug &operator<<(QTextStreamFunction f) {
         stream->ts << f;
         return *this;
@@ -248,8 +261,39 @@ inline QDebug operator<<(QDebug debug, const QContiguousCache<T> &cache)
     return debug.maybeSpace();
 }
 
+#ifndef QT_NO_QOBJECT
+Q_CORE_EXPORT QDebug qt_QMetaEnum_debugOperator(QDebug&, int value, const QMetaObject *meta, const char *name);
+Q_CORE_EXPORT QDebug qt_QMetaEnum_flagDebugOperator(QDebug &dbg, quint64 value, const QMetaObject *meta, const char *name);
+
+template<typename T>
+typename QtPrivate::QEnableIf<QtPrivate::IsQEnumHelper<T>::Value, QDebug>::Type
+operator<<(QDebug dbg, T value)
+{
+    const QMetaObject *obj = qt_getEnumMetaObject(value);
+    const char *name = qt_getEnumName(value);
+    return qt_QMetaEnum_debugOperator(dbg, typename QFlags<T>::Int(value), obj, name);
+}
+
+template <class T>
+inline typename QtPrivate::QEnableIf<
+    QtPrivate::IsQEnumHelper<T>::Value || QtPrivate::IsQEnumHelper<QFlags<T> >::Value,
+    QDebug>::Type
+operator<<(QDebug debug, const QFlags<T> &flags)
+{
+    const QMetaObject *obj = qt_getEnumMetaObject(T());
+    const char *name = qt_getEnumName(T());
+    return qt_QMetaEnum_flagDebugOperator(debug, quint64(flags), obj, name);
+}
+
+template <class T>
+inline typename QtPrivate::QEnableIf<
+    !QtPrivate::IsQEnumHelper<T>::Value && !QtPrivate::IsQEnumHelper<QFlags<T> >::Value,
+    QDebug>::Type
+operator<<(QDebug debug, const QFlags<T> &flags)
+#else // !QT_NO_QOBJECT
 template <class T>
 inline QDebug operator<<(QDebug debug, const QFlags<T> &flags)
+#endif
 {
     QDebugStateSaver saver(debug);
     debug.resetFormat();
@@ -267,6 +311,82 @@ inline QDebug operator<<(QDebug debug, const QFlags<T> &flags)
     debug << ')';
     return debug;
 }
+
+#ifdef Q_OS_MAC
+
+// We provide QDebug stream operators for commonly used Core Foundation
+// and Core Graphics types, as well as NSObject. Additional CF/CG types
+// may be added by the user, using Q_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE.
+
+#define QT_FOR_EACH_CORE_FOUNDATION_TYPE(F) \
+    F(CFArray) \
+    F(CFURL) \
+    F(CFData) \
+    F(CFNumber) \
+    F(CFDictionary) \
+    F(CFLocale) \
+    F(CFDate) \
+    F(CFBoolean) \
+    F(CFTimeZone) \
+
+#define QT_FOR_EACH_MUTABLE_CORE_FOUNDATION_TYPE(F) \
+    F(CFError) \
+    F(CFBundle) \
+
+#define QT_FOR_EACH_CORE_GRAPHICS_TYPE(F) \
+    F(CGPath) \
+
+#define QT_FOR_EACH_MUTABLE_CORE_GRAPHICS_TYPE(F) \
+    F(CGColorSpace) \
+    F(CGImage) \
+    F(CGFont) \
+    F(CGColor) \
+
+#define QT_FORWARD_DECLARE_CF_TYPE(type) Q_FORWARD_DECLARE_CF_TYPE(type);
+#define QT_FORWARD_DECLARE_MUTABLE_CF_TYPE(type) Q_FORWARD_DECLARE_MUTABLE_CF_TYPE(type);
+#define QT_FORWARD_DECLARE_CG_TYPE(type) typedef const struct type *type ## Ref;
+#define QT_FORWARD_DECLARE_MUTABLE_CG_TYPE(type) typedef struct type *type ## Ref;
+
+QT_END_NAMESPACE
+Q_FORWARD_DECLARE_CF_TYPE(CFString);
+Q_FORWARD_DECLARE_OBJC_CLASS(NSObject);
+QT_FOR_EACH_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_CF_TYPE)
+QT_FOR_EACH_MUTABLE_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_MUTABLE_CF_TYPE)
+QT_FOR_EACH_CORE_GRAPHICS_TYPE(QT_FORWARD_DECLARE_CG_TYPE)
+QT_FOR_EACH_MUTABLE_CORE_GRAPHICS_TYPE(QT_FORWARD_DECLARE_MUTABLE_CG_TYPE)
+QT_BEGIN_NAMESPACE
+
+#define QT_FORWARD_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE(CFType) \
+    Q_CORE_EXPORT QDebug operator<<(QDebug, CFType##Ref);
+
+#define Q_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE(CFType) \
+    QDebug operator<<(QDebug debug, CFType##Ref ref) \
+    { \
+        if (!ref) \
+            return debug << QT_STRINGIFY(CFType) "Ref(0x0)"; \
+        if (CFStringRef description = CFCopyDescription(ref)) { \
+            QDebugStateSaver saver(debug); \
+            debug.noquote() << description; \
+            CFRelease(description); \
+        } \
+        return debug; \
+    }
+
+// Defined in qcore_mac_objc.mm
+Q_CORE_EXPORT QDebug operator<<(QDebug, const NSObject *);
+Q_CORE_EXPORT QDebug operator<<(QDebug, CFStringRef);
+
+QT_FOR_EACH_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE)
+QT_FOR_EACH_MUTABLE_CORE_FOUNDATION_TYPE(QT_FORWARD_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE)
+QT_FOR_EACH_CORE_GRAPHICS_TYPE(QT_FORWARD_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE)
+QT_FOR_EACH_MUTABLE_CORE_GRAPHICS_TYPE(QT_FORWARD_DECLARE_QDEBUG_OPERATOR_FOR_CF_TYPE)
+
+#undef QT_FORWARD_DECLARE_CF_TYPE
+#undef QT_FORWARD_DECLARE_MUTABLE_CF_TYPE
+#undef QT_FORWARD_DECLARE_CG_TYPE
+#undef QT_FORWARD_DECLARE_MUTABLE_CG_TYPE
+
+#endif // Q_OS_MAC
 
 QT_END_NAMESPACE
 

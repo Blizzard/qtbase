@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2013 Aleix Pol Gonzalez <aleixpol@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -52,8 +52,12 @@ void QCollatorPrivate::init()
     UErrorCode status = U_ZERO_ERROR;
     QByteArray name = locale.bcp47Name().replace(QLatin1Char('-'), QLatin1Char('_')).toLatin1();
     collator = ucol_open(name.constData(), &status);
-    if (U_FAILURE(status))
+    if (U_FAILURE(status)) {
         qWarning("Could not create collator: %d", status);
+        collator = 0;
+        dirty = false;
+        return;
+    }
 
     // enable normalization by default
     ucol_setAttribute(collator, UCOL_NORMALIZATION_MODE, UCOL_ON, &status);
@@ -97,17 +101,26 @@ int QCollator::compare(const QChar *s1, int len1, const QChar *s2, int len2) con
     if (d->dirty)
         d->init();
 
-    return ucol_strcoll(d->collator, (const UChar *)s1, len1, (const UChar *)s2, len2);
+    if (d->collator)
+        return ucol_strcoll(d->collator, (const UChar *)s1, len1, (const UChar *)s2, len2);
+
+    return QString::compare(QString(s1, len1), QString(s2, len2), d->caseSensitivity);
 }
 
 int QCollator::compare(const QString &s1, const QString &s2) const
 {
-    return compare(s1.constData(), s1.size(), s2.constData(), s2.size());
+    if (d->collator)
+        return compare(s1.constData(), s1.size(), s2.constData(), s2.size());
+
+    return QString::compare(s1, s2, d->caseSensitivity);
 }
 
 int QCollator::compare(const QStringRef &s1, const QStringRef &s2) const
 {
-    return compare(s1.constData(), s1.size(), s2.constData(), s2.size());
+    if (d->collator)
+        return compare(s1.constData(), s1.size(), s2.constData(), s2.size());
+
+    return QStringRef::compare(s1, s2, d->caseSensitivity);
 }
 
 QCollatorSortKey QCollator::sortKey(const QString &string) const
@@ -115,16 +128,20 @@ QCollatorSortKey QCollator::sortKey(const QString &string) const
     if (d->dirty)
         d->init();
 
-    QByteArray result(16 + string.size() + (string.size() >> 2), Qt::Uninitialized);
-    int size = ucol_getSortKey(d->collator, (const UChar *)string.constData(),
-                               string.size(), (uint8_t *)result.data(), result.size());
-    if (size > result.size()) {
-        result.resize(size);
-        size = ucol_getSortKey(d->collator, (const UChar *)string.constData(),
-                               string.size(), (uint8_t *)result.data(), result.size());
+    if (d->collator) {
+        QByteArray result(16 + string.size() + (string.size() >> 2), Qt::Uninitialized);
+        int size = ucol_getSortKey(d->collator, (const UChar *)string.constData(),
+                                   string.size(), (uint8_t *)result.data(), result.size());
+        if (size > result.size()) {
+            result.resize(size);
+            size = ucol_getSortKey(d->collator, (const UChar *)string.constData(),
+                                   string.size(), (uint8_t *)result.data(), result.size());
+        }
+        result.truncate(size);
+        return QCollatorSortKey(new QCollatorSortKeyPrivate(result));
     }
-    result.truncate(size);
-    return QCollatorSortKey(new QCollatorSortKeyPrivate(result));
+
+    return QCollatorSortKey(new QCollatorSortKeyPrivate(QByteArray()));
 }
 
 int QCollatorSortKey::compare(const QCollatorSortKey &otherKey) const

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -214,12 +214,12 @@ static QString windowsErrorCode()
                   NULL);
     QString ret = QString::fromWCharArray(string);
     LocalFree((HLOCAL)string);
-    return ret;
+    return ret.trimmed();
 }
 #endif
 
-static QString
-quoteValue(const ProString &val)
+QString
+QMakeEvaluator::quoteValue(const ProString &val)
 {
     QString ret;
     ret.reserve(val.size());
@@ -362,7 +362,7 @@ QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::Open
 {
     QString errStr;
     if (!m_vfs->writeFile(fn, mode, contents, &errStr)) {
-        evalError(fL1S("Cannot write %1file %2: %3.")
+        evalError(fL1S("Cannot write %1file %2: %3")
                   .arg(ctx, QDir::toNativeSeparators(fn), errStr));
         return ReturnFalse;
     }
@@ -1121,7 +1121,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
     switch (func_t) {
     case T_DEFINED: {
         if (args.count() < 1 || args.count() > 2) {
-            evalError(fL1S("defined(function, [\"test\"|\"replace\"])"
+            evalError(fL1S("defined(function, [\"test\"|\"replace\"|\"var\"])"
                            " requires one or two arguments."));
             return ReturnFalse;
         }
@@ -1202,15 +1202,13 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
             VisitReturn ret = ReturnFalse;
             ProFile *pro = m_parser->parsedProBlock(args.join(statics.field_sep),
                                                     m_current.pro->fileName(), m_current.line);
-            if (pro) {
-                if (m_cumulative || pro->isOk()) {
-                    m_locationStack.push(m_current);
-                    visitProBlock(pro, pro->tokPtr());
-                    ret = ReturnTrue; // This return value is not too useful, but that's qmake
-                    m_current = m_locationStack.pop();
-                }
-                pro->deref();
+            if (m_cumulative || pro->isOk()) {
+                m_locationStack.push(m_current);
+                visitProBlock(pro, pro->tokPtr());
+                ret = ReturnTrue; // This return value is not too useful, but that's qmake
+                m_current = m_locationStack.pop();
             }
+            pro->deref();
             return ret;
         }
     case T_IF: {
@@ -1584,7 +1582,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                                   GENERIC_READ, FILE_SHARE_READ,
                                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (rHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open() reference file %1: %2.").arg(rfn, windowsErrorCode()));
+            evalError(fL1S("Cannot open reference file %1: %2").arg(rfn, windowsErrorCode()));
             return ReturnFalse;
         }
         FILETIME ft;
@@ -1594,7 +1592,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                                   GENERIC_WRITE, FILE_SHARE_READ,
                                   NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (wHand == INVALID_HANDLE_VALUE) {
-            evalError(fL1S("Cannot open() %1: %2.").arg(tfn, windowsErrorCode()));
+            evalError(fL1S("Cannot open %1: %2").arg(tfn, windowsErrorCode()));
             return ReturnFalse;
         }
         SetFileTime(wHand, 0, 0, &ft);
@@ -1689,7 +1687,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
                         if (mode == CacheAdd)
                             newval += diffval;
                         else
-                            removeEach(&newval, diffval);
+                            newval.removeEach(diffval);
                     }
                     if (oldval != newval) {
                         if (target != TargetStash || !m_stashfile.isEmpty()) {

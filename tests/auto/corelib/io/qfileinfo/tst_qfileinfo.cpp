@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -219,10 +219,8 @@ private slots:
     void fileTimes();
     void fileTimes_oldFile();
 
-#ifndef Q_NO_SYMLINKS
     void isSymLink_data();
     void isSymLink();
-#endif
 
     void isHidden_data();
     void isHidden();
@@ -266,16 +264,23 @@ private slots:
 private:
     const QString m_currentDir;
     QString m_sourceFile;
+    QString m_proFile;
     QString m_resourcesDir;
     QTemporaryDir m_dir;
+    QSharedPointer<QTemporaryDir> m_dataDir;
 };
 
 void tst_QFileInfo::initTestCase()
 {
-    m_sourceFile = QFINDTESTDATA("tst_qfileinfo.cpp");
-    QVERIFY(!m_sourceFile.isEmpty());
-    m_resourcesDir = QFINDTESTDATA("resources");
-    QVERIFY(!m_resourcesDir.isEmpty());
+    m_dataDir = QEXTRACTTESTDATA("/testdata");
+    QVERIFY(m_dataDir);
+    const QString dataPath = m_dataDir->path();
+    QVERIFY(!dataPath.isEmpty());
+
+    m_sourceFile = dataPath + QLatin1String("/tst_qfileinfo.cpp");
+    m_resourcesDir = dataPath + QLatin1String("/resources");
+    m_proFile = dataPath + QLatin1String("/tst_qfileinfo.pro");
+
     QVERIFY(m_dir.isValid());
     QVERIFY(QDir::setCurrent(m_dir.path()));
 }
@@ -1137,7 +1142,11 @@ void tst_QFileInfo::fileTimes()
     QEXPECT_FAIL("simple", "WinCE only stores date of access data, not the time", Continue);
 #elif defined(Q_OS_QNX)
     QEXPECT_FAIL("", "QNX uses the noatime filesystem option", Continue);
+#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    if (fileInfo.lastRead() <= beforeRead)
+        QEXPECT_FAIL("", "Android may use relatime or noatime on mounts", Continue);
 #endif
+
     QVERIFY(fileInfo.lastRead() > beforeRead);
     QVERIFY(fileInfo.lastModified() > beforeWrite);
     QVERIFY(fileInfo.lastModified() < beforeRead);
@@ -1196,9 +1205,9 @@ void tst_QFileInfo::fileTimes_oldFile()
 #endif
 }
 
-#ifndef Q_NO_SYMLINKS
 void tst_QFileInfo::isSymLink_data()
 {
+#ifndef Q_NO_SYMLINKS
     QFile::remove("link.lnk");
     QFile::remove("brokenlink.lnk");
     QFile::remove("dummyfile");
@@ -1218,10 +1227,14 @@ void tst_QFileInfo::isSymLink_data()
     QTest::newRow("existent file") << m_sourceFile << false << "";
     QTest::newRow("link") << "link.lnk" << true << QFileInfo(m_sourceFile).absoluteFilePath();
     QTest::newRow("broken link") << "brokenlink.lnk" << true << QFileInfo("dummyfile").absoluteFilePath();
+#endif
 }
 
 void tst_QFileInfo::isSymLink()
 {
+#ifdef Q_NO_SYMLINKS
+    QSKIP("No symlink support", SkipAll);
+#else
     QFETCH(QString, path);
     QFETCH(bool, isSymLink);
     QFETCH(QString, linkTarget);
@@ -1229,8 +1242,8 @@ void tst_QFileInfo::isSymLink()
     QFileInfo fi(path);
     QCOMPARE(fi.isSymLink(), isSymLink);
     QCOMPARE(fi.symLinkTarget(), linkTarget);
-}
 #endif
+}
 
 void tst_QFileInfo::isHidden_data()
 {
@@ -1584,14 +1597,18 @@ void tst_QFileInfo::isWritable()
 void tst_QFileInfo::isExecutable()
 {
     QString appPath = QCoreApplication::applicationDirPath();
+#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    appPath += "/libtst_qfileinfo.so";
+#else
     appPath += "/tst_qfileinfo";
-#if defined(Q_OS_WIN)
+# if defined(Q_OS_WIN)
     appPath += ".exe";
+# endif
 #endif
     QFileInfo fi(appPath);
     QCOMPARE(fi.isExecutable(), true);
 
-    QCOMPARE(QFileInfo(QFINDTESTDATA("qfileinfo.pro")).isExecutable(), false);
+    QCOMPARE(QFileInfo(m_proFile).isExecutable(), false);
 
 #ifdef Q_OS_UNIX
     QFile::remove("link.lnk");
@@ -1603,7 +1620,7 @@ void tst_QFileInfo::isExecutable()
     QFile::remove("link.lnk");
 
     // Symlink to .pro file
-    QFile proFile(QFINDTESTDATA("qfileinfo.pro"));
+    QFile proFile(m_proFile);
     QVERIFY(proFile.link("link.lnk"));
     QCOMPARE(QFileInfo("link.lnk").isExecutable(), false);
     QFile::remove("link.lnk");

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -62,10 +62,10 @@ public:
     QPicturePaintEngine();
     ~QPicturePaintEngine();
 
-    bool begin(QPaintDevice *pdev);
-    bool end();
+    bool begin(QPaintDevice *pdev) Q_DECL_OVERRIDE;
+    bool end() Q_DECL_OVERRIDE;
 
-    void updateState(const QPaintEngineState &state);
+    void updateState(const QPaintEngineState &state) Q_DECL_OVERRIDE;
 
     void updatePen(const QPen &pen);
     void updateBrush(const QBrush &brush);
@@ -80,23 +80,18 @@ public:
     void updateClipEnabled(bool enabled);
     void updateOpacity(qreal opacity);
 
-    void drawEllipse(const QRectF &rect);
-    void drawPath(const QPainterPath &path);
-    void drawPolygon(const QPointF *points, int numPoints, PolygonDrawMode mode);
-#ifdef Q_NO_USING_KEYWORD
-    inline void drawPolygon(const QPoint *points, int pointCount, PolygonDrawMode mode)
-        { QPaintEngine::drawPolygon(points, pointCount, mode); }
-#else
+    void drawEllipse(const QRectF &rect) Q_DECL_OVERRIDE;
+    void drawPath(const QPainterPath &path) Q_DECL_OVERRIDE;
+    void drawPolygon(const QPointF *points, int numPoints, PolygonDrawMode mode) Q_DECL_OVERRIDE;
     using QPaintEngine::drawPolygon;
-#endif
 
-    void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr);
-    void drawTiledPixmap(const QRectF &r, const QPixmap &pixmap, const QPointF &s);
+    void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr) Q_DECL_OVERRIDE;
+    void drawTiledPixmap(const QRectF &r, const QPixmap &pixmap, const QPointF &s) Q_DECL_OVERRIDE;
     void drawImage(const QRectF &r, const QImage &image, const QRectF &sr,
-                   Qt::ImageConversionFlags flags = Qt::AutoColor);
-    void drawTextItem(const QPointF &p, const QTextItem &ti);
+                   Qt::ImageConversionFlags flags = Qt::AutoColor) Q_DECL_OVERRIDE;
+    void drawTextItem(const QPointF &p, const QTextItem &ti) Q_DECL_OVERRIDE;
 
-    Type type() const { return Picture; }
+    Type type() const Q_DECL_OVERRIDE { return Picture; }
 
 protected:
     QPicturePaintEngine(QPaintEnginePrivate &dptr);

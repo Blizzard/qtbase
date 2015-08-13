@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -48,16 +48,14 @@
 
 static QString stringNumber(qint64 number)
 {
-    QString tmp;
     if (number > (1024 * 1024 * 1024))
-        tmp.sprintf("%.2fGB", number / (1024.0 * 1024.0 * 1024.0));
+        return QString::asprintf("%.2fGB", number / (1024.0 * 1024.0 * 1024.0));
     else if (number > (1024 * 1024))
-        tmp.sprintf("%.2fMB", number / (1024.0 * 1024.0));
+        return QString::asprintf("%.2fMB", number / (1024.0 * 1024.0));
     else if (number > (1024))
-        tmp.sprintf("%.2fKB", number / (1024.0));
+        return QString::asprintf("%.2fKB", number / (1024.0));
     else
-        tmp.sprintf("%d bytes", int(number));
-    return tmp;
+        return QString::asprintf("%d bytes", int(number));
 }
 
 AddTorrentDialog::AddTorrentDialog(QWidget *parent)

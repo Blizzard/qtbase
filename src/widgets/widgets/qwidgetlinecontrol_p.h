@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -83,7 +83,7 @@ public:
         m_selstart(0), m_selend(0), m_passwordEchoEditing(false)
         , m_passwordEchoTimer(0)
         , m_passwordMaskDelay(-1)
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
         , m_threadChecks(false)
         , m_textLayoutThread(0)
  #endif
@@ -230,7 +230,7 @@ public:
     {
 #ifndef QT_NO_IM
         if (composeMode())
-            qApp->inputMethod()->reset();
+            QGuiApplication::inputMethod()->reset();
 #endif
         internalSetText(txt, -1, false);
     }
@@ -245,7 +245,7 @@ public:
 
     void insert(const QString &);
     void clear();
-    void undo() { internalUndo(); finishChange(-1, true); }
+    void undo();
     void redo() { internalRedo(); finishChange(); }
     void selectWordAtPos(int);
 
@@ -328,7 +328,7 @@ public:
     Qt::LayoutDirection layoutDirection() const {
         if (m_layoutDirection == Qt::LayoutDirectionAuto) {
             if (m_text.isEmpty())
-                return qApp->inputMethod()->inputDirection();
+                return QGuiApplication::inputMethod()->inputDirection();
             return m_text.isRightToLeft() ? Qt::RightToLeft : Qt::LeftToRight;
         }
         return m_layoutDirection;
@@ -372,14 +372,14 @@ public:
 
     QTextLayout *textLayout() const
     {
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
         if (m_threadChecks && QThread::currentThread() != m_textLayoutThread)
             redoTextLayout();
 #endif
         return &m_textLayout;
     }
 
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
     void setThreadChecks(bool threadChecks)
     {
         m_threadChecks = threadChecks;
@@ -503,7 +503,7 @@ private:
     }
 
     int redoTextLayout() const;
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
     bool m_threadChecks;
     mutable QThread *m_textLayoutThread;
 #endif
@@ -532,7 +532,7 @@ Q_SIGNALS:
     void editFocusChange(bool);
 #endif
 protected:
-    virtual void timerEvent(QTimerEvent *event);
+    virtual void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
 
 private Q_SLOTS:
     void _q_clipboardChanged();

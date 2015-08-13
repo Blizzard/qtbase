@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -38,10 +38,8 @@
 
 QT_BEGIN_NAMESPACE
 
-#if defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__  >= 406) && !defined(Q_CC_INTEL)
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#endif
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Wmissing-field-initializers")
 
 const QArrayData QArrayData::shared_null[2] = {
     { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, sizeof(QArrayData) }, // shared null
@@ -52,9 +50,7 @@ static const QArrayData qt_array[3] = {
     { { Q_BASIC_ATOMIC_INITIALIZER(0) }, 0, 0, 0, sizeof(QArrayData) }, // unsharable empty
     /* zero initialized terminator */};
 
-#if defined (__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__  >= 406) && !defined(Q_CC_INTEL)
-  #pragma GCC diagnostic pop
-#endif
+QT_WARNING_POP
 
 static const QArrayData &qt_array_empty = qt_array[0];
 static const QArrayData &qt_array_unsharable_empty = qt_array[1];
@@ -85,8 +81,20 @@ QArrayData *QArrayData::allocate(size_t objectSize, size_t alignment,
         headerSize += (alignment - Q_ALIGNOF(QArrayData));
 
     // Allocate additional space if array is growing
-    if (options & Grow)
-        capacity = qAllocMore(int(objectSize * capacity), int(headerSize)) / int(objectSize);
+    if (options & Grow) {
+
+        // Guard against integer overflow when multiplying.
+        if (capacity > std::numeric_limits<size_t>::max() / objectSize)
+            return 0;
+
+        size_t alloc = objectSize * capacity;
+
+        // Make sure qAllocMore won't overflow.
+        if (headerSize > size_t(MaxAllocSize) || alloc > size_t(MaxAllocSize) - headerSize)
+            return 0;
+
+        capacity = qAllocMore(int(alloc), int(headerSize)) / int(objectSize);
+    }
 
     size_t allocSize = headerSize + objectSize * capacity;
 
@@ -118,7 +126,8 @@ void QArrayData::deallocate(QArrayData *data, size_t objectSize,
         return;
 #endif
 
-    Q_ASSERT_X(!data->ref.isStatic(), "QArrayData::deallocate", "Static data can not be deleted");
+    Q_ASSERT_X(data == 0 || !data->ref.isStatic(), "QArrayData::deallocate",
+               "Static data can not be deleted");
     ::free(data);
 }
 

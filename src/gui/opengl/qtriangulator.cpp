@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,8 +48,6 @@
 #include <private/qopenglcontext_p.h>
 #include <private/qopenglextensions_p.h>
 #include <private/qrbtree_p.h>
-
-#include <math.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -441,8 +439,8 @@ T QMaxHeap<T>::pop()
 
 // Copied from qhash.cpp
 static const uchar prime_deltas[] = {
-    0,  0,  1,  3,  1,  5,  3,  3,  1,  9,  7,  5,  3,  9, 25,  3,
-    1, 21,  3, 21,  7, 15,  9,  5,  3, 29, 15,  0,  0,  0,  0,  0
+    0,  0,  1,  3,  1,  5,  3,  3,  1,  9,  7,  5,  3, 17, 27,  3,
+    1, 29,  3, 21,  7, 17, 15,  9, 43, 35, 15,  0,  0,  0,  0,  0
 };
 
 // Copied from qhash.cpp
@@ -457,7 +455,7 @@ static inline int primeForCount(int count)
     int high = 32;
     for (int i = 0; i < 5; ++i) {
         int mid = (high + low) / 2;
-        if (count >= 1 << mid)
+        if (uint(count) >= (1u << mid))
             low = mid;
         else
             high = mid;
@@ -1700,8 +1698,8 @@ void QTriangulator<T>::ComplexToSimple::DebugDialog::paintEvent(QPaintEvent *)
         QPodPoint q = vertices.at(splits.at(i).vertex);
         QPodPoint u = vertices.at(edges.at(splits.at(i).edge).from) - q;
         QPodPoint v = vertices.at(edges.at(splits.at(i).edge).to) - q;
-        qreal uLen = sqrt(qreal(qDot(u, u)));
-        qreal vLen = sqrt(qreal(qDot(v, v)));
+        qreal uLen = qSqrt(qDot(u, u));
+        qreal vLen = qSqrt(qDot(v, v));
         if (uLen) {
             u.x *= 2 * halfPointSize / uLen;
             u.y *= 2 * halfPointSize / uLen;
@@ -1719,7 +1717,7 @@ void QTriangulator<T>::ComplexToSimple::DebugDialog::paintEvent(QPaintEvent *)
 template <typename T>
 void QTriangulator<T>::ComplexToSimple::DebugDialog::wheelEvent(QWheelEvent *event)
 {
-    qreal scale = exp(-0.001 * event->delta());
+    qreal scale = qExp(-0.001 * event->delta());
     QPointF center = m_window.center();
     QPointF delta = scale * (m_window.bottomRight() - center);
     m_window = QRectF(center - delta, center + delta);

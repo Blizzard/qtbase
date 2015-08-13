@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -627,7 +627,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     indicator or button bevel.
 
     \omitvalue PE_IndicatorViewItemCheck
-    \value PE_FrameStatusBar Frame
+    \value PE_FrameStatusBar  Obsolete. Use PE_FrameStatusBarItem instead.
 
     \value PE_PanelButtonCommand  Button used to initiate an action, for
         example, a QPushButton.
@@ -1472,6 +1472,11 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value PM_TreeViewIndentation The indentation of items in a tree view.
            This enum value has been introduced in Qt 5.4.
 
+    \value PM_HeaderDefaultSectionSizeHorizontal The default size of sections
+           in a horizontal header. This enum value has been introduced in Qt 5.5.
+    \value PM_HeaderDefaultSectionSizeVertical The default size of sections
+           in a vertical header. This enum value has been introduced in Qt 5.5.
+
     \value PM_CustomBase Base value for custom pixel metrics.  Custom
     values must be greater than this value.
 
@@ -1663,7 +1668,8 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
 
     \value SH_Header_ArrowAlignment The placement of the sorting
         indicator may appear in list or table headers. Possible values
-        are Qt::Left or Qt::Right.
+        are Qt::Alignment values (that is, an OR combination of
+        Qt::AlignmentFlag flags).
 
     \value SH_Slider_SnapToValue  Sliders snap to values while moving,
         as they do on Windows.
@@ -1706,6 +1712,32 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
         the user moving the mouse cursor to a submenu while crossing
         other items of the menu. This is supported on most modern
         desktop platforms.
+
+    \value SH_Menu_SubMenuUniDirection Since Qt 5.5. If the cursor has
+        to move towards the submenu (like it is on OS X), or if the
+        cursor can move in any direction as long as it reaches the
+        submenu before the sloppy timeout.
+
+    \value SH_Menu_SubMenuUniDirectionFailCount Since Qt 5.5.  When
+        SH_Menu_SubMenuUniDirection is defined this enum defines the
+        number of failed mouse moves before the sloppy submenu is
+        discarded.  This can be used to control the "strictness" of the
+        uni direction algorithm.
+
+    \value SH_Menu_SubMenuSloppySelectOtherActions Since Qt 5.5. Should
+        other action items be selected when the mouse moves towards a
+        sloppy submenu.
+
+    \value SH_Menu_SubMenuSloppyCloseTimeout Since Qt 5.5. The timeout
+        used to close sloppy submenus.
+
+    \value SH_Menu_SubMenuResetWhenReenteringParent Since Qt 5.5. When
+        entering parent from child submenu, should the sloppy state be
+        reset, effectively closing the child and making the current
+        submenu active.
+
+    \value SH_Menu_SubMenuDontStartSloppyOnLeave Since Qt 5.5. Do not
+        start sloppy timers when the mouse leaves a sub-menu.
 
     \value SH_ScrollView_FrameOnlyAroundContents  Whether scrollviews
         draw their frame only around contents (like Motif), or around
@@ -2323,51 +2355,24 @@ int QStyle::combinedLayoutSpacing(QSizePolicy::ControlTypes controls1,
     return result;
 }
 
+// ### Qt 6: Remove in favor of template<class T> QDebug operator<<(QDebug, const QFlags<T> &).
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 QT_BEGIN_INCLUDE_NAMESPACE
-#include <QDebug>
+#  include <QDebug>
 QT_END_INCLUDE_NAMESPACE
 
-#if !defined(QT_NO_DEBUG_STREAM)
+#  if !defined(QT_NO_DEBUG_STREAM)
 QDebug operator<<(QDebug debug, QStyle::State state)
 {
-#if !defined(QT_NO_DEBUG)
-    debug << "QStyle::State(";
-
-    QStringList states;
-    if (state & QStyle::State_Active) states << QLatin1String("Active");
-    if (state & QStyle::State_AutoRaise) states << QLatin1String("AutoRaise");
-    if (state & QStyle::State_Bottom) states << QLatin1String("Bottom");
-    if (state & QStyle::State_Children) states << QLatin1String("Children");
-    if (state & QStyle::State_DownArrow) states << QLatin1String("DownArrow");
-    if (state & QStyle::State_Editing) states << QLatin1String("Editing");
-    if (state & QStyle::State_Enabled) states << QLatin1String("Enabled");
-    if (state & QStyle::State_FocusAtBorder) states << QLatin1String("FocusAtBorder");
-    if (state & QStyle::State_HasFocus) states << QLatin1String("HasFocus");
-    if (state & QStyle::State_Horizontal) states << QLatin1String("Horizontal");
-    if (state & QStyle::State_Item) states << QLatin1String("Item");
-    if (state & QStyle::State_KeyboardFocusChange) states << QLatin1String("KeyboardFocusChange");
-    if (state & QStyle::State_MouseOver) states << QLatin1String("MouseOver");
-    if (state & QStyle::State_NoChange) states << QLatin1String("NoChange");
-    if (state & QStyle::State_Off) states << QLatin1String("Off");
-    if (state & QStyle::State_On) states << QLatin1String("On");
-    if (state & QStyle::State_Open) states << QLatin1String("Open");
-    if (state & QStyle::State_Raised) states << QLatin1String("Raised");
-    if (state & QStyle::State_ReadOnly) states << QLatin1String("ReadOnly");
-    if (state & QStyle::State_Selected) states << QLatin1String("Selected");
-    if (state & QStyle::State_Sibling) states << QLatin1String("Sibling");
-    if (state & QStyle::State_Sunken) states << QLatin1String("Sunken");
-    if (state & QStyle::State_Top) states << QLatin1String("Top");
-    if (state & QStyle::State_UpArrow) states << QLatin1String("UpArrow");
-
-    std::sort(states.begin(), states.end());
-    debug << states.join(QLatin1String(" | "));
-    debug << ')';
-#else
+#    if !defined(QT_NO_DEBUG)
+    return operator<< <QStyle::StateFlag>(debug, state);
+#    else
     Q_UNUSED(state);
-#endif
     return debug;
+#    endif
 }
-#endif
+#  endif // !QT_NO_DEBUG_STREAM
+#endif // QT_VERSION < QT_VERSION_CHECK(6,0,0)
 
 /*!
     \since 4.6

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -10,15 +10,15 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
 ** Documentation License version 1.3 as published by the Free Software
 ** Foundation and appearing in the file included in the packaging of
-** this file.  Please review the following information to ensure
+** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
 ** will be met: http://www.gnu.org/copyleft/fdl.html.
 ** $QT_END_LICENSE$
@@ -393,11 +393,11 @@
 
         Files:
         \list
-        \li \l{http://qt-project.org/doc/qt-5.0/qtwidgets/widgets-imageviewer-imageviewer-cpp.html}
+        \li \l{http://doc.qt.io/qt-5/qtwidgets-widgets-imageviewer-imageviewer-cpp.html}
            {widgets/imageviewer/imageviewer.cpp}
-        \li \l{http://qt-project.org/doc/qt-5.0/qtwidgets/widgets-imageviewer-imageviewer-h.html}
+        \li \l{http://doc.qt.io/qt-5/qtwidgets-widgets-imageviewer-imageviewer-h.html}
            {widgets/imageviewer/imageviewer.h}
-        \li \l{http://qt-project.org/doc/qt-5.0/qtwidgets/widgets-imageviewer-main-cpp.html}
+        \li \l{http://doc.qt.io/qt-5/qtwidgets-widgets-imageviewer-main-cpp.html}
            {widgets/imageviewer/main.cpp}
         \endlist
 
@@ -414,7 +414,7 @@
 
     \code
     / *!
-        \externalpage http://qt-project.org/doc/
+        \externalpage http://doc.qt.io/
         \title Qt Documentation Site
     * /
     \endcode
@@ -432,7 +432,7 @@
     QDoc renders this as:
 
     \quotation
-        At the \l {http://qt-project.org/doc/}{Qt Documentation Site}
+        At the \l {http://doc.qt.io/}{Qt Documentation Site}
         you can find the latest documentation for Qt, Qt Creator, the Qt SDK
         and much more.
     \endquotation
@@ -443,7 +443,7 @@
 
     \code
     / *!
-        At the \l {http://qt-project.org/doc/}{Qt Documentation Site}
+        At the \l {http://doc.qt.io/}{Qt Documentation Site}
         you can find the latest documentation for Qt, Qt Creator, the Qt SDK
         and much more.
     * /
@@ -543,7 +543,7 @@
          <table width="100%">
              <tr valign="top" bgcolor="#e0e0e0">
              <td><b>
-             <a href="http://qt-project.org/doc/qt-5.0/qtnetwork/qabstractsocket.html">QAbstractSocket</a>
+             <a href="http://doc.qt.io/qt-5/qabstractsocket.html">QAbstractSocket</a>
              </b></td>
              <td>
              The base functionality common to all socket types
@@ -551,7 +551,7 @@
 
              <tr valign="top" bgcolor="#e0e0e0">
              <td><b>
-             <a href="http://qt-project.org/doc/qt-5.0/qtcore/qbuffer.html">QBuffer</a>
+             <a href="http://doc.qt.io/qt-5/qbuffer.html">QBuffer</a>
              </b></td>
              <td>
              QIODevice interface for a QByteArray
@@ -559,7 +559,7 @@
 
              <tr valign="top" bgcolor="#e0e0e0">
              <td><b>
-             <a href="http://qt-project.org/doc/qt-5.0/qtgui/qclipboard.html">QClipboard</a>
+             <a href="http://doc.qt.io/qt-5/qclipboard.html">QClipboard</a>
              </b></td>
              <td>
              Access to the window system clipboard
@@ -635,7 +635,7 @@
                <h3>Functions</h3>
                <ul>
                <li>RandomAccessIterator
-               <a href="http://qt-project.org/doc/qt-5.0/qtcore/qtalgorithms.html#qBinaryFind">qBinaryFind</a></b>
+               <a href="http://doc.qt.io/qt-5/qtalgorithms-obsolete.html#qBinaryFind">qBinaryFind</a></b>
                (RandomAccessIterator begin, RandomAccessIterator end,
                const T & value)</li>
                <li>...</li></ul>
@@ -804,7 +804,7 @@
                <table width="100%">
                    <tr valign="top" bgcolor="#d0d0d0">
                    <td><b>
-                   <a href="http://qt-project.org/doc/qt-5.0/qtnetwork/qabstractsocket.html">QAbstractSocket</a>
+                   <a href="http://doc.qt.io/qt-5/qabstractsocket.html">QAbstractSocket</a>
                    </b></td>
                    <td>
                    The base functionality common to all socket types
@@ -1053,28 +1053,6 @@
         See also \l{QWidget::geometry} {geometry},
         \l{QWidget::height} {height}, and \l{QWidget::size} {size}.
     \endquotation
-
-    \target service-command
-    \section1 \\service
-
-    The \\service command tells QDoc that a class is a service class
-    and names the service. The command takes two arguments, the name
-    of the class and the name of the service. Currently, this command
-    is not used in the Qt documentation.
-
-     \code
-         / *!
-             \service TimeService Time
-             ...
-         * /
-         class TimeService : public QCopObjectService
-         {
-             ...
-         }
-     \endcode
-
-     See also \l {class-command} {\\class} and \l
-     {generatelist-command} {\\generatelist}.
 
     \target qmlattachedproperty-command
     \section1 \\qmlattachedproperty
@@ -1376,9 +1354,10 @@
     \section1 \\inqmlmodule
 
     A QML class may belong to a \l{qmlmodule-command}{QML module} by inserting
-    the \l{inqmlmodule-command}{\\inqmlmodule} command as a topic command.
-    Every member of a group must be linked to using the module name and two
-    colons (\c{::}).
+    the \l{inqmlmodule-command}{\\inqmlmodule} command as a topic command, with
+    the module name (without a version number) as the only argument. Every
+    member of a group must be linked to using the module name and two colons
+    (\c{::}).
 
     \code
         \qmltype ClickableButton
@@ -1538,7 +1517,7 @@
     \quotation
         \raw HTML
         <h3>
-            <a href="http://qt-project.org/doc/qt-5.0/qtgui/qpalette.html">
+            <a href="http://doc.qt.io/qt-5/qpalette.html">
                 QPalette
             </a>
             QStyleOption::palette

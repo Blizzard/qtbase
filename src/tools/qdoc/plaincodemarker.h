@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -48,20 +48,20 @@ public:
     PlainCodeMarker();
     ~PlainCodeMarker();
 
-    bool recognizeCode( const QString& code );
-    bool recognizeExtension( const QString& ext );
-    bool recognizeLanguage( const QString& lang );
-    Atom::Type atomType() const;
-    QString markedUpCode( const QString& code, const Node *relative, const Location &location );
+    bool recognizeCode( const QString& code ) Q_DECL_OVERRIDE;
+    bool recognizeExtension( const QString& ext ) Q_DECL_OVERRIDE;
+    bool recognizeLanguage( const QString& lang ) Q_DECL_OVERRIDE;
+    Atom::Type atomType() const Q_DECL_OVERRIDE;
+    QString markedUpCode( const QString& code, const Node *relative, const Location &location ) Q_DECL_OVERRIDE;
     QString markedUpSynopsis( const Node *node, const Node *relative,
-                              SynopsisStyle style );
-    QString markedUpName( const Node *node );
-    QString markedUpFullName( const Node *node, const Node *relative );
-    QString markedUpEnumValue(const QString &enumValue, const Node *relative);
-    QString markedUpIncludes( const QStringList& includes );
-    QString functionBeginRegExp( const QString& funcName );
-    QString functionEndRegExp( const QString& funcName );
-    QList<Section> sections(const InnerNode *innerNode, SynopsisStyle style, Status status);
+                              SynopsisStyle style ) Q_DECL_OVERRIDE;
+    QString markedUpName( const Node *node ) Q_DECL_OVERRIDE;
+    QString markedUpFullName( const Node *node, const Node *relative ) Q_DECL_OVERRIDE;
+    QString markedUpEnumValue(const QString &enumValue, const Node *relative) Q_DECL_OVERRIDE;
+    QString markedUpIncludes( const QStringList& includes ) Q_DECL_OVERRIDE;
+    QString functionBeginRegExp( const QString& funcName ) Q_DECL_OVERRIDE;
+    QString functionEndRegExp( const QString& funcName ) Q_DECL_OVERRIDE;
+    QList<Section> sections(const InnerNode *innerNode, SynopsisStyle style, Status status) Q_DECL_OVERRIDE;
 };
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
@@ -17,8 +17,8 @@
 **     notice, this list of conditions and the following disclaimer in
 **     the documentation and/or other materials provided with the
 **     distribution.
-**   * Neither the name of Digia Plc and its Subsidiary(-ies) nor the names
-**     of its contributors may be used to endorse or promote products derived
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
 **     from this software without specific prior written permission.
 **
 **
@@ -43,7 +43,7 @@
 
 #include <QtWidgets>
 
-#include <math.h>
+#include <cmath>
 
 //! [0]
 const float Pi = 3.14159f;
@@ -123,8 +123,8 @@ Window::Window()
     QPainterPath starPath;
     starPath.moveTo(90, 50);
     for (int i = 1; i < 5; ++i) {
-        starPath.lineTo(50 + 40 * cos(0.8 * i * Pi),
-                        50 + 40 * sin(0.8 * i * Pi));
+        starPath.lineTo(50 + 40 * std::cos(0.8 * i * Pi),
+                        50 + 40 * std::sin(0.8 * i * Pi));
     }
     starPath.closeSubpath();
 //! [9]

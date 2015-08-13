@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -54,6 +46,7 @@
 
 #include <QtGui/private/qguiapplication_p.h>
 
+#include <qoffscreensurface.h>
 #include <qpa/qplatformoffscreensurface.h>
 
 #include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
@@ -75,15 +68,23 @@ QIOSIntegration::QIOSIntegration()
     , m_inputContext(0)
     , m_platformServices(new QIOSServices)
     , m_accessibility(0)
+    , m_debugWindowManagement(false)
 {
     if (![UIApplication sharedApplication]) {
-        qWarning()
-            << "Error: You are creating QApplication before calling UIApplicationMain.\n"
-            << "If you are writing a native iOS application, and only want to use Qt for\n"
-            << "parts of the application, a good place to create QApplication is from within\n"
-            << "'applicationDidFinishLaunching' inside your UIApplication delegate.\n";
-        exit(-1);
+        qFatal("Error: You are creating QApplication before calling UIApplicationMain.\n" \
+               "If you are writing a native iOS application, and only want to use Qt for\n" \
+               "parts of the application, a good place to create QApplication is from within\n" \
+               "'applicationDidFinishLaunching' inside your UIApplication delegate.\n");
     }
+
+    // The backingstore needs a global share context in order to support composition in
+    // QPlatformBackingStore.
+    qApp->setAttribute(Qt::AA_ShareOpenGLContexts, true);
+    // And that context must match the format used for the backingstore's context.
+    QSurfaceFormat fmt;
+    fmt.setDepthBufferSize(16);
+    fmt.setStencilBufferSize(8);
+    QSurfaceFormat::setDefaultFormat(fmt);
 
     // Set current directory to app bundle folder
     QDir::setCurrent(QString::fromUtf8([[[NSBundle mainBundle] bundlePath] UTF8String]));
@@ -120,7 +121,7 @@ QIOSIntegration::~QIOSIntegration()
     m_inputContext = 0;
 
     foreach (QScreen *screen, QGuiApplication::screens())
-        delete screen->handle();
+        destroyScreen(screen->handle());
 
     delete m_platformServices;
     m_platformServices = 0;
@@ -145,6 +146,8 @@ bool QIOSIntegration::hasCapability(Capability cap) const
         return false;
     case ApplicationState:
         return true;
+    case RasterGLSurface:
+        return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
     }
@@ -167,9 +170,22 @@ QPlatformOpenGLContext *QIOSIntegration::createPlatformOpenGLContext(QOpenGLCont
     return new QIOSContext(context);
 }
 
+class QIOSOffscreenSurface : public QPlatformOffscreenSurface
+{
+public:
+    QIOSOffscreenSurface(QOffscreenSurface *offscreenSurface) : QPlatformOffscreenSurface(offscreenSurface) {}
+
+    QSurfaceFormat format() const Q_DECL_OVERRIDE
+    {
+        Q_ASSERT(offscreenSurface());
+        return offscreenSurface()->requestedFormat();
+    }
+    bool isValid() const Q_DECL_OVERRIDE { return true; }
+};
+
 QPlatformOffscreenSurface *QIOSIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
 {
-    return new QPlatformOffscreenSurface(surface);
+    return new QIOSOffscreenSurface(surface);
 }
 
 QAbstractEventDispatcher *QIOSIntegration::createEventDispatcher() const
@@ -225,10 +241,24 @@ QPlatformTheme *QIOSIntegration::createPlatformTheme(const QString &name) const
     return QPlatformIntegration::createPlatformTheme(name);
 }
 
+QTouchDevice *QIOSIntegration::touchDevice()
+{
+    return m_touchDevice;
+}
+
+QPlatformAccessibility *QIOSIntegration::accessibility() const
+{
+    if (!m_accessibility)
+        m_accessibility = new QIOSPlatformAccessibility;
+    return m_accessibility;
+}
+
 QPlatformNativeInterface *QIOSIntegration::nativeInterface() const
 {
     return const_cast<QIOSIntegration *>(this);
 }
+
+// ---------------------------------------------------------
 
 void *QIOSIntegration::nativeResourceForWindow(const QByteArray &resource, QWindow *window)
 {
@@ -245,16 +275,18 @@ void *QIOSIntegration::nativeResourceForWindow(const QByteArray &resource, QWind
     return 0;
 }
 
-QTouchDevice *QIOSIntegration::touchDevice()
+void QIOSIntegration::setDebugWindowManagement(bool enabled)
 {
-    return m_touchDevice;
+    m_debugWindowManagement = enabled;
 }
 
-QPlatformAccessibility *QIOSIntegration::accessibility() const
+bool QIOSIntegration::debugWindowManagement() const
 {
-    if (!m_accessibility)
-        m_accessibility = new QIOSPlatformAccessibility;
-    return m_accessibility;
+    return m_debugWindowManagement;
 }
+
+// ---------------------------------------------------------
+
+#include "moc_qiosintegration.cpp"
 
 QT_END_NAMESPACE

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -77,10 +77,6 @@ enum HB_Compat_Error {
 
 typedef void (*qt_destroy_func_t) (void *user_data);
 typedef bool (*qt_get_font_table_func_t) (void *user_data, uint tag, uchar *buffer, uint *length);
-
-const QFont::Weight qt_mediumFontWeight = static_cast<QFont::Weight>(57);
-const QFont::Weight qt_extralightFontWeight = static_cast<QFont::Weight>(12);
-const QFont::Weight qt_thinFontWeight = static_cast<QFont::Weight>(0);
 
 class Q_GUI_EXPORT QFontEngine
 {
@@ -351,26 +347,26 @@ public:
     QFontEngineBox(int size);
     ~QFontEngineBox();
 
-    virtual glyph_t glyphIndex(uint ucs4) const;
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const;
-    virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const;
+    virtual glyph_t glyphIndex(uint ucs4) const Q_DECL_OVERRIDE;
+    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const Q_DECL_OVERRIDE;
+    virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const Q_DECL_OVERRIDE;
 
     void draw(QPaintEngine *p, qreal x, qreal y, const QTextItemInt &si);
-    virtual void addOutlineToPath(qreal x, qreal y, const QGlyphLayout &glyphs, QPainterPath *path, QTextItem::RenderFlags flags);
+    virtual void addOutlineToPath(qreal x, qreal y, const QGlyphLayout &glyphs, QPainterPath *path, QTextItem::RenderFlags flags) Q_DECL_OVERRIDE;
 
-    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs);
-    virtual glyph_metrics_t boundingBox(glyph_t glyph);
-    virtual QFontEngine *cloneWithSize(qreal pixelSize) const;
+    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs) Q_DECL_OVERRIDE;
+    virtual glyph_metrics_t boundingBox(glyph_t glyph) Q_DECL_OVERRIDE;
+    virtual QFontEngine *cloneWithSize(qreal pixelSize) const Q_DECL_OVERRIDE;
 
-    virtual QFixed ascent() const;
-    virtual QFixed descent() const;
-    virtual QFixed leading() const;
-    virtual qreal maxCharWidth() const;
-    virtual qreal minLeftBearing() const { return 0; }
-    virtual qreal minRightBearing() const { return 0; }
-    virtual QImage alphaMapForGlyph(glyph_t);
+    virtual QFixed ascent() const Q_DECL_OVERRIDE;
+    virtual QFixed descent() const Q_DECL_OVERRIDE;
+    virtual QFixed leading() const Q_DECL_OVERRIDE;
+    virtual qreal maxCharWidth() const Q_DECL_OVERRIDE;
+    virtual qreal minLeftBearing() const Q_DECL_OVERRIDE { return 0; }
+    virtual qreal minRightBearing() const Q_DECL_OVERRIDE { return 0; }
+    virtual QImage alphaMapForGlyph(glyph_t) Q_DECL_OVERRIDE;
 
-    virtual bool canRender(const QChar *string, int len) const;
+    virtual bool canRender(const QChar *string, int len) const Q_DECL_OVERRIDE;
 
     inline int size() const { return _size; }
 
@@ -385,85 +381,67 @@ private:
 class Q_GUI_EXPORT QFontEngineMulti : public QFontEngine
 {
 public:
-    explicit QFontEngineMulti(int engineCount);
+    explicit QFontEngineMulti(QFontEngine *engine, int script, const QStringList &fallbackFamilies = QStringList());
     ~QFontEngineMulti();
 
-    virtual glyph_t glyphIndex(uint ucs4) const;
-    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const;
+    virtual glyph_t glyphIndex(uint ucs4) const Q_DECL_OVERRIDE;
+    virtual bool stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs, ShaperFlags flags) const Q_DECL_OVERRIDE;
 
-    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs);
-    virtual glyph_metrics_t boundingBox(glyph_t glyph);
+    virtual glyph_metrics_t boundingBox(const QGlyphLayout &glyphs) Q_DECL_OVERRIDE;
+    virtual glyph_metrics_t boundingBox(glyph_t glyph) Q_DECL_OVERRIDE;
 
-    virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const;
-    virtual void doKerning(QGlyphLayout *, ShaperFlags) const;
-    virtual void addOutlineToPath(qreal, qreal, const QGlyphLayout &, QPainterPath *, QTextItem::RenderFlags flags);
-    virtual void getGlyphBearings(glyph_t glyph, qreal *leftBearing = 0, qreal *rightBearing = 0);
+    virtual void recalcAdvances(QGlyphLayout *, ShaperFlags) const Q_DECL_OVERRIDE;
+    virtual void doKerning(QGlyphLayout *, ShaperFlags) const Q_DECL_OVERRIDE;
+    virtual void addOutlineToPath(qreal, qreal, const QGlyphLayout &, QPainterPath *, QTextItem::RenderFlags flags) Q_DECL_OVERRIDE;
+    virtual void getGlyphBearings(glyph_t glyph, qreal *leftBearing = 0, qreal *rightBearing = 0) Q_DECL_OVERRIDE;
 
-    virtual QFixed ascent() const;
-    virtual QFixed descent() const;
-    virtual QFixed leading() const;
-    virtual QFixed xHeight() const;
-    virtual QFixed averageCharWidth() const;
-    virtual QImage alphaMapForGlyph(glyph_t);
-    virtual QImage alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition);
-    virtual QImage alphaMapForGlyph(glyph_t, const QTransform &t);
-    virtual QImage alphaMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t);
-    virtual QImage alphaRGBMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t);
+    virtual QFixed ascent() const Q_DECL_OVERRIDE;
+    virtual QFixed descent() const Q_DECL_OVERRIDE;
+    virtual QFixed leading() const Q_DECL_OVERRIDE;
+    virtual QFixed xHeight() const Q_DECL_OVERRIDE;
+    virtual QFixed averageCharWidth() const Q_DECL_OVERRIDE;
+    virtual QImage alphaMapForGlyph(glyph_t) Q_DECL_OVERRIDE;
+    virtual QImage alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition) Q_DECL_OVERRIDE;
+    virtual QImage alphaMapForGlyph(glyph_t, const QTransform &t) Q_DECL_OVERRIDE;
+    virtual QImage alphaMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t) Q_DECL_OVERRIDE;
+    virtual QImage alphaRGBMapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t) Q_DECL_OVERRIDE;
 
-    virtual QFixed lineThickness() const;
-    virtual QFixed underlinePosition() const;
-    virtual qreal maxCharWidth() const;
-    virtual qreal minLeftBearing() const;
-    virtual qreal minRightBearing() const;
+    virtual QFixed lineThickness() const Q_DECL_OVERRIDE;
+    virtual QFixed underlinePosition() const Q_DECL_OVERRIDE;
+    virtual qreal maxCharWidth() const Q_DECL_OVERRIDE;
+    virtual qreal minLeftBearing() const Q_DECL_OVERRIDE;
+    virtual qreal minRightBearing() const Q_DECL_OVERRIDE;
 
-    virtual bool canRender(const QChar *string, int len) const;
+    virtual bool canRender(const QChar *string, int len) const Q_DECL_OVERRIDE;
 
-    QFontEngine *engine(int at) const
-    {Q_ASSERT(at < engines.size()); return engines.at(at); }
+    inline int fallbackFamilyCount() const { return m_fallbackFamilies.size(); }
+    inline QString fallbackFamilyAt(int at) const { return m_fallbackFamilies.at(at); }
 
-    inline void ensureEngineAt(int at)
-    {
-        if (at >= engines.size() || engines.at(at) == 0)
-            loadEngine(at);
-    }
+    void setFallbackFamiliesList(const QStringList &fallbackFamilies);
 
-    virtual bool shouldLoadFontEngineForCharacter(int at, uint ucs4) const;
-    virtual void setFallbackFamiliesList(const QStringList &) {}
+    inline QFontEngine *engine(int at) const
+    { Q_ASSERT(at < m_engines.size()); return m_engines.at(at); }
+
+    void ensureEngineAt(int at);
+
+    static QFontEngine *createMultiFontEngine(QFontEngine *fe, int script);
 
 protected:
-    friend class QRawFont;
-    virtual void loadEngine(int at) = 0;
-    virtual void ensureFallbackFamiliesQueried() {}
-    QVector<QFontEngine *> engines;
-};
-
-class Q_GUI_EXPORT QFontEngineMultiBasicImpl : public QFontEngineMulti
-{
-public:
-    QFontEngineMultiBasicImpl(QFontEngine *fe, int script, const QStringList &fallbacks);
-    QFontEngineMultiBasicImpl(QFontEngine *fe, int script);
-
-    void loadEngine(int at);
-    static QFontEngine* createMultiFontEngine(QFontEngine *fe, int script);
-
-    int fallbackFamilyCount() const { return fallbackFamilies.size(); }
-    QString fallbackFamilyAt(int at) const { return fallbackFamilies.at(at); }
-
     virtual void ensureFallbackFamiliesQueried();
-    virtual void setFallbackFamiliesList(const QStringList &fallbacks);
+    virtual bool shouldLoadFontEngineForCharacter(int at, uint ucs4) const;
+    virtual QFontEngine *loadEngine(int at);
 
 private:
-    void init(QFontEngine *fe);
-
-    mutable QStringList fallbackFamilies;
-    int script;
-    mutable bool fallbacksQueried;
+    QVector<QFontEngine *> m_engines;
+    QStringList m_fallbackFamilies;
+    const int m_script;
+    bool m_fallbackFamiliesQueried;
 };
 
 class QTestFontEngine : public QFontEngineBox
 {
 public:
-    inline QTestFontEngine(int size) : QFontEngineBox(TestFontEngine, size) {}
+    QTestFontEngine(int size);
 };
 
 QT_END_NAMESPACE

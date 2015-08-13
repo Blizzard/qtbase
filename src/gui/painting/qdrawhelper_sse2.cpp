@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -111,7 +111,7 @@ void qt_blend_rgb32_on_rgb32_sse2(uchar *destPixels, int dbpl,
                 }
 
                 for (; x < w-3; x += 4) {
-                    __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]);
+                    __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]);
                     if (_mm_movemask_epi8(_mm_cmpeq_epi32(srcVector, nullVector)) != 0xffff) {
                         const __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
                         __m128i result;
@@ -162,7 +162,7 @@ void QT_FASTCALL comp_func_Plus_sse2(uint *dst, const uint *src, int length, uin
 
         // 2) composition with SSE2
         for (; x < length - 3; x += 4) {
-            const __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]);
+            const __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]);
             const __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
 
             const __m128i result = _mm_adds_epu8(srcVector, dstVector);
@@ -185,7 +185,7 @@ void QT_FASTCALL comp_func_Plus_sse2(uint *dst, const uint *src, int length, uin
         const __m128i colorMask = _mm_set1_epi32(0x00ff00ff);
         // 2) composition with SSE2
         for (; x < length - 3; x += 4) {
-            const __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]);
+            const __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]);
             const __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
 
             __m128i result = _mm_adds_epu8(srcVector, dstVector);
@@ -218,7 +218,7 @@ void QT_FASTCALL comp_func_Source_sse2(uint *dst, const uint *src, int length, u
         const __m128i constAlphaVector = _mm_set1_epi16(const_alpha);
         const __m128i oneMinusConstAlpha =  _mm_set1_epi16(ialpha);
         for (; x < length - 3; x += 4) {
-            const __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]);
+            const __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]);
             __m128i dstVector = _mm_load_si128((__m128i *)&dst[x]);
             INTERPOLATE_PIXEL_255_SSE2(dstVector, srcVector, dstVector, constAlphaVector, oneMinusConstAlpha, colorMask, half)
             _mm_store_si128((__m128i *)&dst[x], dstVector);
@@ -484,9 +484,7 @@ void qt_bitmapblit16_sse2(QRasterBuffer *rasterBuffer, int x, int y,
     const int destStride = rasterBuffer->bytesPerLine() / sizeof(quint16);
 
     const __m128i c128 = _mm_set1_epi16(c);
-#if defined(Q_CC_MSVC)
-#  pragma warning(disable: 4309) // truncation of constant value
-#endif
+QT_WARNING_DISABLE_MSVC(4309) // truncation of constant value
     const __m128i maskmask = _mm_set_epi16(0x0101, 0x0202, 0x0404, 0x0808,
                                            0x1010, 0x2020, 0x4040, 0x8080);
     const __m128i maskadd = _mm_set_epi16(0x7f7f, 0x7e7e, 0x7c7c, 0x7878,
@@ -539,18 +537,7 @@ public:
 
     static inline Int32x4 v_toInt(Float32x4 x) { return _mm_cvttps_epi32(x); }
 
-    // pre-VS 2008 doesn't have cast intrinsics, whereas 2008 and later requires it
-    // (same deal with gcc prior to 4.0)
-#if (defined(Q_CC_MSVC) && _MSC_VER < 1500) || (defined(Q_CC_GNU) && __GNUC__ < 4)
-    static inline Int32x4 v_greaterOrEqual(Float32x4 a, Float32x4 b)
-    {
-        union Convert { Int32x4 vi; Float32x4 vf; } convert;
-        convert.vf = _mm_cmpgt_ps(a, b);
-        return convert.vi;
-    }
-#else
     static inline Int32x4 v_greaterOrEqual(Float32x4 a, Float32x4 b) { return _mm_castps_si128(_mm_cmpgt_ps(a, b)); }
-#endif
 };
 
 const uint * QT_FASTCALL qt_fetch_radial_gradient_sse2(uint *buffer, const Operator *op, const QSpanData *data,

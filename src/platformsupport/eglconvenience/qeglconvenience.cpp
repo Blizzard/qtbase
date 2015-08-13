@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -303,7 +303,7 @@ EGLConfig QEglConfigChooser::chooseConfig()
     } while (q_reduceConfigAttributes(&configureAttributes));
 
     if (!cfg)
-        qWarning("Cant find EGLConfig, returning null config");
+        qWarning("Cannot find EGLConfig, returning null config");
     return cfg;
 }
 
@@ -460,8 +460,8 @@ QSizeF q_physicalScreenSizeFromFb(int framebufferDevice, const QSize &screenSize
 
     if (size.isEmpty()) {
         // Note: in millimeters
-        int width = qgetenv("QT_QPA_EGLFS_PHYSICAL_WIDTH").toInt();
-        int height = qgetenv("QT_QPA_EGLFS_PHYSICAL_HEIGHT").toInt();
+        int width = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_WIDTH");
+        int height = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_HEIGHT");
 
         if (width && height) {
             size.setWidth(width);
@@ -513,8 +513,8 @@ QSize q_screenSizeFromFb(int framebufferDevice)
     static QSize size;
 
     if (size.isEmpty()) {
-        int width = qgetenv("QT_QPA_EGLFS_WIDTH").toInt();
-        int height = qgetenv("QT_QPA_EGLFS_HEIGHT").toInt();
+        int width = qEnvironmentVariableIntValue("QT_QPA_EGLFS_WIDTH");
+        int height = qEnvironmentVariableIntValue("QT_QPA_EGLFS_HEIGHT");
 
         if (width && height) {
             size.setWidth(width);
@@ -553,7 +553,7 @@ int q_screenDepthFromFb(int framebufferDevice)
     Q_UNUSED(framebufferDevice)
 #endif
     const int defaultDepth = 32;
-    static int depth = qgetenv("QT_QPA_EGLFS_DEPTH").toInt();
+    static int depth = qEnvironmentVariableIntValue("QT_QPA_EGLFS_DEPTH");
 
     if (depth == 0) {
 #ifdef Q_OS_LINUX
@@ -574,6 +574,33 @@ int q_screenDepthFromFb(int framebufferDevice)
     }
 
     return depth;
+}
+
+qreal q_refreshRateFromFb(int framebufferDevice)
+{
+    static qreal rate = 0;
+
+#ifdef Q_OS_LINUX
+    if (rate == 0) {
+        if (framebufferDevice != -1) {
+            struct fb_var_screeninfo vinfo;
+            if (ioctl(framebufferDevice, FBIOGET_VSCREENINFO, &vinfo) != -1) {
+                const quint64 quot = quint64(vinfo.left_margin + vinfo.right_margin + vinfo.xres + vinfo.hsync_len)
+                    * quint64(vinfo.upper_margin + vinfo.lower_margin + vinfo.yres + vinfo.vsync_len)
+                    * vinfo.pixclock;
+                if (quot)
+                    rate = 1000000000000LLU / quot;
+            } else {
+                qWarning("eglconvenience: Could not query screen info");
+            }
+        }
+    }
+#endif
+
+    if (rate == 0)
+        rate = 60;
+
+    return rate;
 }
 
 #endif // Q_OS_UNIX

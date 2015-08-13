@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -66,7 +66,7 @@ public:
     explicit QPrinter(const QPrinterInfo& printer, PrinterMode mode = ScreenResolution);
     ~QPrinter();
 
-    int devType() const;
+    int devType() const Q_DECL_OVERRIDE;
 
     enum Orientation { Portrait, Landscape };
 
@@ -314,10 +314,10 @@ public:
     void setOrientation(Orientation);
     Orientation orientation() const;
 
-    void setPageSize(PageSize);
+    void setPageSize(PageSize) Q_DECL_OVERRIDE;
     PageSize pageSize() const;
 
-    void setPageSizeMM(const QSizeF &size);
+    void setPageSizeMM(const QSizeF &size) Q_DECL_OVERRIDE;
 
     void setPaperSize(PaperSize);
     PaperSize paperSize() const;
@@ -381,12 +381,12 @@ public:
     QString printerSelectionOption() const;
     void setPrinterSelectionOption(const QString &);
 
-    bool newPage();
+    bool newPage() Q_DECL_OVERRIDE;
     bool abort();
 
     PrinterState printerState() const;
 
-    QPaintEngine *paintEngine() const;
+    QPaintEngine *paintEngine() const Q_DECL_OVERRIDE;
     QPrintEngine *printEngine() const;
 
     void setFromTo(int fromPage, int toPage);
@@ -396,13 +396,13 @@ public:
     void setPrintRange(PrintRange range);
     PrintRange printRange() const;
 
-    void setMargins(const Margins &m);
+    void setMargins(const Margins &m) Q_DECL_OVERRIDE;
 
     void setPageMargins(qreal left, qreal top, qreal right, qreal bottom, Unit unit);
     void getPageMargins(qreal *left, qreal *top, qreal *right, qreal *bottom, Unit unit) const;
 
 protected:
-    int metric(PaintDeviceMetric) const;
+    int metric(PaintDeviceMetric) const Q_DECL_OVERRIDE;
     void setEngines(QPrintEngine *printEngine, QPaintEngine *paintEngine);
 
 private:

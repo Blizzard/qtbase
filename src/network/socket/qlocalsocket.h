@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -85,12 +85,12 @@ public:
     QString fullServerName() const;
 
     void abort();
-    virtual bool isSequential() const;
-    virtual qint64 bytesAvailable() const;
-    virtual qint64 bytesToWrite() const;
-    virtual bool canReadLine() const;
+    virtual bool isSequential() const Q_DECL_OVERRIDE;
+    virtual qint64 bytesAvailable() const Q_DECL_OVERRIDE;
+    virtual qint64 bytesToWrite() const Q_DECL_OVERRIDE;
+    virtual bool canReadLine() const Q_DECL_OVERRIDE;
     virtual bool open(OpenMode openMode = ReadWrite) Q_DECL_OVERRIDE;
-    virtual void close();
+    virtual void close() Q_DECL_OVERRIDE;
     LocalSocketError error() const;
     bool flush();
     bool isValid() const;
@@ -103,10 +103,10 @@ public:
     qintptr socketDescriptor() const;
 
     LocalSocketState state() const;
-    bool waitForBytesWritten(int msecs = 30000);
+    bool waitForBytesWritten(int msecs = 30000) Q_DECL_OVERRIDE;
     bool waitForConnected(int msecs = 30000);
     bool waitForDisconnected(int msecs = 30000);
-    bool waitForReadyRead(int msecs = 30000);
+    bool waitForReadyRead(int msecs = 30000) Q_DECL_OVERRIDE;
 
 Q_SIGNALS:
     void connected();
@@ -115,8 +115,8 @@ Q_SIGNALS:
     void stateChanged(QLocalSocket::LocalSocketState socketState);
 
 protected:
-    virtual qint64 readData(char*, qint64);
-    virtual qint64 writeData(const char*, qint64);
+    virtual qint64 readData(char*, qint64) Q_DECL_OVERRIDE;
+    virtual qint64 writeData(const char*, qint64) Q_DECL_OVERRIDE;
 
 private:
     Q_DISABLE_COPY(QLocalSocket)

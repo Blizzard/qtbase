@@ -1,40 +1,32 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Android port of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -80,6 +72,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -291,7 +284,7 @@ public class QtActivityDelegate
                 }
             } else if ((inputHints & ImhHiddenText) != 0) {
                 inputType |= android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;
-            } else if ((inputHints & ImhSensitiveData) != 0) {
+            } else if ((inputHints & ImhSensitiveData) != 0 || (inputHints & ImhNoPredictiveText) != 0) {
                 inputType |= android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
             }
 
@@ -321,7 +314,6 @@ public class QtActivityDelegate
 
         m_layout.removeView(m_editText);
         m_layout.addView(m_editText, new QtLayout.LayoutParams(width, height, x, y));
-        m_editText.bringToFront();
         m_editText.requestFocus();
         m_editText.postDelayed(new Runnable() {
             @Override
@@ -802,7 +794,6 @@ public class QtActivityDelegate
         m_surfaces =  new HashMap<Integer, QtSurface>();
         m_nativeViews = new HashMap<Integer, View>();
         m_activity.registerForContextMenu(m_layout);
-
         m_activity.setContentView(m_layout,
                                   new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                                              ViewGroup.LayoutParams.MATCH_PARENT));
@@ -818,6 +809,25 @@ public class QtActivityDelegate
 
         QtNative.handleOrientationChanged(rotation, m_nativeOrientation);
         m_currentRotation = rotation;
+    }
+
+    public void initializeAccessibility()
+    {
+        // Initialize accessibility
+        try {
+            final String a11yDelegateClassName = "org.qtproject.qt5.android.accessibility.QtAccessibilityDelegate";
+            Class<?> qtDelegateClass = Class.forName(a11yDelegateClassName);
+            Constructor constructor = qtDelegateClass.getConstructor(android.app.Activity.class,
+                                                                     android.view.ViewGroup.class,
+                                                                     this.getClass());
+            Object accessibilityDelegate = constructor.newInstance(m_activity, m_layout, this);
+        } catch (ClassNotFoundException e) {
+            // Class not found is fine since we are compatible with Android API < 16, but the function will
+            // only be available with that API level.
+        } catch (Exception e) {
+            // Unknown exception means something went wrong.
+            Log.w("Qt A11y", "Unknown exception: " + e.toString());
+        }
     }
 
     public void onConfigurationChanged(Configuration configuration)
@@ -858,13 +868,18 @@ public class QtActivityDelegate
             while (itr.hasNext())
                 m_activity.runOnUiThread(itr.next());
 
+            QtNative.updateApplicationState(ApplicationActive);
             if (m_started) {
-                QtNative.updateApplicationState(ApplicationActive);
                 QtNative.clearLostActions();
                 QtNative.updateWindow();
                 updateFullScreen(); // Suspending the app clears the immersive mode, so we need to set it again.
             }
         }
+    }
+
+    public void onNewIntent(Intent data)
+    {
+        QtNative.onNewIntent(data);
     }
 
     public void onActivityResult(int requestCode, int resultCode, Intent data)
@@ -947,7 +962,7 @@ public class QtActivityDelegate
             if (!m_backKeyPressedSent)
                 return true;
         }
-        QtNative.keyDown(keyCode, c, event.getMetaState());
+        QtNative.keyDown(keyCode, c, event.getMetaState(), event.getRepeatCount() > 0);
 
         return true;
     }
@@ -971,7 +986,7 @@ public class QtActivityDelegate
         }
 
         m_metaState = MetaKeyKeyListener.handleKeyUp(m_metaState, keyCode, event);
-        QtNative.keyUp(keyCode, event.getUnicodeChar(), event.getMetaState());
+        QtNative.keyUp(keyCode, event.getUnicodeChar(), event.getMetaState(), event.getRepeatCount() > 0);
         return true;
     }
 
@@ -982,8 +997,8 @@ public class QtActivityDelegate
                 && event.getCharacters() != null
                 && event.getCharacters().length() == 1
                 && event.getKeyCode() == 0) {
-            QtNative.keyDown(0, event.getCharacters().charAt(0), event.getMetaState());
-            QtNative.keyUp(0, event.getCharacters().charAt(0), event.getMetaState());
+            QtNative.keyDown(0, event.getCharacters().charAt(0), event.getMetaState(), event.getRepeatCount() > 0);
+            QtNative.keyUp(0, event.getCharacters().charAt(0), event.getMetaState(), event.getRepeatCount() > 0);
         }
 
         try {
@@ -1159,7 +1174,6 @@ public class QtActivityDelegate
             } else {
                 m_activity.getWindow().setBackgroundDrawable(m_activity.getResources().getDrawable(attr.resourceId));
             }
-
             if (m_dummyView != null) {
                 m_layout.removeView(m_dummyView);
                 m_dummyView = null;
@@ -1179,8 +1193,8 @@ public class QtActivityDelegate
 
         // Native views are always inserted in the end of the stack (i.e., on top).
         // All other views are stacked based on the order they are created.
-        final int index = m_layout.getChildCount() - m_nativeViews.size() - 1;
-        m_layout.addView(surface, index < 0 ? 0 : index);
+        final int surfaceCount = getSurfaceCount();
+        m_layout.addView(surface, surfaceCount);
 
         m_surfaces.put(id, surface);
     }
@@ -1221,12 +1235,18 @@ public class QtActivityDelegate
         }
     }
 
+    public int getSurfaceCount()
+    {
+        return m_surfaces.size();
+    }
+
     public void bringChildToFront(int id)
     {
         View view = m_surfaces.get(id);
         if (view != null) {
-            final int index = m_layout.getChildCount() - m_nativeViews.size() - 1;
-            m_layout.moveChild(view, index < 0 ? 0 : index);
+            final int surfaceCount = getSurfaceCount();
+            if (surfaceCount > 0)
+                m_layout.moveChild(view, surfaceCount - 1);
             return;
         }
 
@@ -1245,7 +1265,7 @@ public class QtActivityDelegate
 
         view = m_nativeViews.get(id);
         if (view != null) {
-            final int index = m_layout.getChildCount() - m_nativeViews.size();
+            final int index = getSurfaceCount();
             m_layout.moveChild(view, index);
         }
     }

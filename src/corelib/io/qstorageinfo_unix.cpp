@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -52,28 +44,52 @@
 
 #if defined(Q_OS_BSD4)
 #  include <sys/mount.h>
+#  include <sys/statvfs.h>
 #elif defined(Q_OS_ANDROID)
 #  include <sys/mount.h>
 #  include <sys/vfs.h>
 #  include <mntent.h>
-#elif defined(Q_OS_QNX)
-#  include <sys/statvfs.h>
 #elif defined(Q_OS_LINUX)
 #  include <mntent.h>
 #  include <sys/statvfs.h>
 #elif defined(Q_OS_SOLARIS)
 #  include <sys/mnttab.h>
+#  include <sys/statvfs.h>
+#elif defined(Q_OS_HAIKU)
+#  include <Directory.h>
+#  include <Path.h>
+#  include <Volume.h>
+#  include <VolumeRoster.h>
+#  include <fs_info.h>
+#  include <sys/statvfs.h>
+#else
+#  include <sys/statvfs.h>
 #endif
 
 #if defined(Q_OS_BSD4)
-#  define QT_STATFSBUF struct statvfs
-#  define QT_STATFS    ::statvfs
+#  if defined(Q_OS_NETBSD)
+     define QT_STATFSBUF struct statvfs
+     define QT_STATFS    ::statvfs
+#  else
+#    define QT_STATFSBUF struct statfs
+#    define QT_STATFS    ::statfs
+#  endif
+
+#  if !defined(ST_RDONLY)
+#    define ST_RDONLY MNT_RDONLY
+#  endif
+#  if !defined(_STATFS_F_FLAGS)
+#    define _STATFS_F_FLAGS 1
+#  endif
 #elif defined(Q_OS_ANDROID)
 #  define QT_STATFS    ::statfs
 #  define QT_STATFSBUF struct statfs
 #  if !defined(ST_RDONLY)
 #    define ST_RDONLY 1 // hack for missing define on Android
 #  endif
+#elif defined(Q_OS_HAIKU)
+#  define QT_STATFSBUF struct statvfs
+#  define QT_STATFS    ::statvfs
 #else
 #  if defined(QT_LARGEFILE_SUPPORT)
 #    define QT_STATFSBUF struct statvfs64
@@ -118,7 +134,7 @@ public:
     inline QByteArray device() const;
 private:
 #if defined(Q_OS_BSD4)
-    statfs *stat_buf;
+    QT_STATFSBUF *stat_buf;
     int entryCount;
     int currentIndex;
 #elif defined(Q_OS_SOLARIS)
@@ -133,6 +149,12 @@ private:
     FILE *fp;
     mntent mnt;
     QByteArray buffer;
+#elif defined(Q_OS_HAIKU)
+    BVolumeRoster m_volumeRoster;
+
+    QByteArray m_rootPath;
+    QByteArray m_fileSystemType;
+    QByteArray m_device;
 #endif
 };
 
@@ -196,22 +218,22 @@ inline bool QStorageIterator::isValid() const
 
 inline bool QStorageIterator::next()
 {
-    return ::getmntent(fp, &mnt) == Q_NULLPTR;
+    return ::getmntent(fp, &mnt) == 0;
 }
 
 inline QString QStorageIterator::rootPath() const
 {
-    return QFile::decodeName(mnt->mnt_mountp);
+    return QFile::decodeName(mnt.mnt_mountp);
 }
 
 inline QByteArray QStorageIterator::fileSystemType() const
 {
-    return QByteArray(mnt->mnt_fstype);
+    return QByteArray(mnt.mnt_fstype);
 }
 
 inline QByteArray QStorageIterator::device() const
 {
-    return QByteArray(mnt->mnt_mntopts);
+    return QByteArray(mnt.mnt_mntopts);
 }
 
 #elif defined(Q_OS_ANDROID)
@@ -307,6 +329,63 @@ inline QByteArray QStorageIterator::device() const
     return QByteArray(mnt.mnt_fsname);
 }
 
+#elif defined(Q_OS_HAIKU)
+inline QStorageIterator::QStorageIterator()
+{
+}
+
+inline QStorageIterator::~QStorageIterator()
+{
+}
+
+inline bool QStorageIterator::isValid() const
+{
+    return true;
+}
+
+inline bool QStorageIterator::next()
+{
+    BVolume volume;
+
+    if (m_volumeRoster.GetNextVolume(&volume) != B_OK)
+        return false;
+
+    BDirectory directory;
+    if (volume.GetRootDirectory(&directory) != B_OK)
+        return false;
+
+    const BPath path(&directory);
+
+    fs_info fsInfo;
+    memset(&fsInfo, 0, sizeof(fsInfo));
+
+    if (fs_stat_dev(volume.Device(), &fsInfo) != 0)
+        return false;
+
+    m_rootPath = path.Path();
+    m_fileSystemType = QByteArray(fsInfo.fsh_name);
+
+    const QByteArray deviceName(fsInfo.device_name);
+    m_device = (deviceName.isEmpty() ? QByteArray::number(qint32(volume.Device())) : deviceName);
+
+    return true;
+}
+
+inline QString QStorageIterator::rootPath() const
+{
+    return QFile::decodeName(m_rootPath);
+}
+
+inline QByteArray QStorageIterator::fileSystemType() const
+{
+    return m_fileSystemType;
+}
+
+inline QByteArray QStorageIterator::device() const
+{
+    return m_device;
+}
+
 #else
 
 inline QStorageIterator::QStorageIterator()
@@ -388,6 +467,19 @@ static inline QString retrieveLabel(const QByteArray &device)
         if (fileInfo.isSymLink() && fileInfo.symLinkTarget().toLocal8Bit() == device)
             return fileInfo.fileName();
     }
+#elif defined Q_OS_HAIKU
+    fs_info fsInfo;
+    memset(&fsInfo, 0, sizeof(fsInfo));
+
+    int32 pos = 0;
+    dev_t dev;
+    while ((dev = next_dev(&pos)) >= 0) {
+        if (fs_stat_dev(dev, &fsInfo) != 0)
+            continue;
+
+        if (qstrcmp(fsInfo.device_name, device.constData()) == 0)
+            return QString::fromLocal8Bit(fsInfo.volume_name);
+    }
 #else
     Q_UNUSED(device);
 #endif
@@ -401,11 +493,11 @@ void QStorageInfoPrivate::doStat()
     if (rootPath.isEmpty())
         return;
 
-    retreiveVolumeInfo();
+    retrieveVolumeInfo();
     name = retrieveLabel(device);
 }
 
-void QStorageInfoPrivate::retreiveVolumeInfo()
+void QStorageInfoPrivate::retrieveVolumeInfo()
 {
     QT_STATFSBUF statfs_buf;
     int result;
@@ -417,7 +509,7 @@ void QStorageInfoPrivate::retreiveVolumeInfo()
         bytesTotal = statfs_buf.f_blocks * statfs_buf.f_bsize;
         bytesFree = statfs_buf.f_bfree * statfs_buf.f_bsize;
         bytesAvailable = statfs_buf.f_bavail * statfs_buf.f_bsize;
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) || defined (Q_OS_BSD4)
 #if defined(_STATFS_F_FLAGS)
         readOnly = (statfs_buf.f_flags & ST_RDONLY) != 0;
 #endif

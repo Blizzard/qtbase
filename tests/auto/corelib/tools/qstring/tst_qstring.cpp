@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -59,6 +59,7 @@
 #include <locale.h>
 #include <qhash.h>
 
+#include <string>
 
 #define CREATE_REF(string)                                              \
     const QString padded = QString::fromLatin1(" %1 ").arg(string);     \
@@ -155,6 +156,7 @@ private slots:
     void lastIndexOfInvalidRegex();
     void indexOf_data();
     void indexOf();
+    void indexOfInvalidRegex();
     void indexOf2_data();
     void indexOf2();
     void indexOf3_data();
@@ -262,6 +264,7 @@ private slots:
     void assignQLatin1String();
     void isRightToLeft_data();
     void isRightToLeft();
+    void unicodeStrings();
 };
 
 template <class T> const T &verifyZeroTermination(const T &t) { return t; }
@@ -324,75 +327,6 @@ QString verifyZeroTermination(const QString &str)
     /**/
 
 typedef QList<int> IntList;
-
-// This next bit is needed for the NAN and INF in string -> number conversion tests
-#include <float.h>
-#include <limits.h>
-#include <math.h>
-#if defined (Q_OS_WIN)
-#   include <windows.h>
-// mingw defines NAN and INFINITY to 0/0 and x/0
-#   if defined(Q_CC_GNU)
-#      undef NAN
-#      undef INFINITY
-#   else
-#      define isnan(d) _isnan(d)
-#   endif
-#endif
-#if defined (Q_OS_MAC) && !defined isnan
-#define isnan(d) __isnand(d)
-#endif
-#if defined (Q_OS_SOLARIS)
-#   include <ieeefp.h>
-#endif
-#if defined (Q_OS_OSF) && (defined(__DECC) || defined(__DECCXX))
-#   define INFINITY DBL_INFINITY
-#   define NAN DBL_QNAN
-#endif
-#if defined(Q_OS_IRIX) && defined(Q_CC_GNU)
-#   include <ieeefp.h>
-#   define isnan(d) isnand(d)
-#endif
-
-enum {
-    LittleEndian,
-    BigEndian
-#ifdef Q_BYTE_ORDER
-#  if Q_BYTE_ORDER == Q_BIG_ENDIAN
-    , ByteOrder = BigEndian
-#  elif Q_BYTE_ORDER == Q_LITTLE_ENDIAN
-    , ByteOrder = LittleEndian
-#  else
-#    error "undefined byte order"
-#  endif
-};
-#else
-};
-static const unsigned int one = 1;
-static const bool ByteOrder = ((*((unsigned char *) &one) == 0) ? BigEndian : LittleEndian);
-#endif
-#if !defined(INFINITY)
-static const unsigned char be_inf_bytes[] = { 0x7f, 0xf0, 0, 0, 0, 0, 0,0 };
-static const unsigned char le_inf_bytes[] = { 0, 0, 0, 0, 0, 0, 0xf0, 0x7f };
-static inline double inf()
-{
-    if (ByteOrder == BigEndian)
-        return *reinterpret_cast<const double *>(be_inf_bytes);
-    return *reinterpret_cast<const double *>(le_inf_bytes);
-}
-#   define INFINITY (::inf())
-#endif
-#if !defined(NAN)
-static const unsigned char be_nan_bytes[] = { 0x7f, 0xf8, 0, 0, 0, 0, 0,0 };
-static const unsigned char le_nan_bytes[] = { 0, 0, 0, 0, 0, 0, 0xf8, 0x7f };
-static inline double nan()
-{
-    if (ByteOrder == BigEndian)
-        return *reinterpret_cast<const double *>(be_nan_bytes);
-    return *reinterpret_cast<const double *>(le_nan_bytes);
-}
-#   define NAN (::nan())
-#endif
 
 tst_QString::tst_QString()
 {
@@ -812,10 +746,8 @@ void tst_QString::acc_01()
     }
 }
 
-#ifdef Q_CC_GNU
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wformat-security"
-#endif
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Wformat-security")
 
 void tst_QString::isNull()
 {
@@ -827,9 +759,7 @@ void tst_QString::isNull()
     QVERIFY(!a.isNull());
 }
 
-#ifdef Q_CC_GNU
-#    pragma GCC diagnostic pop
-#endif
+QT_WARNING_POP
 
 void tst_QString::isEmpty()
 {
@@ -1182,6 +1112,18 @@ void tst_QString::indexOf()
 
         QRegularExpression re(QRegularExpression::escape(needle), options);
         QCOMPARE( haystack.indexOf(re, startpos), resultpos );
+        QCOMPARE(haystack.indexOf(re, startpos, Q_NULLPTR), resultpos);
+
+        QRegularExpressionMatch match;
+        QVERIFY(!match.hasMatch());
+        QCOMPARE(haystack.indexOf(re, startpos, &match), resultpos);
+        QCOMPARE(match.hasMatch(), resultpos != -1);
+        if (resultpos > -1 && needleIsLatin) {
+            if (bcs)
+                QVERIFY(match.captured() == needle);
+            else
+                QVERIFY(match.captured().toLower() == needle.toLower());
+        }
     }
 
     if (cs == Qt::CaseSensitive) {
@@ -1290,6 +1232,20 @@ void tst_QString::indexOf2()
     }
 }
 
+void tst_QString::indexOfInvalidRegex()
+{
+    QTest::ignoreMessage(QtWarningMsg, "QString::indexOf: invalid QRegularExpression object");
+    QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\")), -1);
+    QTest::ignoreMessage(QtWarningMsg, "QString::indexOf: invalid QRegularExpression object");
+    QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\"), -1, Q_NULLPTR), -1);
+
+    QRegularExpressionMatch match;
+    QVERIFY(!match.hasMatch());
+    QTest::ignoreMessage(QtWarningMsg, "QString::indexOf: invalid QRegularExpression object");
+    QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\"), -1, &match), -1);
+    QVERIFY(!match.hasMatch());
+}
+
 void tst_QString::lastIndexOf_data()
 {
     QTest::addColumn<QString>("haystack" );
@@ -1379,6 +1335,17 @@ void tst_QString::lastIndexOf()
 
             QRegularExpression re(QRegularExpression::escape(needle), options);
             QCOMPARE(haystack.lastIndexOf(re, from), expected);
+            QCOMPARE(haystack.lastIndexOf(re, from, Q_NULLPTR), expected);
+            QRegularExpressionMatch match;
+            QVERIFY(!match.hasMatch());
+            QCOMPARE(haystack.lastIndexOf(re, from, &match), expected);
+            QCOMPARE(match.hasMatch(), expected > -1);
+            if (expected > -1) {
+                if (caseSensitive)
+                    QCOMPARE(match.captured(), needle);
+                else
+                    QCOMPARE(match.captured().toLower(), needle.toLower());
+            }
         }
     }
 
@@ -1403,7 +1370,15 @@ void tst_QString::lastIndexOf()
 void tst_QString::lastIndexOfInvalidRegex()
 {
     QTest::ignoreMessage(QtWarningMsg, "QString::lastIndexOf: invalid QRegularExpression object");
-    QCOMPARE(QString("").lastIndexOf(QRegularExpression("invalid regex\\"), 0), -1);
+    QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), 0), -1);
+    QTest::ignoreMessage(QtWarningMsg, "QString::lastIndexOf: invalid QRegularExpression object");
+    QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), -1, Q_NULLPTR), -1);
+
+    QRegularExpressionMatch match;
+    QVERIFY(!match.hasMatch());
+    QTest::ignoreMessage(QtWarningMsg, "QString::lastIndexOf: invalid QRegularExpression object");
+    QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), -1, &match), -1);
+    QVERIFY(!match.hasMatch());
 }
 
 void tst_QString::count()
@@ -1838,6 +1813,7 @@ void tst_QString::toUpper()
 {
     QCOMPARE( QString().toUpper(), QString() );
     QCOMPARE( QString("").toUpper(), QString("") );
+    QCOMPARE( QStringLiteral("text").toUpper(), QString("TEXT") );
     QCOMPARE( QString("text").toUpper(), QString("TEXT") );
     QCOMPARE( QString("Text").toUpper(), QString("TEXT") );
     QCOMPARE( QString("tExt").toUpper(), QString("TEXT") );
@@ -1898,6 +1874,7 @@ void tst_QString::toLower()
     QCOMPARE( QString().toLower(), QString() );
     QCOMPARE( QString("").toLower(), QString("") );
     QCOMPARE( QString("text").toLower(), QString("text") );
+    QCOMPARE( QStringLiteral("Text").toLower(), QString("text") );
     QCOMPARE( QString("Text").toLower(), QString("text") );
     QCOMPARE( QString("tExt").toLower(), QString("text") );
     QCOMPARE( QString("teXt").toLower(), QString("text") );
@@ -2019,6 +1996,13 @@ void tst_QString::trimmed()
     QCOMPARE(a,(QString)" ");
     a=" a   ";
     QCOMPARE(a.trimmed(),(QString)"a");
+
+    a="Text";
+    QCOMPARE(qMove(a).trimmed(),(QString)"Text");
+    a=" ";
+    QCOMPARE(qMove(a).trimmed(),(QString)"");
+    a=" a   ";
+    QCOMPARE(qMove(a).trimmed(),(QString)"a");
 }
 
 void tst_QString::simplified_data()
@@ -2049,12 +2033,17 @@ void tst_QString::simplified_data()
     QTest::newRow("chars apart posttab") << "a \tb" << "a b";
     QTest::newRow("chars apart pretab") << "a\t b" << "a b";
     QTest::newRow("many words") << "  just some    random\ttext here" << "just some random text here";
+    QTest::newRow("newlines") << "a\nb\nc" << "a b c";
+    QTest::newRow("newlines-trailing") << "a\nb\nc\n" << "a b c";
 }
 
 void tst_QString::simplified()
 {
     QFETCH(QString, full);
     QFETCH(QString, simple);
+
+    QString orig_full = full;
+    orig_full.data();       // forces a detach
 
     QString result = full.simplified();
     if (simple.isNull()) {
@@ -2063,9 +2052,18 @@ void tst_QString::simplified()
         QVERIFY2(result.isEmpty() && !result.isNull(), qPrintable("'" + full + "' did not yield empty: " + result));
     } else {
         QCOMPARE(result, simple);
-        if (full == simple)
-            QVERIFY(result.isSharedWith(full));
     }
+    QCOMPARE(full, orig_full);
+
+    // without detaching:
+    QString copy1 = full;
+    QCOMPARE(qMove(full).simplified(), simple);
+    QCOMPARE(full, orig_full);
+
+    // force a detach
+    if (!full.isEmpty())
+        full[0] = full[0];
+    QCOMPARE(qMove(full).simplified(), simple);
 }
 
 void tst_QString::insert()
@@ -4389,6 +4387,28 @@ void tst_QString::section_data()
                             << QString("o") << 1 << 2
                             << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep)
                             << QString("o1o2o") << false;
+    QTest::newRow( "range1" ) << QString("o1o2o")
+                            << QString("o") << -5 << -5
+                            << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep)
+                            << QString() << false;
+    QTest::newRow( "range2" ) << QString("oo1o2o")
+                            << QString("o") << -5 << 1
+                            << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep
+                                   |QString::SectionSkipEmpty)
+                            << QString("oo1o2o") << false;
+    QTest::newRow( "range3" ) << QString("o1o2o")
+                            << QString("o") << 2 << 1
+                            << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep)
+                            << QString() << false;
+    QTest::newRow( "range4" ) << QString("o1o2o")
+                            << QString("o") << 4 << 4
+                            << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep)
+                            << QString() << false;
+    QTest::newRow( "range5" ) << QString("o1oo2o")
+                            << QString("o") << -2 << -1
+                            << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep
+                                   |QString::SectionSkipEmpty)
+                            << QString("o1oo2o") << false;
     QTest::newRow( "rx1" ) << QString("o1o2o")
                         << QString("[a-z]") << 0 << 0
                         << int(QString::SectionIncludeLeadingSep|QString::SectionIncludeTrailingSep)
@@ -4432,6 +4452,8 @@ void tst_QString::section()
         QCOMPARE( wholeString.section( QRegExp(sep), start, end, QString::SectionFlag(flags) ), sectionString );
         QCOMPARE( wholeString.section( QRegularExpression(sep), start, end, QString::SectionFlag(flags) ), sectionString );
     } else {
+        if (sep.size() == 1)
+            QCOMPARE( wholeString.section( sep[0], start, end, QString::SectionFlag(flags) ), sectionString );
         QCOMPARE( wholeString.section( sep, start, end, QString::SectionFlag(flags) ), sectionString );
         QCOMPARE( wholeString.section( QRegExp(QRegExp::escape(sep)), start, end, QString::SectionFlag(flags) ), sectionString );
         QCOMPARE( wholeString.section( QRegularExpression(QRegularExpression::escape(sep)), start, end, QString::SectionFlag(flags) ), sectionString );
@@ -5213,6 +5235,27 @@ void tst_QString::fromUtf16_char16()
 #endif
 }
 
+void tst_QString::unicodeStrings()
+{
+#ifdef Q_COMPILER_UNICODE_STRINGS
+    QString s1, s2;
+    static const std::u16string u16str1(u"Hello Unicode World");
+    static const std::u32string u32str1(U"Hello Unicode World");
+    s1 = QString::fromStdU16String(u16str1);
+    s2 = QString::fromStdU32String(u32str1);
+    QCOMPARE(s1, QString("Hello Unicode World"));
+    QCOMPARE(s1, s2);
+
+    QCOMPARE(s2.toStdU16String(), u16str1);
+    QCOMPARE(s1.toStdU32String(), u32str1);
+
+    s1 = QString::fromStdU32String(std::u32string(U"\u221212\U000020AC\U00010000"));
+    QCOMPARE(s1, QString::fromUtf8("\342\210\222" "12" "\342\202\254" "\360\220\200\200"));
+#else
+    QSKIP("Compiler does not support C++11 unicode strings");
+#endif
+}
+
 void tst_QString::latin1String()
 {
     QString s("Hello");
@@ -5235,7 +5278,7 @@ void tst_QString::nanAndInf()
 #define CHECK_DOUBLE(str, expected_ok, expected_inf) \
     d = QString(str).toDouble(&ok); \
     QVERIFY(ok == expected_ok); \
-    QVERIFY((d == INFINITY) == expected_inf);
+    QVERIFY(qIsInf(d) == expected_inf);
 
     CHECK_DOUBLE("inf", true, true)
     CHECK_DOUBLE("INF", true, true)
@@ -5263,17 +5306,15 @@ void tst_QString::nanAndInf()
 #define CHECK_NAN(str, expected_ok, expected_nan) \
     d = QString(str).toDouble(&ok); \
     QVERIFY(ok == expected_ok); \
-    QVERIFY((bool)isnan(d) == expected_nan); \
+    QVERIFY(qIsNaN(d) == expected_nan);
 
     CHECK_NAN("nan", true, true)
     CHECK_NAN("NAN", true, true)
     CHECK_NAN("nan  ", true, true)
     CHECK_NAN("\t NAN", true, true)
     CHECK_NAN("\t NAN  ", true, true)
-#ifndef QT_QLOCALE_USES_FCVT //In case we use glibc this tests will fail
     CHECK_NAN("-nan", false, false)
     CHECK_NAN("+NAN", false, false)
-#endif
     CHECK_NAN("NaN", true, true)
     CHECK_NAN("nAn", true, true)
     CHECK_NAN("NANe-10", false, false)
@@ -5283,7 +5324,7 @@ void tst_QString::nanAndInf()
 
     d = QString("-INF").toDouble(&ok);
     QVERIFY(ok);
-    QVERIFY(d == -INFINITY);
+    QVERIFY(d == -qInf());
 
     QString("INF").toLong(&ok);
     QVERIFY(!ok);

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,6 +41,7 @@
 
 #include <qdebug.h>
 
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -119,6 +120,7 @@ struct QTzTransition {
     qint64 tz_time;     // Transition time
     quint8 tz_typeind;  // Type Index
 };
+Q_DECLARE_TYPEINFO(QTzTransition, Q_PRIMITIVE_TYPE);
 
 struct QTzType {
     int tz_gmtoff;  // UTC offset in seconds
@@ -176,27 +178,25 @@ static QTzHeader parseTzHeader(QDataStream &ds, bool *ok)
     return hdr;
 }
 
-static QList<QTzTransition> parseTzTransitions(QDataStream &ds, int tzh_timecnt, bool longTran)
+static QVector<QTzTransition> parseTzTransitions(QDataStream &ds, int tzh_timecnt, bool longTran)
 {
-    QList<QTzTransition> tranList;
+    QVector<QTzTransition> transitions(tzh_timecnt);
 
     if (longTran) {
         // Parse tzh_timecnt x 8-byte transition times
         for (int i = 0; i < tzh_timecnt && ds.status() == QDataStream::Ok; ++i) {
-            QTzTransition tran;
-            ds >> tran.tz_time;
-            if (ds.status() == QDataStream::Ok)
-                tranList.append(tran);
+            ds >> transitions[i].tz_time;
+            if (ds.status() != QDataStream::Ok)
+                transitions.resize(i);
         }
     } else {
         // Parse tzh_timecnt x 4-byte transition times
         int val;
         for (int i = 0; i < tzh_timecnt && ds.status() == QDataStream::Ok; ++i) {
-            QTzTransition tran;
             ds >> val;
-            tran.tz_time = val;
-            if (ds.status() == QDataStream::Ok)
-                tranList.append(tran);
+            transitions[i].tz_time = val;
+            if (ds.status() != QDataStream::Ok)
+                transitions.resize(i);
         }
     }
 
@@ -205,18 +205,19 @@ static QList<QTzTransition> parseTzTransitions(QDataStream &ds, int tzh_timecnt,
         quint8 typeind;
         ds >> typeind;
         if (ds.status() == QDataStream::Ok)
-            tranList[i].tz_typeind = typeind;
+            transitions[i].tz_typeind = typeind;
     }
 
-    return tranList;
+    return transitions;
 }
 
-static QList<QTzType> parseTzTypes(QDataStream &ds, int tzh_typecnt)
+static QVector<QTzType> parseTzTypes(QDataStream &ds, int tzh_typecnt)
 {
-    QList<QTzType> typeList;
+    QVector<QTzType> types(tzh_typecnt);
+
     // Parse tzh_typecnt x transition types
     for (int i = 0; i < tzh_typecnt && ds.status() == QDataStream::Ok; ++i) {
-        QTzType type;
+        QTzType &type = types[i];
         // Parse UTC Offset, 4 bytes
         ds >> type.tz_gmtoff;
         // Parse Is DST flag, 1 byte
@@ -228,14 +229,14 @@ static QList<QTzType> parseTzTypes(QDataStream &ds, int tzh_typecnt)
         // Set defaults in case not populated later
         type.tz_ttisgmt = false;
         type.tz_ttisstd = false;
-        if (ds.status() == QDataStream::Ok)
-            typeList.append(type);
+        if (ds.status() != QDataStream::Ok)
+            types.resize(i);
     }
 
-    return typeList;
+    return types;
 }
 
-static QMap<int, QByteArray> parseTzAbbreviations(QDataStream &ds, int tzh_charcnt, QList<QTzType> typeList)
+static QMap<int, QByteArray> parseTzAbbreviations(QDataStream &ds, int tzh_charcnt, const QVector<QTzType> &types)
 {
     // Parse the abbreviation list which is tzh_charcnt long with '\0' separated strings. The
     // QTzType.tz_abbrind index points to the first char of the abbreviation in the array, not the
@@ -253,8 +254,8 @@ static QMap<int, QByteArray> parseTzAbbreviations(QDataStream &ds, int tzh_charc
         else
             return map;
     }
-    // Then extract all the substrings pointed to by typeList
-    foreach (const QTzType type, typeList) {
+    // Then extract all the substrings pointed to by types
+    foreach (const QTzType &type, types) {
         QByteArray abbrev;
         for (int i = type.tz_abbrind; input.at(i) != '\0'; ++i)
             abbrev.append(input.at(i));
@@ -289,26 +290,26 @@ static void parseTzLeapSeconds(QDataStream &ds, int tzh_leapcnt, bool longTran)
     }
 }
 
-static QList<QTzType> parseTzIndicators(QDataStream &ds, const QList<QTzType> &typeList, int tzh_ttisstdcnt, int tzh_ttisgmtcnt)
+static QVector<QTzType> parseTzIndicators(QDataStream &ds, const QVector<QTzType> &types, int tzh_ttisstdcnt, int tzh_ttisgmtcnt)
 {
-    QList<QTzType> list = typeList;
+    QVector<QTzType> result = types;
     bool temp;
 
     // Parse tzh_ttisstdcnt x 1-byte standard/wall indicators
     for (int i = 0; i < tzh_ttisstdcnt && ds.status() == QDataStream::Ok; ++i) {
         ds >> temp;
         if (ds.status() == QDataStream::Ok)
-            list[i].tz_ttisstd = temp;
+            result[i].tz_ttisstd = temp;
     }
 
     // Parse tzh_ttisgmtcnt x 1-byte UTC/local indicators
     for (int i = 0; i < tzh_ttisgmtcnt && ds.status() == QDataStream::Ok; ++i) {
         ds >> temp;
         if (ds.status() == QDataStream::Ok)
-            list[i].tz_ttisgmt = temp;
+            result[i].tz_ttisgmt = temp;
     }
 
-    return list;
+    return result;
 }
 
 static QByteArray parseTzPosixRule(QDataStream &ds)
@@ -343,7 +344,7 @@ static QDate calculateDowDate(int year, int month, int dayOfWeek, int week)
     return date;
 }
 
-static QDate calculatePosixDate(const QByteArray dateRule, int year)
+static QDate calculatePosixDate(const QByteArray &dateRule, int year)
 {
     // Can start with M, J, or a digit
     if (dateRule.at(0) == 'M') {
@@ -397,11 +398,11 @@ static int parsePosixOffset(const QByteArray &timeRule)
     return 0;
 }
 
-static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray &posixRule,
-                                                               int startYear, int endYear,
-                                                               int lastTranMSecs)
+static QVector<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray &posixRule,
+                                                                 int startYear, int endYear,
+                                                                 int lastTranMSecs)
 {
-    QList<QTimeZonePrivate::Data> list;
+    QVector<QTimeZonePrivate::Data> result;
 
     // Limit year by qint64 max size for msecs
     if (startYear > 292278994)
@@ -448,8 +449,8 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
         data.standardTimeOffset = utcOffset;
         data.daylightTimeOffset = 0;
         data.abbreviation = stdName;
-        list << data;
-        return list;
+        result << data;
+        return result;
     }
 
     // If not populated the total dst offset is 1 hour
@@ -493,17 +494,17 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
         // Part of the high year will overflow
         if (year == 292278994 && (dstData.atMSecsSinceEpoch < 0 || stdData.atMSecsSinceEpoch < 0)) {
             if (dstData.atMSecsSinceEpoch > 0) {
-                list << dstData;
+                result << dstData;
             } else if (stdData.atMSecsSinceEpoch > 0) {
-                list << stdData;
+                result << stdData;
             }
         } else if (dst < std) {
-            list << dstData << stdData;
+            result << dstData << stdData;
         } else {
-            list << stdData << dstData;
+            result << stdData << dstData;
         }
     }
-    return list;
+    return result;
 }
 
 // Create the system default time zone
@@ -568,10 +569,10 @@ void QTzTimeZonePrivate::init(const QByteArray &ianaId)
     QTzHeader hdr = parseTzHeader(ds, &ok);
     if (!ok || ds.status() != QDataStream::Ok)
         return;
-    QList<QTzTransition> tranList = parseTzTransitions(ds, hdr.tzh_timecnt, false);
+    QVector<QTzTransition> tranList = parseTzTransitions(ds, hdr.tzh_timecnt, false);
     if (ds.status() != QDataStream::Ok)
         return;
-    QList<QTzType> typeList = parseTzTypes(ds, hdr.tzh_typecnt);
+    QVector<QTzType> typeList = parseTzTypes(ds, hdr.tzh_typecnt);
     if (ds.status() != QDataStream::Ok)
         return;
     QMap<int, QByteArray> abbrevMap = parseTzAbbreviations(ds, hdr.tzh_charcnt, typeList);
@@ -812,8 +813,8 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
         &&!m_posixRule.isEmpty() && forMSecsSinceEpoch >= 0) {
         const int year = QDateTime::fromMSecsSinceEpoch(forMSecsSinceEpoch, Qt::UTC).date().year();
         const int lastMSecs = (m_tranTimes.size() > 0) ? m_tranTimes.last().atMSecsSinceEpoch : 0;
-        QList<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
-                                                                             year + 1, lastMSecs);
+        QVector<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
+                                                                               year + 1, lastMSecs);
         for (int i = posixTrans.size() - 1; i >= 0; --i) {
             if (posixTrans.at(i).atMSecsSinceEpoch <= forMSecsSinceEpoch) {
                 QTimeZonePrivate::Data data;
@@ -856,8 +857,8 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::nextTransition(qint64 afterMSecsSince
         &&!m_posixRule.isEmpty() && afterMSecsSinceEpoch >= 0) {
         const int year = QDateTime::fromMSecsSinceEpoch(afterMSecsSinceEpoch, Qt::UTC).date().year();
         const int lastMSecs = (m_tranTimes.size() > 0) ? m_tranTimes.last().atMSecsSinceEpoch : 0;
-        QList<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
-                                                                             year + 1, lastMSecs);
+        QVector<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
+                                                                               year + 1, lastMSecs);
         for (int i = 0; i < posixTrans.size(); ++i) {
             if (posixTrans.at(i).atMSecsSinceEpoch > afterMSecsSinceEpoch)
                 return posixTrans.at(i);
@@ -882,8 +883,8 @@ QTimeZonePrivate::Data QTzTimeZonePrivate::previousTransition(qint64 beforeMSecs
         &&!m_posixRule.isEmpty() && beforeMSecsSinceEpoch > 0) {
         const int year = QDateTime::fromMSecsSinceEpoch(beforeMSecsSinceEpoch, Qt::UTC).date().year();
         const int lastMSecs = (m_tranTimes.size() > 0) ? m_tranTimes.last().atMSecsSinceEpoch : 0;
-        QList<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
-                                                                             year + 1, lastMSecs);
+        QVector<QTimeZonePrivate::Data> posixTrans = calculatePosixTransitions(m_posixRule, year - 1,
+                                                                               year + 1, lastMSecs);
         for (int i = posixTrans.size() - 1; i >= 0; --i) {
             if (posixTrans.at(i).atMSecsSinceEpoch < beforeMSecsSinceEpoch)
                 return posixTrans.at(i);
@@ -956,20 +957,23 @@ QByteArray QTzTimeZonePrivate::systemTimeZoneId() const
     return ianaId;
 }
 
-QSet<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds() const
+QList<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds() const
 {
-    return tzZones->keys().toSet();
+    QList<QByteArray> result = tzZones->keys();
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
-QSet<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds(QLocale::Country country) const
+QList<QByteArray> QTzTimeZonePrivate::availableTimeZoneIds(QLocale::Country country) const
 {
     // TODO AnyCountry
-    QSet<QByteArray> set;
+    QList<QByteArray> result;
     foreach (const QByteArray &key, tzZones->keys()) {
         if (tzZones->value(key).country == country)
-            set << key;
+            result << key;
     }
-    return set;
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 QT_END_NAMESPACE

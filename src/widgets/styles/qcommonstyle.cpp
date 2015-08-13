@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -2021,9 +2021,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 bool verticalTitleBar = v2 == 0 ? false : v2->verticalTitleBar;
 
                 if (verticalTitleBar) {
-                    QSize s = r.size();
-                    s.transpose();
-                    r.setSize(s);
+                    r.setSize(r.size().transposed());
 
                     p->save();
                     p->translate(r.left(), r.top() + r.width());
@@ -2898,11 +2896,8 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
         // If this is a vertical titlebar, we transpose and work as if it was
         // horizontal, then transpose again.
 
-        if (verticalTitleBar) {
-            QSize size = rect.size();
-            size.transpose();
-            rect.setSize(size);
-        }
+        if (verticalTitleBar)
+            rect.setSize(rect.size().transposed());
 
         do {
 
@@ -2915,7 +2910,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                                         opt, widget).actualSize(QSize(iconSize, iconSize));
                 sz += QSize(buttonMargin, buttonMargin);
                 if (verticalTitleBar)
-                    sz.transpose();
+                    sz = sz.transposed();
                 closeRect = QRect(right - sz.width(),
                                     rect.center().y() - sz.height()/2,
                                     sz.width(), sz.height());
@@ -2932,7 +2927,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                                         opt, widget).actualSize(QSize(iconSize, iconSize));
                 sz += QSize(buttonMargin, buttonMargin);
                 if (verticalTitleBar)
-                    sz.transpose();
+                    sz = sz.transposed();
                 floatRect = QRect(right - sz.width(),
                                     rect.center().y() - sz.height()/2,
                                     sz.width(), sz.height());
@@ -2952,7 +2947,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                         && icon.cacheKey() != QApplication::windowIcon().cacheKey()) {
                     QSize sz = icon.actualSize(QSize(r.height(), r.height()));
                     if (verticalTitleBar)
-                        sz.transpose();
+                        sz = sz.transposed();
                     iconRect = QRect(left, rect.center().y() - sz.height()/2,
                                         sz.width(), sz.height());
                     left = iconRect.right() + margin;
@@ -4587,10 +4582,16 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
         ret = int(QStyleHelper::dpiScaled(4.));
         break;
     case PM_HeaderMarkSize:
-        ret = int(QStyleHelper::dpiScaled(32.));
+        ret = int(QStyleHelper::dpiScaled(16.));
         break;
     case PM_HeaderGripMargin:
         ret = int(QStyleHelper::dpiScaled(4.));
+        break;
+    case PM_HeaderDefaultSectionSizeHorizontal:
+        ret = int(QStyleHelper::dpiScaled(100.));
+        break;
+    case PM_HeaderDefaultSectionSizeVertical:
+        ret = int(QStyleHelper::dpiScaled(30.));
         break;
     case PM_TabBarScrollButtonWidth:
         ret = int(QStyleHelper::dpiScaled(16.));
@@ -4907,8 +4908,11 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
 
 
     case SH_TabBar_Alignment:
-    case SH_Header_ArrowAlignment:
         ret = Qt::AlignLeft;
+        break;
+
+    case SH_Header_ArrowAlignment:
+        ret = Qt::AlignRight | Qt::AlignVCenter;
         break;
 
     case SH_TitleBar_AutoRaise:
@@ -4921,6 +4925,25 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
 
     case SH_Menu_SloppySubMenus:
         ret = true;
+        break;
+
+    case SH_Menu_SubMenuUniDirection:
+        ret = false;
+        break;
+    case SH_Menu_SubMenuUniDirectionFailCount:
+        ret = 1;
+        break;
+    case SH_Menu_SubMenuSloppySelectOtherActions:
+        ret = true;
+        break;
+    case SH_Menu_SubMenuSloppyCloseTimeout:
+        ret = 1000;
+        break;
+    case SH_Menu_SubMenuResetWhenReenteringParent:
+        ret = false;
+        break;
+    case SH_Menu_SubMenuDontStartSloppyOnLeave:
+        ret = false;
         break;
 
     case SH_ProgressDialog_TextLabelAlignment:
@@ -5176,7 +5199,7 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
 static QPixmap cachedPixmapFromXPM(const char * const *xpm)
 {
     QPixmap result;
-    const QString tag = QString().sprintf("xpm:0x%p", static_cast<const void*>(xpm));
+    const QString tag = QString::asprintf("xpm:0x%p", static_cast<const void*>(xpm));
     if (!QPixmapCache::find(tag, &result)) {
         result = QPixmap(xpm);
         QPixmapCache::insert(tag, result);

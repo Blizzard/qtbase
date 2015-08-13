@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -36,6 +36,7 @@
 
 #include "qdebug.h"
 #include "qendian.h"
+#include "private/qtools_p.h"
 
 #ifndef QT_NO_NETWORKINTERFACE
 
@@ -116,18 +117,14 @@ QList<QSharedDataPointer<QNetworkInterfacePrivate> > QNetworkInterfaceManager::a
 
 QString QNetworkInterfacePrivate::makeHwAddress(int len, uchar *data)
 {
-    QString result;
+    const int outLen = qMax(len * 2 + (len - 1) * 1, 0);
+    QString result(outLen, Qt::Uninitialized);
+    QChar *out = result.data();
     for (int i = 0; i < len; ++i) {
         if (i)
-            result += QLatin1Char(':');
-
-        char buf[3];
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && defined(_MSC_VER) && _MSC_VER >= 1400
-        sprintf_s(buf, 3, "%02hX", ushort(data[i]));
-#else
-        sprintf(buf, "%02hX", ushort(data[i]));
-#endif
-        result += QLatin1String(buf);
+            *out++ = QLatin1Char(':');
+        *out++ = QLatin1Char(QtMiscUtils::toHexUpper(data[i] / 16));
+        *out++ = QLatin1Char(QtMiscUtils::toHexUpper(data[i] % 16));
     }
     return result;
 }
@@ -353,8 +350,7 @@ void QNetworkAddressEntry::setBroadcast(const QHostAddress &newBroadcast)
     Not all operating systems support reporting all features. Only the
     IPv4 addresses are guaranteed to be listed by this class in all
     platforms. In particular, IPv6 address listing is only supported
-    on Windows XP and more recent versions, Linux, MacOS X and the
-    BSDs.
+    on Windows, Linux, OS X and the BSDs.
 
     \sa QNetworkAddressEntry
 */
@@ -584,45 +580,42 @@ QList<QHostAddress> QNetworkInterface::allAddresses()
 static inline QDebug flagsDebug(QDebug debug, QNetworkInterface::InterfaceFlags flags)
 {
     if (flags & QNetworkInterface::IsUp)
-        debug.nospace() << "IsUp ";
+        debug << "IsUp ";
     if (flags & QNetworkInterface::IsRunning)
-        debug.nospace() << "IsRunning ";
+        debug << "IsRunning ";
     if (flags & QNetworkInterface::CanBroadcast)
-        debug.nospace() << "CanBroadcast ";
+        debug << "CanBroadcast ";
     if (flags & QNetworkInterface::IsLoopBack)
-        debug.nospace() << "IsLoopBack ";
+        debug << "IsLoopBack ";
     if (flags & QNetworkInterface::IsPointToPoint)
-        debug.nospace() << "IsPointToPoint ";
+        debug << "IsPointToPoint ";
     if (flags & QNetworkInterface::CanMulticast)
-        debug.nospace() << "CanMulticast ";
-    return debug.nospace();
+        debug << "CanMulticast ";
+    return debug;
 }
 
 static inline QDebug operator<<(QDebug debug, const QNetworkAddressEntry &entry)
 {
-    debug.nospace() << "(address = " << entry.ip();
+    debug << "(address = " << entry.ip();
     if (!entry.netmask().isNull())
-        debug.nospace() << ", netmask = " << entry.netmask();
+        debug << ", netmask = " << entry.netmask();
     if (!entry.broadcast().isNull())
-        debug.nospace() << ", broadcast = " << entry.broadcast();
-    debug.nospace() << ')';
-    return debug.space();
+        debug << ", broadcast = " << entry.broadcast();
+    debug << ')';
+    return debug;
 }
 
 QDebug operator<<(QDebug debug, const QNetworkInterface &networkInterface)
 {
-    debug.nospace() << "QNetworkInterface(name = " << networkInterface.name()
-                    << ", hardware address = " << networkInterface.hardwareAddress()
-                    << ", flags = ";
+    QDebugStateSaver saver(debug);
+    debug.resetFormat().nospace();
+    debug << "QNetworkInterface(name = " << networkInterface.name()
+          << ", hardware address = " << networkInterface.hardwareAddress()
+          << ", flags = ";
     flagsDebug(debug, networkInterface.flags());
-#if defined(Q_CC_RVCT)
-    // RVCT gets confused with << networkInterface.addressEntries(), reason unknown.
-    debug.nospace() << ")\n";
-#else
-    debug.nospace() << ", entries = " << networkInterface.addressEntries()
-                    << ")\n";
-#endif
-    return debug.space();
+    debug << ", entries = " << networkInterface.addressEntries()
+          << ")\n";
+    return debug;
 }
 #endif
 

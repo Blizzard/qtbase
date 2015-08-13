@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -90,8 +90,8 @@ public:
     QIntValidator(int bottom, int top, QObject *parent = 0);
     ~QIntValidator();
 
-    QValidator::State validate(QString &, int &) const;
-    void fixup(QString &input) const;
+    QValidator::State validate(QString &, int &) const Q_DECL_OVERRIDE;
+    void fixup(QString &input) const Q_DECL_OVERRIDE;
 
     void setBottom(int);
     void setTop(int);
@@ -120,7 +120,6 @@ class Q_GUI_EXPORT QDoubleValidator : public QValidator
     Q_PROPERTY(double bottom READ bottom WRITE setBottom NOTIFY bottomChanged)
     Q_PROPERTY(double top READ top WRITE setTop NOTIFY topChanged)
     Q_PROPERTY(int decimals READ decimals WRITE setDecimals NOTIFY decimalsChanged)
-    Q_ENUMS(Notation)
     Q_PROPERTY(Notation notation READ notation WRITE setNotation NOTIFY notationChanged)
 
 public:
@@ -132,7 +131,8 @@ public:
         StandardNotation,
         ScientificNotation
     };
-    QValidator::State validate(QString &, int &) const;
+    Q_ENUM(Notation)
+    QValidator::State validate(QString &, int &) const Q_DECL_OVERRIDE;
 
     virtual void setRange(double bottom, double top, int decimals = 0);
     void setBottom(double);
@@ -171,7 +171,7 @@ public:
     explicit QRegExpValidator(const QRegExp& rx, QObject *parent = 0);
     ~QRegExpValidator();
 
-    virtual QValidator::State validate(QString& input, int& pos) const;
+    virtual QValidator::State validate(QString& input, int& pos) const Q_DECL_OVERRIDE;
 
     void setRegExp(const QRegExp& rx);
     const QRegExp& regExp() const { return r; }

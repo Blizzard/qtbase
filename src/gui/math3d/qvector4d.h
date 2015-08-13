@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -50,6 +50,7 @@ class Q_GUI_EXPORT QVector4D
 {
 public:
     Q_DECL_CONSTEXPR QVector4D();
+    explicit QVector4D(Qt::Initialization) {}
     Q_DECL_CONSTEXPR QVector4D(float xpos, float ypos, float zpos, float wpos);
     Q_DECL_CONSTEXPR explicit QVector4D(const QPoint& point);
     Q_DECL_CONSTEXPR explicit QVector4D(const QPointF& point);
@@ -80,7 +81,7 @@ public:
     float length() const;
     float lengthSquared() const; //In Qt 6 convert to inline and constexpr
 
-    QVector4D normalized() const;
+    QVector4D normalized() const Q_REQUIRED_RESULT;
     void normalize();
 
     QVector4D &operator+=(const QVector4D &vector);
@@ -88,6 +89,7 @@ public:
     QVector4D &operator*=(float factor);
     QVector4D &operator*=(const QVector4D &vector);
     QVector4D &operator/=(float divisor);
+    inline QVector4D &operator/=(const QVector4D &vector);
 
     static float dotProduct(const QVector4D& v1, const QVector4D& v2); //In Qt 6 convert to inline and constexpr
 
@@ -100,6 +102,7 @@ public:
     Q_DECL_CONSTEXPR friend inline const QVector4D operator*(const QVector4D &v1, const QVector4D& v2);
     Q_DECL_CONSTEXPR friend inline const QVector4D operator-(const QVector4D &vector);
     Q_DECL_CONSTEXPR friend inline const QVector4D operator/(const QVector4D &vector, float divisor);
+    Q_DECL_CONSTEXPR friend inline const QVector4D operator/(const QVector4D &vector, const QVector4D &divisor);
 
     Q_DECL_CONSTEXPR friend inline bool qFuzzyCompare(const QVector4D& v1, const QVector4D& v2);
 
@@ -210,6 +213,15 @@ inline QVector4D &QVector4D::operator/=(float divisor)
     return *this;
 }
 
+inline QVector4D &QVector4D::operator/=(const QVector4D &vector)
+{
+    xp /= vector.xp;
+    yp /= vector.yp;
+    zp /= vector.zp;
+    wp /= vector.wp;
+    return *this;
+}
+
 Q_DECL_CONSTEXPR inline bool operator==(const QVector4D &v1, const QVector4D &v2)
 {
     return v1.xp == v2.xp && v1.yp == v2.yp && v1.zp == v2.zp && v1.wp == v2.wp;
@@ -253,6 +265,11 @@ Q_DECL_CONSTEXPR inline const QVector4D operator-(const QVector4D &vector)
 Q_DECL_CONSTEXPR inline const QVector4D operator/(const QVector4D &vector, float divisor)
 {
     return QVector4D(vector.xp / divisor, vector.yp / divisor, vector.zp / divisor, vector.wp / divisor);
+}
+
+Q_DECL_CONSTEXPR inline const QVector4D operator/(const QVector4D &vector, const QVector4D &divisor)
+{
+    return QVector4D(vector.xp / divisor.xp, vector.yp / divisor.yp, vector.zp / divisor.zp, vector.wp / divisor.wp);
 }
 
 Q_DECL_CONSTEXPR inline bool qFuzzyCompare(const QVector4D& v1, const QVector4D& v2)

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -1720,7 +1720,7 @@ void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
         }
     } break;
     case Qt::CheckStateRole:
-        if (itemFlags & Qt::ItemIsTristate) {
+        if ((itemFlags & Qt::ItemIsTristate) && value != Qt::PartiallyChecked) {
             for (int i = 0; i < children.count(); ++i) {
                 QTreeWidgetItem *child = children.at(i);
                 if (child->data(column, role).isValid()) {// has a CheckState
@@ -2153,10 +2153,11 @@ QVariant QTreeWidgetItem::childrenCheckState(int column) const
         default:
             return Qt::PartiallyChecked;
         }
+
+        if (uncheckedChildren && checkedChildren)
+            return Qt::PartiallyChecked;
     }
 
-    if (uncheckedChildren && checkedChildren)
-        return Qt::PartiallyChecked;
     if (uncheckedChildren)
         return Qt::Unchecked;
     else if (checkedChildren)
@@ -2934,8 +2935,6 @@ void QTreeWidget::closePersistentEditor(QTreeWidgetItem *item, int column)
 
     Returns the widget displayed in the cell specified by \a item and the given \a column.
 
-    \note The tree takes ownership of the widget.
-
 */
 QWidget *QTreeWidget::itemWidget(QTreeWidgetItem *item, int column) const
 {
@@ -3268,15 +3267,29 @@ QStringList QTreeWidget::mimeTypes() const
     If the list of items is empty, 0 is returned rather than a serialized
     empty list.
 */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem *> &items) const
+#else
 QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
+#endif
 {
     Q_D(const QTreeWidget);
     if (d->treeModel()->cachedIndexes.isEmpty()) {
         QList<QModelIndex> indexes;
         for (int i = 0; i < items.count(); ++i) {
             QTreeWidgetItem *item = items.at(i);
+            if (!item) {
+                qWarning() << "QTreeWidget::mimeData: Null-item passed";
+                return 0;
+            }
+
             for (int c = 0; c < item->values.count(); ++c) {
-                indexes << indexFromItem(item, c);
+                const QModelIndex index = indexFromItem(item, c);
+                if (!index.isValid()) {
+                    qWarning() << "QTreeWidget::mimeData: No index associated with item :" << item;
+                    return 0;
+                }
+                indexes << index;
             }
         }
         return d->model->QAbstractItemModel::mimeData(indexes);

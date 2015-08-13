@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -166,14 +166,14 @@ Q_GUI_EXPORT int qt_defaultDpi()
 
 QFontPrivate::QFontPrivate()
     : engineData(0), dpi(qt_defaultDpi()), screen(0),
-      rawMode(false), underline(false), overline(false), strikeOut(false), kerning(true),
+      underline(false), overline(false), strikeOut(false), kerning(true),
       capital(0), letterSpacingIsAbsolute(false), scFont(0)
 {
 }
 
 QFontPrivate::QFontPrivate(const QFontPrivate &other)
     : request(other.request), engineData(0), dpi(other.dpi), screen(other.screen),
-      rawMode(other.rawMode), underline(other.underline), overline(other.overline),
+      underline(other.underline), overline(other.overline),
       strikeOut(other.strikeOut), kerning(other.kerning),
       capital(other.capital), letterSpacingIsAbsolute(other.letterSpacingIsAbsolute),
       letterSpacing(other.letterSpacing), wordSpacing(other.wordSpacing),
@@ -405,9 +405,6 @@ QFontEngineData::~QFontEngineData()
     to a specified number of pixels with setPixelSize(); however using
     setPointSize() has a similar effect and provides device
     independence.
-
-    In X11 you can set a font using its system
-    specific name with setRawName().
 
     Loading fonts can be expensive, especially on X11. QFont contains
     extensive optimizations to make the copying of QFont objects fast,
@@ -1033,10 +1030,14 @@ int QFont::weight() const
 
     This enum contains the predefined font weights:
 
+    \value Thin 0
+    \value ExtraLight 12
     \value Light 25
     \value Normal 50
+    \value Medium 57
     \value DemiBold 63
     \value Bold 75
+    \value ExtraBold 81
     \value Black 87
 */
 
@@ -1063,7 +1064,7 @@ void QFont::setWeight(int weight)
     \fn bool QFont::bold() const
 
     Returns \c true if weight() is a value greater than
-   \l{Weight}{QFont::Normal}; otherwise returns \c false.
+   \l{Weight}{QFont::Medium}; otherwise returns \c false.
 
     \sa weight(), setBold(), QFontInfo::bold()
 */
@@ -1567,8 +1568,11 @@ QFont::Capitalization QFont::capitalization() const
     return static_cast<QFont::Capitalization> (d->capital);
 }
 
-
+#if QT_DEPRECATED_SINCE(5, 5)
 /*!
+    \fn void QFont::setRawMode(bool enable)
+    \deprecated
+
     If \a enable is true, turns raw mode on; otherwise turns raw mode
     off. This function only has an effect under X11.
 
@@ -1580,20 +1584,14 @@ QFont::Capitalization QFont::capitalization() const
     return the values set in the QFont for all parameters, including
     the family name).
 
-    \warning Do not use raw mode unless you really, really need it! In
-    most (if not all) cases, setRawName() is a much better choice.
+    \warning Enabling raw mode has no effect since Qt 5.0.
 
-    \sa rawMode(), setRawName()
+    \sa rawMode()
 */
-void QFont::setRawMode(bool enable)
+void QFont::setRawMode(bool)
 {
-    if ((bool) d->rawMode == enable) return;
-
-    // might change behavior, thus destroy engine data
-    detach();
-
-    d->rawMode = enable;
 }
+#endif
 
 /*!
     Returns \c true if a window system font exactly matching the settings
@@ -1605,9 +1603,7 @@ bool QFont::exactMatch() const
 {
     QFontEngine *engine = d->engineForScript(QChar::Script_Common);
     Q_ASSERT(engine != 0);
-    return (d->rawMode
-            ? engine->type() != QFontEngine::Box
-            : d->request.exactMatch(engine->fontDef));
+    return d->request.exactMatch(engine->fontDef);
 }
 
 /*!
@@ -1615,8 +1611,7 @@ bool QFont::exactMatch() const
     false.
 
     Two QFonts are considered equal if their font attributes are
-    equal. If rawMode() is enabled for both fonts, only the family
-    fields are compared.
+    equal.
 
     \sa operator!=(), isCopyOf()
 */
@@ -1679,8 +1674,7 @@ bool QFont::operator<(const QFont &f) const
     returns \c false.
 
     Two QFonts are considered to be different if their font attributes
-    are different. If rawMode() is enabled for both fonts, only the
-    family fields are compared.
+    are different.
 
     \sa operator==()
 */
@@ -1709,16 +1703,20 @@ bool QFont::isCopyOf(const QFont & f) const
     return d == f.d;
 }
 
+#if QT_DEPRECATED_SINCE(5, 5)
 /*!
+    \deprecated
+
     Returns \c true if raw mode is used for font name matching; otherwise
     returns \c false.
 
-    \sa setRawMode(), rawName()
+    \sa setRawMode()
 */
 bool QFont::rawMode() const
 {
-    return d->rawMode;
+    return false;
 }
+#endif
 
 /*!
     Returns a new QFont that has attributes copied from \a other that
@@ -1726,10 +1724,8 @@ bool QFont::rawMode() const
 */
 QFont QFont::resolve(const QFont &other) const
 {
-    if (*this == other
-        && (resolve_mask == other.resolve_mask || resolve_mask == 0)
-        && d->dpi == other.d->dpi) {
-        QFont o = other;
+    if (resolve_mask == 0 || (resolve_mask == other.resolve_mask && *this == other)) {
+        QFont o(other);
         o.resolve_mask = resolve_mask;
         return o;
     }
@@ -1877,7 +1873,7 @@ QStringList QFont::substitutions()
     return ret;
 }
 
-
+#ifndef QT_NO_DATASTREAM
 /*  \internal
     Internal function. Converts boolean font settings to an unsigned
     8-bit number. Used for serialization etc.
@@ -1898,8 +1894,6 @@ static quint8 get_font_bits(int version, const QFontPrivate *f)
         bits |= 0x08;
     // if (f.hintSetByUser)
     // bits |= 0x10;
-    if (f->rawMode)
-        bits |= 0x20;
     if (version >= QDataStream::Qt_4_0) {
         if (f->kerning)
             bits |= 0x10;
@@ -1920,8 +1914,6 @@ static quint8 get_extended_font_bits(const QFontPrivate *f)
     return bits;
 }
 
-#ifndef QT_NO_DATASTREAM
-
 /*  \internal
     Internal function. Sets boolean font settings from an unsigned
     8-bit number. Used for serialization etc.
@@ -1935,7 +1927,6 @@ static void set_font_bits(int version, quint8 bits, QFontPrivate *f)
     f->strikeOut             = (bits & 0x04) != 0;
     f->request.fixedPitch    = (bits & 0x08) != 0;
     // f->hintSetByUser      = (bits & 0x10) != 0;
-    f->rawMode               = (bits & 0x20) != 0;
     if (version >= QDataStream::Qt_4_0)
         f->kerning               = (bits & 0x10) != 0;
     if ((bits & 0x80) != 0)
@@ -1950,6 +1941,7 @@ static void set_extended_font_bits(quint8 bits, QFontPrivate *f)
 }
 #endif
 
+#if QT_DEPRECATED_SINCE(5, 3)
 /*!
     \fn QString QFont::rawName() const
     \deprecated
@@ -1981,11 +1973,12 @@ QString QFont::rawName() const
     If Qt's internal font database cannot resolve the raw name, the
     font becomes a raw font with \a name as its family.
 
-    \sa rawName(), setRawMode(), setFamily()
+    \sa rawName(), setFamily()
 */
 void QFont::setRawName(const QString &)
 {
 }
+#endif
 
 /*!
     Returns the font's key, a textual representation of a font. It is
@@ -2017,7 +2010,7 @@ QString QFont::toString() const
         QString::number((int) underline()) + comma +
         QString::number((int) strikeOut()) + comma +
         QString::number((int)fixedPitch()) + comma +
-        QString::number((int)   rawMode());
+        QString::number((int)   false);
 }
 
 /*!
@@ -2061,7 +2054,6 @@ bool QFont::fromString(const QString &descrip)
         setUnderline(l[5].toInt());
         setStrikeOut(l[6].toInt());
         setFixedPitch(l[7].toInt());
-        setRawMode(l[8].toInt());
     } else if (count == 10) {
         if (l[2].toInt() > 0)
             setPixelSize(l[2].toInt());
@@ -2071,7 +2063,6 @@ bool QFont::fromString(const QString &descrip)
         setUnderline(l[6].toInt());
         setStrikeOut(l[7].toInt());
         setFixedPitch(l[8].toInt());
-        setRawMode(l[9].toInt());
     }
     if (count >= 9 && !d->request.fixedPitch) // assume 'false' fixedPitch equals default
         d->request.ignorePitch = true;
@@ -2161,7 +2152,7 @@ QString QFont::defaultFamily() const
     happens. Please \l{bughowto.html}{report it as a bug} if
     it does, preferably with a list of the fonts you have installed.
 
-    \sa lastResortFamily(), rawName()
+    \sa lastResortFamily()
 */
 QString QFont::lastResortFont() const
 {
@@ -2620,7 +2611,10 @@ QFont::StyleHint QFontInfo::styleHint() const
     return (QFont::StyleHint) engine->fontDef.styleHint;
 }
 
+#if QT_DEPRECATED_SINCE(5, 5)
 /*!
+    \deprecated
+
     Returns \c true if the font is a raw mode font; otherwise returns
     false.
 
@@ -2632,8 +2626,9 @@ QFont::StyleHint QFontInfo::styleHint() const
 */
 bool QFontInfo::rawMode() const
 {
-    return d->rawMode;
+    return false;
 }
+#endif
 
 /*!
     Returns \c true if the matched window system font is exactly the same
@@ -2645,9 +2640,7 @@ bool QFontInfo::exactMatch() const
 {
     QFontEngine *engine = d->engineForScript(QChar::Script_Common);
     Q_ASSERT(engine != 0);
-    return (d->rawMode
-            ? engine->type() != QFontEngine::Box
-            : d->request.exactMatch(engine->fontDef));
+    return d->request.exactMatch(engine->fontDef);
 }
 
 

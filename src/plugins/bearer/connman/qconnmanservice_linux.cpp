@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -67,8 +67,8 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, ConnmanMap &map)
 }
 
 QConnmanManagerInterface::QConnmanManagerInterface( QObject *parent)
-        : QDBusAbstractInterface(QStringLiteral(CONNMAN_SERVICE),
-                                 QStringLiteral(CONNMAN_MANAGER_PATH),
+        : QDBusAbstractInterface(QLatin1String(CONNMAN_SERVICE),
+                                 QLatin1String(CONNMAN_MANAGER_PATH),
                                  CONNMAN_MANAGER_INTERFACE,
                                  QDBusConnection::systemBus(), parent)
 {
@@ -82,23 +82,23 @@ QConnmanManagerInterface::QConnmanManagerInterface( QObject *parent)
     QObject::connect(watcher,SIGNAL(finished(QDBusPendingCallWatcher*)),
                      this, SLOT(propertiesReply(QDBusPendingCallWatcher*)));
 
-    QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
-                           QStringLiteral(CONNMAN_MANAGER_PATH),
-                           QStringLiteral(CONNMAN_SERVICE_INTERFACE),
-                           QStringLiteral("PropertyChanged"),
+    QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
+                           QLatin1String(CONNMAN_MANAGER_PATH),
+                           QLatin1String(CONNMAN_SERVICE_INTERFACE),
+                           QLatin1String("PropertyChanged"),
                            this,SLOT(changedProperty(QString,QDBusVariant)));
 
 
-    QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
-                           QStringLiteral(CONNMAN_MANAGER_PATH),
-                           QStringLiteral(CONNMAN_SERVICE_INTERFACE),
-                           QStringLiteral("TechnologyAdded"),
+    QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
+                           QLatin1String(CONNMAN_MANAGER_PATH),
+                           QLatin1String(CONNMAN_SERVICE_INTERFACE),
+                           QLatin1String("TechnologyAdded"),
                            this,SLOT(technologyAdded(QDBusObjectPath,QVariantMap)));
 
-    QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
-                           QStringLiteral(CONNMAN_MANAGER_PATH),
-                           QStringLiteral(CONNMAN_SERVICE_INTERFACE),
-                           QStringLiteral("TechnologyRemoved"),
+    QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
+                           QLatin1String(CONNMAN_MANAGER_PATH),
+                           QLatin1String(CONNMAN_SERVICE_INTERFACE),
+                           QLatin1String("TechnologyRemoved"),
                            this,SLOT(technologyRemoved(QDBusObjectPath)));
 
     QList<QVariant> argumentList2;
@@ -152,10 +152,10 @@ void QConnmanManagerInterface::connectNotify(const QMetaMethod &signal)
 {
     static const QMetaMethod propertyChangedSignal = QMetaMethod::fromSignal(&QConnmanManagerInterface::propertyChanged);
     if (signal == propertyChangedSignal) {
-        if (!connection().connect(QStringLiteral(CONNMAN_SERVICE),
-                               QStringLiteral(CONNMAN_MANAGER_PATH),
-                               QStringLiteral(CONNMAN_MANAGER_INTERFACE),
-                               QStringLiteral("PropertyChanged"),
+        if (!connection().connect(QLatin1String(CONNMAN_SERVICE),
+                               QLatin1String(CONNMAN_MANAGER_PATH),
+                               QLatin1String(CONNMAN_MANAGER_INTERFACE),
+                               QLatin1String("PropertyChanged"),
                                    this,SIGNAL(propertyChanged(QString,QDBusVariant)))) {
             qWarning() << "PropertyChanged not connected";
         }
@@ -163,10 +163,10 @@ void QConnmanManagerInterface::connectNotify(const QMetaMethod &signal)
 
     static const QMetaMethod servicesChangedSignal = QMetaMethod::fromSignal(&QConnmanManagerInterface::servicesChanged);
     if (signal == servicesChangedSignal) {
-        if (!connection().connect(QStringLiteral(CONNMAN_SERVICE),
-                               QStringLiteral(CONNMAN_MANAGER_PATH),
-                               QStringLiteral(CONNMAN_MANAGER_INTERFACE),
-                               QStringLiteral("ServicesChanged"),
+        if (!connection().connect(QLatin1String(CONNMAN_SERVICE),
+                               QLatin1String(CONNMAN_MANAGER_PATH),
+                               QLatin1String(CONNMAN_MANAGER_INTERFACE),
+                               QLatin1String("ServicesChanged"),
                                this,SLOT(onServicesChanged(ConnmanMapList, QList<QDBusObjectPath>)))) {
             qWarning() << "servicesChanged not connected";
         }
@@ -275,7 +275,7 @@ void QConnmanManagerInterface::technologyRemoved(const QDBusObjectPath &path)
 }
 
 QConnmanServiceInterface::QConnmanServiceInterface(const QString &dbusPathName,QObject *parent)
-    : QDBusAbstractInterface(QStringLiteral(CONNMAN_SERVICE),
+    : QDBusAbstractInterface(QLatin1String(CONNMAN_SERVICE),
                              dbusPathName,
                              CONNMAN_SERVICE_INTERFACE,
                              QDBusConnection::systemBus(), parent)
@@ -288,10 +288,10 @@ QConnmanServiceInterface::QConnmanServiceInterface(const QString &dbusPathName,Q
     QObject::connect(watcher,SIGNAL(finished(QDBusPendingCallWatcher*)),
             this, SLOT(propertiesReply(QDBusPendingCallWatcher*)));
 
-    QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
+    QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
                            path(),
-                           QStringLiteral(CONNMAN_SERVICE_INTERFACE),
-                           QStringLiteral("PropertyChanged"),
+                           QLatin1String(CONNMAN_SERVICE_INTERFACE),
+                           QLatin1String("PropertyChanged"),
                            this,SLOT(changedProperty(QString,QDBusVariant)));
 }
 
@@ -327,10 +327,10 @@ void QConnmanServiceInterface::connectNotify(const QMetaMethod &signal)
 {
     static const QMetaMethod propertyChangedSignal = QMetaMethod::fromSignal(&QConnmanServiceInterface::propertyChanged);
     if (signal == propertyChangedSignal) {
-        QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
+        QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
                                path(),
-                               QStringLiteral(CONNMAN_SERVICE_INTERFACE),
-                               QStringLiteral("PropertyChanged"),
+                               QLatin1String(CONNMAN_SERVICE_INTERFACE),
+                               QLatin1String("PropertyChanged"),
                                this,SIGNAL(propertyChanged(QString,QDBusVariant)));
     }
 }
@@ -440,7 +440,7 @@ QStringList QConnmanServiceInterface::services()
 
 //////////////////////////
 QConnmanTechnologyInterface::QConnmanTechnologyInterface(const QString &dbusPathName,QObject *parent)
-    : QDBusAbstractInterface(QStringLiteral(CONNMAN_SERVICE),
+    : QDBusAbstractInterface(QLatin1String(CONNMAN_SERVICE),
                              dbusPathName,
                              CONNMAN_TECHNOLOGY_INTERFACE,
                              QDBusConnection::systemBus(), parent)
@@ -455,10 +455,10 @@ void QConnmanTechnologyInterface::connectNotify(const QMetaMethod &signal)
 {
     static const QMetaMethod propertyChangedSignal = QMetaMethod::fromSignal(&QConnmanTechnologyInterface::propertyChanged);
     if (signal == propertyChangedSignal) {
-        QDBusConnection::systemBus().connect(QStringLiteral(CONNMAN_SERVICE),
+        QDBusConnection::systemBus().connect(QLatin1String(CONNMAN_SERVICE),
                                path(),
-                               QStringLiteral(CONNMAN_TECHNOLOGY_INTERFACE),
-                               QStringLiteral("PropertyChanged"),
+                               QLatin1String(CONNMAN_TECHNOLOGY_INTERFACE),
+                               QLatin1String("PropertyChanged"),
                                this,SIGNAL(propertyChanged(QString,QDBusVariant)));
     }
 }

@@ -1,8 +1,8 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,7 @@
 #include "androidjniinput.h"
 #include "androidjniclipboard.h"
 #include "androidjnimenu.h"
+#include "androiddeadlockprotector.h"
 #include "qandroidplatformdialoghelpers.h"
 #include "qandroidplatformintegration.h"
 #include "qandroidassetsfileenginehandler.h"
@@ -61,40 +62,40 @@ Q_IMPORT_PLUGIN(QAndroidPlatformIntegrationPlugin)
 
 QT_BEGIN_NAMESPACE
 
-static JavaVM *m_javaVM = Q_NULLPTR;
-static jclass m_applicationClass  = Q_NULLPTR;
-static jobject m_classLoaderObject = Q_NULLPTR;
-static jmethodID m_loadClassMethodID = Q_NULLPTR;
-static AAssetManager *m_assetManager = Q_NULLPTR;
-static jobject m_resourcesObj = Q_NULLPTR;
-static jobject m_activityObject = Q_NULLPTR;
-static jmethodID m_createSurfaceMethodID = Q_NULLPTR;
-static jmethodID m_setSurfaceGeometryMethodID = Q_NULLPTR;
-static jmethodID m_destroySurfaceMethodID = Q_NULLPTR;
+static JavaVM *m_javaVM = nullptr;
+static jclass m_applicationClass  = nullptr;
+static jobject m_classLoaderObject = nullptr;
+static jmethodID m_loadClassMethodID = nullptr;
+static AAssetManager *m_assetManager = nullptr;
+static jobject m_resourcesObj = nullptr;
+static jobject m_activityObject = nullptr;
+static jmethodID m_createSurfaceMethodID = nullptr;
+static jmethodID m_setSurfaceGeometryMethodID = nullptr;
+static jmethodID m_destroySurfaceMethodID = nullptr;
 
 static bool m_activityActive = true; // defaults to true because when the platform plugin is
                                      // initialized, QtActivity::onResume() has already been called
 
-static jclass m_bitmapClass  = Q_NULLPTR;
-static jmethodID m_createBitmapMethodID = Q_NULLPTR;
-static jobject m_ARGB_8888_BitmapConfigValue = Q_NULLPTR;
-static jobject m_RGB_565_BitmapConfigValue = Q_NULLPTR;
+static jclass m_bitmapClass  = nullptr;
+static jmethodID m_createBitmapMethodID = nullptr;
+static jobject m_ARGB_8888_BitmapConfigValue = nullptr;
+static jobject m_RGB_565_BitmapConfigValue = nullptr;
 
 static bool m_statusBarShowing = true;
 
-static jclass m_bitmapDrawableClass = Q_NULLPTR;
-static jmethodID m_bitmapDrawableConstructorMethodID = Q_NULLPTR;
+static jclass m_bitmapDrawableClass = nullptr;
+static jmethodID m_bitmapDrawableConstructorMethodID = nullptr;
 
 extern "C" typedef int (*Main)(int, char **); //use the standard main method to start the application
-static Main m_main = Q_NULLPTR;
-static void *m_mainLibraryHnd = Q_NULLPTR;
+static Main m_main = nullptr;
+static void *m_mainLibraryHnd = nullptr;
 static QList<QByteArray> m_applicationParams;
 
 struct SurfaceData
 {
     ~SurfaceData() { delete surface; }
-    QJNIObjectPrivate *surface = Q_NULLPTR;
-    AndroidSurfaceClient *client = Q_NULLPTR;
+    QJNIObjectPrivate *surface = nullptr;
+    AndroidSurfaceClient *client = nullptr;
 };
 
 QHash<int, AndroidSurfaceClient *> m_surfaces;
@@ -103,7 +104,7 @@ static QMutex m_surfacesMutex;
 static int m_surfaceId = 1;
 
 
-static QAndroidPlatformIntegration *m_androidPlatformIntegration = Q_NULLPTR;
+static QAndroidPlatformIntegration *m_androidPlatformIntegration = nullptr;
 
 static int m_desktopWidthPixels  = 0;
 static int m_desktopHeightPixels = 0;
@@ -111,7 +112,7 @@ static double m_scaledDensity = 0;
 
 static volatile bool m_pauseApplication;
 
-static AndroidAssetsFileEngineHandler *m_androidAssetsFileEngineHandler = Q_NULLPTR;
+static AndroidAssetsFileEngineHandler *m_androidAssetsFileEngineHandler = nullptr;
 
 
 
@@ -325,7 +326,7 @@ namespace QtAndroid
     {
         m_surfacesMutex.lock();
         const int surfaceId = m_surfaceId++;
-        m_surfaces[surfaceId] = Q_NULLPTR; // dummy
+        m_surfaces[surfaceId] = nullptr; // dummy
         m_surfacesMutex.unlock();
 
         jint x = 0, y = 0, w = -1, h = -1;
@@ -376,8 +377,6 @@ namespace QtAndroid
         const auto &it = m_surfaces.find(surfaceId);
         if (it != m_surfaces.end())
             m_surfaces.remove(surfaceId);
-        if (m_surfaces.isEmpty())
-            m_surfaceId = 1;
 
         QJNIEnvironmentPrivate env;
         if (!env)
@@ -412,7 +411,7 @@ namespace QtAndroid
 
     bool blockEventLoopsWhenSuspended()
     {
-        static bool block = qgetenv("QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED").toInt();
+        static bool block = qEnvironmentVariableIntValue("QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED");
         return block;
     }
 
@@ -421,7 +420,7 @@ namespace QtAndroid
 
 static jboolean startQtAndroidPlugin(JNIEnv* /*env*/, jobject /*object*//*, jobject applicationAssetManager*/)
 {
-    m_androidPlatformIntegration = Q_NULLPTR;
+    m_androidPlatformIntegration = nullptr;
     m_androidAssetsFileEngineHandler = new AndroidAssetsFileEngineHandler();
     return true;
 }
@@ -449,7 +448,7 @@ static void *startMainMethod(void */*data*/)
 
 static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring paramsString, jstring environmentString)
 {
-    m_mainLibraryHnd = Q_NULLPTR;
+    m_mainLibraryHnd = nullptr;
     { // Set env. vars
         const char *nativeString = env->GetStringUTFChars(environmentString, 0);
         const QList<QByteArray> envVars = QByteArray(nativeString).split('\t');
@@ -475,7 +474,7 @@ static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring para
         // Obtain a handle to the main library (the library that contains the main() function).
         // This library should already be loaded, and calling dlopen() will just return a reference to it.
         m_mainLibraryHnd = dlopen(m_applicationParams.first().data(), 0);
-        if (m_mainLibraryHnd == Q_NULLPTR) {
+        if (m_mainLibraryHnd == nullptr) {
             qCritical() << "dlopen failed:" << dlerror();
             return false;
         }
@@ -492,16 +491,16 @@ static jboolean startQtApplication(JNIEnv *env, jobject /*object*/, jstring para
     }
 
     pthread_t appThread;
-    return pthread_create(&appThread, Q_NULLPTR, startMainMethod, Q_NULLPTR) == 0;
+    return pthread_create(&appThread, nullptr, startMainMethod, nullptr) == 0;
 }
 
 
 static void quitQtAndroidPlugin(JNIEnv *env, jclass /*clazz*/)
 {
     Q_UNUSED(env);
-    m_androidPlatformIntegration = Q_NULLPTR;
+    m_androidPlatformIntegration = nullptr;
     delete m_androidAssetsFileEngineHandler;
-    m_androidAssetsFileEngineHandler = Q_NULLPTR;
+    m_androidAssetsFileEngineHandler = nullptr;
 }
 
 static void terminateQt(JNIEnv *env, jclass /*clazz*/)
@@ -520,16 +519,16 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
         env->DeleteGlobalRef(m_RGB_565_BitmapConfigValue);
     if (m_bitmapDrawableClass)
         env->DeleteGlobalRef(m_bitmapDrawableClass);
-    m_androidPlatformIntegration = Q_NULLPTR;
+    m_androidPlatformIntegration = nullptr;
     delete m_androidAssetsFileEngineHandler;
-    m_androidAssetsFileEngineHandler = Q_NULLPTR;
+    m_androidAssetsFileEngineHandler = nullptr;
 }
 
 static void setSurface(JNIEnv *env, jobject /*thiz*/, jint id, jobject jSurface, jint w, jint h)
 {
     QMutexLocker lock(&m_surfacesMutex);
     const auto &it = m_surfaces.find(id);
-    if (it.value() == Q_NULLPTR) // This should never happen...
+    if (it.value() == nullptr) // This should never happen...
         return;
 
     if (it == m_surfaces.end()) {
@@ -574,7 +573,7 @@ static void updateWindow(JNIEnv */*env*/, jobject /*thiz*/)
     if (!m_androidPlatformIntegration)
         return;
 
-    if (QGuiApplication::instance() != Q_NULLPTR) {
+    if (QGuiApplication::instance() != nullptr) {
         foreach (QWindow *w, QGuiApplication::topLevelWindows()) {
             QRect availableGeometry = w->screen()->availableGeometry();
             if (w->geometry().width() > 0 && w->geometry().height() > 0 && availableGeometry.width() > 0 && availableGeometry.height() > 0)
@@ -591,15 +590,28 @@ static void updateApplicationState(JNIEnv */*env*/, jobject /*thiz*/, jint state
 {
     m_activityActive = (state == Qt::ApplicationActive);
 
-    if (!m_main || !m_androidPlatformIntegration || !QGuiApplicationPrivate::platformIntegration())
+    if (!m_main || !m_androidPlatformIntegration || !QGuiApplicationPrivate::platformIntegration()) {
+        QAndroidPlatformIntegration::setDefaultApplicationState(Qt::ApplicationState(state));
         return;
+    }
 
     if (state <= Qt::ApplicationInactive) {
+        // NOTE: sometimes we will receive two consecutive suspended notifications,
+        // In the second suspended notification, QWindowSystemInterface::flushWindowSystemEvents()
+        // will deadlock since the dispatcher has been stopped in the first suspended notification.
+        // To avoid the deadlock we simply return if we found the event dispatcher has been stopped.
+        if (QAndroidEventDispatcherStopper::instance()->stopped())
+            return;
+
         // Don't send timers and sockets events anymore if we are going to hide all windows
         QAndroidEventDispatcherStopper::instance()->goingToStop(true);
         QCoreApplication::processEvents();
         QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(state));
-        QWindowSystemInterface::flushWindowSystemEvents();
+        {
+            AndroidDeadlockProtector protector;
+            if (protector.acquire())
+                QWindowSystemInterface::flushWindowSystemEvents();
+        }
         if (state == Qt::ApplicationSuspended)
             QAndroidEventDispatcherStopper::instance()->stopAll();
     } else {
@@ -650,6 +662,11 @@ static void onActivityResult(JNIEnv */*env*/, jclass /*cls*/,
     QtAndroidPrivate::handleActivityResult(requestCode, resultCode, data);
 }
 
+static void onNewIntent(JNIEnv *env, jclass /*cls*/, jobject data)
+{
+    QtAndroidPrivate::handleNewIntent(env, data);
+}
+
 static JNINativeMethod methods[] = {
     {"startQtAndroidPlugin", "()Z", (void *)startQtAndroidPlugin},
     {"startQtApplication", "(Ljava/lang/String;Ljava/lang/String;)V", (void *)startQtApplication},
@@ -660,7 +677,8 @@ static JNINativeMethod methods[] = {
     {"updateWindow", "()V", (void *)updateWindow},
     {"updateApplicationState", "(I)V", (void *)updateApplicationState},
     {"handleOrientationChanged", "(II)V", (void *)handleOrientationChanged},
-    {"onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult}
+    {"onActivityResult", "(IILandroid/content/Intent;)V", (void *)onActivityResult},
+    {"onNewIntent", "(Landroid/content/Intent;)V", (void *)onNewIntent}
 };
 
 #define FIND_AND_CHECK_CLASS(CLASS_NAME) \
@@ -767,8 +785,8 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
 
     __android_log_print(ANDROID_LOG_INFO, "Qt", "qt start");
     UnionJNIEnvToVoid uenv;
-    uenv.venv = Q_NULLPTR;
-    m_javaVM = Q_NULLPTR;
+    uenv.venv = nullptr;
+    m_javaVM = nullptr;
 
     if (vm->GetEnv(&uenv.venv, JNI_VERSION_1_4) != JNI_OK) {
         __android_log_print(ANDROID_LOG_FATAL, "Qt", "GetEnv failed");

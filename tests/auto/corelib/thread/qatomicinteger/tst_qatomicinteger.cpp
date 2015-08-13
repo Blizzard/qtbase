@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Intel Corporation
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,13 +23,37 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+
+#ifdef QT_ATOMIC_FORCE_CXX11
+// We need to check if this compiler has C++11 atomics and constexpr support.
+// We can't rely on qcompilerdetection.h because it forces all of qglobal.h to
+// be included, which causes qbasicatomic.h to be included too.
+// Incomplete, but ok
+#  if defined(__INTEL_COMPILER) && __INTEL_COMPILER >= 1500 && (__cplusplus >= 201103L || defined(__INTEL_CXX11_MODE__))
+#  elif defined(__clang__) && (__cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__))
+#    if !__has_feature(cxx_constexpr) || !__has_feature(cxx_atomic) || !__has_include(<atomic>)
+#      undef QT_ATOMIC_FORCE_CXX11
+#    endif
+#  elif defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) >= 407 && (__cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__))
+#  elif defined(_MSC_VER) && _MSC_VER >= 1900
+    // We need MSVC 2015 because of: atomics (2012), constexpr (2015), and unrestricted unions (2015).
+    // Support for constexpr is not working completely on MSVC 2015 but it's enough for the test.
+#  else
+#    undef QT_ATOMIC_FORCE_CXX11
+#  endif
+
+#  ifndef QT_ATOMIC_FORCE_CXX11
+#    undef QATOMIC_TEST_TYPE
+#    define QATOMIC_TEST_TYPE unsupported
+#  endif
+#endif
 
 #include <QtTest>
 #include <QAtomicInt>
@@ -94,13 +118,9 @@
 #  define QATOMIC_TEST_NOT_SUPPORTED
 #endif
 
-#if defined(Q_CC_GNU) && !defined(Q_CC_INTEL)
-#  pragma GCC diagnostic ignored "-Wtype-limits"
-#  pragma GCC diagnostic ignored "-Wsign-compare"
-#endif
-#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
-#  pragma clang diagnostic ignored "-Wtautological-constant-out-of-range-compare"
-#endif
+QT_WARNING_DISABLE_GCC("-Wtype-limits")
+QT_WARNING_DISABLE_GCC("-Wsign-compare")
+QT_WARNING_DISABLE_CLANG("-Wtautological-constant-out-of-range-compare")
 
 typedef signed char schar;
 

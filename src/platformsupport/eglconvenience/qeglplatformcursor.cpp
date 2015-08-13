@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -39,10 +39,11 @@
 #include <QtCore/QJsonObject>
 #include <QtDebug>
 
-#include <QtPlatformSupport/private/qdevicediscovery_p.h>
+#include <QtGui/private/qguiapplication_p.h>
 
 #include "qeglplatformcursor_p.h"
 #include "qeglplatformintegration_p.h"
+#include "qeglplatformscreen_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -56,13 +57,13 @@ QT_BEGIN_NAMESPACE
 
 QEGLPlatformCursor::QEGLPlatformCursor(QPlatformScreen *screen)
     : m_visible(true),
-      m_screen(screen),
+      m_screen(static_cast<QEGLPlatformScreen *>(screen)),
       m_program(0),
       m_vertexCoordEntry(0),
       m_textureCoordEntry(0),
       m_textureEntry(0),
       m_deviceListener(0),
-      m_updater(screen)
+      m_updateRequested(false)
 {
     QByteArray hideCursorVal = qgetenv("QT_QPA_EGLFS_HIDECURSOR");
     if (!hideCursorVal.isEmpty())
@@ -79,6 +80,11 @@ QEGLPlatformCursor::QEGLPlatformCursor(QPlatformScreen *screen)
     QCursor cursor(Qt::ArrowCursor);
     setCurrentCursor(&cursor);
 #endif
+
+    m_deviceListener = new QEGLPlatformCursorDeviceListener(this);
+    connect(QGuiApplicationPrivate::inputDeviceManager(), &QInputDeviceManager::deviceListChanged,
+            m_deviceListener, &QEGLPlatformCursorDeviceListener::onDeviceListChanged);
+    updateMouseStatus();
 }
 
 QEGLPlatformCursor::~QEGLPlatformCursor()
@@ -87,42 +93,20 @@ QEGLPlatformCursor::~QEGLPlatformCursor()
     delete m_deviceListener;
 }
 
-void QEGLPlatformCursor::setMouseDeviceDiscovery(QDeviceDiscovery *dd)
-{
-    if (m_visible && dd) {
-        m_deviceListener = new QEGLPlatformCursorDeviceListener(dd, this);
-        updateMouseStatus();
-    }
-}
-
 void QEGLPlatformCursor::updateMouseStatus()
 {
     m_visible = m_deviceListener->hasMouse();
 }
 
-QEGLPlatformCursorDeviceListener::QEGLPlatformCursorDeviceListener(QDeviceDiscovery *dd, QEGLPlatformCursor *cursor)
-    : m_cursor(cursor)
-{
-    m_mouseCount = dd->scanConnectedDevices().count();
-    connect(dd, SIGNAL(deviceDetected(QString)), SLOT(onDeviceAdded()));
-    connect(dd, SIGNAL(deviceRemoved(QString)), SLOT(onDeviceRemoved()));
-}
-
 bool QEGLPlatformCursorDeviceListener::hasMouse() const
 {
-    return m_mouseCount > 0;
+    return QGuiApplicationPrivate::inputDeviceManager()->deviceCount(QInputDeviceManager::DeviceTypePointer) > 0;
 }
 
-void QEGLPlatformCursorDeviceListener::onDeviceAdded()
+void QEGLPlatformCursorDeviceListener::onDeviceListChanged(QInputDeviceManager::DeviceType type)
 {
-    ++m_mouseCount;
-    m_cursor->updateMouseStatus();
-}
-
-void QEGLPlatformCursorDeviceListener::onDeviceRemoved()
-{
-    --m_mouseCount;
-    m_cursor->updateMouseStatus();
+    if (type == QInputDeviceManager::DeviceTypePointer)
+        m_cursor->updateMouseStatus();
 }
 
 void QEGLPlatformCursor::resetResources()
@@ -263,30 +247,43 @@ bool QEGLPlatformCursor::setCurrentCursor(QCursor *cursor)
 }
 #endif
 
-void QEGLPlatformCursorUpdater::update(const QPoint &pos, const QRegion &rgn)
+class CursorUpdateEvent : public QEvent
 {
-    m_active = false;
-    QWindowSystemInterface::handleExposeEvent(m_screen->topLevelAt(pos), rgn);
-    QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
-}
+public:
+    CursorUpdateEvent(const QPoint &pos, const QRegion &rgn)
+        : QEvent(QEvent::Type(QEvent::User + 1)),
+          m_pos(pos),
+          m_region(rgn)
+        { }
+    QPoint pos() const { return m_pos; }
+    QRegion region() const { return m_region; }
 
-void QEGLPlatformCursorUpdater::scheduleUpdate(const QPoint &pos, const QRegion &rgn)
+private:
+    QPoint m_pos;
+    QRegion m_region;
+};
+
+bool QEGLPlatformCursor::event(QEvent *e)
 {
-    if (m_active)
-        return;
-
-    m_active = true;
-
-    // Must not flush the window system events directly from here since we are likely to
-    // be a called directly from QGuiApplication's processMouseEvents. Flushing events
-    // could cause reentering by dispatching more queued mouse events.
-    QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection,
-                              Q_ARG(QPoint, pos), Q_ARG(QRegion, rgn));
+    if (e->type() == QEvent::User + 1) {
+        CursorUpdateEvent *ev = static_cast<CursorUpdateEvent *>(e);
+        m_updateRequested = false;
+        QWindowSystemInterface::handleExposeEvent(m_screen->topLevelAt(ev->pos()), ev->region());
+        QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
+        return true;
+    }
+    return QPlatformCursor::event(e);
 }
 
 void QEGLPlatformCursor::update(const QRegion &rgn)
 {
-    m_updater.scheduleUpdate(m_cursor.pos, rgn);
+    if (!m_updateRequested) {
+        // Must not flush the window system events directly from here since we are likely to
+        // be a called directly from QGuiApplication's processMouseEvents. Flushing events
+        // could cause reentering by dispatching more queued mouse events.
+        m_updateRequested = true;
+        QCoreApplication::postEvent(this, new CursorUpdateEvent(m_cursor.pos, rgn));
+    }
 }
 
 QRect QEGLPlatformCursor::cursorRect() const
@@ -301,9 +298,11 @@ QPoint QEGLPlatformCursor::pos() const
 
 void QEGLPlatformCursor::setPos(const QPoint &pos)
 {
+    QGuiApplicationPrivate::inputDeviceManager()->setCursorPos(pos);
     const QRect oldCursorRect = cursorRect();
     m_cursor.pos = pos;
     update(oldCursorRect | cursorRect());
+    m_screen->handleCursorMove(m_cursor.pos);
 }
 
 void QEGLPlatformCursor::pointerEvent(const QMouseEvent &event)
@@ -313,6 +312,7 @@ void QEGLPlatformCursor::pointerEvent(const QMouseEvent &event)
     const QRect oldCursorRect = cursorRect();
     m_cursor.pos = event.screenPos().toPoint();
     update(oldCursorRect | cursorRect());
+    m_screen->handleCursorMove(m_cursor.pos);
 }
 
 void QEGLPlatformCursor::paintOnScreen()
@@ -380,6 +380,7 @@ void QEGLPlatformCursor::draw(const QRectF &r)
         s2, t1
     };
 
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_cursor.texture);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
@@ -391,6 +392,8 @@ void QEGLPlatformCursor::draw(const QRectF &r)
 
     m_program->setUniformValue(m_textureEntry, 0);
 
+    glDisable(GL_CULL_FACE);
+    glFrontFace(GL_CCW);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST); // disable depth testing to make sure cursor is always on top

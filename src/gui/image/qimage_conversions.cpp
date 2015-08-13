@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,8 +34,8 @@
 #include <private/qdrawhelper_p.h>
 #include <private/qguiapplication_p.h>
 #include <private/qsimd_p.h>
-
 #include <private/qimage_p.h>
+#include <qendian.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -100,9 +100,30 @@ void qGamma_correct_back_to_linear_cs(QImage *image)
   Internal routines for converting image depth.
  *****************************************************************************/
 
-// Cannot be used with indexed formats.
+// The drawhelper conversions from/to RGB32 are passthroughs which is not always correct for general image conversion.
+static const uint *QT_FASTCALL convertRGB32FromARGB32PM(uint *buffer, const uint *src, int count,
+                                                        const QPixelLayout *, const QRgb *)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = 0xff000000 | qUnpremultiply(src[i]);
+    return buffer;
+}
+
+static const uint *QT_FASTCALL convertRGB32ToARGB32PM(uint *buffer, const uint *src, int count,
+                                                      const QPixelLayout *, const QRgb *)
+{
+    for (int i = 0; i < count; ++i)
+        buffer[i] = 0xff000000 |src[i];
+    return buffer;
+}
+
+#ifdef QT_COMPILER_SUPPORTS_SSE4_1
+extern const uint *QT_FASTCALL convertRGB32FromARGB32PM_sse4(uint *buffer, const uint *src, int count, const QPixelLayout *, const QRgb *);
+#endif
+
 void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
 {
+    // Cannot be used with indexed formats.
     Q_ASSERT(dest->format > QImage::Format_Indexed8);
     Q_ASSERT(src->format > QImage::Format_Indexed8);
     const int buffer_size = 2048;
@@ -112,16 +133,33 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
     const uchar *srcData = src->data;
     uchar *destData = dest->data;
 
-    FetchPixelsFunc fetch = qFetchPixels[srcLayout->bpp];
-    StorePixelsFunc store = qStorePixels[destLayout->bpp];
+    const FetchPixelsFunc fetch = qFetchPixels[srcLayout->bpp];
+    const StorePixelsFunc store = qStorePixels[destLayout->bpp];
+    ConvertFunc convertToARGB32PM = srcLayout->convertToARGB32PM;
+    ConvertFunc convertFromARGB32PM = destLayout->convertFromARGB32PM;
+    if (srcLayout->alphaWidth == 0 && destLayout->convertFromRGB32) {
+        // If the source doesn't have an alpha channel, we can use the faster convertFromRGB32 method.
+        convertFromARGB32PM = destLayout->convertFromRGB32;
+    } else {
+        if (src->format == QImage::Format_RGB32)
+            convertToARGB32PM = convertRGB32ToARGB32PM;
+        if (dest->format == QImage::Format_RGB32) {
+#ifdef QT_COMPILER_SUPPORTS_SSE4_1
+            if (qCpuHasFeature(SSE4_1))
+                convertFromARGB32PM = convertRGB32FromARGB32PM_sse4;
+            else
+#endif
+                convertFromARGB32PM = convertRGB32FromARGB32PM;
+        }
+    }
 
     for (int y = 0; y < src->height; ++y) {
         int x = 0;
         while (x < src->width) {
             int l = qMin(src->width - x, buffer_size);
             const uint *ptr = fetch(buffer, srcData, x, l);
-            ptr = srcLayout->convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
-            ptr = destLayout->convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
+            ptr = convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
+            ptr = convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
             store(destData, ptr, x, l);
             x += l;
         }
@@ -130,9 +168,9 @@ void convert_generic(QImageData *dest, const QImageData *src, Qt::ImageConversio
     }
 }
 
-// Cannot be used with indexed formats or between formats with different pixel depths.
 bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::ImageConversionFlags)
 {
+    // Cannot be used with indexed formats or between formats with different pixel depths.
     Q_ASSERT(dst_format > QImage::Format_Indexed8);
     Q_ASSERT(data->format > QImage::Format_Indexed8);
     if (data->depth != qt_depthForFormat(dst_format))
@@ -142,19 +180,35 @@ bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::Im
     uint buffer[buffer_size];
     const QPixelLayout *srcLayout = &qPixelLayouts[data->format];
     const QPixelLayout *destLayout = &qPixelLayouts[dst_format];
-
     uchar *srcData = data->data;
 
-    FetchPixelsFunc fetch = qFetchPixels[srcLayout->bpp];
-    StorePixelsFunc store = qStorePixels[destLayout->bpp];
+    const FetchPixelsFunc fetch = qFetchPixels[srcLayout->bpp];
+    const StorePixelsFunc store = qStorePixels[destLayout->bpp];
+    ConvertFunc convertToARGB32PM = srcLayout->convertToARGB32PM;
+    ConvertFunc convertFromARGB32PM = destLayout->convertFromARGB32PM;
+    if (srcLayout->alphaWidth == 0 && destLayout->convertFromRGB32) {
+        // If the source doesn't have an alpha channel, we can use the faster convertFromRGB32 method.
+        convertFromARGB32PM = destLayout->convertFromRGB32;
+    } else {
+        if (data->format == QImage::Format_RGB32)
+            convertToARGB32PM = convertRGB32ToARGB32PM;
+        if (dst_format == QImage::Format_RGB32) {
+#ifdef QT_COMPILER_SUPPORTS_SSE4_1
+            if (qCpuHasFeature(SSE4_1))
+                convertFromARGB32PM = convertRGB32FromARGB32PM_sse4;
+            else
+#endif
+                convertFromARGB32PM = convertRGB32FromARGB32PM;
+        }
+    }
 
     for (int y = 0; y < data->height; ++y) {
         int x = 0;
         while (x < data->width) {
             int l = qMin(data->width - x, buffer_size);
             const uint *ptr = fetch(buffer, srcData, x, l);
-            ptr = srcLayout->convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
-            ptr = destLayout->convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
+            ptr = convertToARGB32PM(buffer, ptr, l, srcLayout, 0);
+            ptr = convertFromARGB32PM(buffer, ptr, l, destLayout, 0);
             // The conversions might be passthrough and not use the buffer, in that case we are already done.
             if (srcData != (const uchar*)ptr)
                 store(srcData, ptr, x, l);
@@ -219,28 +273,109 @@ static void convert_ARGB_to_ARGB_PM(QImageData *dest, const QImageData *src, Qt:
     }
 }
 
-extern bool convert_ARGB_to_ARGB_PM_inplace_sse2(QImageData *data, Qt::ImageConversionFlags);
-
-#ifndef __SSE2__
-static bool convert_ARGB_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConversionFlags)
+Q_GUI_EXPORT void QT_FASTCALL qt_convert_rgb888_to_rgb32(quint32 *dest_data, const uchar *src_data, int len)
 {
-    Q_ASSERT(data->format == QImage::Format_ARGB32);
-
-    const int pad = (data->bytes_per_line >> 2) - data->width;
-    QRgb *rgb_data = (QRgb *) data->data;
-
-    for (int i = 0; i < data->height; ++i) {
-        const QRgb *end = rgb_data + data->width;
-        while (rgb_data < end) {
-            *rgb_data = PREMUL(*rgb_data);
-            ++rgb_data;
-        }
-        rgb_data += pad;
+    int pixel = 0;
+    // prolog: align input to 32bit
+    while ((quintptr(src_data) & 0x3) && pixel < len) {
+        *dest_data = 0xff000000 | (src_data[0] << 16) | (src_data[1] << 8) | (src_data[2]);
+        src_data += 3;
+        ++dest_data;
+        ++pixel;
     }
-    data->format = QImage::Format_ARGB32_Premultiplied;
-    return true;
+
+    // Handle 4 pixels at a time 12 bytes input to 16 bytes output.
+    for (; pixel + 3 < len; pixel += 4) {
+        const quint32 *src_packed = (const quint32 *) src_data;
+        const quint32 src1 = qFromBigEndian(src_packed[0]);
+        const quint32 src2 = qFromBigEndian(src_packed[1]);
+        const quint32 src3 = qFromBigEndian(src_packed[2]);
+
+        dest_data[0] = 0xff000000 | (src1 >> 8);
+        dest_data[1] = 0xff000000 | (src1 << 16) | (src2 >> 16);
+        dest_data[2] = 0xff000000 | (src2 << 8) | (src3 >> 24);
+        dest_data[3] = 0xff000000 | src3;
+
+        src_data += 12;
+        dest_data += 4;
+    }
+
+    // epilog: handle left over pixels
+    for (; pixel < len; ++pixel) {
+        *dest_data = 0xff000000 | (src_data[0] << 16) | (src_data[1] << 8) | (src_data[2]);
+        src_data += 3;
+        ++dest_data;
+    }
 }
+
+Q_GUI_EXPORT void QT_FASTCALL qt_convert_rgb888_to_rgbx8888(quint32 *dest_data, const uchar *src_data, int len)
+{
+    int pixel = 0;
+    // prolog: align input to 32bit
+    while ((quintptr(src_data) & 0x3) && pixel < len) {
+        *dest_data = ARGB2RGBA(0xff000000 | (src_data[0] << 16) | (src_data[1] << 8) | (src_data[2]));
+        src_data += 3;
+        ++dest_data;
+        ++pixel;
+    }
+
+    // Handle 4 pixels at a time 12 bytes input to 16 bytes output.
+    for (; pixel + 3 < len; pixel += 4) {
+        const quint32 *src_packed = (const quint32 *) src_data;
+        const quint32 src1 = src_packed[0];
+        const quint32 src2 = src_packed[1];
+        const quint32 src3 = src_packed[2];
+
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+        dest_data[0] = 0xff000000 | src1;
+        dest_data[1] = 0xff000000 | (src1 >> 24) | (src2 << 8);
+        dest_data[2] = 0xff000000 | (src2 >> 16) | (src3 << 16);
+        dest_data[3] = 0xff000000 | (src3 >> 8);
+#else
+        dest_data[0] = 0xff | src1;
+        dest_data[1] = 0xff | (src1 << 24) | (src2 >> 8);
+        dest_data[2] = 0xff | (src2 << 16) | (src3 >> 16);
+        dest_data[3] = 0xff | (src3 << 8);
 #endif
+
+        src_data += 12;
+        dest_data += 4;
+    }
+
+    // epilog: handle left over pixels
+    for (; pixel < len; ++pixel) {
+        *dest_data = ARGB2RGBA(0xff000000 | (src_data[0] << 16) | (src_data[1] << 8) | (src_data[2]));
+        src_data += 3;
+        ++dest_data;
+    }
+}
+
+typedef void (QT_FASTCALL *Rgb888ToRgbConverter)(quint32 *dst, const uchar *src, int len);
+
+template <bool rgbx>
+static void convert_RGB888_to_RGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_RGB888);
+    if (rgbx)
+        Q_ASSERT(dest->format == QImage::Format_RGBX8888 || dest->format == QImage::Format_RGBA8888 || dest->format == QImage::Format_RGBA8888_Premultiplied);
+    else
+        Q_ASSERT(dest->format == QImage::Format_RGB32 || dest->format == QImage::Format_ARGB32 || dest->format == QImage::Format_ARGB32_Premultiplied);
+    Q_ASSERT(src->width == dest->width);
+    Q_ASSERT(src->height == dest->height);
+
+    const uchar *src_data = (uchar *) src->data;
+    quint32 *dest_data = (quint32 *) dest->data;
+
+    Rgb888ToRgbConverter line_converter= rgbx ? qt_convert_rgb888_to_rgbx8888 : qt_convert_rgb888_to_rgb32;
+
+    for (int i = 0; i < src->height; ++i) {
+        line_converter(dest_data, src_data, src->width);
+        src_data += src->bytes_per_line;
+        dest_data = (quint32 *)((uchar*)dest_data + dest->bytes_per_line);
+    }
+}
+
+extern bool convert_ARGB_to_ARGB_PM_inplace_sse2(QImageData *data, Qt::ImageConversionFlags);
 
 static void convert_ARGB_to_RGBx(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
 {
@@ -290,50 +425,26 @@ static void convert_ARGB_to_RGBA(QImageData *dest, const QImageData *src, Qt::Im
     }
 }
 
+template<QImage::Format DestFormat>
 static bool convert_ARGB_to_RGBA_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_ARGB32 || data->format == QImage::Format_ARGB32_Premultiplied);
 
     const int pad = (data->bytes_per_line >> 2) - data->width;
     quint32 *rgb_data = (quint32 *) data->data;
+    Q_CONSTEXPR uint mask = (DestFormat == QImage::Format_RGBX8888) ? 0xff000000 : 0;
 
     for (int i = 0; i < data->height; ++i) {
         const quint32 *end = rgb_data + data->width;
         while (rgb_data < end) {
-            *rgb_data = ARGB2RGBA(*rgb_data);
+            *rgb_data = ARGB2RGBA(*rgb_data | mask);
             ++rgb_data;
         }
         rgb_data += pad;
     }
-    if (data->format == QImage::Format_ARGB32)
-        data->format = QImage::Format_RGBA8888;
-    else
-        data->format = QImage::Format_RGBA8888_Premultiplied;
+
+    data->format = DestFormat;
     return true;
-}
-
-static void convert_ARGB_to_RGBA_PM(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32);
-    Q_ASSERT(dest->format == QImage::Format_RGBA8888_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = ARGB2RGBA(qPremultiply(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
 }
 
 static void convert_RGBA_to_ARGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
@@ -360,70 +471,24 @@ static void convert_RGBA_to_ARGB(QImageData *dest, const QImageData *src, Qt::Im
     }
 }
 
+template<QImage::Format DestFormat>
 static bool convert_RGBA_to_ARGB_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_RGBX8888 || data->format == QImage::Format_RGBA8888 || data->format == QImage::Format_RGBA8888_Premultiplied);
 
     const int pad = (data->bytes_per_line >> 2) - data->width;
     QRgb *rgb_data = (QRgb *) data->data;
+    Q_CONSTEXPR uint mask = (DestFormat == QImage::Format_RGB32) ? 0xff000000 : 0;
 
     for (int i = 0; i < data->height; ++i) {
         const QRgb *end = rgb_data + data->width;
         while (rgb_data < end) {
-            *rgb_data = RGBA2ARGB(*rgb_data);
+            *rgb_data = mask | RGBA2ARGB(*rgb_data);
             ++rgb_data;
         }
         rgb_data += pad;
     }
-    if (data->format == QImage::Format_RGBA8888_Premultiplied)
-        data->format = QImage::Format_ARGB32_Premultiplied;
-    else if (data->format == QImage::Format_RGBX8888)
-        data->format = QImage::Format_RGB32;
-    else
-        data->format = QImage::Format_ARGB32;
-    return true;
-}
-
-static void convert_RGBA_to_ARGB_PM(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_RGBA8888);
-    Q_ASSERT(dest->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qPremultiply(RGBA2ARGB(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static bool convert_RGBA_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(data->format == QImage::Format_RGBA8888);
-
-    const int pad = (data->bytes_per_line >> 2) - data->width;
-    QRgb *rgb_data = (QRgb *) data->data;
-
-    for (int i = 0; i < data->height; ++i) {
-        const QRgb *end = rgb_data + data->width;
-        while (rgb_data < end) {
-            *rgb_data = qPremultiply(RGBA2ARGB(*rgb_data));
-            ++rgb_data;
-        }
-        rgb_data += pad;
-    }
-    data->format = QImage::Format_ARGB32_Premultiplied;
+    data->format = DestFormat;
     return true;
 }
 
@@ -432,8 +497,7 @@ static void convert_RGB_to_RGB30(QImageData *dest, const QImageData *src, Qt::Im
 {
 
     Q_ASSERT(src->format == QImage::Format_RGB32 || src->format == QImage::Format_ARGB32);
-    Q_ASSERT(dest->format == QImage::Format_BGR30 ||  dest->format == QImage::Format_A2BGR30_Premultiplied
-             || dest->format == QImage::Format_RGB30 || dest->format == QImage::Format_A2RGB30_Premultiplied);
+    Q_ASSERT(dest->format == QImage::Format_BGR30 || dest->format == QImage::Format_RGB30);
     Q_ASSERT(src->width == dest->width);
     Q_ASSERT(src->height == dest->height);
 
@@ -455,128 +519,24 @@ static void convert_RGB_to_RGB30(QImageData *dest, const QImageData *src, Qt::Im
 }
 
 template<QtPixelOrder PixelOrder>
-static void convert_RGB30_to_RGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+static bool convert_RGB_to_RGB30_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
-    Q_ASSERT(src->format == QImage::Format_BGR30 || src->format == QImage::Format_RGB30);
-    Q_ASSERT(dest->format == QImage::Format_RGB32 || dest->format == QImage::Format_ARGB32 || dest->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
+    Q_ASSERT(data->format == QImage::Format_RGB32 || data->format == QImage::Format_ARGB32);
 
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
+    const int pad = (data->bytes_per_line >> 2) - data->width;
+    QRgb *rgb_data = (QRgb *) data->data;
 
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qConvertA2rgb30ToArgb32<PixelOrder>(*src_data);
-            ++src_data;
-            ++dest_data;
+    for (int i = 0; i < data->height; ++i) {
+        const QRgb *end = rgb_data + data->width;
+        while (rgb_data < end) {
+            *rgb_data = qConvertRgb32ToRgb30<PixelOrder>(*rgb_data);
+            ++rgb_data;
         }
-        src_data += src_pad;
-        dest_data += dest_pad;
+        rgb_data += pad;
     }
-}
 
-template<QtPixelOrder PixelOrder>
-static void convert_A2RGB30_PM_to_RGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_A2RGB30_Premultiplied || src->format == QImage::Format_A2BGR30_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_RGB32);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = 0xff000000 | qUnpremultiply(qConvertA2rgb30ToArgb32<PixelOrder>(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-template<QtPixelOrder PixelOrder>
-static void convert_ARGB_PM_to_RGB30(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_BGR30 || dest->format == QImage::Format_RGB30);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qConvertRgb32ToRgb30<PixelOrder>(qUnpremultiply(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-template<QtPixelOrder PixelOrder>
-static void convert_ARGB_to_A2RGB30(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_A2BGR30_Premultiplied || dest->format == QImage::Format_A2RGB30_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qConvertArgb32ToA2rgb30<PixelOrder>(*src_data);
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-template<QtPixelOrder PixelOrder>
-static void convert_A2RGB30_to_ARGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_A2BGR30_Premultiplied || src->format == QImage::Format_A2RGB30_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const quint32 *src_data = (quint32 *) src->data;
-    quint32 *dest_data = (quint32 *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const quint32 *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qConvertA2rgb30ToArgb32<PixelOrder>(*src_data);
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
+    data->format = (PixelOrder == PixelOrderRGB) ? QImage::Format_RGB30 : QImage::Format_BGR30;
+    return true;
 }
 
 static inline uint qUnpremultiplyRgb30(uint rgb30)
@@ -592,7 +552,7 @@ static inline uint qUnpremultiplyRgb30(uint rgb30)
     }
     case 2: {
         uint rgb = rgb30 & 0x3fffffff;
-        rgb += rgb >> 1;
+        rgb += (rgb >> 1) & 0x5ff7fdff;
         return (a << 30) | rgb;
     }
     case 3:
@@ -602,6 +562,7 @@ static inline uint qUnpremultiplyRgb30(uint rgb30)
     return 0;
 }
 
+template<bool rgbswap>
 static void convert_A2RGB30_PM_to_RGB30(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
 {
     Q_ASSERT(src->format == QImage::Format_A2RGB30_Premultiplied || src->format == QImage::Format_A2BGR30_Premultiplied);
@@ -617,7 +578,8 @@ static void convert_A2RGB30_PM_to_RGB30(QImageData *dest, const QImageData *src,
     for (int i = 0; i < src->height; ++i) {
         const quint32 *end = src_data + src->width;
         while (src_data < end) {
-            *dest_data = 0xc0000000 | qUnpremultiplyRgb30(*src_data);
+            const uint p = 0xc0000000 | qUnpremultiplyRgb30(*src_data);
+            *dest_data = (rgbswap) ? qRgbSwapRgb30(p) : p;
             ++src_data;
             ++dest_data;
         }
@@ -626,6 +588,7 @@ static void convert_A2RGB30_PM_to_RGB30(QImageData *dest, const QImageData *src,
     }
 }
 
+template<bool rgbswap>
 static bool convert_A2RGB30_PM_to_RGB30_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_A2RGB30_Premultiplied || data->format == QImage::Format_A2BGR30_Premultiplied);
@@ -636,16 +599,17 @@ static bool convert_A2RGB30_PM_to_RGB30_inplace(QImageData *data, Qt::ImageConve
     for (int i = 0; i < data->height; ++i) {
         const uint *end = rgb_data + data->width;
         while (rgb_data < end) {
-            *rgb_data = 0xc0000000 | qUnpremultiplyRgb30(*rgb_data);
+            const uint p = 0xc0000000 | qUnpremultiplyRgb30(*rgb_data);
+            *rgb_data = (rgbswap) ? qRgbSwapRgb30(p) : p;
             ++rgb_data;
         }
         rgb_data += pad;
     }
 
     if (data->format == QImage::Format_A2RGB30_Premultiplied)
-        data->format = QImage::Format_RGB30;
+        data->format = (rgbswap) ? QImage::Format_BGR30 : QImage::Format_RGB30;
     else
-        data->format = QImage::Format_BGR30;
+        data->format = (rgbswap) ? QImage::Format_RGB30 : QImage::Format_BGR30;
     return true;
 }
 
@@ -713,9 +677,69 @@ static bool convert_BGR30_to_RGB30_inplace(QImageData *data, Qt::ImageConversion
     return true;
 }
 
+static bool convert_BGR30_to_A2RGB30_inplace(QImageData *data, Qt::ImageConversionFlags flags)
+{
+    Q_ASSERT(data->format == QImage::Format_RGB30 || data->format == QImage::Format_BGR30);
+    if (!convert_BGR30_to_RGB30_inplace(data, flags))
+        return false;
+
+    if (data->format == QImage::Format_RGB30)
+        data->format = QImage::Format_A2RGB30_Premultiplied;
+    else
+        data->format = QImage::Format_A2BGR30_Premultiplied;
+    return true;
+}
+
+template<QtPixelOrder PixelOrder>
+static void convert_A2RGB30_PM_to_ARGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_A2RGB30_Premultiplied || src->format == QImage::Format_A2BGR30_Premultiplied);
+    Q_ASSERT(dest->format == QImage::Format_ARGB32);
+    Q_ASSERT(src->width == dest->width);
+    Q_ASSERT(src->height == dest->height);
+
+    const int src_pad = (src->bytes_per_line >> 2) - src->width;
+    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
+    const quint32 *src_data = (quint32 *) src->data;
+    quint32 *dest_data = (quint32 *) dest->data;
+
+    for (int i = 0; i < src->height; ++i) {
+        const quint32 *end = src_data + src->width;
+        while (src_data < end) {
+            *dest_data = qConvertA2rgb30ToArgb32<PixelOrder>(qUnpremultiplyRgb30(*src_data));
+            ++src_data;
+            ++dest_data;
+        }
+        src_data += src_pad;
+        dest_data += dest_pad;
+    }
+}
+
+template<QtPixelOrder PixelOrder>
+static bool convert_A2RGB30_PM_to_ARGB_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_A2RGB30_Premultiplied || data->format == QImage::Format_A2BGR30_Premultiplied);
+
+    const int pad = (data->bytes_per_line >> 2) - data->width;
+    uint *rgb_data = (uint *) data->data;
+
+    for (int i = 0; i < data->height; ++i) {
+        const uint *end = rgb_data + data->width;
+        while (rgb_data < end) {
+            *rgb_data = qConvertA2rgb30ToArgb32<PixelOrder>(qUnpremultiplyRgb30(*rgb_data));
+            ++rgb_data;
+        }
+        rgb_data += pad;
+    }
+    data->format = QImage::Format_ARGB32;
+    return true;
+}
+
 static bool convert_indexed8_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
+    if (!data->own_data)
+        return false;
     const int depth = 32;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -765,9 +789,11 @@ static bool convert_indexed8_to_ARGB_PM_inplace(QImageData *data, Qt::ImageConve
     return true;
 }
 
-static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversionFlags)
+static bool convert_indexed8_to_ARGB_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
+    if (!data->own_data)
+        return false;
     const int depth = 32;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -806,7 +832,7 @@ static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversio
     }
 
     data->colortable = QVector<QRgb>();
-    data->format = QImage::Format_RGB32;
+    data->format = QImage::Format_ARGB32;
     data->bytes_per_line = dst_bytes_per_line;
     data->depth = depth;
     data->nbytes = nbytes;
@@ -814,9 +840,29 @@ static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversio
     return true;
 }
 
+static bool convert_indexed8_to_RGB_inplace(QImageData *data, Qt::ImageConversionFlags flags)
+{
+    Q_ASSERT(data->format == QImage::Format_Indexed8);
+    if (!data->own_data)
+        return false;
+
+    if (data->has_alpha_clut) {
+        for (int i = 0; i < data->colortable.size(); ++i)
+            data->colortable[i] |= 0xff000000;
+    }
+
+    if (!convert_indexed8_to_ARGB_inplace(data, flags))
+        return false;
+
+    data->format = QImage::Format_RGB32;
+    return true;
+}
+
 static bool convert_indexed8_to_RGB16_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_Indexed8);
+    if (!data->own_data)
+        return false;
     const int depth = 16;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -872,6 +918,8 @@ static bool convert_indexed8_to_RGB16_inplace(QImageData *data, Qt::ImageConvers
 static bool convert_RGB_to_RGB16_inplace(QImageData *data, Qt::ImageConversionFlags)
 {
     Q_ASSERT(data->format == QImage::Format_RGB32);
+    if (!data->own_data)
+        return false;
     const int depth = 16;
 
     const int dst_bytes_per_line = ((data->width * depth + 31) >> 5) << 2;
@@ -898,7 +946,7 @@ static bool convert_RGB_to_RGB16_inplace(QImageData *data, Qt::ImageConversionFl
     }
 }
 
-static void convert_ARGB_PM_to_ARGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+static void convert_ARGB_PM_to_ARGB(QImageData *dest, const QImageData *src)
 {
     Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied || src->format == QImage::Format_RGBA8888_Premultiplied);
     Q_ASSERT(dest->format == QImage::Format_ARGB32 || dest->format == QImage::Format_RGBA8888);
@@ -914,78 +962,6 @@ static void convert_ARGB_PM_to_ARGB(QImageData *dest, const QImageData *src, Qt:
         const QRgb *end = src_data + src->width;
         while (src_data < end) {
             *dest_data = qUnpremultiply(*src_data);
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_ARGB_PM_to_RGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied || src->format == QImage::Format_RGBA8888_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_RGB32 || dest->format == QImage::Format_RGBX8888);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const QRgb *src_data = (QRgb *) src->data;
-    QRgb *dest_data = (QRgb *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const QRgb *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = 0xff000000 | qUnpremultiply(*src_data);
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_ARGB_PM_to_RGBx(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_RGBX8888);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const QRgb *src_data = (QRgb *) src->data;
-    QRgb *dest_data = (QRgb *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const QRgb *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = ARGB2RGBA(0xff000000 | qUnpremultiply(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_ARGB_PM_to_RGBA(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_ARGB32_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_RGBA8888);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const QRgb *src_data = (QRgb *) src->data;
-    QRgb *dest_data = (QRgb *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const QRgb *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = ARGB2RGBA(qUnpremultiply(*src_data));
             ++src_data;
             ++dest_data;
         }
@@ -1010,78 +986,6 @@ static void convert_RGBA_to_RGB(QImageData *dest, const QImageData *src, Qt::Ima
         const uint *end = src_data + src->width;
         while (src_data < end) {
             *dest_data = RGBA2ARGB(*src_data) | 0xff000000;
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_RGB_to_RGBA(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_RGB32);
-    Q_ASSERT(dest->format == QImage::Format_RGBX8888 || dest->format == QImage::Format_RGBA8888 || dest->format == QImage::Format_RGBA8888_Premultiplied);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const uint *src_data = (const uint *)src->data;
-    uint *dest_data = (uint *)dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const uint *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = ARGB2RGBA(*src_data | 0xff000000);
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_RGBA_PM_to_ARGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_RGBA8888_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_ARGB32);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const QRgb *src_data = (QRgb *) src->data;
-    QRgb *dest_data = (QRgb *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const QRgb *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = qUnpremultiply(RGBA2ARGB(*src_data));
-            ++src_data;
-            ++dest_data;
-        }
-        src_data += src_pad;
-        dest_data += dest_pad;
-    }
-}
-
-static void convert_RGBA_PM_to_RGB(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
-{
-    Q_ASSERT(src->format == QImage::Format_RGBA8888_Premultiplied);
-    Q_ASSERT(dest->format == QImage::Format_RGB32);
-    Q_ASSERT(src->width == dest->width);
-    Q_ASSERT(src->height == dest->height);
-
-    const int src_pad = (src->bytes_per_line >> 2) - src->width;
-    const int dest_pad = (dest->bytes_per_line >> 2) - dest->width;
-    const QRgb *src_data = (QRgb *) src->data;
-    QRgb *dest_data = (QRgb *) dest->data;
-
-    for (int i = 0; i < src->height; ++i) {
-        const QRgb *end = src_data + src->width;
-        while (src_data < end) {
-            *dest_data = 0xff000000 | qUnpremultiply(RGBA2ARGB(*src_data));
             ++src_data;
             ++dest_data;
         }
@@ -1133,6 +1037,27 @@ static void mask_alpha_converter(QImageData *dest, const QImageData *src, Qt::Im
     }
 }
 
+template<QImage::Format DestFormat>
+static bool mask_alpha_converter_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_RGB32
+            || DestFormat == QImage::Format_RGB32
+            || DestFormat == QImage::Format_RGBX8888);
+    const int pad = (data->bytes_per_line >> 2) - data->width;
+    QRgb *rgb_data = (QRgb *) data->data;
+
+    for (int i = 0; i < data->height; ++i) {
+        const QRgb *end = rgb_data + data->width;
+        while (rgb_data < end) {
+            *rgb_data = *rgb_data | 0xff000000;
+            ++rgb_data;
+        }
+        rgb_data += pad;
+    }
+    data->format = DestFormat;
+    return true;
+}
+
 static void mask_alpha_converter_RGBx(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags flags)
 {
 #if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
@@ -1157,6 +1082,29 @@ static void mask_alpha_converter_RGBx(QImageData *dest, const QImageData *src, Q
         src_data += src_pad;
         dest_data += dest_pad;
     }
+#endif
+}
+
+static bool mask_alpha_converter_rgbx_inplace(QImageData *data, Qt::ImageConversionFlags flags)
+{
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+    return mask_alpha_converter_inplace<QImage::Format_RGBX8888>(data, flags);
+#else
+    Q_UNUSED(flags);
+
+    const int pad = (data->bytes_per_line >> 2) - data->width;
+    QRgb *rgb_data = (QRgb *) data->data;
+
+    for (int i = 0; i < data->height; ++i) {
+        const QRgb *end = rgb_data + data->width;
+        while (rgb_data < end) {
+            *rgb_data = *rgb_data | 0x000000fff;
+            ++rgb_data;
+        }
+        rgb_data += pad;
+    }
+    data->format = DestFormat;
+    return true;
 #endif
 }
 
@@ -1251,12 +1199,12 @@ void dither_to_Mono(QImageData *dst, const QImageData *src,
         } else {                                // 32 bit image
             if (fromalpha) {
                 while (p < end) {
-                    *b2++ = 255 - (*(uint*)p >> 24);
+                    *b2++ = 255 - (*(const uint*)p >> 24);
                     p += 4;
                 }
             } else {
                 while (p < end) {
-                    *b2++ = qGray(*(uint*)p);
+                    *b2++ = qGray(*(const uint*)p);
                     p += 4;
                 }
             }
@@ -1274,12 +1222,12 @@ void dither_to_Mono(QImageData *dst, const QImageData *src,
                 } else {                        // 24 bit image
                     if (fromalpha) {
                         while (p < end) {
-                            *b2++ = 255 - (*(uint*)p >> 24);
+                            *b2++ = 255 - (*(const uint*)p >> 24);
                             p += 4;
                         }
                     } else {
                         while (p < end) {
-                            *b2++ = qGray(*(uint*)p);
+                            *b2++ = qGray(*(const uint*)p);
                             p += 4;
                         }
                     }
@@ -1457,7 +1405,7 @@ static void convert_X_to_Mono(QImageData *dst, const QImageData *src, Qt::ImageC
 static void convert_ARGB_PM_to_Mono(QImageData *dst, const QImageData *src, Qt::ImageConversionFlags flags)
 {
     QScopedPointer<QImageData> tmp(QImageData::create(QSize(src->width, src->height), QImage::Format_ARGB32));
-    convert_ARGB_PM_to_ARGB(tmp.data(), src, flags);
+    convert_ARGB_PM_to_ARGB(tmp.data(), src);
     dither_to_Mono(dst, tmp.data(), flags, false);
 }
 
@@ -1737,7 +1685,7 @@ static void convert_RGB_to_Indexed8(QImageData *dst, const QImageData *src, Qt::
 static void convert_ARGB_PM_to_Indexed8(QImageData *dst, const QImageData *src, Qt::ImageConversionFlags flags)
 {
     QScopedPointer<QImageData> tmp(QImageData::create(QSize(src->width, src->height), QImage::Format_ARGB32));
-    convert_ARGB_PM_to_ARGB(tmp.data(), src, flags);
+    convert_ARGB_PM_to_ARGB(tmp.data(), src);
     convert_RGB_to_Indexed8(dst, tmp.data(), flags);
 }
 
@@ -1861,11 +1809,154 @@ static void convert_Mono_to_Indexed8(QImageData *dest, const QImageData *src, Qt
     }
 }
 
+static void convert_Indexed8_to_Alpha8(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_Indexed8);
+    Q_ASSERT(dest->format == QImage::Format_Alpha8);
+
+    uchar translate[256];
+    const QVector<QRgb> &colors = src->colortable;
+    bool simpleCase = (colors.size() == 256);
+    for (int i = 0; i < colors.size(); ++i) {
+        uchar alpha = qAlpha(colors[i]);
+        translate[i] = alpha;
+        simpleCase = simpleCase && (alpha == i);
+    }
+
+    if (simpleCase)
+        memcpy(dest->data, src->data, src->bytes_per_line * src->height);
+    else {
+        int size = src->bytes_per_line * src->height;
+        for (int i = 0; i < size; ++i) {
+            dest->data[i] = translate[src->data[i]];
+        }
+    }
+}
+
+static void convert_Indexed8_to_Grayscale8(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_Indexed8);
+    Q_ASSERT(dest->format == QImage::Format_Grayscale8);
+
+    uchar translate[256];
+    const QVector<QRgb> &colors = src->colortable;
+    bool simpleCase = (colors.size() == 256);
+    for (int i = 0; i < colors.size(); ++i) {
+        uchar gray = qGray(colors[i]);
+        translate[i] = gray;
+        simpleCase = simpleCase && (gray == i);
+    }
+
+    if (simpleCase)
+        memcpy(dest->data, src->data, src->bytes_per_line * src->height);
+    else {
+        int size = src->bytes_per_line * src->height;
+        for (int i = 0; i < size; ++i) {
+            dest->data[i] = translate[src->data[i]];
+        }
+    }
+}
+
+static bool convert_Indexed8_to_Alpha8_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_Indexed8);
+
+    // Just check if this is an Alpha8 in Indexed8 disguise.
+    const QVector<QRgb> &colors = data->colortable;
+    if (colors.size() != 256)
+        return false;
+    for (int i = 0; i < colors.size(); ++i) {
+        if (i != qAlpha(colors[i]))
+            return false;
+    }
+
+    data->colortable.clear();
+    data->format = QImage::Format_Alpha8;
+
+    return true;
+}
+
+static bool convert_Indexed8_to_Grayscale8_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_Indexed8);
+
+    // Just check if this is a Grayscale8 in Indexed8 disguise.
+    const QVector<QRgb> &colors = data->colortable;
+    if (colors.size() != 256)
+        return false;
+    for (int i = 0; i < colors.size(); ++i) {
+        if (i != qGray(colors[i]))
+            return false;
+    }
+
+    data->colortable.clear();
+    data->format = QImage::Format_Grayscale8;
+
+    return true;
+}
+
+static void convert_Alpha8_to_Indexed8(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_Alpha8);
+    Q_ASSERT(dest->format == QImage::Format_Indexed8);
+
+    memcpy(dest->data, src->data, src->bytes_per_line * src->height);
+
+    QVector<QRgb> colors(256);
+    for (int i=0; i<256; ++i)
+        colors[i] = qRgba(0, 0, 0, i);
+
+    dest->colortable = colors;
+}
+
+static void convert_Grayscale8_to_Indexed8(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(src->format == QImage::Format_Grayscale8);
+    Q_ASSERT(dest->format == QImage::Format_Indexed8);
+
+    memcpy(dest->data, src->data, src->bytes_per_line * src->height);
+
+    QVector<QRgb> colors(256);
+    for (int i=0; i<256; ++i)
+        colors[i] = qRgb(i, i, i);
+
+    dest->colortable = colors;
+}
+
+static bool convert_Alpha8_to_Indexed8_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_Alpha8);
+
+    QVector<QRgb> colors(256);
+    for (int i=0; i<256; ++i)
+        colors[i] = qRgba(0, 0, 0, i);
+
+    data->colortable = colors;
+    data->format = QImage::Format_Indexed8;
+
+    return true;
+}
+
+static bool convert_Grayscale8_to_Indexed8_inplace(QImageData *data, Qt::ImageConversionFlags)
+{
+    Q_ASSERT(data->format == QImage::Format_Grayscale8);
+
+    QVector<QRgb> colors(256);
+    for (int i=0; i<256; ++i)
+        colors[i] = qRgb(i, i, i);
+
+    data->colortable = colors;
+    data->format = QImage::Format_Indexed8;
+
+    return true;
+}
+
+
 // first index source, second dest
 Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormats] =
 {
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     },
     {
         0,
@@ -1886,7 +1977,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_Mono
 
     {
@@ -1908,7 +1999,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_MonoLSB
 
     {
@@ -1930,7 +2021,9 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0,
+        convert_Indexed8_to_Alpha8,
+        convert_Indexed8_to_Grayscale8,
     }, // Format_Indexed8
 
     {
@@ -1950,13 +2043,14 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        convert_RGB_to_RGBA,
-        convert_RGB_to_RGBA,
-        convert_RGB_to_RGBA,
+        0,
+        0,
+        0,
         convert_RGB_to_RGB30<PixelOrderBGR>,
-        convert_RGB_to_RGB30<PixelOrderBGR>,
+        0,
         convert_RGB_to_RGB30<PixelOrderRGB>,
-        convert_RGB_to_RGB30<PixelOrderRGB>,
+        0,
+        0, 0
     }, // Format_RGB32
 
     {
@@ -1978,11 +2072,12 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         convert_ARGB_to_RGBx,
         convert_ARGB_to_RGBA,
-        convert_ARGB_to_RGBA_PM,
+        0,
         convert_RGB_to_RGB30<PixelOrderBGR>,
         0,
         convert_RGB_to_RGB30<PixelOrderRGB>,
         0,
+        0, 0
     }, // Format_ARGB32
 
     {
@@ -1990,8 +2085,6 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         convert_ARGB_PM_to_Mono,
         convert_ARGB_PM_to_Mono,
         convert_ARGB_PM_to_Indexed8,
-        convert_ARGB_PM_to_RGB,
-        convert_ARGB_PM_to_ARGB,
         0,
         0,
         0,
@@ -2002,13 +2095,16 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        convert_ARGB_PM_to_RGBx,
-        convert_ARGB_PM_to_RGBA,
+        0,
+        0,
+        0,
+        0,
         convert_ARGB_to_RGBA,
-        convert_ARGB_PM_to_RGB30<PixelOrderBGR>,
-        convert_ARGB_to_A2RGB30<PixelOrderBGR>,
-        convert_ARGB_PM_to_RGB30<PixelOrderRGB>,
-        convert_ARGB_to_A2RGB30<PixelOrderRGB>,
+        0,
+        0,
+        0,
+        0,
+        0, 0
     },  // Format_ARGB32_Premultiplied
 
     {
@@ -2030,7 +2126,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB16
 
     {
@@ -2052,7 +2148,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB8565_Premultiplied
 
     {
@@ -2074,7 +2170,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB666
 
     {
@@ -2096,7 +2192,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB6666_Premultiplied
 
     {
@@ -2118,7 +2214,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB555
 
     {
@@ -2140,7 +2236,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB8555_Premultiplied
 
     {
@@ -2148,6 +2244,9 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
+        convert_RGB888_to_RGB<false>,
+        convert_RGB888_to_RGB<false>,
+        convert_RGB888_to_RGB<false>,
         0,
         0,
         0,
@@ -2157,12 +2256,10 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0, 0, 0, 0, 0
+        convert_RGB888_to_RGB<true>,
+        convert_RGB888_to_RGB<true>,
+        convert_RGB888_to_RGB<true>,
+        0, 0, 0, 0, 0, 0
     }, // Format_RGB888
 
     {
@@ -2184,7 +2281,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB444
 
     {
@@ -2205,7 +2302,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB4444_Premultiplied
     {
         0,
@@ -2227,7 +2324,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         mask_alpha_converter_RGBx,
         mask_alpha_converter_RGBx,
-        0, 0, 0, 0
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBX8888
     {
         0,
@@ -2236,7 +2333,7 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         convert_RGBA_to_RGB,
         convert_RGBA_to_ARGB,
-        convert_RGBA_to_ARGB_PM,
+        0,
         0,
         0,
         0,
@@ -2252,9 +2349,9 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         convert_ARGB_to_ARGB_PM,
 #else
         0,
-        0
+        0,
 #endif
-        0, 0, 0, 0
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBA8888
 
     {
@@ -2262,8 +2359,8 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        convert_RGBA_PM_to_RGB,
-        convert_RGBA_PM_to_ARGB,
+        0,
+        0,
         convert_RGBA_to_ARGB,
         0,
         0,
@@ -2274,16 +2371,9 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN
-        convert_ARGB_PM_to_RGB,
-        convert_ARGB_PM_to_ARGB,
-        0,
-#else
         0,
         0,
-        0
-#endif
-        0, 0, 0, 0
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBA8888_Premultiplied
 
     {
@@ -2291,9 +2381,9 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        convert_RGB30_to_RGB<PixelOrderBGR>,
-        convert_RGB30_to_RGB<PixelOrderBGR>,
-        convert_RGB30_to_RGB<PixelOrderBGR>,
+        0,
+        0,
+        0,
         0,
         0,
         0,
@@ -2309,17 +2399,16 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         convert_passthrough,
         convert_BGR30_to_RGB30,
-        convert_BGR30_to_RGB30
+        convert_BGR30_to_RGB30,
+        0, 0
     }, // Format_BGR30
     {
         0,
         0,
         0,
         0,
-        convert_A2RGB30_PM_to_RGB<PixelOrderBGR>,
         0,
-        convert_A2RGB30_to_ARGB<PixelOrderBGR>,
-        0,
+        convert_A2RGB30_PM_to_ARGB<PixelOrderBGR>,
         0,
         0,
         0,
@@ -2331,19 +2420,23 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
-        convert_A2RGB30_PM_to_RGB30,
         0,
         0,
-        convert_BGR30_to_RGB30
+        convert_A2RGB30_PM_to_RGB30<false>,
+        0,
+        convert_A2RGB30_PM_to_RGB30<true>,
+        convert_BGR30_to_RGB30,
+        0, 0
     }, // Format_BGR30A2_Premultiplied
     {
         0,
         0,
         0,
         0,
-        convert_RGB30_to_RGB<PixelOrderRGB>,
-        convert_RGB30_to_RGB<PixelOrderRGB>,
-        convert_RGB30_to_RGB<PixelOrderRGB>,
+        0,
+        0,
+        0,
+        0,
         0,
         0,
         0,
@@ -2357,19 +2450,17 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         convert_BGR30_to_RGB30,
         convert_BGR30_to_RGB30,
-        0,
         0,
         convert_passthrough,
+        0, 0
     }, // Format_RGB30
     {
         0,
         0,
         0,
         0,
-        convert_A2RGB30_PM_to_RGB<PixelOrderRGB>,
         0,
-        convert_A2RGB30_to_ARGB<PixelOrderRGB>,
-        0,
+        convert_A2RGB30_PM_to_ARGB<PixelOrderRGB>,
         0,
         0,
         0,
@@ -2382,30 +2473,73 @@ Image_Converter qimage_converter_map[QImage::NImageFormats][QImage::NImageFormat
         0,
         0,
         0,
+        0,
+        convert_A2RGB30_PM_to_RGB30<true>,
         convert_BGR30_to_RGB30,
-        convert_A2RGB30_PM_to_RGB30,
+        convert_A2RGB30_PM_to_RGB30<false>,
         0,
+        0, 0
     }, // Format_RGB30A2_Premultiplied
+    {
+        0,
+        0,
+        0,
+        convert_Alpha8_to_Indexed8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0, 0, 0, 0, 0, 0, 0
+    }, // Format_Alpha8
+    {
+        0,
+        0,
+        0,
+        convert_Grayscale8_to_Indexed8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0, 0, 0, 0, 0, 0, 0
+    } // Format_Grayscale8
 };
 
 InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QImage::NImageFormats] =
 {
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     },
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_Mono
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_MonoLSB
     {
         0,
         0,
         0,
         0,
-        0,
         convert_indexed8_to_RGB_inplace,
+        convert_indexed8_to_ARGB_inplace,
         convert_indexed8_to_ARGB_PM_inplace,
         convert_indexed8_to_RGB16_inplace,
         0,
@@ -2418,7 +2552,9 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0, 0, 0, 0, 0,
+        convert_Indexed8_to_Alpha8_inplace,
+        convert_Indexed8_to_Grayscale8_inplace,
     }, // Format_Indexed8
     {
         0,
@@ -2426,8 +2562,8 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0,
-        0,
+        mask_alpha_converter_inplace<QImage::Format_ARGB32>,
+        mask_alpha_converter_inplace<QImage::Format_ARGB32_Premultiplied>,
         convert_RGB_to_RGB16_inplace,
         0,
         0,
@@ -2439,19 +2575,24 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0, 0, 0, 0, 0
+        0,
+        convert_RGB_to_RGB30_inplace<PixelOrderBGR>,
+        0,
+        convert_RGB_to_RGB30_inplace<PixelOrderRGB>,
+        0,
+        0, 0
     }, // Format_RGB32
     {
         0,
         0,
         0,
         0,
-        0,
+        mask_alpha_converter_inplace<QImage::Format_RGB32>,
         0,
 #ifdef __SSE2__
         convert_ARGB_to_ARGB_PM_inplace_sse2,
 #else
-        convert_ARGB_to_ARGB_PM_inplace,
+        0,
 #endif
         0,
         0,
@@ -2462,9 +2603,14 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
+        convert_ARGB_to_RGBA_inplace<QImage::Format_RGBX8888>,
+        convert_ARGB_to_RGBA_inplace<QImage::Format_RGBA8888>,
         0,
-        convert_ARGB_to_RGBA_inplace,
-        0, 0, 0, 0, 0
+        convert_RGB_to_RGB30_inplace<PixelOrderBGR>,
+        0,
+        convert_RGB_to_RGB30_inplace<PixelOrderRGB>,
+        0,
+        0, 0
     }, // Format_ARGB32
     {
         0,
@@ -2485,44 +2631,48 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        convert_ARGB_to_RGBA_inplace,
-        0, 0, 0, 0
+        convert_ARGB_to_RGBA_inplace<QImage::Format_RGBA8888_Premultiplied>,
+        0,
+        0,
+        0,
+        0,
+        0, 0
     },  // Format_ARGB32_Premultiplied
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB16
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB8565_Premultiplied
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB666
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB6666_Premultiplied
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB555
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB8555_Premultiplied
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB888
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_RGB444
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     }, // Format_ARGB4444_Premultiplied
     {
         0,
         0,
         0,
         0,
-        0,
-        convert_RGBA_to_ARGB_inplace,
-        convert_RGBA_to_ARGB_inplace,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_RGB32>,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_ARGB32>,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_ARGB32_Premultiplied>,
         0,
         0,
         0,
@@ -2535,18 +2685,15 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         convert_passthrough_inplace<QImage::Format_RGBA8888>,
         convert_passthrough_inplace<QImage::Format_RGBA8888_Premultiplied>,
-        0, 0, 0, 0
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBX8888
     {
         0,
         0,
         0,
         0,
-        0,
-        0,
-        convert_RGBA_to_ARGB_inplace,
-        convert_RGBA_to_ARGB_PM_inplace,
-        0,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_RGB32>,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_ARGB32>,
         0,
         0,
         0,
@@ -2557,7 +2704,15 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0, 0, 0, 0
+        mask_alpha_converter_rgbx_inplace,
+#if Q_BYTE_ORDER == Q_LITTLE_ENDIAN && __SSE2__
+        0,
+        convert_ARGB_to_ARGB_PM_inplace_sse2,
+#else
+        0,
+        0,
+#endif
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBA8888
     {
         0,
@@ -2566,9 +2721,7 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0,
-        convert_RGBA_to_ARGB_inplace,
-        0,
+        convert_RGBA_to_ARGB_inplace<QImage::Format_ARGB32_Premultiplied>,
         0,
         0,
         0,
@@ -2579,7 +2732,9 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0, 0, 0, 0
+        0,
+        0,
+        0, 0, 0, 0, 0, 0
     }, // Format_RGBA8888_Premultiplied
     {
         0,
@@ -2601,10 +2756,11 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0,
+        0, // self
         convert_passthrough_inplace<QImage::Format_A2BGR30_Premultiplied>,
         convert_BGR30_to_RGB30_inplace,
-        convert_BGR30_to_RGB30_inplace
+        convert_BGR30_to_A2RGB30_inplace,
+        0, 0
     }, // Format_BGR30
     {
         0,
@@ -2612,6 +2768,7 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
+        convert_A2RGB30_PM_to_ARGB_inplace<PixelOrderBGR>,
         0,
         0,
         0,
@@ -2625,11 +2782,11 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0,
-        convert_A2RGB30_PM_to_RGB30_inplace,
-        0,
-        0,
-        convert_BGR30_to_RGB30_inplace
+        convert_A2RGB30_PM_to_RGB30_inplace<false>,
+        0, // self
+        convert_A2RGB30_PM_to_RGB30_inplace<true>,
+        convert_BGR30_to_RGB30_inplace,
+        0, 0
     }, // Format_BGR30A2_Premultiplied
     {
         0,
@@ -2652,9 +2809,10 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         convert_BGR30_to_RGB30_inplace,
-        convert_BGR30_to_RGB30_inplace,
-        0,
-        convert_passthrough_inplace<QImage::Format_A2RGB30_Premultiplied>
+        convert_BGR30_to_A2RGB30_inplace,
+        0, // self
+        convert_passthrough_inplace<QImage::Format_A2RGB30_Premultiplied>,
+        0, 0
     }, // Format_RGB30
     {
         0,
@@ -2662,6 +2820,7 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
+        convert_A2RGB30_PM_to_ARGB_inplace<PixelOrderRGB>,
         0,
         0,
         0,
@@ -2675,12 +2834,64 @@ InPlace_Image_Converter qimage_inplace_converter_map[QImage::NImageFormats][QIma
         0,
         0,
         0,
-        0,
-        0,
+        convert_A2RGB30_PM_to_RGB30_inplace<true>,
         convert_BGR30_to_RGB30_inplace,
-        convert_A2RGB30_PM_to_RGB30_inplace,
-        0
+        convert_A2RGB30_PM_to_RGB30_inplace<false>,
+        0, // self
+        0, 0
     }, // Format_RGB30A2_Premultiplied
+    {
+        0,
+        0,
+        0,
+        convert_Alpha8_to_Indexed8_inplace,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0, 0
+    }, // Format_Alpha8
+    {
+        0,
+        0,
+        0,
+        convert_Grayscale8_to_Indexed8_inplace,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0, 0
+    }  // Format_Grayscale8
 };
 
 void qInitImageConversions()
@@ -2691,6 +2902,22 @@ void qInitImageConversions()
         qimage_converter_map[QImage::Format_RGB888][QImage::Format_RGB32] = convert_RGB888_to_RGB32_ssse3;
         qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32] = convert_RGB888_to_RGB32_ssse3;
         qimage_converter_map[QImage::Format_RGB888][QImage::Format_ARGB32_Premultiplied] = convert_RGB888_to_RGB32_ssse3;
+    }
+#endif
+
+#if defined(QT_COMPILER_SUPPORTS_SSE4_1) && !defined(__SSE4_1__)
+    if (qCpuHasFeature(SSE4_1)) {
+        extern void convert_ARGB_to_ARGB_PM_sse4(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags);
+        qimage_converter_map[QImage::Format_ARGB32][QImage::Format_ARGB32_Premultiplied] = convert_ARGB_to_ARGB_PM_sse4;
+        qimage_converter_map[QImage::Format_RGBA8888][QImage::Format_RGBA8888_Premultiplied] = convert_ARGB_to_ARGB_PM_sse4;
+    }
+#endif
+
+#if defined(QT_COMPILER_SUPPORTS_AVX2) && !defined(__AVX2__)
+    if (qCpuHasFeature(AVX2)) {
+        extern void convert_ARGB_to_ARGB_PM_avx2(QImageData *dest, const QImageData *src, Qt::ImageConversionFlags);
+        qimage_converter_map[QImage::Format_ARGB32][QImage::Format_ARGB32_Premultiplied] = convert_ARGB_to_ARGB_PM_avx2;
+        qimage_converter_map[QImage::Format_RGBA8888][QImage::Format_RGBA8888_Premultiplied] = convert_ARGB_to_ARGB_PM_avx2;
     }
 #endif
 

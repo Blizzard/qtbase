@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,9 +61,8 @@ public:
     virtual const char* readPointer(qint64 maximumLength, qint64 &len) = 0;
     virtual bool advanceReadPointer(qint64 amount) = 0;
     virtual bool atEnd() = 0;
+    virtual qint64 pos() { return -1; }
     virtual bool reset() = 0;
-    void disableReset();
-    bool isResetDisabled() { return resetDisabled; }
     virtual qint64 size() = 0;
 
     virtual ~QNonContiguousByteDevice();
@@ -72,7 +71,6 @@ protected:
     QNonContiguousByteDevice();
 
 
-    bool resetDisabled;
 Q_SIGNALS:
     void readyRead();
     void readProgress(qint64 current, qint64 total);
@@ -101,11 +99,12 @@ class QNonContiguousByteDeviceByteArrayImpl : public QNonContiguousByteDevice
 public:
     QNonContiguousByteDeviceByteArrayImpl(QByteArray *ba);
     ~QNonContiguousByteDeviceByteArrayImpl();
-    const char* readPointer(qint64 maximumLength, qint64 &len);
-    bool advanceReadPointer(qint64 amount);
-    bool atEnd();
-    bool reset();
-    qint64 size();
+    const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
+    bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
+    bool atEnd() Q_DECL_OVERRIDE;
+    bool reset() Q_DECL_OVERRIDE;
+    qint64 size() Q_DECL_OVERRIDE;
+    qint64 pos() Q_DECL_OVERRIDE;
 protected:
     QByteArray* byteArray;
     qint64 currentPosition;
@@ -116,11 +115,12 @@ class QNonContiguousByteDeviceRingBufferImpl : public QNonContiguousByteDevice
 public:
     QNonContiguousByteDeviceRingBufferImpl(QSharedPointer<QRingBuffer> rb);
     ~QNonContiguousByteDeviceRingBufferImpl();
-    const char* readPointer(qint64 maximumLength, qint64 &len);
-    bool advanceReadPointer(qint64 amount);
-    bool atEnd();
-    bool reset();
-    qint64 size();
+    const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
+    bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
+    bool atEnd() Q_DECL_OVERRIDE;
+    bool reset() Q_DECL_OVERRIDE;
+    qint64 size() Q_DECL_OVERRIDE;
+    qint64 pos() Q_DECL_OVERRIDE;
 protected:
     QSharedPointer<QRingBuffer> ringBuffer;
     qint64 currentPosition;
@@ -133,11 +133,12 @@ class QNonContiguousByteDeviceIoDeviceImpl : public QNonContiguousByteDevice
 public:
     QNonContiguousByteDeviceIoDeviceImpl(QIODevice *d);
     ~QNonContiguousByteDeviceIoDeviceImpl();
-    const char* readPointer(qint64 maximumLength, qint64 &len);
-    bool advanceReadPointer(qint64 amount);
-    bool atEnd();
-    bool reset();
-    qint64 size();
+    const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
+    bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
+    bool atEnd() Q_DECL_OVERRIDE;
+    bool reset() Q_DECL_OVERRIDE;
+    qint64 size() Q_DECL_OVERRIDE;
+    qint64 pos() Q_DECL_OVERRIDE;
 protected:
     QIODevice* device;
     QByteArray* currentReadBuffer;
@@ -155,11 +156,11 @@ class QNonContiguousByteDeviceBufferImpl : public QNonContiguousByteDevice
 public:
     QNonContiguousByteDeviceBufferImpl(QBuffer *b);
     ~QNonContiguousByteDeviceBufferImpl();
-    const char* readPointer(qint64 maximumLength, qint64 &len);
-    bool advanceReadPointer(qint64 amount);
-    bool atEnd();
-    bool reset();
-    qint64 size();
+    const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
+    bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
+    bool atEnd() Q_DECL_OVERRIDE;
+    bool reset() Q_DECL_OVERRIDE;
+    qint64 size() Q_DECL_OVERRIDE;
 protected:
     QBuffer* buffer;
     QByteArray byteArray;
@@ -172,13 +173,13 @@ class QByteDeviceWrappingIoDevice : public QIODevice
 public:
     QByteDeviceWrappingIoDevice (QNonContiguousByteDevice *bd);
     ~QByteDeviceWrappingIoDevice ();
-    virtual bool isSequential () const;
-    virtual bool atEnd () const;
-    virtual bool reset ();
-    virtual qint64 size () const;
+    virtual bool isSequential () const Q_DECL_OVERRIDE;
+    virtual bool atEnd () const Q_DECL_OVERRIDE;
+    virtual bool reset () Q_DECL_OVERRIDE;
+    virtual qint64 size () const Q_DECL_OVERRIDE;
 protected:
-     virtual qint64 readData ( char * data, qint64 maxSize );
-     virtual qint64 writeData ( const char * data, qint64 maxSize );
+     virtual qint64 readData ( char * data, qint64 maxSize ) Q_DECL_OVERRIDE;
+     virtual qint64 writeData ( const char * data, qint64 maxSize ) Q_DECL_OVERRIDE;
 
      QNonContiguousByteDevice *byteDevice;
 };

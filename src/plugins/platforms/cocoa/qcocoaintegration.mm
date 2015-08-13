@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,7 @@
 
 #include "qcocoaintegration.h"
 
+#include "qcocoaautoreleasepool.h"
 #include "qcocoawindow.h"
 #include "qcocoabackingstore.h"
 #include "qcocoanativeinterface.h"
@@ -144,6 +137,7 @@ void QCocoaScreen::updateGeometry()
 
 qreal QCocoaScreen::devicePixelRatio() const
 {
+    QCocoaAutoReleasePool pool;
     NSScreen * screen = osScreen();
     return qreal(screen ? [screen backingScaleFactor] : 1.0);
 }
@@ -337,7 +331,7 @@ QCocoaIntegration::~QCocoaIntegration()
 
     // Delete screens in reverse order to avoid crash in case of multiple screens
     while (!mScreens.isEmpty()) {
-        delete mScreens.takeLast();
+        destroyScreen(mScreens.takeLast());
     }
 
     clearToolbars();
@@ -397,7 +391,7 @@ void QCocoaIntegration::updateScreens()
     // Now the leftovers in remainingScreens are no longer current, so we can delete them.
     foreach (QCocoaScreen* screen, remainingScreens) {
         mScreens.removeOne(screen);
-        delete screen;
+        destroyScreen(screen);
     }
     // All screens in mScreens are siblings, because we ignored the mirrors.
     foreach (QCocoaScreen* screen, mScreens)
@@ -426,6 +420,7 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
     case ForeignWindows:
     case RasterGLSurface:
     case ApplicationState:
+    case ApplicationIcon:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -513,8 +508,6 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
 {
     if (hint == QPlatformIntegration::FontSmoothingGamma)
         return 2.0;
-    if (hint == QPlatformIntegration::SynthesizeMouseFromTouchEvents)
-        return false;
 
     return QPlatformIntegration::styleHint(hint);
 }
@@ -551,6 +544,42 @@ void QCocoaIntegration::clearToolbars()
         ++it;
     }
     mToolbars.clear();
+}
+
+void QCocoaIntegration::pushPopupWindow(QCocoaWindow *window)
+{
+    m_popupWindowStack.append(window);
+}
+
+QCocoaWindow *QCocoaIntegration::popPopupWindow()
+{
+    if (m_popupWindowStack.isEmpty())
+        return 0;
+    return m_popupWindowStack.takeLast();
+}
+
+QCocoaWindow *QCocoaIntegration::activePopupWindow() const
+{
+    if (m_popupWindowStack.isEmpty())
+        return 0;
+    return m_popupWindowStack.front();
+}
+
+QList<QCocoaWindow *> *QCocoaIntegration::popupWindowStack()
+{
+    return &m_popupWindowStack;
+}
+
+void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
+{
+    NSImage *image = nil;
+    if (!icon.isNull()) {
+        NSSize size = [[[NSApplication sharedApplication] dockTile] size];
+        QPixmap pixmap = icon.pixmap(size.width, size.height);
+        image = static_cast<NSImage *>(qt_mac_create_nsimage(pixmap));
+    }
+    [[NSApplication sharedApplication] setApplicationIconImage:image];
+    [image release];
 }
 
 QT_END_NAMESPACE

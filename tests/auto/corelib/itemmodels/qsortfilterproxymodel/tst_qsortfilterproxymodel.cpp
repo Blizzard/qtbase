@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -95,6 +95,9 @@ private slots:
     void changeFilter();
     void changeSourceData_data();
     void changeSourceData();
+    void changeSourceDataKeepsStableSorting_qtbug1548();
+    void changeSourceDataForwardsRoles_qtbug35440();
+    void resortingDoesNotBreakTreeModels();
     void sortFilterRole();
     void selectionFilteredOut();
     void match_data();
@@ -143,6 +146,7 @@ private slots:
 
     void noMapAfterSourceDelete();
     void forwardDropApi();
+    void canDropMimeData();
 
 protected:
     void buildHierarchy(const QStringList &data, QAbstractItemModel *model);
@@ -2009,6 +2013,112 @@ void tst_QSortFilterProxyModel::changeSourceData()
     }
 }
 
+// Checks that the model is a table, and that each and every row is like this:
+// i-th row:   ( rows.at(i), i )
+static void checkSortedTableModel(const QAbstractItemModel *model, const QStringList &rows)
+{
+    QCOMPARE(model->rowCount(), rows.length());
+    QCOMPARE(model->columnCount(), 2);
+
+    for (int row = 0; row < model->rowCount(); ++row) {
+        const QString column0 = model->index(row, 0).data().toString();
+        const int column1 = model->index(row, 1).data().toString().toInt();
+
+        QCOMPARE(column0, rows.at(row));
+        QCOMPARE(column1, row);
+    }
+}
+
+void tst_QSortFilterProxyModel::changeSourceDataKeepsStableSorting_qtbug1548()
+{
+    QSKIP("This test will fail, see QTBUG-1548");
+
+    // Check that emitting dataChanged from the source model
+    // for a change of a role which is not the sorting role
+    // doesn't alter the sorting. In this case, we sort on the DisplayRole,
+    // and play with other roles.
+
+    static const QStringList rows
+            = QStringList() << "a" << "b" << "b" << "b" << "c" << "c" << "x";
+
+    // Build a table of pairs (string, #row) in each row
+    QStandardItemModel model(0, 2);
+
+    for (int rowNumber = 0; rowNumber < rows.length(); ++rowNumber) {
+        QStandardItem *column0 = new QStandardItem(rows.at(rowNumber));
+        column0->setCheckable(true);
+        column0->setCheckState(Qt::Unchecked);
+
+        QStandardItem *column1 = new QStandardItem(QString::number(rowNumber));
+
+        const QList<QStandardItem *> row
+                = QList<QStandardItem *>() << column0 << column1;
+
+        model.appendRow(row);
+    }
+
+    checkSortedTableModel(&model, rows);
+
+    // Build the proxy model
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    proxy.setDynamicSortFilter(true);
+    proxy.sort(0);
+
+    // The proxy is now sorted by the first column, check that the sorting
+    // * is correct (the input is already sorted, so it must not have changed)
+    // * was stable (by looking at the second column)
+    checkSortedTableModel(&model, rows);
+
+    // Change the check status of an item. That must not break the stable sorting
+    // changes the middle "b"
+    model.item(2)->setCheckState(Qt::Checked);
+    checkSortedTableModel(&model, rows);
+
+    // changes the starting "a"
+    model.item(0)->setCheckState(Qt::Checked);
+    checkSortedTableModel(&model, rows);
+
+    // change the background color of the first "c"
+    model.item(4)->setBackground(Qt::red);
+    checkSortedTableModel(&model, rows);
+
+    // change the background color of the second "c"
+    model.item(5)->setBackground(Qt::red);
+    checkSortedTableModel(&model, rows);
+}
+
+void tst_QSortFilterProxyModel::changeSourceDataForwardsRoles_qtbug35440()
+{
+    QStringList strings;
+    for (int i = 0; i < 100; ++i)
+        strings << QString::number(i);
+
+    QStringListModel model(strings);
+
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    proxy.sort(0, Qt::AscendingOrder);
+
+    QSignalSpy spy(&proxy, &QAbstractItemModel::dataChanged);
+    QVERIFY(spy.isValid());
+    QCOMPARE(spy.length(), 0);
+
+    QModelIndex index;
+
+    index = model.index(0, 0);
+    QVERIFY(index.isValid());
+    model.setData(index, QStringLiteral("teststring"), Qt::DisplayRole);
+    QCOMPARE(spy.length(), 1);
+    QCOMPARE(spy.at(0).at(2).value<QVector<int> >(), QVector<int>() << Qt::DisplayRole);
+
+    index = model.index(1, 0);
+    QVERIFY(index.isValid());
+    model.setData(index, QStringLiteral("teststring2"), Qt::EditRole);
+    QCOMPARE(spy.length(), 2);
+    QCOMPARE(spy.at(1).at(2).value<QVector<int> >(), QVector<int>() << Qt::EditRole);
+}
+
 void tst_QSortFilterProxyModel::sortFilterRole()
 {
     QStandardItemModel model;
@@ -3511,7 +3621,7 @@ class SignalArgumentChecker : public QObject
     Q_OBJECT
 public:
     SignalArgumentChecker(QAbstractItemModel *model, QAbstractProxyModel *proxy, QObject *parent = 0)
-      : QObject(parent), m_model(model), m_proxy(proxy)
+      : QObject(parent), m_proxy(proxy)
     {
         connect(model, SIGNAL(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)), SLOT(rowsAboutToBeMoved(QModelIndex,int,int,QModelIndex,int)));
         connect(model, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)), SLOT(rowsMoved(QModelIndex,int,int,QModelIndex,int)));
@@ -3561,7 +3671,6 @@ private slots:
     }
 
 private:
-    QAbstractItemModel *m_model;
     QAbstractProxyModel *m_proxy;
     QPersistentModelIndex m_p1PersistentBefore;
     QPersistentModelIndex m_p2PersistentBefore;
@@ -3835,6 +3944,36 @@ void tst_QSortFilterProxyModel::chainedProxyModelRoleNames()
     QVERIFY(proxy2.roleNames().value(Qt::UserRole + 1) == "custom");
 }
 
+// A source model with ABABAB rows, where only A rows accept drops.
+// It will then be sorted by a QSFPM.
+class DropOnOddRows : public QAbstractListModel
+{
+    Q_OBJECT
+public:
+    DropOnOddRows(QObject *parent = 0) : QAbstractListModel(parent) {}
+
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const
+    {
+        if (role == Qt::DisplayRole)
+            return (index.row() % 2 == 0) ? "A" : "B";
+        return QVariant();
+    }
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const
+    {
+        Q_UNUSED(parent);
+        return 10;
+    }
+
+    bool canDropMimeData(const QMimeData *, Qt::DropAction,
+                         int row, int column, const QModelIndex &parent) const Q_DECL_OVERRIDE
+    {
+        Q_UNUSED(row);
+        Q_UNUSED(column);
+        return parent.row() % 2 == 0;
+    }
+};
+
 class SourceAssertion : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -3897,6 +4036,65 @@ void tst_QSortFilterProxyModel::forwardDropApi()
     QCOMPARE(model.rowCount(), 1);
     QVERIFY(model.canDropMimeData(0, Qt::CopyAction, 0, 0, QModelIndex()));
     QVERIFY(model.dropMimeData(0, Qt::CopyAction, 0, 0, QModelIndex()));
+}
+
+static QString rowTexts(QAbstractItemModel *model) {
+    QString str;
+    for (int row = 0 ; row < model->rowCount(); ++row)
+        str += model->index(row, 0).data().toString();
+    return str;
+}
+
+void tst_QSortFilterProxyModel::canDropMimeData()
+{
+    // Given a source model which only supports dropping on even rows
+    DropOnOddRows sourceModel;
+    QCOMPARE(rowTexts(&sourceModel), QString("ABABABABAB"));
+
+    // and a proxy model that sorts the rows
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&sourceModel);
+    proxy.sort(0, Qt::AscendingOrder);
+    QCOMPARE(rowTexts(&proxy), QString("AAAAABBBBB"));
+
+    // the proxy should correctly map canDropMimeData to the source model,
+    // i.e. accept drops on the first 5 rows and refuse drops on the next 5.
+    for (int row = 0; row < proxy.rowCount(); ++row)
+        QCOMPARE(proxy.canDropMimeData(0, Qt::CopyAction, -1, -1, proxy.index(row, 0)), row < 5);
+}
+
+void tst_QSortFilterProxyModel::resortingDoesNotBreakTreeModels()
+{
+    QStandardItemModel *treeModel = new QStandardItemModel(this);
+    QStandardItem *e1 = new QStandardItem("Loading...");
+    e1->appendRow(new QStandardItem("entry10"));
+    treeModel->appendRow(e1);
+    QStandardItem *e0 = new QStandardItem("Loading...");
+    e0->appendRow(new QStandardItem("entry00"));
+    e0->appendRow(new QStandardItem("entry01"));
+    treeModel->appendRow(e0);
+
+    QSortFilterProxyModel proxy;
+    proxy.setDynamicSortFilter(true);
+    proxy.sort(0);
+    proxy.setSourceModel(treeModel);
+
+    ModelTest modelTest(&proxy);
+
+    QCOMPARE(proxy.rowCount(), 2);
+    e1->setText("entry1");
+    e0->setText("entry0");
+
+    QModelIndex pi0 = proxy.index(0, 0);
+    QCOMPARE(pi0.data().toString(), QString("entry0"));
+    QCOMPARE(proxy.rowCount(pi0), 2);
+
+    QModelIndex pi01 = proxy.index(1, 0, pi0);
+    QCOMPARE(pi01.data().toString(), QString("entry01"));
+
+    QModelIndex pi1 = proxy.index(1, 0);
+    QCOMPARE(pi1.data().toString(), QString("entry1"));
+    QCOMPARE(proxy.rowCount(pi1), 1);
 }
 
 QTEST_MAIN(tst_QSortFilterProxyModel)

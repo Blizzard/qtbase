@@ -1,39 +1,31 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author James Turner <james.turner@kdab.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +37,7 @@
 #include "qcocoaautoreleasepool.h"
 
 #include <QtCore/QtDebug>
+#include <QtCore/qmetaobject.h>
 #include <QtCore/private/qthread_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include "qcocoaapplication.h"
@@ -52,6 +45,8 @@
 #include "qcocoamenubar.h"
 #include "qcocoawindow.h"
 #import "qnsview.h"
+
+QT_BEGIN_NAMESPACE
 
 NSString *qt_mac_removePrivateUnicode(NSString* string)
 {
@@ -79,12 +74,14 @@ static inline QCocoaMenuLoader *getMenuLoader()
     return [NSApp QT_MANGLE_NAMESPACE(qt_qcocoamenuLoader)];
 }
 
+QT_END_NAMESPACE
+
 @interface QT_MANGLE_NAMESPACE(QCocoaMenuDelegate) : NSObject <NSMenuDelegate> {
     QCocoaMenu *m_menu;
 }
 
 - (id) initWithMenu:(QCocoaMenu*) m;
-- (BOOL)hasShortcut:(NSMenu *)menu forKey:(NSString *)key forModifiers:(NSUInteger)modifier;
+- (NSMenuItem *)findItem:(NSMenu *)menu forKey:(NSString *)key forModifiers:(NSUInteger)modifier;
 
 @end
 
@@ -128,7 +125,8 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaMenuDelegate);
     QCocoaMenuItem *cocoaItem = reinterpret_cast<QCocoaMenuItem *>([item tag]);
     QScopedLoopLevelCounter loopLevelCounter(QGuiApplicationPrivate::instance()->threadData);
     QGuiApplicationPrivate::modifier_buttons = [QNSView convertKeyModifiers:[NSEvent modifierFlags]];
-    cocoaItem->activated();
+    static QMetaMethod activatedSignal = QMetaMethod::fromSignal(&QCocoaMenuItem::activated);
+    activatedSignal.invoke(cocoaItem, Qt::QueuedConnection);
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem*)menuItem
@@ -154,11 +152,20 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaMenuDelegate);
 
     // Change the private unicode keys to the ones used in setting the "Key Equivalents"
     NSString *characters = qt_mac_removePrivateUnicode([event characters]);
-    if ([self hasShortcut:menu
-            forKey:characters
-            // Interested only in Shift, Cmd, Ctrl & Alt Keys, so ignoring masks like, Caps lock, Num Lock ...
-            forModifiers:([event modifierFlags] & (NSShiftKeyMask | NSControlKeyMask | NSCommandKeyMask | NSAlternateKeyMask))
-            ]) {
+    // Interested only in Shift, Cmd, Ctrl & Alt Keys, so ignoring masks like, Caps lock, Num Lock ...
+    const NSUInteger mask = NSShiftKeyMask | NSControlKeyMask | NSCommandKeyMask | NSAlternateKeyMask;
+    if (NSMenuItem *menuItem = [self findItem:menu forKey:characters forModifiers:([event modifierFlags] & mask)]) {
+        if (!menuItem.target) {
+            // This item was modified by QCocoaMenuBar::redirectKnownMenuItemsToFirstResponder
+            // and it looks like we're running a modal session for NSOpenPanel/NSSavePanel.
+            // QCocoaFileDialogHelper is actually the only place we use this and we run NSOpenPanel modal
+            // (modal sheet, window modal, application modal).
+            // Whatever the current first responder is, let's give it a chance
+            // and do not touch the Qt's focusObject (which is different from some native view
+            // having a focus inside NSSave/OpenPanel.
+            return YES;
+        }
+
         QObject *object = qApp->focusObject();
         if (object) {
             QChar ch;
@@ -196,22 +203,23 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaMenuDelegate);
     return NO;
 }
 
-- (BOOL)hasShortcut:(NSMenu *)menu forKey:(NSString *)key forModifiers:(NSUInteger)modifier
+- (NSMenuItem *)findItem:(NSMenu *)menu forKey:(NSString *)key forModifiers:(NSUInteger)modifier
 {
     for (NSMenuItem *item in [menu itemArray]) {
         if (![item isEnabled] || [item isHidden] || [item isSeparatorItem])
             continue;
-        if ([item hasSubmenu]
-            && [self hasShortcut:[item submenu] forKey:key forModifiers:modifier])
-            return YES;
+        if ([item hasSubmenu]) {
+            if (NSMenuItem *nested = [self findItem:[item submenu] forKey:key forModifiers:modifier])
+                return nested;
+        }
 
         NSString *menuKey = [item keyEquivalent];
         if (menuKey
             && NSOrderedSame == [menuKey compare:key]
             && modifier == [item keyEquivalentModifierMask])
-            return YES;
+            return item;
     }
-    return NO;
+    return nil;
 }
 
 @end
@@ -225,6 +233,8 @@ QCocoaMenu::QCocoaMenu() :
     m_menuBar(0),
     m_containingMenuItem(0)
 {
+    QCocoaAutoReleasePool pool;
+
     m_delegate = [[QCocoaMenuDelegate alloc] initWithMenu:this];
     m_nativeItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
     m_nativeMenu = [[NSMenu alloc] initWithTitle:@"Untitled"];
@@ -366,14 +376,9 @@ void QCocoaMenu::syncMenuItem(QPlatformMenuItem *menuItem)
     }
 
     bool wasMerged = cocoaItem->isMerged();
-    NSMenu *oldMenu = m_nativeMenu;
-    if (wasMerged) {
-        QPlatformMenuItem::MenuRole role = cocoaItem->effectiveRole();
-        if (role >= QPlatformMenuItem::ApplicationSpecificRole && role < QPlatformMenuItem::CutRole)
-            oldMenu = [getMenuLoader() applicationMenu];
-    }
-
+    NSMenu *oldMenu = wasMerged ? [getMenuLoader() applicationMenu] : m_nativeMenu;
     NSMenuItem *oldItem = [oldMenu itemWithTag:(NSInteger) cocoaItem];
+
     if (cocoaItem->sync() != oldItem) {
         // native item was changed for some reason
         if (oldItem) {
@@ -435,6 +440,11 @@ void QCocoaMenu::setEnabled(bool enabled)
 {
     m_enabled = enabled;
     syncModalState(!m_enabled);
+}
+
+bool QCocoaMenu::isEnabled() const
+{
+    return [m_nativeItem isEnabled];
 }
 
 void QCocoaMenu::setVisible(bool visible)

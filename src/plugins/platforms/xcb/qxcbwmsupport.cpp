@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -68,7 +68,7 @@ void QXcbWMSupport::updateNetWMAtoms()
         remaining = 0;
 
         if (reply->type == XCB_ATOM_ATOM && reply->format == 32) {
-            int len = xcb_get_property_value_length(reply)/4;
+            int len = xcb_get_property_value_length(reply)/sizeof(xcb_atom_t);
             xcb_atom_t *atoms = (xcb_atom_t *)xcb_get_property_value(reply);
             int s = net_wm_atoms.size();
             net_wm_atoms.resize(s + len);
@@ -102,11 +102,11 @@ void QXcbWMSupport::updateVirtualRoots()
         remaining = 0;
 
         if (reply->type == XCB_ATOM_ATOM && reply->format == 32) {
-            int len = xcb_get_property_value_length(reply)/4;
-            xcb_atom_t *atoms = (xcb_atom_t *)xcb_get_property_value(reply);
-            int s = net_wm_atoms.size();
-            net_wm_atoms.resize(s + len);
-            memcpy(net_wm_atoms.data() + s, atoms, len*sizeof(xcb_atom_t));
+            int len = xcb_get_property_value_length(reply)/sizeof(xcb_window_t);
+            xcb_window_t *roots = (xcb_window_t *)xcb_get_property_value(reply);
+            int s = net_virtual_roots.size();
+            net_virtual_roots.resize(s + len);
+            memcpy(net_virtual_roots.data() + s, roots, len*sizeof(xcb_window_t));
 
             remaining = reply->bytes_after;
             offset += len;

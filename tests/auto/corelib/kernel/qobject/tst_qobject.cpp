@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Copyright (C) 2013 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -91,9 +91,7 @@ private slots:
     void floatProperty();
     void qrealProperty();
     void property();
-#ifndef QT_NO_PROCESS
     void recursiveSignalEmission();
-#endif
     void signalBlocking();
     void blockingQueuedConnection();
     void childEvents();
@@ -129,6 +127,8 @@ private slots:
     void connectConvert();
     void connectWithReference();
     void connectManyArguments();
+    void connectForwardDeclare();
+    void connectNoDefaultConstructorArg();
     void returnValue_data();
     void returnValue();
     void returnValue2_data();
@@ -1502,7 +1502,6 @@ typedef QString CustomString;
 class PropertyObject : public QObject
 {
     Q_OBJECT
-    Q_ENUMS(Alpha Priority)
 
     Q_PROPERTY(Alpha alpha READ alpha WRITE setAlpha)
     Q_PROPERTY(Priority priority READ priority WRITE setPriority)
@@ -1564,6 +1563,9 @@ private:
     float m_float;
     qreal m_qreal;
     CustomString m_customString;
+
+    Q_ENUM(Alpha)
+    Q_ENUM(Priority)
 };
 
 Q_DECLARE_METATYPE(PropertyObject::Priority)
@@ -2979,9 +2981,11 @@ void tst_QObject::dynamicProperties()
     QVERIFY(obj.dynamicPropertyNames().isEmpty());
 }
 
-#ifndef QT_NO_PROCESS
 void tst_QObject::recursiveSignalEmission()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QProcess proc;
     // signalbug helper app should always be next to this test binary
     const QString path = QStringLiteral("signalbug/signalbug");
@@ -2990,8 +2994,8 @@ void tst_QObject::recursiveSignalEmission()
     QVERIFY(proc.waitForFinished());
     QVERIFY(proc.exitStatus() == QProcess::NormalExit);
     QCOMPARE(proc.exitCode(), 0);
-}
 #endif
+}
 
 void tst_QObject::signalBlocking()
 {
@@ -5204,6 +5208,47 @@ void tst_QObject::connectManyArguments()
     emit ob2.signal6("a", "b", "c", "d", "e", "f");
     QCOMPARE(ob2.count, 6);
     QCOMPARE(ManyArgumentNamespace::count, 12);
+}
+
+class ForwardDeclared;
+
+class ForwardDeclareArguments : public QObject
+{
+    Q_OBJECT
+signals:
+    void mySignal(const ForwardDeclared&);
+public slots:
+    void mySlot(const ForwardDeclared&) {}
+};
+
+void tst_QObject::connectForwardDeclare()
+{
+    ForwardDeclareArguments ob;
+    // it should compile
+    QVERIFY(connect(&ob, &ForwardDeclareArguments::mySignal, &ob, &ForwardDeclareArguments::mySlot, Qt::QueuedConnection));
+}
+
+class NoDefaultConstructor
+{
+    Q_GADGET
+public:
+    NoDefaultConstructor(int) {}
+};
+
+class NoDefaultContructorArguments : public QObject
+{
+    Q_OBJECT
+signals:
+    void mySignal(const NoDefaultConstructor&);
+public slots:
+    void mySlot(const NoDefaultConstructor&) {}
+};
+
+void tst_QObject::connectNoDefaultConstructorArg()
+{
+    NoDefaultContructorArguments ob;
+    // it should compile
+    QVERIFY(connect(&ob, &NoDefaultContructorArguments::mySignal, &ob, &NoDefaultContructorArguments::mySlot, Qt::QueuedConnection));
 }
 
 class ReturnValue : public QObject {

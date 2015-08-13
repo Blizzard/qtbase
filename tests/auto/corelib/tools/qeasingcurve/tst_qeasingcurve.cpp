@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -51,6 +51,7 @@ private slots:
     void operators();
     void properties();
     void metaTypes();
+    void propertyOrderIsNotImportant();
     void bezierSpline_data();
     void bezierSpline();
     void tcbSpline_data();
@@ -426,9 +427,6 @@ void tst_QEasingCurve::setCustomType()
     QCOMPARE(curve.valueForProgress(0.15), 0.1);
     QCOMPARE(curve.valueForProgress(0.20), 0.2);
     QCOMPARE(curve.valueForProgress(0.25), 0.2);
-#if defined(UBUNTU_ONEIRIC) && defined(__i386__)
-    QEXPECT_FAIL("", "QTBUG-32432: Fails on Ubuntu 11.10 32 bit configurations", Abort);
-#endif
     QCOMPARE(curve.valueForProgress(0.30), 0.3);
     QCOMPARE(curve.valueForProgress(0.35), 0.3);
     QCOMPARE(curve.valueForProgress(0.999999), 0.9);
@@ -550,6 +548,25 @@ void tst_QEasingCurve::metaTypes()
     QVERIFY(QMetaType::isRegistered(QMetaType::QEasingCurve));
 
     QVERIFY(qMetaTypeId<QEasingCurve>() == QMetaType::QEasingCurve);
+}
+
+/*
+  Test to ensure that regardless of what order properties are set, they should produce the same
+  behavior.
+ */
+void tst_QEasingCurve::propertyOrderIsNotImportant()
+{
+
+    QEasingCurve c1;
+    c1.setPeriod(1);
+    c1.setType(QEasingCurve::OutSine);
+    QVERIFY(c1.valueForProgress(0.75) > 0.9);
+
+    QEasingCurve c2;
+    c2.setType(QEasingCurve::OutSine);
+    c2.setPeriod(1);
+
+    QCOMPARE(c1.valueForProgress(0.75), c2.valueForProgress(0.75));
 }
 
 void tst_QEasingCurve::bezierSpline_data()
@@ -733,7 +750,7 @@ void tst_QEasingCurve::testCbrtDouble()
         if (f != 0.0)
             t = t * (t_cubic + d + d) / f;
 
-        double expected = pow(d, 1.0/3.0);
+        double expected = std::pow(d, 1.0/3.0);
 
         const qreal error = qAbs(expected - t);
 
@@ -759,7 +776,7 @@ void tst_QEasingCurve::testCbrtFloat()
         if (fac != 0.0f)
             t = t * (t_cubic + f + f) / fac;
 
-        float expected = pow(f, float(1.0/3.0));
+        float expected = std::pow(f, float(1.0/3.0));
 
         const qreal error = qAbs(expected - t);
 

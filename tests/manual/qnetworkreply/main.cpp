@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,6 +69,7 @@ private slots:
     void proxyAuthentication_data();
     void proxyAuthentication();
     void authentication();
+    void npnWithEmptyList(); // QTBUG-40714
 
 protected slots:
     void spdyReplyFinished(); // only used by spdyMultipleRequestsPerHost test
@@ -180,6 +181,8 @@ void tst_qnetworkreply::setSslConfiguration()
     QCOMPARE(rootCertLoadingAllowed, true);
 #elif defined(Q_OS_MAC)
     QCOMPARE(rootCertLoadingAllowed, false);
+#else
+    Q_UNUSED(rootCertLoadingAllowed)
 #endif // other platforms: undecided (Windows: depends on the version)
     if (works) {
         QCOMPARE(reply->error(), QNetworkReply::NoError);
@@ -575,6 +578,34 @@ void tst_qnetworkreply::authentication()
     QVERIFY2(reply->error() == QNetworkReply::NoError, reply->errorString().toLocal8Bit());
     int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     QVERIFY(statusCode >= 200 && statusCode < 400);
+}
+
+void tst_qnetworkreply::npnWithEmptyList() // QTBUG-40714
+{
+#if defined(QT_BUILD_INTERNAL) && !defined(QT_NO_SSL) && OPENSSL_VERSION_NUMBER >= 0x1000100fL && !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
+
+    // The server does not send a list of Next Protocols, so we test
+    // that we continue anyhow and it works
+
+    m_manager.clearAccessCache();
+
+    QUrl url(QStringLiteral("https://www.ossifrage.net/"));
+    QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::SpdyAllowedAttribute, QVariant(true));
+    QNetworkReply *reply = m_manager.get(request);
+    QObject::connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()));
+
+    QTestEventLoop::instance().enterLoop(15);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+
+    int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QVERIFY(statusCode == 200);
+
+    QCOMPARE(reply->sslConfiguration().nextProtocolNegotiationStatus(),
+             QSslConfiguration::NextProtocolNegotiationUnsupported);
+#else
+    QSKIP("Qt built withouth OpenSSL, or the OpenSSL version is too old");
+#endif // defined(QT_BUILD_INTERNAL) && !defined(QT_NO_SSL) ...
 }
 
 QTEST_MAIN(tst_qnetworkreply)

@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,17 +24,19 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include "qssl_p.h"
 #include "qsslconfiguration.h"
 #include "qsslconfiguration_p.h"
 #include "qsslsocket.h"
+#include "qsslsocket_p.h"
 #include "qmutex.h"
 #include "qdebug.h"
 
@@ -202,6 +204,7 @@ bool QSslConfiguration::operator==(const QSslConfiguration &other) const
         d->sessionCipher == other.d->sessionCipher &&
         d->sessionProtocol == other.d->sessionProtocol &&
         d->ciphers == other.d->ciphers &&
+        d->ellipticCurves == other.d->ellipticCurves &&
         d->caCertificates == other.d->caCertificates &&
         d->protocol == other.d->protocol &&
         d->peerVerifyMode == other.d->peerVerifyMode &&
@@ -242,6 +245,7 @@ bool QSslConfiguration::isNull() const
             d->allowRootCertOnDemandLoading == true &&
             d->caCertificates.count() == 0 &&
             d->ciphers.count() == 0 &&
+            d->ellipticCurves.isEmpty() &&
             d->localCertificateChain.isEmpty() &&
             d->privateKey.isNull() &&
             d->peerCertificate.isNull() &&
@@ -341,7 +345,8 @@ int QSslConfiguration::peerVerifyDepth() const
 void QSslConfiguration::setPeerVerifyDepth(int depth)
 {
     if (depth < 0) {
-        qWarning("QSslConfiguration::setPeerVerifyDepth: cannot set negative depth of %d", depth);
+        qCWarning(lcSsl,
+                 "QSslConfiguration::setPeerVerifyDepth: cannot set negative depth of %d", depth);
         return;
     }
     d->peerVerifyDepth = depth;
@@ -510,6 +515,7 @@ QSslCipher QSslConfiguration::sessionCipher() const
     is set during the handshake phase.
 
     \sa protocol(), setProtocol()
+    \since 5.4
 */
 QSsl::SslProtocol QSslConfiguration::sessionProtocol() const
 {
@@ -585,6 +591,20 @@ void QSslConfiguration::setCiphers(const QList<QSslCipher> &ciphers)
 }
 
 /*!
+    \since 5.5
+
+    Returns the list of cryptographic ciphers supported by this
+    system. This list is set by the system's SSL libraries and may
+    vary from system to system.
+
+    \sa ciphers(), setCiphers()
+*/
+QList<QSslCipher> QSslConfiguration::supportedCiphers()
+{
+    return QSslSocketPrivate::supportedCiphers();
+}
+
+/*!
   Returns this connection's CA certificate database. The CA certificate
   database is used by the socket during the handshake phase to
   validate the peer's certificate. It can be modified prior to the
@@ -611,6 +631,22 @@ void QSslConfiguration::setCaCertificates(const QList<QSslCertificate> &certific
 {
     d->caCertificates = certificates;
     d->allowRootCertOnDemandLoading = false;
+}
+
+/*!
+    \since 5.5
+
+    This function provides the CA certificate database
+    provided by the operating system. The CA certificate database
+    returned by this function is used to initialize the database
+    returned by caCertificates() on the default QSslConfiguration.
+
+    \sa caCertificates(), setCaCertificates(), defaultConfiguration()
+*/
+QList<QSslCertificate> QSslConfiguration::systemCaCertificates()
+{
+    // we are calling ensureInitialized() in the method below
+    return QSslSocketPrivate::systemCaCertificates();
 }
 
 /*!
@@ -695,6 +731,64 @@ int QSslConfiguration::sessionTicketLifeTimeHint() const
 }
 
 /*!
+    \since 5.5
+
+    Returns this connection's current list of elliptic curves. This
+    list is used during the handshake phase for choosing an
+    elliptic curve (when using an elliptic curve cipher).
+    The returned list of curves is ordered by descending preference
+    (i.e., the first curve in the list is the most preferred one).
+
+    By default, the handshake phase can choose any of the curves
+    supported by this system's SSL libraries, which may vary from
+    system to system. The list of curves supported by this system's
+    SSL libraries is returned by QSslSocket::supportedEllipticCurves().
+
+    You can restrict the list of curves used for choosing the session cipher
+    for this socket by calling setEllipticCurves() with a subset of the
+    supported ciphers. You can revert to using the entire set by calling
+    setEllipticCurves() with the list returned by
+    QSslSocket::supportedEllipticCurves().
+
+    \sa setEllipticCurves
+ */
+QVector<QSslEllipticCurve> QSslConfiguration::ellipticCurves() const
+{
+    return d->ellipticCurves;
+}
+
+/*!
+    \since 5.5
+
+    Sets the list of elliptic curves to be used by this socket to \a curves,
+    which must contain a subset of the curves in the list returned by
+    supportedEllipticCurves().
+
+    Restricting the elliptic curves must be done before the handshake
+    phase, where the session cipher is chosen.
+
+    \sa ellipticCurves
+ */
+void QSslConfiguration::setEllipticCurves(const QVector<QSslEllipticCurve> &curves)
+{
+    d->ellipticCurves = curves;
+}
+
+/*!
+    \since 5.5
+
+    Returns the list of elliptic curves supported by this
+    system. This list is set by the system's SSL libraries and may
+    vary from system to system.
+
+    \sa ellipticCurves(), setEllipticCurves()
+*/
+QVector<QSslEllipticCurve> QSslConfiguration::supportedEllipticCurves()
+{
+    return QSslSocketPrivate::supportedEllipticCurves();
+}
+
+/*!
   \since 5.3
 
   This function returns the protocol negotiated with the server
@@ -725,7 +819,11 @@ QByteArray QSslConfiguration::nextNegotiatedProtocol() const
 
   \sa nextNegotiatedProtocol(), nextProtocolNegotiationStatus(), allowedNextProtocols(), QSslConfiguration::NextProtocolSpdy3_0, QSslConfiguration::NextProtocolHttp1_1
  */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+void QSslConfiguration::setAllowedNextProtocols(const QList<QByteArray> &protocols)
+#else
 void QSslConfiguration::setAllowedNextProtocols(QList<QByteArray> protocols)
+#endif
 {
     d->nextAllowedProtocols = protocols;
 }

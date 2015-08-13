@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -102,18 +102,39 @@ void tst_QCoreApplication::qAppName()
     const char* appName = "tst_qcoreapplication";
 #endif
 
-    int argc = 1;
-    char *argv[] = { const_cast<char*>(appName) };
-    TestApplication app(argc, argv);
-    QCOMPARE(::qAppName(), QString::fromLatin1(appName));
+    {
+        int argc = 1;
+        char *argv[] = { const_cast<char*>(appName) };
+        TestApplication app(argc, argv);
+        QCOMPARE(::qAppName(), QString::fromLatin1(appName));
+        QCOMPARE(QCoreApplication::applicationName(), QString::fromLatin1(appName));
+    }
+    // The application name should still be available after destruction;
+    // global statics often rely on this.
     QCOMPARE(QCoreApplication::applicationName(), QString::fromLatin1(appName));
+
+    // Setting the appname before creating the application should work (QTBUG-45283)
+    const QString wantedAppName("my app name");
+    {
+        int argc = 1;
+        char *argv[] = { const_cast<char*>(appName) };
+        QCoreApplication::setApplicationName(wantedAppName);
+        TestApplication app(argc, argv);
+        QCOMPARE(::qAppName(), QString::fromLatin1(appName));
+        QCOMPARE(QCoreApplication::applicationName(), wantedAppName);
+    }
+    QCOMPARE(QCoreApplication::applicationName(), wantedAppName);
+
+    // Restore to initial value
+    QCoreApplication::setApplicationName(QString());
+    QCOMPARE(QCoreApplication::applicationName(), QString());
 }
 
-// "QCoreApplication::arguments() always parses arguments from actual command line on Windows
-// making this test invalid."
-#ifndef Q_OS_WIN
 void tst_QCoreApplication::argc()
 {
+#if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+    QSKIP("QCoreApplication::arguments() parses arguments from actual command line on this platform.");
+#endif
     {
         int argc = 1;
         char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
@@ -150,7 +171,6 @@ void tst_QCoreApplication::argc()
         QCOMPARE(app.arguments().count(), 1);
     }
 }
-#endif
 
 class EventGenerator : public QObject
 {

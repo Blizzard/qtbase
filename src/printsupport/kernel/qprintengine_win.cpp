@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -69,7 +69,7 @@ extern QMarginsF qt_convertMargins(const QMarginsF &margins, QPageLayout::Unit f
 // #define QT_DEBUG_METRICS
 
 static void draw_text_item_win(const QPointF &_pos, const QTextItemInt &ti, HDC hdc,
-                               bool convertToText, const QTransform &xform, const QPointF &topLeft);
+                               const QTransform &xform, const QPointF &topLeft);
 
 QWin32PrintEngine::QWin32PrintEngine(QPrinter::PrinterMode mode)
     : QAlphaPaintEngine(*(new QWin32PrintEnginePrivate),
@@ -87,6 +87,17 @@ QWin32PrintEngine::QWin32PrintEngine(QPrinter::PrinterMode mode)
         d->m_printDevice = ps->createDefaultPrintDevice();
     d->m_pageLayout.setPageSize(d->m_printDevice.defaultPageSize());
     d->initialize();
+}
+
+static QByteArray msgBeginFailed(const char *function, const DOCINFO &d)
+{
+    QString result;
+    QTextStream str(&result);
+    str << "QWin32PrintEngine::begin: " << function << " failed, document \""
+        << QString::fromWCharArray(d.lpszDocName) << '"';
+    if (d.lpszOutput[0])
+        str << ", file \"" << QString::fromWCharArray(d.lpszOutput) << '"';
+    return result.toLocal8Bit();
 }
 
 bool QWin32PrintEngine::begin(QPaintDevice *pdev)
@@ -123,12 +134,12 @@ bool QWin32PrintEngine::begin(QPaintDevice *pdev)
     if (d->printToFile)
         di.lpszOutput = d->fileName.isEmpty() ? L"FILE:" : reinterpret_cast<const wchar_t *>(d->fileName.utf16());
     if (ok && StartDoc(d->hdc, &di) == SP_ERROR) {
-        qErrnoWarning("QWin32PrintEngine::begin: StartDoc failed");
+        qErrnoWarning(msgBeginFailed("StartDoc", di));
         ok = false;
     }
 
     if (StartPage(d->hdc) <= 0) {
-        qErrnoWarning("QWin32PrintEngine::begin: StartPage failed");
+        qErrnoWarning(msgBeginFailed("StartPage", di));
         ok = false;
     }
 
@@ -175,8 +186,10 @@ bool QWin32PrintEngine::end()
         return true;
 
     if (d->hdc) {
-        EndPage(d->hdc);                 // end; printing done
-        EndDoc(d->hdc);
+        if (EndPage(d->hdc) <= 0) // end; printing done
+            qErrnoWarning("QWin32PrintEngine::end: EndPage failed (%p)", d->hdc);
+        if (EndDoc(d->hdc) <= 0)
+            qErrnoWarning("QWin32PrintEngine::end: EndDoc failed");
     }
 
     d->state = QPrinter::Idle;
@@ -201,10 +214,8 @@ bool QWin32PrintEngine::newPage()
     }
 
     if (d->reinit) {
-        if (!d->resetDC()) {
-            qErrnoWarning("QWin32PrintEngine::newPage: ResetDC failed");
+        if (!d->resetDC())
             return false;
-        }
         d->reinit = false;
     }
 
@@ -241,6 +252,8 @@ bool QWin32PrintEngine::newPage()
                 d->reinit = false;
             }
             success = (StartPage(d->hdc) > 0);
+            if (!success)
+                qErrnoWarning("Win32PrintEngine::newPage: StartPage failed (2)");
         }
         if (!success) {
             d->state = QPrinter::Aborted;
@@ -296,27 +309,12 @@ void QWin32PrintEngine::drawTextItem(const QPointF &p, const QTextItem &textItem
         return ;
     }
 
-    // We only want to convert the glyphs to text if the entire string is compatible with ASCII
-    // and if we actually have access to the chars.
-    bool convertToText = ti.chars != 0;
-    for (int i=0;  i < ti.num_chars; ++i) {
-        if (ti.chars[i].unicode() >= 0x80) {
-            convertToText = false;
-            break;
-        }
-
-        if (ti.logClusters[i] != i) {
-            convertToText = false;
-            break;
-        }
-    }
-
     COLORREF cf = RGB(qRed(brushColor), qGreen(brushColor), qBlue(brushColor));
     SelectObject(d->hdc, CreateSolidBrush(cf));
     SelectObject(d->hdc, CreatePen(PS_SOLID, 1, cf));
     SetTextColor(d->hdc, cf);
 
-    draw_text_item_win(p, ti, d->hdc, convertToText, d->matrix, QPointF(0.0, 0.0));
+    draw_text_item_win(p, ti, d->hdc, d->matrix, QPointF(0.0, 0.0));
     DeleteObject(SelectObject(d->hdc,GetStockObject(HOLLOW_BRUSH)));
     DeleteObject(SelectObject(d->hdc,GetStockObject(BLACK_PEN)));
 }
@@ -385,6 +383,9 @@ int QWin32PrintEngine::metric(QPaintDevice::PaintDeviceMetric m) const
         break;
     case QPaintDevice::PdmDepth:
         val = GetDeviceCaps(d->hdc, PLANES);
+        break;
+    case QPaintDevice::PdmDevicePixelRatio:
+        val = 1;
         break;
     default:
         qWarning("QPrinter::metric: Invalid metric command");
@@ -855,7 +856,8 @@ void QWin32PrintEnginePrivate::initialize()
 
     txop = QTransform::TxNone;
 
-    bool ok = OpenPrinter((LPWSTR)m_printDevice.id().utf16(), (LPHANDLE)&hPrinter, 0);
+    QString printerName = m_printDevice.id();
+    bool ok = OpenPrinter((LPWSTR)printerName.utf16(), (LPHANDLE)&hPrinter, 0);
     if (!ok) {
         qErrnoWarning("QWin32PrintEngine::initialize: OpenPrinter failed");
         return;
@@ -876,7 +878,32 @@ void QWin32PrintEnginePrivate::initialize()
     }
 
     devMode = pInfo->pDevMode;
-    hdc = CreateDC(NULL, reinterpret_cast<const wchar_t *>(m_printDevice.id().utf16()), 0, devMode);
+
+    if (!devMode) {
+        // pInfo->pDevMode == NULL for some printers and passing NULL
+        // into CreateDC leads to the printer doing nothing.  In addition,
+        // the framework assumes that devMode isn't NULL, such as in
+        // QWin32PrintEngine::begin() and QPageSetupDialog::exec()
+        // Attempt to get the DEVMODE a different way.
+
+        // Allocate the required buffer
+        LONG result = DocumentProperties(NULL, hPrinter, (LPWSTR)printerName.utf16(),
+                                         NULL, NULL, 0);
+        devMode = (DEVMODE *) malloc(result);
+        ownsDevMode = true;
+
+         // Get the default DevMode
+        result = DocumentProperties(NULL, hPrinter, (LPWSTR)printerName.utf16(),
+                                    devMode, NULL, DM_OUT_BUFFER);
+        if (result != IDOK) {
+            qErrnoWarning("QWin32PrintEngine::initialize: Failed to obtain devMode");
+            free(devMode);
+            devMode = NULL;
+            ownsDevMode = false;
+        }
+    }
+
+    hdc = CreateDC(NULL, (LPCWSTR)printerName.utf16(), 0, devMode);
 
     if (!hdc) {
         qErrnoWarning("QWin32PrintEngine::initialize: CreateDC failed");
@@ -931,14 +958,15 @@ void QWin32PrintEnginePrivate::initHDC()
     default:
         break;
     }
+
+    updateMetrics();
 }
 
 void QWin32PrintEnginePrivate::release()
 {
     if (globalDevMode) { // Devmode comes from print dialog
         GlobalUnlock(globalDevMode);
-    } else if (hMem) {            // Devmode comes from initialize...
-        // devMode is a part of the same memory block as pInfo so one free is enough...
+    } else if (hMem) {
         GlobalUnlock(hMem);
         GlobalFree(hMem);
     }
@@ -947,11 +975,16 @@ void QWin32PrintEnginePrivate::release()
     if (hdc)
         DeleteDC(hdc);
 
+    // Check if devMode was allocated separately from pInfo / hMem.
+    if (ownsDevMode)
+        free(devMode);
+
     hdc = 0;
     hPrinter = 0;
     pInfo = 0;
     hMem = 0;
     devMode = 0;
+    ownsDevMode = false;
 }
 
 void QWin32PrintEnginePrivate::doReinit()
@@ -962,6 +995,21 @@ void QWin32PrintEnginePrivate::doReinit()
         resetDC();
         reinit = false;
     }
+}
+
+bool QWin32PrintEnginePrivate::resetDC()
+{
+    if (!hdc) {
+        qWarning() << "ResetDC() called with null hdc.";
+        return false;
+    }
+    const HDC oldHdc = hdc;
+    const HDC hdc = ResetDC(oldHdc, devMode);
+    if (!hdc) {
+        const int lastError = GetLastError();
+        qErrnoWarning(lastError, "ResetDC() on %p failed (%d)", oldHdc, lastError);
+    }
+    return hdc != 0;
 }
 
 static int indexOfId(const QList<QPrint::InputSlot> &inputSlots, QPrint::InputSlotId id)
@@ -1231,6 +1279,8 @@ void QWin32PrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &
     }
 
     case PPK_QPageSize: {
+        if (!d->devMode)
+            break;
         // Get the page size from the printer if supported
         const QPageSize pageSize = value.value<QPageSize>();
         if (pageSize.isValid()) {
@@ -1301,7 +1351,10 @@ QVariant QWin32PrintEngine::property(PrintEnginePropertyKey key) const
         break;
 
     case PPK_CollateCopies:
-        value = d->devMode->dmCollate == DMCOLLATE_TRUE;
+        if (!d->devMode)
+            value = false;
+        else
+            value = d->devMode->dmCollate == DMCOLLATE_TRUE;
         break;
 
     case PPK_ColorMode:
@@ -1511,6 +1564,10 @@ void QWin32PrintEngine::setGlobalDevMode(HGLOBAL globalDevNames, HGLOBAL globalD
         DEVMODE *dm = (DEVMODE*) GlobalLock(globalDevMode);
         d->release();
         d->globalDevMode = globalDevMode;
+        if (d->ownsDevMode) {
+            free(d->devMode);
+            d->ownsDevMode = false;
+        }
         d->devMode = dm;
         d->hdc = CreateDC(NULL, reinterpret_cast<const wchar_t *>(d->m_printDevice.id().utf16()), 0, dm);
 
@@ -1541,6 +1598,8 @@ void QWin32PrintEnginePrivate::setPageSize(const QPageSize &pageSize)
     if (!pageSize.isValid())
         return;
 
+    Q_ASSERT(devMode);
+
     // Use the printer page size if supported
     const QPageSize printerPageSize = m_printDevice.supportedPageSize(pageSize);
     const QPageSize usePageSize = printerPageSize.isValid() ? printerPageSize : pageSize;
@@ -1569,6 +1628,8 @@ void QWin32PrintEnginePrivate::setPageSize(const QPageSize &pageSize)
 // Update the page layout after any changes made to devMode
 void QWin32PrintEnginePrivate::updatePageLayout()
 {
+    Q_ASSERT(devMode);
+
     // Update orientation first as is needed to obtain printable margins when changing page size
     m_pageLayout.setOrientation(devMode->dmOrientation == DMORIENT_LANDSCAPE ? QPageLayout::Landscape : QPageLayout::Portrait);
     if (devMode->dmPaperSize >= DMPAPER_USER) {
@@ -1609,7 +1670,7 @@ void QWin32PrintEnginePrivate::debugMetrics() const
 }
 
 static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC hdc,
-                               bool convertToText, const QTransform &xform, const QPointF &topLeft)
+                               const QTransform &xform, const QPointF &topLeft)
 {
     QPointF baseline_pos = xform.inverted().map(xform.map(pos) - topLeft);
 
@@ -1619,24 +1680,20 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
     const bool has_kerning = ti.f && ti.f->kerning();
 
     HFONT hfont = 0;
-    bool ttf = false;
 
     if (ti.fontEngine->type() == QFontEngine::Win) {
         const QVariantMap userData = ti.fontEngine->userData().toMap();
         const QVariant hfontV = userData.value(QStringLiteral("hFont"));
         const QVariant ttfV = userData.value(QStringLiteral("trueType"));
-        if (ttfV.type() == QVariant::Bool && hfontV.canConvert<HFONT>()) {
+        if (ttfV.toBool() && hfontV.canConvert<HFONT>())
             hfont = hfontV.value<HFONT>();
-            ttf = ttfV.toBool();
-        }
     }
 
     if (!hfont)
         hfont = (HFONT)GetStockObject(ANSI_VAR_FONT);
 
     HGDIOBJ old_font = SelectObject(hdc, hfont);
-    unsigned int options = (ttf && !convertToText) ? ETO_GLYPH_INDEX : 0;
-    wchar_t *convertedGlyphs = (wchar_t *)ti.chars;
+    unsigned int options = ETO_GLYPH_INDEX;
     QGlyphLayout glyphs = ti.glyphs;
 
     bool fast = !has_kerning && !(ti.flags & QTextItem::RightToLeft);
@@ -1670,7 +1727,7 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
         ExtTextOut(hdc,
                    qRound(baseline_pos.x() + glyphs.offsets[0].x.toReal()),
                    qRound(baseline_pos.y() + glyphs.offsets[0].y.toReal()),
-                   options, 0, convertToText ? convertedGlyphs : g.data(), glyphs.numGlyphs, 0);
+                   options, 0, g.constData(), glyphs.numGlyphs, 0);
     } else {
         QVarLengthArray<QFixedPoint> positions;
         QVarLengthArray<glyph_t> _glyphs;
@@ -1683,7 +1740,6 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
             return;
         }
 
-        convertToText = convertToText && glyphs.numGlyphs == _glyphs.size();
         bool outputEntireItem = _glyphs.size() > 0;
 
         if (outputEntireItem) {
@@ -1699,7 +1755,7 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
             glyphDistances[(_glyphs.size() - 1) * 2 + 1] = 0;
             g[_glyphs.size() - 1] = _glyphs[_glyphs.size() - 1];
             ExtTextOut(hdc, qRound(positions[0].x), qRound(positions[0].y), options, 0,
-                       convertToText ? convertedGlyphs : g.data(), _glyphs.size(),
+                       g.constData(), _glyphs.size(),
                        glyphDistances.data());
         } else {
             int i = 0;
@@ -1708,7 +1764,7 @@ static void draw_text_item_win(const QPointF &pos, const QTextItemInt &ti, HDC h
 
                 ExtTextOut(hdc, qRound(positions[i].x),
                            qRound(positions[i].y), options, 0,
-                           convertToText ? convertedGlyphs + i : &g, 1, 0);
+                           &g, 1, 0);
                 ++i;
             }
         }

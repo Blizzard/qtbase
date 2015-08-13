@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -61,9 +61,9 @@ void tst_QStorageInfo::defaultValues()
     QVERIFY(!storage.isRoot());
     QVERIFY(storage.device().isEmpty());
     QVERIFY(storage.fileSystemType().isEmpty());
-    QVERIFY(storage.bytesTotal() == 0);
-    QVERIFY(storage.bytesFree() == 0);
-    QVERIFY(storage.bytesAvailable() == 0);
+    QVERIFY(storage.bytesTotal() == -1);
+    QVERIFY(storage.bytesFree() == -1);
+    QVERIFY(storage.bytesAvailable() == -1);
 }
 
 void tst_QStorageInfo::operatorEqual()
@@ -105,9 +105,11 @@ void tst_QStorageInfo::root()
     QVERIFY(storage.isRoot());
     QVERIFY(!storage.device().isEmpty());
     QVERIFY(!storage.fileSystemType().isEmpty());
-    QVERIFY(storage.bytesTotal() > 0);
-    QVERIFY(storage.bytesFree() > 0);
-    QVERIFY(storage.bytesAvailable() > 0);
+#ifndef Q_OS_HAIKU
+    QVERIFY(storage.bytesTotal() >= 0);
+    QVERIFY(storage.bytesFree() >= 0);
+    QVERIFY(storage.bytesAvailable() >= 0);
+#endif
 }
 
 void tst_QStorageInfo::currentStorage()
@@ -119,9 +121,9 @@ void tst_QStorageInfo::currentStorage()
     QVERIFY(appPath.startsWith(storage.rootPath(), Qt::CaseInsensitive));
     QVERIFY(!storage.device().isEmpty());
     QVERIFY(!storage.fileSystemType().isEmpty());
-    QVERIFY(storage.bytesTotal() > 0);
-    QVERIFY(storage.bytesFree() > 0);
-    QVERIFY(storage.bytesAvailable() > 0);
+    QVERIFY(storage.bytesTotal() >= 0);
+    QVERIFY(storage.bytesFree() >= 0);
+    QVERIFY(storage.bytesAvailable() >= 0);
 }
 
 void tst_QStorageInfo::storageList()
@@ -154,6 +156,11 @@ void tst_QStorageInfo::tempFile()
     QVERIFY(file.open());
 
     QStorageInfo storage1(file.fileName());
+#ifdef Q_OS_LINUX
+    if (storage1.fileSystemType() == "btrfs")
+        QSKIP("This test doesn't work on btrfs, probably due to a btrfs bug");
+#endif
+
     qint64 free = storage1.bytesFree();
 
     file.write(QByteArray(1024*1024, '1'));
@@ -170,6 +177,11 @@ void tst_QStorageInfo::caching()
     QVERIFY(file.open());
 
     QStorageInfo storage1(file.fileName());
+#ifdef Q_OS_LINUX
+    if (storage1.fileSystemType() == "btrfs")
+        QSKIP("This test doesn't work on btrfs, probably due to a btrfs bug");
+#endif
+
     qint64 free = storage1.bytesFree();
     QStorageInfo storage2(storage1);
     QVERIFY(free == storage2.bytesFree());

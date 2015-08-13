@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -171,7 +171,7 @@ QT_BEGIN_NAMESPACE
     } \
 \
     for (; x < length-3; x += 4) { \
-        const __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]); \
+        const __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]); \
         BLEND_SOURCE_OVER_ARGB32_SSE2_helper(dst, srcVector, nullVector, half, one, colorMask, alphaMask) \
     } \
     for (; x < length; ++x) { \
@@ -207,7 +207,7 @@ QT_BEGIN_NAMESPACE
     } \
 \
     for (; x < length-3; x += 4) { \
-        __m128i srcVector = _mm_loadu_si128((__m128i *)&src[x]); \
+        __m128i srcVector = _mm_loadu_si128((const __m128i *)&src[x]); \
         if (_mm_movemask_epi8(_mm_cmpeq_epi32(srcVector, nullVector)) != 0xffff) { \
             BYTE_MUL_SSE2(srcVector, srcVector, constAlphaVector, colorMask, half); \
 \
@@ -235,5 +235,28 @@ QT_BEGIN_NAMESPACE
 QT_END_NAMESPACE
 
 #endif // __SSE2__
+
+QT_BEGIN_NAMESPACE
+#if QT_COMPILER_SUPPORTS_HERE(SSE4_1)
+QT_FUNCTION_TARGET(SSE4_1)
+inline QRgb qUnpremultiply_sse4(QRgb p)
+{
+    const uint alpha = qAlpha(p);
+    if (alpha == 255 || alpha == 0)
+        return p;
+    const uint invAlpha = qt_inv_premul_factor[alpha];
+    const __m128i via = _mm_set1_epi32(invAlpha);
+    const __m128i vr = _mm_set1_epi32(0x8000);
+    __m128i vl = _mm_cvtepu8_epi32(_mm_cvtsi32_si128(p));
+    vl = _mm_mullo_epi32(vl, via);
+    vl = _mm_add_epi32(vl, vr);
+    vl = _mm_srai_epi32(vl, 16);
+    vl = _mm_insert_epi32(vl, alpha, 3);
+    vl = _mm_packus_epi32(vl, vl);
+    vl = _mm_packus_epi16(vl, vl);
+    return _mm_cvtsi128_si32(vl);
+}
+#endif
+QT_END_NAMESPACE
 
 #endif // QDRAWINGPRIMITIVE_SSE2_P_H

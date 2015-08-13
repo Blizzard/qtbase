@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -847,7 +847,7 @@ void QGraphicsScenePrivate::setFocusItemHelper(QGraphicsItem *item,
             // the views, but if we are changing focus, we have to
             // do it ourselves.
             if (qApp)
-                qApp->inputMethod()->commit();
+                QGuiApplication::inputMethod()->commit();
         }
 #endif //QT_NO_IM
 
@@ -1468,6 +1468,8 @@ void QGraphicsScenePrivate::mousePressEventHandler(QGraphicsSceneMouseEvent *mou
 
         QGraphicsView *view = mouseEvent->widget() ? qobject_cast<QGraphicsView *>(mouseEvent->widget()->parentWidget()) : 0;
         bool dontClearSelection = view && view->dragMode() == QGraphicsView::ScrollHandDrag;
+        bool extendSelection = (mouseEvent->modifiers() & Qt::ControlModifier) != 0;
+        dontClearSelection |= extendSelection;
         if (!dontClearSelection) {
             // Clear the selection if the originating view isn't in scroll
             // hand drag mode. The view will clear the selection if no drag
@@ -2263,6 +2265,28 @@ void QGraphicsScene::setSelectionArea(const QPainterPath &path, const QTransform
 void QGraphicsScene::setSelectionArea(const QPainterPath &path, Qt::ItemSelectionMode mode,
                                       const QTransform &deviceTransform)
 {
+    setSelectionArea(path, Qt::ReplaceSelection, mode, deviceTransform);
+}
+
+/*!
+    \overload
+    \since 5.5
+
+    Sets the selection area to \a path using \a mode to determine if items are
+    included in the selection area.
+
+    \a deviceTransform is the transformation that applies to the view, and needs to
+    be provided if the scene contains items that ignore transformations.
+
+    \a selectionOperation determines what to do with the currently selected items.
+
+    \sa clearSelection(), selectionArea()
+*/
+void QGraphicsScene::setSelectionArea(const QPainterPath &path,
+                                      Qt::ItemSelectionOperation selectionOperation,
+                                      Qt::ItemSelectionMode mode,
+                                      const QTransform &deviceTransform)
+{
     Q_D(QGraphicsScene);
 
     // Note: with boolean path operations, we can improve performance here
@@ -2287,10 +2311,16 @@ void QGraphicsScene::setSelectionArea(const QPainterPath &path, Qt::ItemSelectio
         }
     }
 
-    // Unselect all items outside path.
-    foreach (QGraphicsItem *item, unselectItems) {
-        item->setSelected(false);
-        changed = true;
+    switch (selectionOperation) {
+    case Qt::ReplaceSelection:
+        // Deselect all items outside path.
+        foreach (QGraphicsItem *item, unselectItems) {
+            item->setSelected(false);
+            changed = true;
+        }
+        break;
+    default:
+        break;
     }
 
     // Reenable emitting selectionChanged() for individual items.
@@ -4106,7 +4136,7 @@ void QGraphicsScene::wheelEvent(QGraphicsSceneWheelEvent *wheelEvent)
                                                                 wheelEvent->scenePos(),
                                                                 wheelEvent->widget());
 
-#ifdef Q_WS_MAC
+#ifdef Q_DEAD_CODE_FROM_QT4_MAC
     // On Mac, ignore the event if the first item under the mouse is not the last opened
     // popup (or one of its descendant)
     if (!d->popupWidgets.isEmpty() && !wheelCandidates.isEmpty() && wheelCandidates.first() != d->popupWidgets.back() && !d->popupWidgets.back()->isAncestorOf(wheelCandidates.first())) {
@@ -4345,7 +4375,7 @@ void QGraphicsScenePrivate::drawItemHelper(QGraphicsItem *item, QPainter *painte
 
     // Render directly, using no cache.
     if (cacheMode == QGraphicsItem::NoCache
-#ifdef Q_WS_X11
+#ifdef Q_DEAD_CODE_FROM_QT4_X11
         || !X11->use_xrender
 #endif
         ) {
@@ -4910,7 +4940,7 @@ void QGraphicsScenePrivate::draw(QGraphicsItem *item, QPainter *painter, const Q
         if (painterStateProtection || restorePainterClip)
             painter->restore();
 
-        static int drawRect = qgetenv("QT_DRAW_SCENE_ITEM_RECTS").toInt();
+        static int drawRect = qEnvironmentVariableIntValue("QT_DRAW_SCENE_ITEM_RECTS");
         if (drawRect) {
             QPen oldPen = painter->pen();
             QBrush oldBrush = painter->brush();

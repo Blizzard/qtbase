@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,8 +34,8 @@
 #ifndef QWINDOWSSCREEN_H
 #define QWINDOWSSCREEN_H
 
-#include "qwindowscursor.h"
 #include "qwindowsscaling.h"
+#include "qtwindowsglobal.h"
 #ifdef Q_OS_WINCE
 #  include "qplatformfunctions_wince.h"
 #endif
@@ -75,7 +75,7 @@ class QWindowsScreen : public QPlatformScreen
 {
 public:
 #ifndef QT_NO_CURSOR
-    typedef QSharedPointer<QWindowsCursor> WindowsCursorPtr;
+    typedef QSharedPointer<QPlatformCursor> CursorPtr;
 #endif
 
     explicit QWindowsScreen(const QWindowsScreenData &data);
@@ -100,12 +100,13 @@ public:
     static QWindow *windowAt(const QPoint &point, unsigned flags);
 
     QPixmap grabWindow(WId window, int qX, int qY, int qWidth, int qHeight) const Q_DECL_OVERRIDE;
+    QPlatformScreen::SubpixelAntialiasingType subpixelAntialiasingTypeHint() const Q_DECL_OVERRIDE;
 
     inline void handleChanges(const QWindowsScreenData &newData);
 
 #ifndef QT_NO_CURSOR
-    QPlatformCursor *cursor() const               { return m_cursor.data(); }
-    const WindowsCursorPtr &windowsCursor() const { return m_cursor; }
+    QPlatformCursor *cursor() const Q_DECL_OVERRIDE { return m_cursor.data(); }
+    const CursorPtr &cursorPtr() const { return m_cursor; }
 #else
     QPlatformCursor *cursor() const               { return 0; }
 #endif // !QT_NO_CURSOR
@@ -116,7 +117,7 @@ public:
 private:
     QWindowsScreenData m_data;
 #ifndef QT_NO_CURSOR
-    const WindowsCursorPtr m_cursor;
+    const CursorPtr m_cursor;
 #endif
 };
 
@@ -127,15 +128,13 @@ public:
 
     QWindowsScreenManager();
 
-    inline void clearScreens() {
-        // Delete screens in reverse order to avoid crash in case of multiple screens
-        while (!m_screens.isEmpty())
-            delete m_screens.takeLast();
-    }
+    void clearScreens();
 
     bool handleScreenChanges();
     bool handleDisplayChange(WPARAM wParam, LPARAM lParam);
     const WindowsScreenList &screens() const { return m_screens; }
+
+    const QWindowsScreen *screenAtDp(const QPoint &p) const;
 
 private:
     void removeScreen(int index);

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -59,17 +59,15 @@ private slots:
     void complexacquire();
     void release();
 
-#ifndef QT_NO_PROCESS
     void basicProcesses();
 
     void processes_data();
     void processes();
 
-#ifndef Q_OS_WIN
+#if !defined(Q_OS_WIN) && !defined(QT_POSIX_IPC)
     void undo();
 #endif
     void initialValue();
-#endif // QT_NO_PROCESS
 
 private:
     static QString helperBinary();
@@ -177,9 +175,11 @@ void tst_QSystemSemaphore::release()
     QCOMPARE(sem.errorString(), QString());
 }
 
-#ifndef QT_NO_PROCESS
 void tst_QSystemSemaphore::basicProcesses()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QSystemSemaphore sem("store", 0, QSystemSemaphore::Create);
 
     QProcess acquire;
@@ -198,6 +198,7 @@ void tst_QSystemSemaphore::basicProcesses()
     acquire.waitForFinished(HELPERWAITTIME);
     release.waitForFinished(HELPERWAITTIME);
     QVERIFY(acquire.state() == QProcess::NotRunning);
+#endif
 }
 
 void tst_QSystemSemaphore::processes_data()
@@ -212,6 +213,9 @@ void tst_QSystemSemaphore::processes_data()
 
 void tst_QSystemSemaphore::processes()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QSystemSemaphore sem("store", 1, QSystemSemaphore::Create);
 
     QFETCH(int, processes);
@@ -231,12 +235,16 @@ void tst_QSystemSemaphore::processes()
         QCOMPARE(consumers.first()->exitCode(), 0);
         delete consumers.takeFirst();
     }
+#endif
 }
 
-// This test only checks a unix behavior.
-#ifndef Q_OS_WIN
+// This test only checks a system v unix behavior.
+#if !defined(Q_OS_WIN) && !defined(QT_POSIX_IPC)
 void tst_QSystemSemaphore::undo()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QSystemSemaphore sem("store", 1, QSystemSemaphore::Create);
 
     QStringList acquireArguments = QStringList("acquire");
@@ -253,11 +261,15 @@ void tst_QSystemSemaphore::undo()
     QVERIFY2(acquire.waitForStarted(), "Could not start helper binary");
     acquire.waitForFinished(HELPERWAITTIME);
     QVERIFY(acquire.state()== QProcess::NotRunning);
+#endif
 }
 #endif
 
 void tst_QSystemSemaphore::initialValue()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QSystemSemaphore sem("store", 1, QSystemSemaphore::Create);
 
     QStringList acquireArguments = QStringList("acquire");
@@ -284,8 +296,8 @@ void tst_QSystemSemaphore::initialValue()
     acquire.waitForFinished(HELPERWAITTIME);
     release.waitForFinished(HELPERWAITTIME);
     QVERIFY(acquire.state()== QProcess::NotRunning);
-}
 #endif
+}
 
 QString tst_QSystemSemaphore::helperBinary()
 {

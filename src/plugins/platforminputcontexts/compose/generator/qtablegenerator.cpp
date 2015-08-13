@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -259,7 +259,7 @@ QByteArray TableGenerator::readLocaleAliases(const QByteArray &locale)
     return fullLocaleName;
 }
 
-bool TableGenerator::processFile(QString composeFileName)
+bool TableGenerator::processFile(const QString &composeFileName)
 {
     QFile composeFile(composeFileName);
     if (composeFile.open(QIODevice::ReadOnly)) {
@@ -385,6 +385,10 @@ void TableGenerator::parseKeySequence(char *line)
     if (!composeValueEnd)
         return;
 
+    // if composed value is a quotation mark adjust the end pointer
+    if (composeValueEnd[1] == '"')
+        ++composeValueEnd;
+
     if (*composeValue == '\\' && composeValue[1] >= '0' && composeValue[1] <= '9') {
         // handle octal and hex code values
         char detectBase = composeValue[2];
@@ -399,7 +403,7 @@ void TableGenerator::parseKeySequence(char *line)
         // handle direct text encoded in the locale
         if (*composeValue == '\\')
             ++composeValue;
-        elem.value = QString::fromLocal8Bit(composeValue).at(0).unicode();
+        elem.value = QString::fromLocal8Bit(composeValue, composeValueEnd - composeValue).at(0).unicode();
         ++composeValue;
     }
 
@@ -442,28 +446,22 @@ void TableGenerator::parseKeySequence(char *line)
 void TableGenerator::printComposeTable() const
 {
 #ifdef DEBUG_GENERATOR
+# ifndef QT_NO_DEBUG_STREAM
     if (m_composeTable.isEmpty())
         return;
 
-    QString output;
-    QComposeTableElement elem;
-    QString comma = QStringLiteral(",");
-    int tableSize = m_composeTable.size();
+    QDebug ds = qDebug() << "output:\n";
+    ds.nospace();
+    const int tableSize = m_composeTable.size();
     for (int i = 0; i < tableSize; ++i) {
-        elem = m_composeTable.at(i);
-        output.append(QLatin1String("{ {"));
+        const QComposeTableElement &elem = m_composeTable.at(i);
+        ds << "{ {";
         for (int j = 0; j < QT_KEYSEQUENCE_MAX_LEN; j++) {
-            output.append(QString(QLatin1String("0x%1, ")).arg(QString::number(elem.keys[j],16)));
+            ds << hex << showbase << elem.keys[j] << ", ";
         }
-        // take care of the trailing comma
-        if (i == tableSize - 1)
-            comma = QStringLiteral("");
-        output.append(QString(QLatin1String("}, 0x%1, \"\" }%2 // %3 \n"))
-                      .arg(QString::number(elem.value,16))
-                      .arg(comma)
-                      .arg(elem.comment));
+        ds << "}, " << hex << showbase << elem.value << ", \"\" }, // " << elem.comment << " \n";
     }
-    qDebug() << "output: \n" << output;
+# endif
 #endif
 }
 

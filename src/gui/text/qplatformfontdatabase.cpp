@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -34,6 +34,9 @@
 #include "qplatformfontdatabase.h"
 #include <QtGui/private/qfontengine_p.h>
 #include <QtGui/private/qfontengine_qpf2_p.h>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QScreen>
+#include <qpa/qplatformscreen.h>
 #include <QtCore/QLibraryInfo>
 #include <QtCore/QDir>
 
@@ -314,7 +317,7 @@ void QPlatformFontDatabase::invalidate()
 */
 QFontEngineMulti *QPlatformFontDatabase::fontEngineMulti(QFontEngine *fontEngine, QChar::Script script)
 {
-    return new QFontEngineMultiBasicImpl(fontEngine, script);
+    return new QFontEngineMulti(fontEngine, script);
 }
 
 /*!
@@ -457,6 +460,15 @@ bool QPlatformFontDatabase::fontsAlwaysScalable() const
     return ret;
 }
 
+QFontEngine::SubpixelAntialiasingType QPlatformFontDatabase::subpixelAntialiasingTypeHint() const
+{
+    static int type = -1;
+    if (type == -1) {
+        if (QScreen *screen = QGuiApplication::primaryScreen())
+            type = screen->handle()->subpixelAntialiasingTypeHint();
+    }
+    return static_cast<QFontEngine::SubpixelAntialiasingType>(type);
+}
 
 // ### copied to tools/makeqpf/qpf2.cpp
 
@@ -510,9 +522,11 @@ enum {
     VietnameseCsbBit = 8,
     SimplifiedChineseCsbBit = 18,
     TraditionalChineseCsbBit = 20,
+    ThaiCsbBit = 16,
     JapaneseCsbBit = 17,
     KoreanCsbBit = 19,
-    KoreanJohabCsbBit = 21
+    KoreanJohabCsbBit = 21,
+    SymbolCsbBit = 31
 };
 
 /*!
@@ -567,6 +581,11 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
         hasScript = true;
         //qDebug("font %s supports Arabic", familyName.latin1());
     }
+    if (codePageRange[0] & (1 << ThaiCsbBit)) {
+        writingSystems.setSupported(QFontDatabase::Thai);
+        hasScript = true;
+        //qDebug("font %s supports Thai", familyName.latin1());
+    }
     if (codePageRange[0] & (1 << VietnameseCsbBit)) {
         writingSystems.setSupported(QFontDatabase::Vietnamese);
         hasScript = true;
@@ -592,10 +611,43 @@ QSupportedWritingSystems QPlatformFontDatabase::writingSystemsFromTrueTypeBits(q
         hasScript = true;
         //qDebug("font %s supports Korean", familyName.latin1());
     }
+    if (codePageRange[0] & (1U << SymbolCsbBit)) {
+        writingSystems = QSupportedWritingSystems();
+        hasScript = false;
+    }
+
     if (!hasScript)
         writingSystems.setSupported(QFontDatabase::Symbol);
 
     return writingSystems;
+}
+
+/*!
+    Helper function that returns the Qt font weight matching a given opentype integer value.
+
+    \since 5.5
+*/
+
+// convert 0 ~ 1000 integer to QFont::Weight
+QFont::Weight QPlatformFontDatabase::weightFromInteger(int weight)
+{
+    if (weight < 150)
+        return QFont::Thin;
+    if (weight < 250)
+        return QFont::ExtraLight;
+    if (weight < 350)
+        return QFont::Light;
+    if (weight < 450)
+        return QFont::Normal;
+    if (weight < 550)
+        return QFont::Medium;
+    if (weight < 650)
+        return QFont::DemiBold;
+    if (weight < 750)
+        return QFont::Bold;
+    if (weight < 850)
+        return QFont::ExtraBold;
+    return QFont::Black;
 }
 
 /*!

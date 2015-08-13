@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
+** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -100,6 +92,18 @@
 #include <qpa/qplatformtheme.h>
 
 QT_USE_NAMESPACE
+
+namespace {
+class AutoReleasePool
+{
+public:
+    AutoReleasePool(): pool([[NSAutoreleasePool alloc] init]) {}
+    ~AutoReleasePool() { [pool release]; }
+
+private:
+    NSAutoreleasePool *pool;
+};
+}
 
 @interface QT_MANGLE_NAMESPACE(NotificationReceiver) : NSObject {
 QMacStylePrivate *mPrivate;
@@ -879,6 +883,10 @@ static QSize qt_aqua_get_known_size(QStyle::ContentsType ct, const QWidget *widg
             gbi.size = sz == QAquaSizeSmall ? kHIThemeGrowBoxSizeSmall : kHIThemeGrowBoxSizeNormal;
             if (HIThemeGetGrowBoxBounds(&p, &gbi, &r) == noErr) {
                 int width = 0;
+#ifndef QT_NO_MDIAREA
+            if (widg && qobject_cast<QMdiSubWindow *>(widg->parentWidget()))
+                width = r.size.width;
+#endif
                 ret = QSize(width, r.size.height);
             }
         }
@@ -1671,13 +1679,14 @@ void QMacStylePrivate::getSliderInfo(QStyle::ComplexControl cc, const QStyleOpti
         else
             tdi->max = 10 * slider->rect.height();
 
-        if (usePlainKnob || slider->orientation == Qt::Horizontal) {
+        int range = slider->maximum - slider->minimum;
+        if (range == 0) {
+            tdi->value = 0;
+        } else if (usePlainKnob || slider->orientation == Qt::Horizontal) {
             int endsCorrection = usePlainKnob ? 25 : 10;
-            tdi->value = (tdi->max + 2 * endsCorrection) * (slider->sliderPosition - slider->minimum)
-                    / (slider->maximum - slider->minimum) - endsCorrection;
+            tdi->value = (tdi->max + 2 * endsCorrection) * (slider->sliderPosition - slider->minimum) / range - endsCorrection;
         } else {
-            tdi->value = (tdi->max + 30) * (slider->sliderPosition - slider->minimum)
-                       / (slider->maximum - slider->minimum) - 20;
+            tdi->value = (tdi->max + 30) * (slider->sliderPosition - slider->minimum) / range - 20;
         }
     }
     tdi->attributes = kThemeTrackShowThumb;
@@ -1744,6 +1753,7 @@ QMacStylePrivate::QMacStylePrivate()
 
 QMacStylePrivate::~QMacStylePrivate()
 {
+    AutoReleasePool pool;
     Q_FOREACH (NSView *b, cocoaControls)
         [b release];
 }
@@ -1965,6 +1975,7 @@ void QMacStylePrivate::drawColorlessButton(const HIRect &macRect, HIThemeButtonD
                                || bdi->kind == kThemeComboBoxSmall
                                || bdi->kind == kThemeComboBoxMini;
     const bool button = opt->type == QStyleOption::SO_Button;
+    const bool viewItem = opt->type == QStyleOption::SO_ViewItem;
     const bool pressed = bdi->state == kThemeStatePressed;
     const bool usingYosemiteOrLater = QSysInfo::MacintoshVersion > QSysInfo::MV_10_9;
 
@@ -2005,6 +2016,8 @@ void QMacStylePrivate::drawColorlessButton(const HIRect &macRect, HIThemeButtonD
                 HIRect newRect = CGRectMake(xoff, yoff, macRect.size.width, macRect.size.height);
                 if (button && pressed)
                     bdi->state = kThemeStateActive;
+                else if (usingYosemiteOrLater && viewItem)
+                    bdi->state = kThemeStateInactive;
                 HIThemeDrawButton(&newRect, bdi, cg, kHIThemeOrientationNormal, 0);
             }
         }
@@ -2052,7 +2065,7 @@ void QMacStylePrivate::drawColorlessButton(const HIRect &macRect, HIThemeButtonD
                 rect.adjust(0, 0, -5, 0);
             drawNSViewInRect(cw, bc, rect, p);
             return;
-        } else if (usingYosemiteOrLater && editableCombo) {
+        } else if (usingYosemiteOrLater && (editableCombo || viewItem)) {
             QImage image = activePixmap.toImage();
 
             for (int y = 0; y < height; ++y) {
@@ -2122,6 +2135,8 @@ QMacStyle::QMacStyle()
     : QCommonStyle(*new QMacStylePrivate)
 {
     Q_D(QMacStyle);
+    AutoReleasePool pool;
+
     d->receiver = [[NotificationReceiver alloc] initWithPrivate:d];
     NotificationReceiver *receiver = static_cast<NotificationReceiver *>(d->receiver);
 
@@ -2137,6 +2152,8 @@ QMacStyle::QMacStyle()
 QMacStyle::~QMacStyle()
 {
     Q_D(QMacStyle);
+    AutoReleasePool pool;
+
     [reinterpret_cast<NSScroller*>(d->nsscroller) release];
 
     NotificationReceiver *receiver = static_cast<NotificationReceiver *>(d->receiver);
@@ -2152,6 +2169,7 @@ QMacStyle::~QMacStyle()
 */
 QPixmap QMacStylePrivate::generateBackgroundPattern() const
 {
+    AutoReleasePool pool;
     QPixmap px(4, 4);
     QMacCGContext cg(&px);
     HIThemeSetFill(kThemeBrushDialogBackgroundActive, 0, cg, kHIThemeOrientationNormal);
@@ -2749,6 +2767,8 @@ QPalette QMacStyle::standardPalette() const
 int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w,
                          QStyleHintReturn *hret) const
 {
+    AutoReleasePool pool;
+
     SInt32 ret = 0;
     switch (sh) {
     case SH_Slider_SnapToValue:
@@ -2794,6 +2814,19 @@ int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w
     case SH_Menu_SubMenuPopupDelay:
         ret = 100;
         break;
+    case SH_Menu_SubMenuUniDirection:
+        ret = true;
+        break;
+    case SH_Menu_SubMenuSloppySelectOtherActions:
+        ret = false;
+        break;
+    case SH_Menu_SubMenuResetWhenReenteringParent:
+        ret = true;
+        break;
+    case SH_Menu_SubMenuDontStartSloppyOnLeave:
+        ret = true;
+        break;
+
     case SH_ScrollBar_LeftClickAbsolutePosition: {
         NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
         bool result = [defaults boolForKey:@"AppleScrollerPagingBehavior"];
@@ -3040,8 +3073,11 @@ int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w
         break;
     case SH_ScrollBar_Transient:
         if ((qobject_cast<const QScrollBar *>(w) && w->parent() &&
-                qobject_cast<QAbstractScrollArea*>(w->parent()->parent())) ||
-                (opt && QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ScrollBar))) {
+                qobject_cast<QAbstractScrollArea*>(w->parent()->parent()))
+#ifndef QT_NO_ACCESSIBILITY
+                || (opt && QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ScrollBar))
+#endif
+        ) {
             ret = [NSScroller preferredScrollerStyle] == NSScrollerStyleOverlay;
         }
         break;
@@ -3683,6 +3719,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
         if (const QStyleOptionToolButton *tb = qstyleoption_cast<const QStyleOptionToolButton *>(opt)) {
             QStyleOptionToolButton myTb = *tb;
             myTb.state &= ~State_AutoRaise;
+#ifndef QT_NO_ACCESSIBILITY
             if (QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)) {
                 QRect cr = tb->rect;
                 int shiftX = 0;
@@ -3772,6 +3809,9 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             } else {
                 QCommonStyle::drawControl(ce, &myTb, p, w);
             }
+#else
+            Q_UNUSED(tb)
+#endif
         }
         break;
     case CE_ToolBoxTabShape:
@@ -4343,9 +4383,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 if (verticalTitleBar) {
                     QRect rect = dwOpt->rect;
                     QRect r = rect;
-                    QSize s = r.size();
-                    s.transpose();
-                    r.setSize(s);
+                    r.setSize(r.size().transposed());
 
                     titleRect = QRect(r.left() + rect.bottom()
                                         - titleRect.bottom(),
@@ -5172,11 +5210,8 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt,
 
             // If this is a vertical titlebar, we transpose and work as if it was
             // horizontal, then transpose again.
-            if (verticalTitleBar) {
-                QSize size = srect.size();
-                size.transpose();
-                srect.setSize(size);
-            }
+            if (verticalTitleBar)
+                srect.setSize(srect.size().transposed());
 
             do {
                 int right = srect.right();
@@ -5188,7 +5223,7 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                                             opt, widget).actualSize(QSize(iconSize, iconSize));
                     sz += QSize(buttonMargin, buttonMargin);
                     if (verticalTitleBar)
-                        sz.transpose();
+                        sz = sz.transposed();
                     closeRect = QRect(left,
                                       srect.center().y() - sz.height()/2,
                                       sz.width(), sz.height());
@@ -5205,7 +5240,7 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                                             opt, widget).actualSize(QSize(iconSize, iconSize));
                     sz += QSize(buttonMargin, buttonMargin);
                     if (verticalTitleBar)
-                        sz.transpose();
+                        sz = sz.transposed();
                     floatRect = QRect(left,
                                       srect.center().y() - sz.height()/2,
                                       sz.width(), sz.height());
@@ -5225,7 +5260,7 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt,
                         && icon.cacheKey() != QApplication::windowIcon().cacheKey()) {
                         QSize sz = icon.actualSize(QSize(rect.height(), rect.height()));
                         if (verticalTitleBar)
-                            sz.transpose();
+                            sz = sz.transposed();
                         iconRect = QRect(right - sz.width(), srect.center().y() - sz.height()/2,
                                          sz.width(), sz.height());
                         right = iconRect.left() - 1;
@@ -5910,7 +5945,7 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
     case CC_ToolButton:
         if (const QStyleOptionToolButton *tb
                 = qstyleoption_cast<const QStyleOptionToolButton *>(opt)) {
-
+#ifndef QT_NO_ACCESSIBILITY
             if (QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)) {
                 if (tb->subControls & SC_ToolButtonMenu) {
                     QStyleOption arrowOpt(0);
@@ -6036,6 +6071,7 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                 label.rect = buttonRect.adjusted(fw, fw, -fw, -fw);
                 proxy()->drawControl(CE_ToolButtonLabel, &label, p, widget);
             }
+#endif
         }
         break;
     case CC_Dial:
@@ -6514,7 +6550,11 @@ QRect QMacStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex *op
         break;
     case CC_ToolButton:
         ret = QCommonStyle::subControlRect(cc, opt, sc, widget);
-        if (sc == SC_ToolButtonMenu && !QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)) {
+        if (sc == SC_ToolButtonMenu
+#ifndef QT_NO_ACCESSIBILITY
+                && !QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)
+#endif
+        ) {
             ret.adjust(-1, 0, 0, 0);
         }
         break;
@@ -6601,7 +6641,7 @@ QSize QMacStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
             ThemeTabDirection ttd = getTabDirection(tab->shape);
             bool vertTabs = ttd == kThemeTabWest || ttd == kThemeTabEast;
             if (vertTabs)
-                sz.transpose();
+                sz = sz.transposed();
             int defaultTabHeight;
             int defaultExtraSpace = proxy()->pixelMetric(PM_TabBarTabHSpace, tab, widget); // Remove spurious gcc warning (AFAIK)
             QFontMetrics fm = opt->fontMetrics;
@@ -6631,7 +6671,7 @@ QSize QMacStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
             }
 
             if (vertTabs)
-                sz.transpose();
+                sz = sz.transposed();
 
             int maxWidgetHeight = qMax(tab->leftButtonSize.height(), tab->rightButtonSize.height());
             int maxWidgetWidth = qMax(tab->leftButtonSize.width(), tab->rightButtonSize.width());

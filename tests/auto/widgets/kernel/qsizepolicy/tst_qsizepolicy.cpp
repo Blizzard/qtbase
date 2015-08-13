@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,47 +23,91 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-
 #include <QtTest/QtTest>
 #include <qsizepolicy.h>
 
+Q_DECLARE_METATYPE(Qt::Orientations)
+Q_DECLARE_METATYPE(QSizePolicy)
+Q_DECLARE_METATYPE(QSizePolicy::Policy)
+Q_DECLARE_METATYPE(QSizePolicy::ControlType)
+
 class tst_QSizePolicy : public QObject
 {
-Q_OBJECT
+    Q_OBJECT
 
-public:
-    tst_QSizePolicy();
-    virtual ~tst_QSizePolicy();
-
-private slots:
+private Q_SLOTS:
+    void qtest();
+    void defaultValues();
+    void getSetCheck_data() { data(); }
     void getSetCheck();
     void dataStream();
     void horizontalStretch();
     void verticalStretch();
+private:
+    void data() const;
 };
 
-tst_QSizePolicy::tst_QSizePolicy()
+
+struct PrettyPrint {
+    const char *m_s;
+    template <typename T>
+    explicit PrettyPrint(const T &t) : m_s(Q_NULLPTR)
+    {
+        using QT_PREPEND_NAMESPACE(QTest)::toString;
+        m_s = toString(t);
+    }
+    ~PrettyPrint() { delete[] m_s; }
+    const char* s() const { return m_s ? m_s : "<null>" ; }
+};
+
+void tst_QSizePolicy::qtest()
 {
+#define CHECK(x) QCOMPARE(PrettyPrint(QSizePolicy::x).s(), #x)
+    // Policy:
+    CHECK(Fixed);
+    CHECK(Minimum);
+    CHECK(Ignored);
+    CHECK(MinimumExpanding);
+    CHECK(Expanding);
+    CHECK(Maximum);
+    CHECK(Preferred);
+    // ControlType:
+    CHECK(ButtonBox);
+    CHECK(CheckBox);
+    CHECK(ComboBox);
+    CHECK(Frame);
+    CHECK(GroupBox);
+    CHECK(Label);
+    CHECK(Line);
+    CHECK(LineEdit);
+    CHECK(PushButton);
+    CHECK(RadioButton);
+    CHECK(Slider);
+    CHECK(SpinBox);
+    CHECK(TabWidget);
+    CHECK(ToolButton);
+#undef CHECK
+#define CHECK2(x, y) QCOMPARE(PrettyPrint(QSizePolicy::x|QSizePolicy::y).s(), \
+                              QSizePolicy::x < QSizePolicy::y ? #x "|" #y : #y "|" #x)
+    // ControlTypes (sample)
+    CHECK2(ButtonBox, CheckBox);
+    CHECK2(CheckBox, ButtonBox);
+    CHECK2(ToolButton, Slider);
+#undef CHECK2
 }
 
-tst_QSizePolicy::~tst_QSizePolicy()
-{
-}
-
-
-// Testing get/set functions
-void tst_QSizePolicy::getSetCheck()
+void tst_QSizePolicy::defaultValues()
 {
     {
-        // check values of a default constructed QSizePolicy
+        // check values of a default-constructed QSizePolicy
         QSizePolicy sp;
         QCOMPARE(sp.horizontalPolicy(), QSizePolicy::Fixed);
         QCOMPARE(sp.verticalPolicy(), QSizePolicy::Fixed);
@@ -74,6 +118,61 @@ void tst_QSizePolicy::getSetCheck()
         QCOMPARE(sp.hasHeightForWidth(), false);
         QCOMPARE(sp.hasWidthForHeight(), false);
     }
+}
+
+#define FETCH_TEST_DATA \
+    QFETCH(QSizePolicy, sp); \
+    QFETCH(QSizePolicy::Policy, hp); \
+    QFETCH(QSizePolicy::Policy, vp); \
+    QFETCH(int, hst); \
+    QFETCH(int, vst); \
+    QFETCH(QSizePolicy::ControlType, ct); \
+    QFETCH(bool, hfw); \
+    QFETCH(bool, wfh); \
+    QFETCH(Qt::Orientations, ed)
+
+
+// Testing get/set functions
+void tst_QSizePolicy::getSetCheck()
+{
+    FETCH_TEST_DATA;
+
+    QCOMPARE(QPixmap(), QPixmap());
+
+    QCOMPARE(sp.horizontalPolicy(),    hp);
+    QCOMPARE(sp.verticalPolicy(),      vp);
+    QCOMPARE(sp.horizontalStretch(),   hst);
+    QCOMPARE(sp.verticalStretch(),     vst);
+    QCOMPARE(sp.controlType(),         ct);
+    QCOMPARE(sp.hasHeightForWidth(),   hfw);
+    QCOMPARE(sp.hasWidthForHeight(),   wfh);
+    QCOMPARE(sp.expandingDirections(), ed);
+}
+
+#undef FETCH_TEST_DATA
+
+static void makeRow(QSizePolicy sp, QSizePolicy::Policy hp, QSizePolicy::Policy vp,
+                    int hst, int vst, QSizePolicy::ControlType ct, bool hfw, bool wfh,
+                    Qt::Orientations orients)
+{
+    QTest::newRow(qPrintable(QString::asprintf("%s-%s-%d-%d-%s-%s-%s",
+                                               PrettyPrint(hp).s(), PrettyPrint(vp).s(), hst, vst,
+                                               PrettyPrint(ct).s(),
+                                               hfw ? "true" : "false", wfh ? "true" : "false")))
+            << sp << hp << vp << hst << vst << ct << hfw << wfh << orients;
+}
+
+void tst_QSizePolicy::data() const
+{
+    QTest::addColumn<QSizePolicy>("sp");
+    QTest::addColumn<QSizePolicy::Policy>("hp");
+    QTest::addColumn<QSizePolicy::Policy>("vp");
+    QTest::addColumn<int>("hst");
+    QTest::addColumn<int>("vst");
+    QTest::addColumn<QSizePolicy::ControlType>("ct");
+    QTest::addColumn<bool>("hfw");
+    QTest::addColumn<bool>("wfh");
+    QTest::addColumn<Qt::Orientations>("ed");
 
     {
         static const QSizePolicy::Policy policies[3] = {
@@ -118,18 +217,11 @@ void tst_QSizePolicy::getSetCheck()
                                         case 0: sp.setHorizontalPolicy(hp); break;
                                         case 1: sp.setVerticalPolicy(vp); break;
                                         case 2: sp.setHorizontalStretch(hst); break;
-                           case 3: sp.setVerticalStretch(vst); break;
+                                        case 3: sp.setVerticalStretch(vst); break;
                                         case 4: sp.setControlType(ct); break;
                                         case 5: sp.setHeightForWidth(hfw); sp.setWidthForHeight(wfh); break;
                                         default: break;
                                         }
-                                        QCOMPARE(sp.horizontalPolicy(),  (i >= 0 ? hp  : oldsp.horizontalPolicy()));
-                                        QCOMPARE(sp.verticalPolicy(),    (i >= 1 ? vp  : oldsp.verticalPolicy()));
-                                        QCOMPARE(sp.horizontalStretch(), (i >= 2 ? hst : oldsp.horizontalStretch()));
-                                        QCOMPARE(sp.verticalStretch(),   (i >= 3 ? vst : oldsp.verticalStretch()));
-                                        QCOMPARE(sp.controlType(),       (i >= 4 ? ct  : oldsp.controlType()));
-                                        QCOMPARE(sp.hasHeightForWidth(), (i >= 5 ? hfw : oldsp.hasHeightForWidth()));
-                                        QCOMPARE(sp.hasWidthForHeight(), (i >= 5 ? wfh : oldsp.hasWidthForHeight()));
 
                                         Qt::Orientations orients;
                                         if (sp.horizontalPolicy() & QSizePolicy::ExpandFlag)
@@ -137,7 +229,15 @@ void tst_QSizePolicy::getSetCheck()
                                         if (sp.verticalPolicy() & QSizePolicy::ExpandFlag)
                                             orients |= Qt::Vertical;
 
-                                        QCOMPARE(sp.expandingDirections(), orients);
+                                        makeRow(sp,
+                                                i >= 0 ? hp  : oldsp.horizontalPolicy(),
+                                                i >= 1 ? vp  : oldsp.verticalPolicy(),
+                                                i >= 2 ? hst : oldsp.horizontalStretch(),
+                                                i >= 3 ? vst : oldsp.verticalStretch(),
+                                                i >= 4 ? ct  : oldsp.controlType(),
+                                                i >= 5 ? hfw : oldsp.hasHeightForWidth(),
+                                                i >= 5 ? wfh : oldsp.hasWidthForHeight(),
+                                                orients);
 #ifdef GENERATE_BASELINE
                                         stream << sp;
 #endif
@@ -152,6 +252,7 @@ void tst_QSizePolicy::getSetCheck()
             out.close();
         }
 #endif
+#undef ITEMCOUNT
     }
 }
 
@@ -212,5 +313,6 @@ void tst_QSizePolicy::verticalStretch()
     sp.setVerticalStretch(257);
     QCOMPARE(sp.verticalStretch(), 255);
 }
+
 QTEST_MAIN(tst_QSizePolicy)
 #include "tst_qsizepolicy.moc"

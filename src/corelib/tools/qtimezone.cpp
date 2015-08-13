@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -56,6 +56,8 @@ static QTimeZonePrivate *newBackendTimeZone()
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate();
+#elif defined Q_OS_ANDROID
+    return new QAndroidTimeZonePrivate();
 #elif defined Q_OS_UNIX
     return new QTzTimeZonePrivate();
     // Registry based timezone backend not available on WinRT
@@ -81,6 +83,8 @@ static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate(ianaId);
+#elif defined Q_OS_ANDROID
+    return new QAndroidTimeZonePrivate(ianaId);
 #elif defined Q_OS_UNIX
     return new QTzTimeZonePrivate(ianaId);
     // Registry based timezone backend not available on WinRT
@@ -179,7 +183,7 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     given moment then you should use a Qt::TimeSpec of Qt::LocalTime.
 
     The method systemTimeZoneId() returns the current system IANA time zone
-    ID which on OSX and Linux will always be correct.  On Windows this ID is
+    ID which on Unix-like systems will always be correct.  On Windows this ID is
     translated from the Windows system ID using an internal translation
     table and the user's selected country.  As a consequence there is a small
     chance any Windows install may have IDs not known by Qt, in which case
@@ -374,12 +378,10 @@ QTimeZone::QTimeZone(int offsetSeconds)
 
 QTimeZone::QTimeZone(const QByteArray &ianaId, int offsetSeconds, const QString &name,
                      const QString &abbreviation, QLocale::Country country, const QString &comment)
+    : d()
 {
-    // ianaId must be a valid ID and must not clash with the standard system names
-    if (QTimeZonePrivate::isValidId(ianaId) && !availableTimeZoneIds().contains(ianaId))
+    if (!isTimeZoneIdAvailable(ianaId))
         d = new QUtcTimeZonePrivate(ianaId, offsetSeconds, name, abbreviation, country, comment);
-    else
-        d = 0;
 }
 
 /*!
@@ -785,6 +787,29 @@ QByteArray QTimeZone::systemTimeZoneId()
 }
 
 /*!
+    \since 5.5
+    Returns a QTimeZone object that refers to the local system time, as
+    specified by systemTimeZoneId().
+
+    \sa utc()
+*/
+QTimeZone QTimeZone::systemTimeZone()
+{
+    return QTimeZone(QTimeZone::systemTimeZoneId());
+}
+
+/*!
+    \since 5.5
+    Returns a QTimeZone object that refers to UTC (Universal Time Coordinated).
+
+    \sa systemTimeZone()
+*/
+QTimeZone QTimeZone::utc()
+{
+    return QTimeZone(QTimeZonePrivate::utcQByteArray());
+}
+
+/*!
     Returns \c true if a given time zone \a ianaId is available on this system.
 
     \sa availableTimeZoneIds()
@@ -794,7 +819,20 @@ bool QTimeZone::isTimeZoneIdAvailable(const QByteArray &ianaId)
 {
     // isValidId is not strictly required, but faster to weed out invalid
     // IDs as availableTimeZoneIds() may be slow
-    return (QTimeZonePrivate::isValidId(ianaId) && (availableTimeZoneIds().contains(ianaId)));
+    if (!QTimeZonePrivate::isValidId(ianaId))
+        return false;
+    const QList<QByteArray> tzIds = availableTimeZoneIds();
+    return std::binary_search(tzIds.begin(), tzIds.end(), ianaId);
+}
+
+static QList<QByteArray> set_union(const QList<QByteArray> &l1, const QList<QByteArray> &l2)
+{
+    QList<QByteArray> result;
+    result.reserve(l1.size() + l2.size());
+    std::set_union(l1.begin(), l1.end(),
+                   l2.begin(), l2.end(),
+                   std::back_inserter(result));
+    return result;
 }
 
 /*!
@@ -805,11 +843,8 @@ bool QTimeZone::isTimeZoneIdAvailable(const QByteArray &ianaId)
 
 QList<QByteArray> QTimeZone::availableTimeZoneIds()
 {
-    QSet<QByteArray> set = QUtcTimeZonePrivate().availableTimeZoneIds()
-                           + global_tz->backend->availableTimeZoneIds();
-    QList<QByteArray> list = set.toList();
-    std::sort(list.begin(), list.end());
-    return list;
+    return set_union(QUtcTimeZonePrivate().availableTimeZoneIds(),
+                     global_tz->backend->availableTimeZoneIds());
 }
 
 /*!
@@ -825,11 +860,8 @@ QList<QByteArray> QTimeZone::availableTimeZoneIds()
 
 QList<QByteArray> QTimeZone::availableTimeZoneIds(QLocale::Country country)
 {
-    QSet<QByteArray> set = QUtcTimeZonePrivate().availableTimeZoneIds(country)
-                           + global_tz->backend->availableTimeZoneIds(country);
-    QList<QByteArray> list = set.toList();
-    std::sort(list.begin(), list.end());
-    return list;
+    return set_union(QUtcTimeZonePrivate().availableTimeZoneIds(country),
+                     global_tz->backend->availableTimeZoneIds(country));
 }
 
 /*!
@@ -841,11 +873,8 @@ QList<QByteArray> QTimeZone::availableTimeZoneIds(QLocale::Country country)
 
 QList<QByteArray> QTimeZone::availableTimeZoneIds(int offsetSeconds)
 {
-    QSet<QByteArray> set = QUtcTimeZonePrivate().availableTimeZoneIds(offsetSeconds)
-                           + global_tz->backend->availableTimeZoneIds(offsetSeconds);
-    QList<QByteArray> list = set.toList();
-    std::sort(list.begin(), list.end());
-    return list;
+    return set_union(QUtcTimeZonePrivate().availableTimeZoneIds(offsetSeconds),
+                     global_tz->backend->availableTimeZoneIds(offsetSeconds));
 }
 
 /*!
@@ -953,9 +982,10 @@ QDataStream &operator>>(QDataStream &ds, QTimeZone &tz)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QTimeZone &tz)
 {
+    QDebugStateSaver saver(dbg);
     //TODO Include backend and data version details?
     dbg.nospace() << "QTimeZone(" << QString::fromUtf8(tz.id()) << ')';
-    return dbg.space();
+    return dbg;
 }
 #endif
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -338,26 +338,20 @@ inline bool QWindowPrivate::windowRecreationRequired(QScreen *newScreen) const
 {
     Q_Q(const QWindow);
     const QScreen *oldScreen = q->screen();
-    return oldScreen != newScreen && platformWindow
+    return oldScreen != newScreen && (platformWindow || !oldScreen)
         && !(oldScreen && oldScreen->virtualSiblings().contains(newScreen));
 }
 
 inline void QWindowPrivate::disconnectFromScreen()
 {
-    if (topLevelScreen) {
-        Q_Q(QWindow);
-        QObject::disconnect(topLevelScreen, &QObject::destroyed, q, &QWindow::screenDestroyed);
+    if (topLevelScreen)
         topLevelScreen = 0;
-    }
 }
 
 void QWindowPrivate::connectToScreen(QScreen *screen)
 {
-    Q_Q(QWindow);
     disconnectFromScreen();
     topLevelScreen = screen;
-    if (topLevelScreen)
-        QObject::connect(topLevelScreen, &QObject::destroyed, q, &QWindow::screenDestroyed);
 }
 
 void QWindowPrivate::emitScreenChangedRecursion(QScreen *newScreen)
@@ -379,10 +373,13 @@ void QWindowPrivate::setTopLevelScreen(QScreen *newScreen, bool recreate)
     }
     if (newScreen != topLevelScreen) {
         const bool shouldRecreate = recreate && windowRecreationRequired(newScreen);
-        if (shouldRecreate)
+        const bool shouldShow = visibilityOnDestroy && !topLevelScreen;
+        if (shouldRecreate && platformWindow)
             q->destroy();
         connectToScreen(newScreen);
-        if (newScreen && shouldRecreate)
+        if (shouldShow)
+            q->setVisible(true);
+        else if (newScreen && shouldRecreate)
             create(true);
         emitScreenChangedRecursion(newScreen);
     }
@@ -404,11 +401,25 @@ void QWindowPrivate::create(bool recursive)
                     window->d_func()->platformWindow->setParent(platformWindow);
             }
         }
+
+        if (platformWindow) {
+            QPlatformSurfaceEvent e(QPlatformSurfaceEvent::SurfaceCreated);
+            QGuiApplication::sendEvent(q, &e);
+        }
     }
 }
 
 void QWindowPrivate::clearFocusObject()
 {
+}
+
+// Allows for manipulating the suggested geometry before a resize/move
+// event in derived classes for platforms that support it, for example to
+// implement heightForWidth().
+QRectF QWindowPrivate::closestAcceptableGeometry(const QRectF &rect) const
+{
+    Q_UNUSED(rect)
+    return QRectF();
 }
 
 /*!
@@ -478,6 +489,13 @@ void QWindow::setVisible(bool visible)
             }
             if (!app_priv->forcedWindowIcon.isNull())
                 setIcon(app_priv->forcedWindowIcon);
+
+            // Handling of the -qwindowgeometry, -geometry command line arguments
+            static bool geometryApplied = false;
+            if (!geometryApplied) {
+                geometryApplied = true;
+                QGuiApplicationPrivate::applyWindowGeometrySpecificationTo(this);
+            }
         }
 
         QShowEvent showEvent;
@@ -1057,6 +1075,10 @@ Qt::ScreenOrientation QWindow::contentOrientation() const
 
     Common values are 1.0 on normal displays and 2.0 on Apple "retina" displays.
 
+    \note For windows not backed by a platform window, meaning that create() was not
+    called, the function will fall back to QGuiApplication::devicePixelRatio() which in
+    turn returns the highest screen device pixel ratio found on the system.
+
     \sa QScreen::devicePixelRatio(), QGuiApplication::devicePixelRatio()
 */
 qreal QWindow::devicePixelRatio() const
@@ -1491,10 +1513,10 @@ void QWindow::setFramePosition(const QPoint &point)
 {
     Q_D(QWindow);
     d->positionPolicy = QWindowPrivate::WindowFrameInclusive;
+    d->positionAutomatic = false;
     if (d->platformWindow) {
         d->platformWindow->setGeometry(QRect(point, size()));
     } else {
-        d->positionAutomatic = false;
         d->geometry.moveTopLeft(point);
     }
 }
@@ -1588,12 +1610,19 @@ void QWindow::destroy()
         QGuiApplicationPrivate::focus_window = parent();
     if (QGuiApplicationPrivate::currentMouseWindow == this)
         QGuiApplicationPrivate::currentMouseWindow = parent();
+    if (QGuiApplicationPrivate::currentMousePressWindow == this)
+        QGuiApplicationPrivate::currentMousePressWindow = parent();
     if (QGuiApplicationPrivate::tabletPressTarget == this)
         QGuiApplicationPrivate::tabletPressTarget = parent();
 
     bool wasVisible = isVisible();
+    d->visibilityOnDestroy = wasVisible && d->platformWindow;
 
     setVisible(false);
+
+    QPlatformSurfaceEvent e(QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed);
+    QGuiApplication::sendEvent(this, &e);
+
     delete d->platformWindow;
     d->resizeEventPending = true;
     d->receivedExpose = false;
@@ -1639,8 +1668,6 @@ QPlatformSurface *QWindow::surfaceHandle() const
 bool QWindow::setKeyboardGrabEnabled(bool grab)
 {
     Q_D(QWindow);
-    if (grab && QGuiApplicationPrivate::noGrab)
-        return false;
     if (d->platformWindow)
         return d->platformWindow->setKeyboardGrabEnabled(grab);
     return false;
@@ -1658,15 +1685,13 @@ bool QWindow::setKeyboardGrabEnabled(bool grab)
 bool QWindow::setMouseGrabEnabled(bool grab)
 {
     Q_D(QWindow);
-    if (grab && QGuiApplicationPrivate::noGrab)
-        return false;
     if (d->platformWindow)
         return d->platformWindow->setMouseGrabEnabled(grab);
     return false;
 }
 
 /*!
-    Returns the screen on which the window is shown.
+    Returns the screen on which the window is shown, or null if there is none.
 
     For child windows, this returns the screen of the corresponding top level window.
 
@@ -1675,7 +1700,7 @@ bool QWindow::setMouseGrabEnabled(bool grab)
 QScreen *QWindow::screen() const
 {
     Q_D(const QWindow);
-    return d->parentWindow ? d->parentWindow->screen() : d->topLevelScreen;
+    return d->parentWindow ? d->parentWindow->screen() : d->topLevelScreen.data();
 }
 
 /*!
@@ -1695,24 +1720,7 @@ void QWindow::setScreen(QScreen *newScreen)
     Q_D(QWindow);
     if (!newScreen)
         newScreen = QGuiApplication::primaryScreen();
-    d->setTopLevelScreen(newScreen, true /* recreate */);
-}
-
-void QWindow::screenDestroyed(QObject *object)
-{
-    Q_D(QWindow);
-    if (d->parentWindow || QGuiApplication::closingDown())
-        return;
-    if (object == static_cast<QObject *>(d->topLevelScreen)) {
-        const bool wasVisible = isVisible();
-        setScreen(0);
-        // destroy() might have hidden our window, show it again.
-        // This might not be the best behavior if the new screen isn't a virtual sibling
-        // of the old one. This can be removed once platform plugins have the power to
-        // update the QScreen of its QWindows itself.
-        if (wasVisible && d->platformWindow)
-            setVisible(true);
-    }
+    d->setTopLevelScreen(newScreen, newScreen != 0);
 }
 
 /*!
@@ -2047,10 +2055,59 @@ bool QWindow::event(QEvent *ev)
         break;
 #endif
 
+    case QEvent::Timer: {
+        Q_D(QWindow);
+        if (static_cast<QTimerEvent *>(ev)->timerId() == d->updateTimer) {
+            killTimer(d->updateTimer);
+            d->updateTimer = 0;
+            d->deliverUpdateRequest();
+        } else {
+            QObject::event(ev);
+        }
+        break;
+    }
+
     default:
         return QObject::event(ev);
     }
     return true;
+}
+
+void QWindowPrivate::deliverUpdateRequest()
+{
+    Q_Q(QWindow);
+    updateRequestPending = false;
+    QEvent request(QEvent::UpdateRequest);
+    QCoreApplication::sendEvent(q, &request);
+}
+
+/*!
+    Schedules a QEvent::UpdateRequest event to be delivered to this window.
+
+    The event is delivered in sync with the display vsync on platforms
+    where this is possible. When driving animations, this function should
+    be called once after drawing has completed.
+
+    Calling this function multiple times will result in a single event
+    being delivered to the window.
+
+    Subclasses of QWindow should reimplement event(), intercept the event and
+    call the application's rendering code, then call the base class
+    implementation.
+
+    \note The subclass' reimplementation of event() must invoke the base class
+    implementation, unless it is absolutely sure that the event does not need to
+    be handled by the base class. For example, the default implementation of
+    this function relies on QEvent::Timer events. Filtering them away would
+    therefore break the delivery of the update events.
+*/
+void QWindow::requestUpdate()
+{
+    Q_D(QWindow);
+    if (d->updateRequestPending || !d->platformWindow)
+        return;
+    d->updateRequestPending = true;
+    d->platformWindow->requestUpdate();
 }
 
 /*!
@@ -2194,10 +2251,12 @@ bool QWindow::nativeEvent(const QByteArray &eventType, void *message, long *resu
 QPoint QWindow::mapToGlobal(const QPoint &pos) const
 {
     Q_D(const QWindow);
-    if (d->platformWindow && d->platformWindow->isEmbedded(0))
+    // QTBUG-43252, prefer platform implementation for foreign windows.
+    if (d->platformWindow
+        && (type() == Qt::ForeignWindow || d->platformWindow->isEmbedded(0))) {
         return d->platformWindow->mapToGlobal(pos);
-    else
-        return pos + d_func()->globalPosition();
+    }
+    return pos + d_func()->globalPosition();
 }
 
 
@@ -2212,10 +2271,12 @@ QPoint QWindow::mapToGlobal(const QPoint &pos) const
 QPoint QWindow::mapFromGlobal(const QPoint &pos) const
 {
     Q_D(const QWindow);
-    if (d->platformWindow && d->platformWindow->isEmbedded(0))
+    // QTBUG-43252, prefer platform implementation for foreign windows.
+    if (d->platformWindow
+        && (type() == Qt::ForeignWindow || d->platformWindow->isEmbedded(0))) {
         return d->platformWindow->mapFromGlobal(pos);
-    else
-        return pos - d_func()->globalPosition();
+    }
+    return pos - d_func()->globalPosition();
 }
 
 
@@ -2232,24 +2293,22 @@ void QWindowPrivate::maybeQuitOnLastWindowClosed()
     Q_Q(QWindow);
     // Attempt to close the application only if this has WA_QuitOnClose set and a non-visible parent
     bool quitOnClose = QGuiApplication::quitOnLastWindowClosed() && !q->parent();
-
-    if (quitOnClose) {
-        QWindowList list = QGuiApplication::topLevelWindows();
-        bool lastWindowClosed = true;
-        for (int i = 0; i < list.size(); ++i) {
-            QWindow *w = list.at(i);
-            if (!w->isVisible() || w->transientParent())
-                continue;
-            lastWindowClosed = false;
-            break;
-        }
-        if (lastWindowClosed) {
-            QGuiApplicationPrivate::emitLastWindowClosed();
+    QWindowList list = QGuiApplication::topLevelWindows();
+    bool lastWindowClosed = true;
+    for (int i = 0; i < list.size(); ++i) {
+        QWindow *w = list.at(i);
+        if (!w->isVisible() || w->transientParent())
+            continue;
+        lastWindowClosed = false;
+        break;
+    }
+    if (lastWindowClosed) {
+        QGuiApplicationPrivate::emitLastWindowClosed();
+        if (quitOnClose) {
             QCoreApplicationPrivate *applicationPrivate = static_cast<QCoreApplicationPrivate*>(QObjectPrivate::get(QCoreApplication::instance()));
             applicationPrivate->maybeQuit();
         }
     }
-
 }
 
 QWindow *QWindowPrivate::topLevelWindow() const
@@ -2388,7 +2447,8 @@ void QWindowPrivate::setCursor(const QCursor *newCursor)
         hasCursor = false;
     }
     // Only attempt to set cursor and emit signal if there is an actual platform cursor
-    if (q->screen()->handle()->cursor()) {
+    QScreen* screen = q->screen();
+    if (screen && screen->handle()->cursor()) {
         applyCursor();
         QEvent event(QEvent::CursorChange);
         QGuiApplication::sendEvent(q, &event);

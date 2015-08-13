@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -41,7 +41,6 @@
 #include <qfontmetrics.h>
 #include <qbrush.h>
 #include <qimagereader.h>
-#include "private/qfunctions_p.h"
 
 #include <algorithm>
 
@@ -340,18 +339,18 @@ static const QCssKnownValue styleFeatures[NumKnownStyleFeatures - 1] = {
 };
 
 #if defined(Q_CC_MSVC) && _MSC_VER < 1600
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCssKnownValue &prop1, const QCssKnownValue &prop2)
+static bool operator<(const QCssKnownValue &prop1, const QCssKnownValue &prop2)
 {
     return QString::compare(QString::fromLatin1(prop1.name), QLatin1String(prop2.name), Qt::CaseInsensitive) < 0;
 }
 #endif
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QString &name, const QCssKnownValue &prop)
+static bool operator<(const QString &name, const QCssKnownValue &prop)
 {
     return QString::compare(name, QLatin1String(prop.name), Qt::CaseInsensitive) < 0;
 }
 
-Q_STATIC_GLOBAL_OPERATOR bool operator<(const QCssKnownValue &prop, const QString &name)
+static bool operator<(const QCssKnownValue &prop, const QString &name)
 {
     return QString::compare(QLatin1String(prop.name), name, Qt::CaseInsensitive) < 0;
 }
@@ -363,6 +362,29 @@ static quint64 findKnownValue(const QString &name, const QCssKnownValue *start, 
     if ((prop == end) || (name < *prop))
         return 0;
     return prop->id;
+}
+
+static inline bool isInheritable(Property propertyId)
+{
+    switch (propertyId) {
+    case Font:
+    case FontFamily:
+    case FontSize:
+    case FontStyle:
+    case FontWeight:
+    case TextIndent:
+    case Whitespace:
+    case ListStyleType:
+    case ListStyle:
+    case TextAlignment:
+    case FontVariant:
+    case TextTransform:
+    case LineHeight:
+        return true;
+    default:
+        break;
+    }
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2318,6 +2340,7 @@ bool Parser::parseProperty(Declaration *decl)
 {
     decl->d->property = lexem();
     decl->d->propertyId = static_cast<Property>(findKnownValue(decl->d->property, properties, NumProperties));
+    decl->d->inheritable = isInheritable(decl->d->propertyId);
     skipSpace();
     return true;
 }

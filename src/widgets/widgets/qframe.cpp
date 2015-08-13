@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -202,6 +202,49 @@ QFrame::QFrame(QFramePrivate &dd, QWidget* parent, Qt::WindowFlags f)
     d->init();
 }
 
+/*!
+    \since 5.5
+
+    Initializes \a option with the values from this QFrame. This method is
+    useful for subclasses when they need a QStyleOptionFrame but don't want to
+    fill in all the information themselves.
+
+    \sa QStyleOption::initFrom()
+*/
+void QFrame::initStyleOption(QStyleOptionFrame *option) const
+{
+    if (!option)
+        return;
+
+    Q_D(const QFrame);
+    option->initFrom(this);
+
+    int frameShape  = d->frameStyle & QFrame::Shape_Mask;
+    int frameShadow = d->frameStyle & QFrame::Shadow_Mask;
+    option->frameShape = Shape(int(option->frameShape) | frameShape);
+    option->rect = frameRect();
+    switch (frameShape) {
+        case QFrame::Box:
+        case QFrame::HLine:
+        case QFrame::VLine:
+        case QFrame::StyledPanel:
+        case QFrame::Panel:
+            option->lineWidth = d->lineWidth;
+            option->midLineWidth = d->midLineWidth;
+            break;
+        default:
+            // most frame styles do not handle customized line and midline widths
+            // (see updateFrameWidth()).
+            option->lineWidth = d->frameWidth;
+            break;
+    }
+
+    if (frameShadow == Sunken)
+        option->state |= QStyle::State_Sunken;
+    else if (frameShadow == Raised)
+        option->state |= QStyle::State_Raised;
+}
+
 
 /*!
   Destroys the frame.
@@ -362,10 +405,7 @@ void QFramePrivate::updateStyledFrameWidths()
 {
     Q_Q(const QFrame);
     QStyleOptionFrame opt;
-    opt.initFrom(q);
-    opt.lineWidth = lineWidth;
-    opt.midLineWidth = midLineWidth;
-    opt.frameShape = QFrame::Shape(frameStyle & QFrame::Shape_Mask);
+    q->initStyleOption(&opt);
 
     QRect cr = q->style()->subElementRect(QStyle::SE_ShapedFrameContents, &opt, q);
     leftFrameWidth = cr.left() - opt.rect.left();
@@ -472,34 +512,8 @@ void QFrame::paintEvent(QPaintEvent *)
  */
 void QFrame::drawFrame(QPainter *p)
 {
-    Q_D(QFrame);
     QStyleOptionFrame opt;
-    opt.init(this);
-    int frameShape  = d->frameStyle & QFrame::Shape_Mask;
-    int frameShadow = d->frameStyle & QFrame::Shadow_Mask;
-    opt.frameShape = Shape(int(opt.frameShape) | frameShape);
-    opt.rect = frameRect();
-    switch (frameShape) {
-        case QFrame::Box:
-        case QFrame::HLine:
-        case QFrame::VLine:
-        case QFrame::StyledPanel:
-        case QFrame::Panel:
-            opt.lineWidth = d->lineWidth;
-            opt.midLineWidth = d->midLineWidth;
-            break;
-        default:
-            // most frame styles do not handle customized line and midline widths
-            // (see updateFrameWidth()).
-            opt.lineWidth = d->frameWidth;
-            break;
-    }
-
-    if (frameShadow == Sunken)
-        opt.state |= QStyle::State_Sunken;
-    else if (frameShadow == Raised)
-        opt.state |= QStyle::State_Raised;
-
+    initStyleOption(&opt);
     style()->drawControl(QStyle::CE_ShapedFrame, &opt, p, this);
 }
 

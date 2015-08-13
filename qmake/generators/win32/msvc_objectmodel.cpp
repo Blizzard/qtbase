@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -2137,7 +2137,6 @@ VCPreLinkEventTool::VCPreLinkEventTool()
 VCConfiguration::VCConfiguration()
     :   WinRT(false),
         WinPhone(false),
-        WinPhone80(false),
         ATLMinimizesCRunTimeLibraryUsage(unset),
         BuildBrowserInformation(unset),
         CharacterSet(charSetNotSet),
@@ -2237,7 +2236,10 @@ void VCFilter::modifyPCHstage(QString str)
     useCompilerTool = true;
     // Setup PCH options
     CompilerTool.UsePrecompiledHeader     = (isCFile ? pchNone : pchCreateUsingSpecific);
-    CompilerTool.PrecompiledHeaderThrough = (isCPPFile ? Project->precompHFilename : QString("$(NOINHERIT)"));
+    if (isCFile)
+        CompilerTool.PrecompiledHeaderThrough = QLatin1String("$(NOINHERIT)");
+    else if (autogenSourceFile)
+        CompilerTool.PrecompiledHeaderThrough = Project->precompHFilename;
     CompilerTool.ForcedIncludeFiles       = QStringList("$(NOINHERIT)");
 }
 
@@ -2295,9 +2297,8 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         QString cmd, cmd_name, out;
         QStringList deps, inputs;
         // Variabel replacement of output name
-        out = Option::fixPathToTargetOS(
-                    Project->replaceExtraCompilerVariables(tmp_out, inFile, QString()),
-                    false);
+        out = Option::fixPathToTargetOS(Project->replaceExtraCompilerVariables(
+                tmp_out, inFile, QString(), MakefileGenerator::NoShell), false);
 
         // If file has built-in compiler, we've swapped the input and output of
         // the command, as we in Visual Studio cannot have a Custom Buildstep on
@@ -2318,9 +2319,8 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         if (!tmp_dep_cmd.isEmpty()) {
             // Execute dependency command, and add every line as a dep
             char buff[256];
-            QString dep_cmd = Project->replaceExtraCompilerVariables(tmp_dep_cmd,
-                                                                     Option::fixPathToLocalOS(inFile, true, false),
-                                                                     out);
+            QString dep_cmd = Project->replaceExtraCompilerVariables(
+                        tmp_dep_cmd, inFile, out, MakefileGenerator::LocalShell);
             if(Project->canExecute(dep_cmd)) {
                 dep_cmd.prepend(QLatin1String("cd ")
                                 + Project->escapeFilePath(Option::fixPathToLocalOS(Option::output_dir, false))
@@ -2339,7 +2339,7 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
                         for (int i = 0; i < extradeps.count(); ++i) {
                             QString dd = extradeps.at(i).simplified();
                             if (!dd.isEmpty())
-                                deps += Project->fileFixify(dd, QString(), Option::output_dir);
+                                deps += Project->fileFixify(dd, MakefileGenerator::FileFixifyFromOutdir);
                         }
                     }
                 }
@@ -2347,8 +2347,9 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         }
         for (int i = 0; i < deps.count(); ++i)
             deps[i] = Option::fixPathToTargetOS(
-                        Project->replaceExtraCompilerVariables(deps.at(i), inFile, out),
-                        false).trimmed();
+                        Project->replaceExtraCompilerVariables(
+                                deps.at(i), inFile, out, MakefileGenerator::NoShell),
+                        false);
         // Command for file
         if (combined) {
             // Add dependencies for each file
@@ -2364,28 +2365,27 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
             deps = inputs + deps; // input files themselves too..
 
             // Replace variables for command w/all input files
-            // ### join gives path issues with directories containing spaces!
             cmd = Project->replaceExtraCompilerVariables(tmp_cmd,
-                                                         inputs.join(' '),
-                                                         out);
+                                                         inputs,
+                                                         QStringList(out),
+                                                         MakefileGenerator::TargetShell);
         } else {
             deps.prepend(inFile); // input file itself too..
             cmd = Project->replaceExtraCompilerVariables(tmp_cmd,
                                                          inFile,
-                                                         out);
+                                                         out,
+                                                         MakefileGenerator::TargetShell);
         }
         // Name for command
         if (!tmp_cmd_name.isEmpty()) {
-            cmd_name = Project->replaceExtraCompilerVariables(tmp_cmd_name, inFile, out);
+            cmd_name = Project->replaceExtraCompilerVariables(
+                    tmp_cmd_name, inFile, out, MakefileGenerator::NoShell);
         } else {
             int space = cmd.indexOf(' ');
             if (space != -1)
                 cmd_name = cmd.left(space);
             else
                 cmd_name = cmd;
-            if ((cmd_name[0] == '\'' || cmd_name[0] == '"') &&
-                cmd_name[0] == cmd_name[cmd_name.length()-1])
-                cmd_name = cmd_name.mid(1,cmd_name.length()-2);
         }
 
         // Fixify paths
@@ -2451,6 +2451,8 @@ const VCFilter &VCProjectSingleConfig::filterByName(const QString &name) const
         return ResourceFiles;
     if (name == "Deployment Files")
         return DeploymentFiles;
+    if (name == "Distribution Files")
+        return DistributionFiles;
     return filterForExtraCompiler(name);
 }
 
@@ -2533,6 +2535,7 @@ void VCProjectWriter::write(XmlOutput &xml, VCProjectSingleConfig &tool)
     outputFilter(tempProj, xml, "Form Files");
     outputFilter(tempProj, xml, "Resource Files");
     outputFilter(tempProj, xml, "Deployment Files");
+    outputFilter(tempProj, xml, "Distribution Files");
 
     QSet<QString> extraCompilersInProject;
     for (int i = 0; i < tool.ExtraCompilersFiles.count(); ++i) {
@@ -2586,6 +2589,7 @@ void VCProjectWriter::write(XmlOutput &xml, VCProject &tool)
     outputFilter(tool, xml, "Form Files");
     outputFilter(tool, xml, "Resource Files");
     outputFilter(tool, xml, "Deployment Files");
+    outputFilter(tool, xml, "Distribution Files");
     for (int x = 0; x < tool.ExtraCompilers.count(); ++x) {
         outputFilter(tool, xml, tool.ExtraCompilers.at(x));
     }
@@ -2903,7 +2907,7 @@ void VCProjectWriter::write(XmlOutput &xml, VCFilter &tool)
     for (int i = 0; i < tool.Files.count(); ++i) {
         const VCFilterFile &info = tool.Files.at(i);
         xml << tag(q_File)
-                << attrS(_RelativePath, Option::fixPathToLocalOS(info.file))
+                << attrS(_RelativePath, Option::fixPathToTargetOS(info.file))
             << data(); // In case no custom builds, to avoid "/>" endings
         outputFileConfig(tool, xml, tool.Files.at(i).file);
         xml << closetag(q_File);
@@ -2962,7 +2966,7 @@ void VCProjectWriter::outputFilter(VCProject &project, XmlOutput &xml, const QSt
 void VCProjectWriter::outputFileConfigs(VCProject &project, XmlOutput &xml, const VCFilterFile &info, const QString &filtername)
 {
     xml << tag(q_File)
-            << attrS(_RelativePath, Option::fixPathToLocalOS(info.file));
+            << attrS(_RelativePath, Option::fixPathToTargetOS(info.file));
     for (int i = 0; i < project.SingleProjects.count(); ++i) {
         VCFilter filter = project.SingleProjects.at(i).filterByName(filtername);
         if (filter.Config) // only if the filter is not empty

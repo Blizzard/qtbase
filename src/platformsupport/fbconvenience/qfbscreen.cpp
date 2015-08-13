@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -37,11 +37,15 @@
 #include "qfbbackingstore_p.h"
 
 #include <QtGui/QPainter>
+#include <QtCore/QCoreApplication>
 #include <qpa/qwindowsysteminterface.h>
+
+#include <QtCore/QDebug>
+#include <QtCore/QElapsedTimer>
 
 QT_BEGIN_NAMESPACE
 
-QFbScreen::QFbScreen() : mCursor(0), mGeometry(), mDepth(16), mFormat(QImage::Format_RGB16), mScreenImage(0), mCompositePainter(0), mIsUpToDate(false)
+QFbScreen::QFbScreen() : mUpdatePending(false), mCursor(0), mGeometry(), mDepth(16), mFormat(QImage::Format_RGB16), mScreenImage(0), mCompositePainter(0), mIsUpToDate(false)
 {
 }
 
@@ -54,24 +58,31 @@ QFbScreen::~QFbScreen()
 void QFbScreen::initializeCompositor()
 {
     mScreenImage = new QImage(mGeometry.size(), mFormat);
+    scheduleUpdate();
+}
 
-    mRedrawTimer.setSingleShot(true);
-    mRedrawTimer.setInterval(0);
-    connect(&mRedrawTimer, SIGNAL(timeout()), this, SLOT(doRedraw()));
+bool QFbScreen::event(QEvent *event)
+{
+    if (event->type() == QEvent::UpdateRequest) {
+        doRedraw();
+        mUpdatePending = false;
+        return true;
+    }
+    return QObject::event(event);
 }
 
 void QFbScreen::addWindow(QFbWindow *window)
 {
     mWindowStack.prepend(window);
-    if (!mBackingStores.isEmpty()) {
+    if (!mPendingBackingStores.isEmpty()) {
         //check if we have a backing store for this window
-        for (int i = 0; i < mBackingStores.size(); ++i) {
-            QFbBackingStore *bs = mBackingStores.at(i);
+        for (int i = 0; i < mPendingBackingStores.size(); ++i) {
+            QFbBackingStore *bs = mPendingBackingStores.at(i);
             // this gets called during QWindow::create() at a point where the
             // invariant (window->handle()->window() == window) is broken
             if (bs->window() == window->window()) {
                 window->setBackingStore(bs);
-                mBackingStores.removeAt(i);
+                mPendingBackingStores.removeAt(i);
                 break;
             }
         }
@@ -146,8 +157,10 @@ void QFbScreen::setDirty(const QRect &rect)
 
 void QFbScreen::scheduleUpdate()
 {
-    if (!mRedrawTimer.isActive())
-        mRedrawTimer.start();
+    if (!mUpdatePending) {
+        mUpdatePending = true;
+        QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
+    }
 }
 
 void QFbScreen::setPhysicalSize(const QSize &size)
@@ -246,12 +259,19 @@ QRegion QFbScreen::doRedraw()
                         continue;
                     // if (mWindowStack[layerIndex]->isMinimized())
                     //     continue;
+
                     QRect windowRect = mWindowStack[layerIndex]->geometry().translated(-screenOffset);
                     QRect windowIntersect = rect.translated(-windowRect.left(),
                                                             -windowRect.top());
+
+
                     QFbBackingStore *backingStore = mWindowStack[layerIndex]->backingStore();
-                    if (backingStore)
+
+                    if (backingStore) {
+                        backingStore->lock();
                         mCompositePainter->drawImage(rect, backingStore->image(), windowIntersect);
+                        backingStore->unlock();
+                    }
                     if (firstLayer) {
                         firstLayer = false;
                     }
@@ -272,8 +292,16 @@ QRegion QFbScreen::doRedraw()
 
 //    qDebug() << "QFbScreen::doRedraw"  << mWindowStack.size() << mScreenImage->size() << touchedRegion;
 
-
     return touchedRegion;
+}
+
+QFbWindow *QFbScreen::windowForId(WId wid) const
+{
+    for (int i = 0; i < mWindowStack.count(); ++i)
+        if (mWindowStack[i]->winId() == wid)
+            return mWindowStack[i];
+
+    return 0;
 }
 
 QT_END_NAMESPACE

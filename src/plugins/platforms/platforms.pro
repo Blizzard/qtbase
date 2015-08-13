@@ -35,8 +35,8 @@ contains(QT_CONFIG, directfb) {
     SUBDIRS += directfb
 }
 
-contains(QT_CONFIG, kms):contains(QT_CONFIG, opengl) {
-    SUBDIRS += kms
-}
-
 contains(QT_CONFIG, linuxfb): SUBDIRS += linuxfb
+
+haiku {
+    SUBDIRS += haiku
+}

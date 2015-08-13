@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -96,9 +96,7 @@ private slots:
     void setSocketDescriptor();
 #endif
     void listenWhileListening();
-#ifndef QT_NO_PROCESS
     void addressReusable();
-#endif
     void setNewSocketDescriptorBlocking();
 #ifndef QT_NO_NETWORKPROXY
     void invalidProxy_data();
@@ -565,9 +563,11 @@ protected:
 #endif // !Q_OS_WINRT
 };
 
-#ifndef QT_NO_PROCESS
 void tst_QTcpServer::addressReusable()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
 #ifdef Q_OS_LINUX
     QSKIP("The addressReusable test is unstable on Linux. See QTBUG-39985.");
 #endif
@@ -616,8 +616,8 @@ void tst_QTcpServer::addressReusable()
 
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost, 49199));
-}
 #endif
+}
 
 void tst_QTcpServer::setNewSocketDescriptorBlocking()
 {
@@ -864,11 +864,12 @@ void tst_QTcpServer::serverAddress_data()
     QTest::newRow("AnyIPv4") << QHostAddress(QHostAddress::AnyIPv4) << QHostAddress(QHostAddress::AnyIPv4);
     if (QtNetworkSettings::hasIPv6())
         QTest::newRow("AnyIPv6") << QHostAddress(QHostAddress::AnyIPv6) << QHostAddress(QHostAddress::AnyIPv6);
-    foreach (const QHostAddress& addr, QNetworkInterface::allAddresses()) {
-        if (addr.isInSubnet(QHostAddress::parseSubnet("fe80::/10"))
-            || addr.isInSubnet(QHostAddress::parseSubnet("169.254/16")))
-            continue; //cannot bind on link local addresses
-        QTest::newRow(qPrintable(addr.toString())) << addr << addr;
+    foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces()) {
+        if ((iface.flags() & QNetworkInterface::IsUp) == 0)
+            continue;
+        foreach (const QNetworkAddressEntry &entry, iface.addressEntries()) {
+            QTest::newRow(qPrintable(entry.ip().toString())) << entry.ip() << entry.ip();
+        }
     }
 }
 

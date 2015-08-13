@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -139,7 +139,7 @@ private slots:
     void readAll_data();
     void readAll();
     void readAllBuffer();
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
     void readAllStdin();
     void readLineStdin();
     void readLineStdin_lineByLine();
@@ -868,9 +868,12 @@ void tst_QFile::readAllBuffer()
     QFile::remove(fileName);
 }
 
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_PROCESS)
+#if !defined(Q_OS_WINCE)
 void tst_QFile::readAllStdin()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QByteArray lotsOfData(1024, '@'); // 10 megs
 
     QProcess process;
@@ -887,11 +890,14 @@ void tst_QFile::readAllStdin()
     process.closeWriteChannel();
     process.waitForFinished();
     QCOMPARE(process.readAll().size(), lotsOfData.size() * 5);
+#endif
 }
 
 void tst_QFile::readLineStdin()
 {
-
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     QByteArray lotsOfData(1024, '@'); // 10 megs
     for (int i = 0; i < lotsOfData.size(); ++i) {
         if ((i % 32) == 31)
@@ -926,10 +932,14 @@ void tst_QFile::readLineStdin()
                 QCOMPARE(char(array[i]), char('0' + i % 32));
         }
     }
+#endif
 }
 
 void tst_QFile::readLineStdin_lineByLine()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No qprocess support", SkipAll);
+#else
     for (int i = 0; i < 2; ++i) {
         QProcess process;
         process.start(m_stdinProcessDir + QStringLiteral("/stdinprocess"),
@@ -949,6 +959,7 @@ void tst_QFile::readLineStdin_lineByLine()
         process.closeWriteChannel();
         QVERIFY(process.waitForFinished(5000));
     }
+#endif
 }
 #endif
 
@@ -2323,7 +2334,7 @@ void tst_QFile::readFromWriteOnlyFile()
     QFile file("writeonlyfile");
     QVERIFY(file.open(QFile::WriteOnly));
     char c;
-    QTest::ignoreMessage(QtWarningMsg, "QIODevice::read: WriteOnly device");
+    QTest::ignoreMessage(QtWarningMsg, "QIODevice::read (QFile, \"writeonlyfile\"): WriteOnly device");
     QCOMPARE(file.read(&c, 1), qint64(-1));
 }
 
@@ -2332,7 +2343,7 @@ void tst_QFile::writeToReadOnlyFile()
     QFile file("readonlyfile");
     QVERIFY(file.open(QFile::ReadOnly));
     char c = 0;
-    QTest::ignoreMessage(QtWarningMsg, "QIODevice::write: ReadOnly device");
+    QTest::ignoreMessage(QtWarningMsg, "QIODevice::write (QFile, \"readonlyfile\"): ReadOnly device");
     QCOMPARE(file.write(&c, 1), qint64(-1));
 }
 

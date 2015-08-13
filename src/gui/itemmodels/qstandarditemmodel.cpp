@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -2909,12 +2909,6 @@ void QStandardItemModel::sort(int column, Qt::SortOrder order)
 }
 
 /*!
-  \fn QObject *QStandardItemModel::parent() const
-  \internal
-*/
-
-
-/*!
   \reimp
 */
 QStringList QStandardItemModel::mimeTypes() const
@@ -2942,9 +2936,13 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
     itemsSet.reserve(indexes.count());
     stack.reserve(indexes.count());
     for (int i = 0; i < indexes.count(); ++i) {
-        QStandardItem *item = itemFromIndex(indexes.at(i));
-        itemsSet << item;
-        stack.push(item);
+        if (QStandardItem *item = itemFromIndex(indexes.at(i))) {
+            itemsSet << item;
+            stack.push(item);
+        } else {
+            qWarning() << "QStandardItemModel::mimeData: No item associated with invalid index";
+            return 0;
+        }
     }
 
     //remove duplicates childrens
@@ -2978,16 +2976,11 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
     //stream everything recursively
     while (!stack.isEmpty()) {
         QStandardItem *item = stack.pop();
-        if(itemsSet.contains(item)) { //if the item is selection 'top-level', strem its position
+        if (itemsSet.contains(item)) //if the item is selection 'top-level', stream its position
             stream << item->row() << item->column();
-        }
-        if(item) {
-            stream << *item << item->columnCount() << item->d_ptr->children.count();
-            stack += item->d_ptr->children;
-        } else {
-            QStandardItem dummy;
-            stream << dummy << 0 << 0;
-        }
+
+        stream << *item << item->columnCount() << item->d_ptr->children.count();
+        stack += item->d_ptr->children;
     }
 
     data->setData(format, encoded);

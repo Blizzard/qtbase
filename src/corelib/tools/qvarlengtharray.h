@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -42,6 +42,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <algorithm>
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+#include <initializer_list>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -62,6 +65,14 @@ public:
         append(other.constData(), other.size());
     }
 
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+    QVarLengthArray(std::initializer_list<T> args)
+        : a(Prealloc), s(0), ptr(reinterpret_cast<T *>(array))
+    {
+        append(args.begin(), args.size());
+    }
+#endif
+
     inline ~QVarLengthArray() {
         if (QTypeInfo<T>::isComplex) {
             T *i = ptr + s;
@@ -79,6 +90,15 @@ public:
         }
         return *this;
     }
+
+#ifdef Q_COMPILER_INITIALIZER_LISTS
+    QVarLengthArray<T, Prealloc> &operator=(std::initializer_list<T> list)
+    {
+        resize(list.size());
+        std::copy(list.begin(), list.end(), this->begin());
+        return *this;
+    }
+#endif
 
     inline void removeLast() {
         Q_ASSERT(s > 0);
@@ -457,11 +477,10 @@ bool operator==(const QVarLengthArray<T, Prealloc1> &l, const QVarLengthArray<T,
 {
     if (l.size() != r.size())
         return false;
-    for (int i = 0; i < l.size(); i++) {
-        if (l.at(i) != r.at(i))
-            return false;
-    }
-    return true;
+    const T *rb = r.begin();
+    const T *b  = l.begin();
+    const T *e  = l.end();
+    return std::equal(b, e, rb);
 }
 
 template <typename T, int Prealloc1, int Prealloc2>

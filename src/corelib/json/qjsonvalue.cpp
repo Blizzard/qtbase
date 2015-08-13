@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -46,6 +46,7 @@ QT_BEGIN_NAMESPACE
     \class QJsonValue
     \inmodule QtCore
     \ingroup json
+    \ingroup shared
     \reentrant
     \since 5.0
 
@@ -73,6 +74,20 @@ QT_BEGIN_NAMESPACE
     Values are strictly typed internally and contrary to QVariant will not attempt to do any implicit type
     conversions. This implies that converting to a type that is not stored in the value will return a default
     constructed return value.
+
+    \section1 QJsonValueRef
+
+    QJsonValueRef is a helper class for QJsonArray and QJsonObject.
+    When you get an object of type QJsonValueRef, you can
+    use it as if it were a reference to a QJsonValue. If you assign to it,
+    the assignment will apply to the element in the QJsonArray or QJsonObject
+    from which you got the reference.
+
+    The following methods return QJsonValueRef:
+    \list
+    \li \l {QJsonArray}::operator[](int i)
+    \li \l {QJsonObject}::operator[](const QString & key) const
+    \endlist
 
     \sa {JSON Support in Qt}, {JSON Save Game Example}
 */
@@ -373,6 +388,7 @@ QJsonValue &QJsonValue::operator =(const QJsonValue &other)
         \li
             \list
                 \li QMetaType::QVariantMap
+                \li QMetaType::QVariantHash
             \endlist
         \li QJsonValue::Object
     \endtable
@@ -402,6 +418,8 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
         return QJsonValue(QJsonArray::fromVariantList(variant.toList()));
     case QVariant::Map:
         return QJsonValue(QJsonObject::fromVariantMap(variant.toMap()));
+    case QVariant::Hash:
+        return QJsonValue(QJsonObject::fromVariantHash(variant.toHash()));
     default:
         break;
     }
@@ -416,13 +434,13 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
 
     The QJsonValue types will be converted as follows:
 
-    \value Null     {QVariant::}{QVariant()}
+    \value Null     \l {QVariant::}{QVariant()}
     \value Bool     QMetaType::Bool
     \value Double   QMetaType::Double
     \value String   QString
     \value Array    QVariantList
     \value Object   QVariantMap
-    \value Undefined {QVariant::}{QVariant()}
+    \value Undefined \l {QVariant::}{QVariant()}
 
     \sa fromVariant()
  */
@@ -686,6 +704,11 @@ QJsonValueRef &QJsonValueRef::operator =(const QJsonValueRef &ref)
     return *this;
 }
 
+QVariant QJsonValueRef::toVariant() const
+{
+    return toValue().toVariant();
+}
+
 QJsonArray QJsonValueRef::toArray() const
 {
     return toValue().toArray();
@@ -706,12 +729,13 @@ QJsonValue QJsonValueRef::toValue() const
 #if !defined(QT_NO_DEBUG_STREAM) && !defined(QT_JSON_READONLY)
 QDebug operator<<(QDebug dbg, const QJsonValue &o)
 {
+    QDebugStateSaver saver(dbg);
     switch (o.t) {
     case QJsonValue::Undefined:
-        dbg.nospace() << "QJsonValue(undefined)";
+        dbg << "QJsonValue(undefined)";
         break;
     case QJsonValue::Null:
-        dbg.nospace() << "QJsonValue(null)";
+        dbg << "QJsonValue(null)";
         break;
     case QJsonValue::Bool:
         dbg.nospace() << "QJsonValue(bool, " << o.toBool() << ")";
@@ -724,16 +748,16 @@ QDebug operator<<(QDebug dbg, const QJsonValue &o)
         break;
     case QJsonValue::Array:
         dbg.nospace() << "QJsonValue(array, ";
-        dbg.nospace() << o.toArray();
-        dbg.nospace() << ")";
+        dbg << o.toArray();
+        dbg << ")";
         break;
     case QJsonValue::Object:
         dbg.nospace() << "QJsonValue(object, ";
-        dbg.nospace() << o.toObject();
-        dbg.nospace() << ")";
+        dbg << o.toObject();
+        dbg << ")";
         break;
     }
-    return dbg.space();
+    return dbg;
 }
 #endif
 

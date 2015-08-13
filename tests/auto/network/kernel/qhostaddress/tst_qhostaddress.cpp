@@ -1,8 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2012 Intel Corporation.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -11,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -24,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -83,6 +83,8 @@ private slots:
     void isInSubnet();
     void isLoopback_data();
     void isLoopback();
+    void convertv4v6_data();
+    void convertv4v6();
 };
 
 QT_BEGIN_NAMESPACE
@@ -313,6 +315,10 @@ void tst_QHostAddress::compare_data()
     QTest::newRow("5") << QHostAddress(QHostAddress::LocalHost) << QHostAddress(QHostAddress::Broadcast) << false;
     QTest::newRow("6") << QHostAddress(QHostAddress::LocalHost) << QHostAddress(QHostAddress::LocalHostIPv6) << false;
     QTest::newRow("7") << QHostAddress() << QHostAddress(QHostAddress::LocalHostIPv6) << false;
+
+    Q_IPV6ADDR localhostv4mapped = { 0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 255, 255,  127, 0, 0, 1 };
+    QTest::newRow("v4-v4mapped") << QHostAddress(QHostAddress::LocalHost) << QHostAddress("::ffff:127.0.0.1") << false;
+    QTest::newRow("v4-v4mapped-2") << QHostAddress(QHostAddress::LocalHost) << QHostAddress(localhostv4mapped) << false;
 }
 
 void tst_QHostAddress::compare()
@@ -322,6 +328,7 @@ void tst_QHostAddress::compare()
     QFETCH(bool, result);
 
     QCOMPARE(first == second, result);
+    QCOMPARE(second == first, result);
     if (result == true)
         QVERIFY(qHash(first) == qHash(second));
 }
@@ -655,6 +662,52 @@ void tst_QHostAddress::isLoopback()
     QFETCH(bool, result);
 
     QCOMPARE(address.isLoopback(), result);
+}
+
+void tst_QHostAddress::convertv4v6_data()
+{
+    QTest::addColumn<QHostAddress>("source");
+    QTest::addColumn<int>("protocol");
+    QTest::addColumn<QHostAddress>("result");
+
+    QTest::newRow("any-to-v4") << QHostAddress(QHostAddress::Any) << 4 << QHostAddress(QHostAddress::AnyIPv4);
+    QTest::newRow("any-to-v6") << QHostAddress(QHostAddress::Any) << 6 << QHostAddress(QHostAddress::AnyIPv6);
+    QTest::newRow("anyv4-to-v6") << QHostAddress(QHostAddress::AnyIPv4) << 6 << QHostAddress(QHostAddress::AnyIPv6);
+    QTest::newRow("anyv6-to-v4") << QHostAddress(QHostAddress::AnyIPv6) << 4 << QHostAddress(QHostAddress::AnyIPv4);
+
+    QTest::newRow("v4mapped-to-v4") << QHostAddress("::ffff:192.0.2.1") << 4 << QHostAddress("192.0.2.1");
+    QTest::newRow("v4-to-v4mapped") << QHostAddress("192.0.2.1") << 6 << QHostAddress("::ffff:192.0.2.1");
+
+    // we won't convert 127.0.0.1 to ::1 or vice-versa:
+    // you can connect to a v4 server socket with ::ffff:127.0.0.1, but not with ::1
+    QTest::newRow("localhost-to-v4mapped") << QHostAddress(QHostAddress::LocalHost) << 6 << QHostAddress("::ffff:127.0.0.1");
+    QTest::newRow("v4mapped-to-localhost") << QHostAddress("::ffff:127.0.0.1") << 4 << QHostAddress(QHostAddress::LocalHost);
+
+    // in turn, that means localhost6 doesn't convert to v4
+    QTest::newRow("localhost6-to-v4") << QHostAddress(QHostAddress::LocalHostIPv6) << 4 << QHostAddress();
+
+    // some other v6 addresses that won't convert to v4
+    QTest::newRow("v4compat-to-v4") << QHostAddress("::192.0.2.1") << 4 << QHostAddress();
+    QTest::newRow("localhostv4compat-to-v4") << QHostAddress("::127.0.0.1") << 4 << QHostAddress();
+    QTest::newRow("v6global-to-v4") << QHostAddress("2001:db8::1") << 4 << QHostAddress();
+    QTest::newRow("v6multicast-to-v4") << QHostAddress("ff02::1") << 4 << QHostAddress();
+}
+
+void tst_QHostAddress::convertv4v6()
+{
+    QFETCH(QHostAddress, source);
+    QFETCH(int, protocol);
+    QFETCH(QHostAddress, result);
+
+    if (protocol == 4) {
+        bool ok;
+        quint32 v4 = source.toIPv4Address(&ok);
+        QCOMPARE(ok, result.protocol() == QAbstractSocket::IPv4Protocol);
+        if (ok)
+            QCOMPARE(QHostAddress(v4), result);
+    } else if (protocol == 6) {
+        QCOMPARE(QHostAddress(source.toIPv6Address()), result);
+    }
 }
 
 QTEST_MAIN(tst_QHostAddress)

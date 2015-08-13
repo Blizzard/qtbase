@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -84,6 +84,7 @@ public:
           cascadingResizing(false),
           resizeRecursionBlock(false),
           allowUserMoveOfSection0(true), // will be false for QTreeView and true for QTableView
+          customDefaultSectionSize(false),
           stretchSections(0),
           contentsSections(0),
           minimumSectionSize(-1),
@@ -155,8 +156,7 @@ public:
 
     inline void setDefaultValues(Qt::Orientation o) {
         orientation = o;
-        defaultSectionSize = (o == Qt::Horizontal ? 100
-                              : qMax(q_func()->minimumSectionSize(), 30));
+        updateDefaultSectionSizeFromStyle();
         defaultAlignment = (o == Qt::Horizontal
                             ? Qt::Alignment(Qt::AlignCenter)
                             : Qt::AlignLeft|Qt::AlignVCenter);
@@ -275,6 +275,7 @@ public:
     bool cascadingResizing;
     bool resizeRecursionBlock;
     bool allowUserMoveOfSection0;
+    bool customDefaultSectionSize;
     int stretchSections;
     int contentsSections;
     int defaultSectionSize;
@@ -321,6 +322,7 @@ public:
     void removeSectionsFromSectionItems(int start, int end);
     void resizeSectionItem(int visualIndex, int oldSize, int newSize);
     void setDefaultSectionSize(int size);
+    void updateDefaultSectionSizeFromStyle();
     void recalcSectionStartPos() const; // not really const
 
     inline int headerLength() const { // for debugging

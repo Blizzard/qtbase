@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -203,7 +203,7 @@ public:
     explicit QWidget(QWidget* parent = 0, Qt::WindowFlags f = 0);
     ~QWidget();
 
-    int devType() const;
+    int devType() const Q_DECL_OVERRIDE;
 
     WId winId() const;
     void createWinId(); // internal, going away
@@ -536,7 +536,11 @@ public:
 #ifndef QT_NO_ACTION
     //actions
     void addAction(QAction *action);
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    void addActions(const QList<QAction*> &actions);
+#else
     void addActions(QList<QAction*> actions);
+#endif
     void insertAction(QAction *before, QAction *action);
     void insertActions(QAction *before, QList<QAction*> actions);
     void removeAction(QAction *action);
@@ -555,12 +559,12 @@ public:
     inline QWidget *childAt(int x, int y) const;
     QWidget *childAt(const QPoint &p) const;
 
-#if defined(Q_WS_X11)
+#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     const QX11Info &x11Info() const;
     Qt::HANDLE x11PictureHandle() const;
 #endif
 
-#if defined(Q_WS_MAC)
+#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
     Qt::HANDLE macQDHandle() const;
     Qt::HANDLE macCGHandle() const;
 #endif
@@ -568,7 +572,7 @@ public:
     void setAttribute(Qt::WidgetAttribute, bool on = true);
     inline bool testAttribute(Qt::WidgetAttribute) const;
 
-    QPaintEngine *paintEngine() const;
+    QPaintEngine *paintEngine() const Q_DECL_OVERRIDE;
 
     void ensurePolished() const;
 
@@ -598,7 +602,7 @@ Q_SIGNALS:
 
 protected:
     // Event handlers
-    bool event(QEvent *);
+    bool event(QEvent *) Q_DECL_OVERRIDE;
     virtual void mousePressEvent(QMouseEvent *);
     virtual void mouseReleaseEvent(QMouseEvent *);
     virtual void mouseDoubleClickEvent(QMouseEvent *);
@@ -640,10 +644,10 @@ protected:
     // Misc. protected functions
     virtual void changeEvent(QEvent *);
 
-    int metric(PaintDeviceMetric) const;
-    void initPainter(QPainter *painter) const;
-    QPaintDevice *redirected(QPoint *offset) const;
-    QPainter *sharedPainter() const;
+    int metric(PaintDeviceMetric) const Q_DECL_OVERRIDE;
+    void initPainter(QPainter *painter) const Q_DECL_OVERRIDE;
+    QPaintDevice *redirected(QPoint *offset) const Q_DECL_OVERRIDE;
+    QPainter *sharedPainter() const Q_DECL_OVERRIDE;
 
     virtual void inputMethodEvent(QInputMethodEvent *);
 public:

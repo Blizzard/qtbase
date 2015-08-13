@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -54,6 +54,13 @@
 
 QT_BEGIN_NAMESPACE
 
+static const int maxWeight = 99;
+
+static inline int mapToQtWeightForRange(int fcweight, int fcLower, int fcUpper, int qtLower, int qtUpper)
+{
+    return qtLower + ((fcweight - fcLower) * (qtUpper - qtLower)) / (fcUpper - fcLower);
+}
+
 static inline bool requiresOpenType(int writingSystem)
 {
     return ((writingSystem >= QFontDatabase::Syriac && writingSystem <= QFontDatabase::Sinhala)
@@ -68,26 +75,28 @@ static inline int weightFromFcWeight(int fcweight)
     // mapping.  This ensures that where there is a corresponding enum on both sides (for example
     // FC_WEIGHT_DEMIBOLD and QFont::DemiBold) we map one to the other but other values map
     // to intermediate Qt weights.
-    const int maxWeight = 99;
-    int qtweight;
-    if (fcweight < 0)
-        qtweight = 0;
-    else if (fcweight <= FC_WEIGHT_LIGHT)
-        qtweight = (fcweight * QFont::Light) / FC_WEIGHT_LIGHT;
-    else if (fcweight <= FC_WEIGHT_NORMAL)
-        qtweight = QFont::Light + ((fcweight - FC_WEIGHT_LIGHT) * (QFont::Normal - QFont::Light)) / (FC_WEIGHT_NORMAL - FC_WEIGHT_LIGHT);
-    else if (fcweight <= FC_WEIGHT_DEMIBOLD)
-        qtweight = QFont::Normal + ((fcweight - FC_WEIGHT_NORMAL) * (QFont::DemiBold - QFont::Normal)) / (FC_WEIGHT_DEMIBOLD - FC_WEIGHT_NORMAL);
-    else if (fcweight <= FC_WEIGHT_BOLD)
-        qtweight = QFont::DemiBold + ((fcweight - FC_WEIGHT_DEMIBOLD) * (QFont::Bold - QFont::DemiBold)) / (FC_WEIGHT_BOLD - FC_WEIGHT_DEMIBOLD);
-    else if (fcweight <= FC_WEIGHT_BLACK)
-        qtweight = QFont::Bold + ((fcweight - FC_WEIGHT_BOLD) * (QFont::Black - QFont::Bold)) / (FC_WEIGHT_BLACK - FC_WEIGHT_BOLD);
-    else if (fcweight <= FC_WEIGHT_ULTRABLACK)
-        qtweight = QFont::Black + ((fcweight - FC_WEIGHT_BLACK) * (maxWeight - QFont::Black)) / (FC_WEIGHT_ULTRABLACK - FC_WEIGHT_BLACK);
-    else
-        qtweight = maxWeight;
 
-    return qtweight;
+    if (fcweight <= FC_WEIGHT_THIN)
+        return QFont::Thin;
+    if (fcweight <= FC_WEIGHT_ULTRALIGHT)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_THIN, FC_WEIGHT_ULTRALIGHT, QFont::Thin, QFont::ExtraLight);
+    if (fcweight <= FC_WEIGHT_LIGHT)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_ULTRALIGHT, FC_WEIGHT_LIGHT, QFont::ExtraLight, QFont::Light);
+    if (fcweight <= FC_WEIGHT_NORMAL)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_LIGHT, FC_WEIGHT_NORMAL, QFont::Light, QFont::Normal);
+    if (fcweight <= FC_WEIGHT_MEDIUM)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_NORMAL, FC_WEIGHT_MEDIUM, QFont::Normal, QFont::Medium);
+    if (fcweight <= FC_WEIGHT_DEMIBOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_MEDIUM, FC_WEIGHT_DEMIBOLD, QFont::Medium, QFont::DemiBold);
+    if (fcweight <= FC_WEIGHT_BOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_DEMIBOLD, FC_WEIGHT_BOLD, QFont::DemiBold, QFont::Bold);
+    if (fcweight <= FC_WEIGHT_ULTRABOLD)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_BOLD, FC_WEIGHT_ULTRABOLD, QFont::Bold, QFont::ExtraBold);
+    if (fcweight <= FC_WEIGHT_BLACK)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_ULTRABOLD, FC_WEIGHT_BLACK, QFont::ExtraBold, QFont::Black);
+    if (fcweight <= FC_WEIGHT_ULTRABLACK)
+        return mapToQtWeightForRange(fcweight, FC_WEIGHT_BLACK, FC_WEIGHT_ULTRABLACK, QFont::Black, maxWeight);
+    return maxWeight;
 }
 
 static inline int stretchFromFcWidth(int fcwidth)
@@ -209,7 +218,30 @@ static const char *specialLanguages[] = {
     "hmd", // Miao
     "sa", // Sharada
     "srb", // SoraSompeng
-    "doi"  // Takri
+    "doi", // Takri
+    "lez", // CaucasianAlbanian
+    "bsq", // BassaVah
+    "fr", // Duployan
+    "sq", // Elbasan
+    "sa", // Grantha
+    "hnj", // PahawhHmong
+    "sd", // Khojki
+    "lab", // LinearA
+    "hi", // Mahajani
+    "xmn", // Manichaean
+    "men", // MendeKikakui
+    "mr", // Modi
+    "mru", // Mro
+    "xna", // OldNorthArabian
+    "arc", // Nabataean
+    "arc", // Palmyrene
+    "ctd", // PauCinHau
+    "kv", // OldPermic
+    "pal", // PsalterPahlavi
+    "sa", // Siddham
+    "sd", // Khudawadi
+    "mai", // Tirhuta
+    "hoc"  // WarangCiti
 };
 Q_STATIC_ASSERT(sizeof(specialLanguages) / sizeof(const char *) == QChar::ScriptCount);
 
@@ -270,7 +302,7 @@ static const char *openType[] = {
     "deva",  // Devanagari
     "beng",  // Bengali
     "guru",  // Gurmukhi
-    "gurj",  // Gujarati
+    "gujr",  // Gujarati
     "orya",  // Oriya
     "taml",  // Tamil
     "telu",  // Telugu
@@ -521,6 +553,28 @@ QFontEngine::HintStyle defaultHintStyleFromMatch(QFont::HintingPreference hintin
         break;
     }
 
+    if (QGuiApplication::platformNativeInterface()->nativeResourceForScreen("nofonthinting",
+                         QGuiApplication::primaryScreen())) {
+        return QFontEngine::HintNone;
+    }
+
+    int hint_style = 0;
+    if (FcPatternGetInteger (match, FC_HINT_STYLE, 0, &hint_style) == FcResultMatch) {
+        switch (hint_style) {
+        case FC_HINT_NONE:
+            return QFontEngine::HintNone;
+        case FC_HINT_SLIGHT:
+            return QFontEngine::HintLight;
+        case FC_HINT_MEDIUM:
+            return QFontEngine::HintMedium;
+        case FC_HINT_FULL:
+            return QFontEngine::HintFull;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     if (useXftConf) {
         void *hintStyleResource =
                 QGuiApplication::platformNativeInterface()->nativeResourceForScreen("hintstyle",
@@ -530,27 +584,31 @@ QFontEngine::HintStyle defaultHintStyleFromMatch(QFont::HintingPreference hintin
             return QFontEngine::HintStyle(hintStyle - 1);
     }
 
-    int hint_style = 0;
-    if (FcPatternGetInteger (match, FC_HINT_STYLE, 0, &hint_style) == FcResultNoMatch)
-        hint_style = FC_HINT_FULL;
-    switch (hint_style) {
-    case FC_HINT_NONE:
-        return QFontEngine::HintNone;
-    case FC_HINT_SLIGHT:
-        return QFontEngine::HintLight;
-    case FC_HINT_MEDIUM:
-        return QFontEngine::HintMedium;
-    case FC_HINT_FULL:
-        return QFontEngine::HintFull;
-    default:
-        Q_UNREACHABLE();
-        break;
-    }
     return QFontEngine::HintFull;
 }
 
 QFontEngine::SubpixelAntialiasingType subpixelTypeFromMatch(FcPattern *match, bool useXftConf)
 {
+    int subpixel = FC_RGBA_UNKNOWN;
+    if (FcPatternGetInteger(match, FC_RGBA, 0, &subpixel) == FcResultMatch) {
+        switch (subpixel) {
+        case FC_RGBA_UNKNOWN:
+        case FC_RGBA_NONE:
+            return QFontEngine::Subpixel_None;
+        case FC_RGBA_RGB:
+            return QFontEngine::Subpixel_RGB;
+        case FC_RGBA_BGR:
+            return QFontEngine::Subpixel_BGR;
+        case FC_RGBA_VRGB:
+            return QFontEngine::Subpixel_VRGB;
+        case FC_RGBA_VBGR:
+            return QFontEngine::Subpixel_VBGR;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     if (useXftConf) {
         void *subpixelTypeResource =
                 QGuiApplication::platformNativeInterface()->nativeResourceForScreen("subpixeltype",
@@ -560,25 +618,6 @@ QFontEngine::SubpixelAntialiasingType subpixelTypeFromMatch(FcPattern *match, bo
             return QFontEngine::SubpixelAntialiasingType(subpixelType - 1);
     }
 
-    int subpixel = FC_RGBA_UNKNOWN;
-    FcPatternGetInteger(match, FC_RGBA, 0, &subpixel);
-
-    switch (subpixel) {
-    case FC_RGBA_UNKNOWN:
-    case FC_RGBA_NONE:
-        return QFontEngine::Subpixel_None;
-    case FC_RGBA_RGB:
-        return QFontEngine::Subpixel_RGB;
-    case FC_RGBA_BGR:
-        return QFontEngine::Subpixel_BGR;
-    case FC_RGBA_VRGB:
-        return QFontEngine::Subpixel_VRGB;
-    case FC_RGBA_VBGR:
-        return QFontEngine::Subpixel_VBGR;
-    default:
-        Q_UNREACHABLE();
-        break;
-    }
     return QFontEngine::Subpixel_None;
 }
 } // namespace
@@ -818,10 +857,8 @@ void QFontconfigDatabase::setupFontEngine(QFontEngineFT *engine, const QFontDef 
                 QGuiApplication::platformNativeInterface()->nativeResourceForScreen("antialiasingEnabled",
                                                                                     QGuiApplication::primaryScreen());
         int antialiasingEnabled = int(reinterpret_cast<qintptr>(antialiasResource));
-        if (antialiasingEnabled > 0) {
+        if (antialiasingEnabled > 0)
             antialias = antialiasingEnabled - 1;
-            forcedAntialiasSetting = true;
-        }
     }
 
     QFontEngine::GlyphFormat format;

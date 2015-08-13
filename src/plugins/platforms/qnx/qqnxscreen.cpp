@@ -1,7 +1,7 @@
 /***************************************************************************
 **
 ** Copyright (C) 2011 - 2013 BlackBerry Limited. All rights reserved.
-** Contact: http://www.qt-project.org/legal
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -112,7 +112,7 @@ static QSize determineScreenSize(screen_display_t display, bool primaryScreen) {
 #endif
 }
 
-static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> windows,
+static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> &windows,
                                                     const QByteArray &mmWindowId)
 {
     Q_FOREACH (QQnxWindow *sibling, windows) {
@@ -128,7 +128,7 @@ static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> windows,
     return 0;
 }
 
-static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> windows,
+static QQnxWindow *findMultimediaWindow(const QList<QQnxWindow*> &windows,
                                                     screen_window_t mmWindowId)
 {
     Q_FOREACH (QQnxWindow *sibling, windows) {
@@ -305,7 +305,7 @@ static int defaultDepth()
     if (defaultDepth == 0) {
         // check if display depth was specified in environment variable;
         // use default value if no valid value found
-        defaultDepth = qgetenv("QQNX_DISPLAY_DEPTH").toInt();
+        defaultDepth = qEnvironmentVariableIntValue("QQNX_DISPLAY_DEPTH");
         if (defaultDepth != 16 && defaultDepth != 32)
             defaultDepth = 32;
     }
@@ -329,7 +329,8 @@ qreal QQnxScreen::refreshRate() const
 {
     screen_display_mode_t displayMode;
     int result = screen_get_display_property_pv(m_display, SCREEN_PROPERTY_MODE, reinterpret_cast<void **>(&displayMode));
-    if (result != 0) {
+    // Screen shouldn't really return 0 but it does so default to 60 or things break.
+    if (result != 0 || displayMode.refresh == 0) {
         qWarning("QQnxScreen: Failed to query screen mode. Using default value of 60Hz");
         return 60.0;
     }
@@ -584,7 +585,7 @@ void QQnxScreen::addWindow(QQnxWindow *window)
             m_childWindows.push_back(window);
         updateHierarchy();
     } else {
-#if defined(Q_OS_BLACKBERRY) && !defined(Q_OS_BLACKBERRY_TABLET)
+#if defined(Q_OS_BLACKBERRY)
         m_coverWindow = window;
 #endif
     }
@@ -679,7 +680,7 @@ void QQnxScreen::adjustOrientation()
         return;
 
     bool ok = false;
-    const int rotation = qgetenv("ORIENTATION").toInt(&ok);
+    const int rotation = qEnvironmentVariableIntValue("ORIENTATION", &ok);
 
     if (ok)
         setRotation(rotation);
@@ -858,7 +859,7 @@ void QQnxScreen::setRootWindow(QQnxWindow *window)
 {
     // Optionally disable the screen power save
     bool ok = false;
-    const int disablePowerSave = qgetenv("QQNX_DISABLE_POWER_SAVE").toInt(&ok);
+    const int disablePowerSave = qEnvironmentVariableIntValue("QQNX_DISABLE_POWER_SAVE", &ok);
     if (ok && disablePowerSave) {
         const int mode = SCREEN_IDLE_MODE_KEEP_AWAKE;
         int result = screen_set_window_property_iv(window->nativeHandle(), SCREEN_PROPERTY_IDLE_MODE, &mode);

@@ -1,5 +1,7 @@
 TEMPLATE = subdirs
 
+load(qfeatures)
+
 src_tools_bootstrap.subdir = tools/bootstrap
 src_tools_bootstrap.target = sub-bootstrap
 src_tools_bootstrap.CONFIG = host_build
@@ -16,6 +18,7 @@ src_tools_rcc.CONFIG = host_build
 
 src_tools_qlalr.subdir = tools/qlalr
 src_tools_qlalr.target = sub-qlalr
+src_tools_qlalr.CONFIG = host_build
 force_bootstrap: src_tools_qlalr.depends = src_tools_bootstrap
 else: src_tools_qlalr.depends = src_corelib
 
@@ -78,10 +81,17 @@ src_network.depends = src_corelib
 
 src_testlib.subdir = $$PWD/testlib
 src_testlib.target = sub-testlib
-src_testlib.depends = src_corelib   # src_gui & src_widgets are not build-depends
+src_testlib.depends = src_corelib   # testlib links only to corelib, but see below for the headers
+
+src_3rdparty_pcre.subdir = $$PWD/3rdparty/pcre
+src_3rdparty_pcre.target = sub-3rdparty-pcre
 
 src_3rdparty_harfbuzzng.subdir = $$PWD/3rdparty/harfbuzz-ng
 src_3rdparty_harfbuzzng.target = sub-3rdparty-harfbuzzng
+src_3rdparty_harfbuzzng.depends = src_corelib   # for the Qt atomics
+
+src_3rdparty_freetype.subdir = $$PWD/3rdparty/freetype
+src_3rdparty_freetype.target = sub-3rdparty-freetype
 
 src_angle.subdir = $$PWD/angle
 src_angle.target = sub-angle
@@ -96,7 +106,7 @@ src_platformheaders.depends = src_corelib src_gui
 
 src_platformsupport.subdir = $$PWD/platformsupport
 src_platformsupport.target = sub-platformsupport
-src_platformsupport.depends = src_corelib src_gui src_network src_platformheaders
+src_platformsupport.depends = src_corelib src_gui src_platformheaders
 
 src_widgets.subdir = $$PWD/widgets
 src_widgets.target = sub-widgets
@@ -121,7 +131,12 @@ src_plugins.depends = src_sql src_xml src_network
 src_android.subdir = $$PWD/android
 
 # this order is important
-SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc src_corelib src_tools_qlalr
+SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
+!contains(QT_DISABLED_FEATURES, regularexpression):pcre {
+    SUBDIRS += src_3rdparty_pcre
+    src_corelib.depends += src_3rdparty_pcre
+}
+SUBDIRS += src_corelib src_tools_qlalr
 TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
 win32:SUBDIRS += src_winmain
 SUBDIRS += src_network src_sql src_xml src_testlib
@@ -144,13 +159,19 @@ contains(QT_CONFIG, concurrent):SUBDIRS += src_concurrent
         SUBDIRS += src_angle
         src_gui.depends += src_angle
     }
+    contains(QT_CONFIG, freetype) {
+        SUBDIRS += src_3rdparty_freetype
+        src_platformsupport.depends += src_3rdparty_freetype
+    }
     SUBDIRS += src_gui src_platformsupport src_platformheaders
     contains(QT_CONFIG, opengl(es2)?):SUBDIRS += src_openglextensions
     src_plugins.depends += src_gui src_platformsupport src_platformheaders
+    src_testlib.depends += src_gui      # if QtGui is enabled, QtTest requires QtGui's headers
     !contains(QT_CONFIG, no-widgets) {
         SUBDIRS += src_tools_uic src_widgets
         TOOLS += src_tools_uic
         src_plugins.depends += src_widgets
+        src_testlib.depends += src_widgets        # if QtWidgets is enabled, QtTest requires QtWidgets's headers
         contains(QT_CONFIG, opengl(es2)?) {
             SUBDIRS += src_opengl
             src_plugins.depends += src_opengl
@@ -170,7 +191,7 @@ android:!android-no-sdk: SUBDIRS += src_android
 TR_EXCLUDE = \
     src_tools_bootstrap src_tools_moc src_tools_rcc src_tools_uic src_tools_qlalr \
     src_tools_bootstrap_dbus src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml \
-    src_3rdparty_harfbuzzng
+    src_3rdparty_pcre src_3rdparty_harfbuzzng src_3rdparty_freetype
 
 sub-tools.depends = $$TOOLS
 QMAKE_EXTRA_TARGETS = sub-tools

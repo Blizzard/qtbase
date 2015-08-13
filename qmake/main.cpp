@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -163,6 +163,75 @@ static int doSed(int argc, char **argv)
     return 0;
 }
 
+static int doLink(int argc, char **argv)
+{
+    bool isSymlink = false;
+    bool force = false;
+    QList<const char *> inFiles;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "-s")) {
+            isSymlink = true;
+        } else if (!strcmp(argv[i], "-f")) {
+            force = true;
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Error: unrecognized ln option '%s'\n", argv[i]);
+            return 3;
+        } else {
+            inFiles << argv[i];
+        }
+    }
+    if (inFiles.size() != 2) {
+        fprintf(stderr, "Error: this ln requires exactly two file arguments\n");
+        return 3;
+    }
+    if (!isSymlink) {
+        fprintf(stderr, "Error: this ln supports faking symlinks only\n");
+        return 3;
+    }
+    QString target = QString::fromLocal8Bit(inFiles[0]);
+    QString linkname = QString::fromLocal8Bit(inFiles[1]);
+
+    QDir destdir;
+    QFileInfo tfi(target);
+    QFileInfo lfi(linkname);
+    if (lfi.isDir()) {
+        destdir.setPath(linkname);
+        lfi.setFile(destdir, tfi.fileName());
+    } else {
+        destdir.setPath(lfi.path());
+    }
+    if (!destdir.exists()) {
+        fprintf(stderr, "Error: destination directory %s does not exist\n", qPrintable(destdir.path()));
+        return 1;
+    }
+    tfi.setFile(destdir.absoluteFilePath(tfi.filePath()));
+    if (!tfi.exists()) {
+        fprintf(stderr, "Error: this ln does not support symlinking non-existing targets\n");
+        return 3;
+    }
+    if (tfi.isDir()) {
+        fprintf(stderr, "Error: this ln does not support symlinking directories\n");
+        return 3;
+    }
+    if (lfi.exists()) {
+        if (!force) {
+            fprintf(stderr, "Error: %s exists\n", qPrintable(lfi.filePath()));
+            return 1;
+        }
+        if (!QFile::remove(lfi.filePath())) {
+            fprintf(stderr, "Error: cannot overwrite %s\n", qPrintable(lfi.filePath()));
+            return 1;
+        }
+    }
+    if (!QFile::copy(tfi.filePath(), lfi.filePath())) {
+        fprintf(stderr, "Error: cannot copy %s to %s\n",
+                qPrintable(tfi.filePath()), qPrintable(lfi.filePath()));
+        return 1;
+    }
+
+    return 0;
+}
+
 static int doInstall(int argc, char **argv)
 {
     if (!argc) {
@@ -171,6 +240,8 @@ static int doInstall(int argc, char **argv)
     }
     if (!strcmp(argv[0], "sed"))
         return doSed(argc - 1, argv + 1);
+    if (!strcmp(argv[0], "ln"))
+        return doLink(argc - 1, argv + 1);
     fprintf(stderr, "Error: unrecognized -install subcommand '%s'\n", argv[0]);
     return 3;
 }

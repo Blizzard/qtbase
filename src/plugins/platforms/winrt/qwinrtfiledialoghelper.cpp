@@ -1,39 +1,34 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL3$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia.  For licensing terms and
-** conditions see http://qt.digia.com/licensing.  For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU Lesser General Public License version 2.1 requirements
-** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** In addition, as a special exception, Digia gives you certain additional
-** rights.  These rights are described in the Digia Qt LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3.0 as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL included in the
-** packaging of this file.  Please review the following information to
-** ensure the GNU General Public License version 3.0 requirements will be
-** met: http://www.gnu.org/copyleft/gpl.html.
-**
+** General Public License version 2.0 or later as published by the Free
+** Software Foundation and appearing in the file LICENSE.GPL included in
+** the packaging of this file. Please review the following information to
+** ensure the GNU General Public License version 2.0 requirements will be
+** met: http://www.gnu.org/licenses/gpl-2.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -306,42 +301,48 @@ bool QWinRTFileDialogHelper::show(Qt::WindowFlags windowFlags, Qt::WindowModalit
             return false;
         }
 
-        ComPtr<IMap<HSTRING, IVector<HSTRING> *>> choices;
-        hr = picker->get_FileTypeChoices(&choices);
-        RETURN_FALSE_IF_FAILED("Failed to get file extension choices");
-        foreach (const QString &namedFilter, dialogOptions->nameFilters()) {
-            ComPtr<IVector<HSTRING>> entry = Make<WindowsStringVector>();
-            foreach (const QString &filter, QPlatformFileDialogHelper::cleanFilterList(namedFilter)) {
-                // Remove leading star
-                const int offset = (filter.length() > 1 && filter.startsWith(QLatin1Char('*'))) ? 1 : 0;
-                HStringReference filterRef(reinterpret_cast<const wchar_t *>(filter.utf16() + offset),
-                                           filter.length() - offset);
-                hr = entry->Append(filterRef.Get());
-                if (FAILED(hr)) {
-                    qWarning("Failed to add named file filter \"%s\": %s",
-                             qPrintable(filter), qPrintable(qt_error_string(hr)));
+        if (!dialogOptions->nameFilters().isEmpty()) {
+            ComPtr<IMap<HSTRING, IVector<HSTRING> *>> choices;
+            hr = picker->get_FileTypeChoices(&choices);
+            RETURN_FALSE_IF_FAILED("Failed to get file extension choices");
+            foreach (const QString &namedFilter, dialogOptions->nameFilters()) {
+                ComPtr<IVector<HSTRING>> entry = Make<WindowsStringVector>();
+                foreach (const QString &filter, QPlatformFileDialogHelper::cleanFilterList(namedFilter)) {
+                    // Remove leading star
+                    const int offset = (filter.length() > 1 && filter.startsWith(QLatin1Char('*'))) ? 1 : 0;
+                    HStringReference filterRef(reinterpret_cast<const wchar_t *>(filter.utf16() + offset),
+                                               filter.length() - offset);
+                    hr = entry->Append(filterRef.Get());
+                    if (FAILED(hr)) {
+                        qWarning("Failed to add named file filter \"%s\": %s",
+                                 qPrintable(filter), qPrintable(qt_error_string(hr)));
+                    }
                 }
+                const int offset = namedFilter.indexOf(QLatin1String(" ("));
+                const QString filterTitle = namedFilter.mid(0, offset);
+                HStringReference namedFilterRef(reinterpret_cast<const wchar_t *>(filterTitle.utf16()),
+                                                filterTitle.length());
+                boolean replaced;
+                hr = choices->Insert(namedFilterRef.Get(), entry.Get(), &replaced);
+                RETURN_FALSE_IF_FAILED("Failed to insert file extension choice entry");
             }
-            const int offset = namedFilter.indexOf(QLatin1String(" ("));
-            const QString filterTitle = offset > 0 ? namedFilter.left(offset) : filterTitle;
-            HStringReference namedFilterRef(reinterpret_cast<const wchar_t *>(filterTitle.utf16()),
-                                            filterTitle.length());
-            boolean replaced;
-            hr = choices->Insert(namedFilterRef.Get(), entry.Get(), &replaced);
-            RETURN_FALSE_IF_FAILED("Failed to insert file extension choice entry");
         }
 
         const QString suffix = dialogOptions->defaultSuffix();
-        HStringReference nativeSuffix(reinterpret_cast<const wchar_t *>(suffix.utf16()),
-                                      suffix.length());
-        hr = picker->put_DefaultFileExtension(nativeSuffix.Get());
-        RETURN_FALSE_IF_FAILED("Failed to set default file extension");
+        if (!suffix.isEmpty()) {
+            HStringReference nativeSuffix(reinterpret_cast<const wchar_t *>(suffix.utf16()),
+                                          suffix.length());
+            hr = picker->put_DefaultFileExtension(nativeSuffix.Get());
+            RETURN_FALSE_IF_FAILED("Failed to set default file extension");
+        }
 
         const QString suggestedName = QFileInfo(d->saveFileName.toLocalFile()).fileName();
-        HStringReference nativeSuggestedName(reinterpret_cast<const wchar_t *>(suggestedName.utf16()),
-                                             suggestedName.length());
-        hr = picker->put_SuggestedFileName(nativeSuggestedName.Get());
-        RETURN_FALSE_IF_FAILED("Failed to set suggested file name");
+        if (!suggestedName.isEmpty()) {
+            HStringReference nativeSuggestedName(reinterpret_cast<const wchar_t *>(suggestedName.utf16()),
+                                                 suggestedName.length());
+            hr = picker->put_SuggestedFileName(nativeSuggestedName.Get());
+            RETURN_FALSE_IF_FAILED("Failed to set suggested file name");
+        }
 
         ComPtr<IAsyncOperation<StorageFile *>> op;
         hr = picker->PickSaveFileAsync(&op);

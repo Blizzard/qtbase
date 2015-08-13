@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +11,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +24,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -40,6 +41,7 @@
 #include <QtCore/qpair.h>
 #include <QtCore/qrefcount.h>
 
+#include <numeric> // for std::accumulate
 #ifdef Q_COMPILER_INITIALIZER_LISTS
 #include <initializer_list>
 #endif
@@ -100,6 +102,44 @@ template <class T> inline uint qHash(const T *key, uint seed = 0) Q_DECL_NOTHROW
 template<typename T> inline uint qHash(const T &t, uint seed)
     Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(t)))
 { return (qHash(t) ^ seed); }
+
+namespace QtPrivate {
+
+struct QHashCombine {
+    typedef uint result_type;
+    template <typename T>
+    Q_DECL_CONSTEXPR result_type operator()(uint seed, const T &t) const Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(t)))
+    // combiner taken from N3876 / boost::hash_combine
+    { return seed ^ (qHash(t) + 0x9e3779b9 + (seed << 6) + (seed >> 2)) ; }
+};
+
+struct QHashCombineCommutative {
+    // QHashCombine is a good hash combiner, but is not commutative,
+    // ie. it depends on the order of the input elements. That is
+    // usually what we want: {0,1,3} should hash differently than
+    // {1,3,0}. Except when it isn't (e.g. for QSet and
+    // QHash). Therefore, provide a commutative combiner, too.
+    typedef uint result_type;
+    template <typename T>
+    Q_DECL_CONSTEXPR result_type operator()(uint seed, const T &t) const Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(t)))
+    { return seed + qHash(t); } // don't use xor!
+};
+
+} // namespace QtPrivate
+
+template <typename InputIterator>
+inline uint qHashRange(InputIterator first, InputIterator last, uint seed = 0)
+    Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(*first))) // assume iterator operations don't throw
+{
+    return std::accumulate(first, last, seed, QtPrivate::QHashCombine());
+}
+
+template <typename InputIterator>
+inline uint qHashRangeCommutative(InputIterator first, InputIterator last, uint seed = 0)
+    Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(*first))) // assume iterator operations don't throw
+{
+    return std::accumulate(first, last, seed, QtPrivate::QHashCombineCommutative());
+}
 
 template <typename T1, typename T2> inline uint qHash(const QPair<T1, T2> &key, uint seed = 0)
     Q_DECL_NOEXCEPT_EXPR(noexcept(qHash(key.first, seed)) && noexcept(qHash(key.second, seed)))
@@ -288,7 +328,7 @@ class QHash
     static inline int alignOfNode() { return qMax<int>(sizeof(void*), Q_ALIGNOF(Node)); }
 
 public:
-    inline QHash() : d(const_cast<QHashData *>(&QHashData::shared_null)) { }
+    inline QHash() Q_DECL_NOTHROW : d(const_cast<QHashData *>(&QHashData::shared_null)) { }
 #ifdef Q_COMPILER_INITIALIZER_LISTS
     inline QHash(std::initializer_list<std::pair<Key,T> > list)
         : d(const_cast<QHashData *>(&QHashData::shared_null))
@@ -298,19 +338,19 @@ public:
             insert(it->first, it->second);
     }
 #endif
-    inline QHash(const QHash<Key, T> &other) : d(other.d) { d->ref.ref(); if (!d->sharable) detach(); }
-    inline ~QHash() { if (!d->ref.deref()) freeData(d); }
+    QHash(const QHash &other) : d(other.d) { d->ref.ref(); if (!d->sharable) detach(); }
+    ~QHash() { if (!d->ref.deref()) freeData(d); }
 
-    QHash<Key, T> &operator=(const QHash<Key, T> &other);
+    QHash &operator=(const QHash &other);
 #ifdef Q_COMPILER_RVALUE_REFS
-    inline QHash(QHash<Key, T> &&other) : d(other.d) { other.d = const_cast<QHashData *>(&QHashData::shared_null); }
-    inline QHash<Key, T> &operator=(QHash<Key, T> &&other)
+    QHash(QHash &&other) Q_DECL_NOTHROW : d(other.d) { other.d = const_cast<QHashData *>(&QHashData::shared_null); }
+    QHash &operator=(QHash &&other) Q_DECL_NOTHROW
     { qSwap(d, other.d); return *this; }
 #endif
-    inline void swap(QHash<Key, T> &other) { qSwap(d, other.d); }
+    void swap(QHash &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
 
-    bool operator==(const QHash<Key, T> &other) const;
-    inline bool operator!=(const QHash<Key, T> &other) const { return !(*this == other); }
+    bool operator==(const QHash &other) const;
+    bool operator!=(const QHash &other) const { return !(*this == other); }
 
     inline int size() const { return d->size; }
 
@@ -325,7 +365,7 @@ public:
 #if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
     inline void setSharable(bool sharable) { if (!sharable) detach(); if (d != &QHashData::shared_null) d->sharable = sharable; }
 #endif
-    inline bool isSharedWith(const QHash<Key, T> &other) const { return d == other.d; }
+    bool isSharedWith(const QHash &other) const { return d == other.d; }
 
     void clear();
 
@@ -488,7 +528,7 @@ public:
     const_iterator constFind(const Key &key) const;
     iterator insert(const Key &key, const T &value);
     iterator insertMulti(const Key &key, const T &value);
-    QHash<Key, T> &unite(const QHash<Key, T> &other);
+    QHash &unite(const QHash &other);
 
     // STL compatibility
     typedef T mapped_type;
@@ -564,9 +604,9 @@ QHash<Key, T>::createNode(uint ah, const Key &akey, const T &avalue, Node **anex
 }
 
 template <class Key, class T>
-Q_INLINE_TEMPLATE QHash<Key, T> &QHash<Key, T>::unite(const QHash<Key, T> &other)
+Q_INLINE_TEMPLATE QHash<Key, T> &QHash<Key, T>::unite(const QHash &other)
 {
-    QHash<Key, T> copy(other);
+    QHash copy(other);
     const_iterator it = copy.constEnd();
     while (it != copy.constBegin()) {
         --it;
@@ -584,7 +624,7 @@ Q_OUTOFLINE_TEMPLATE void QHash<Key, T>::freeData(QHashData *x)
 template <class Key, class T>
 Q_INLINE_TEMPLATE void QHash<Key, T>::clear()
 {
-    *this = QHash<Key,T>();
+    *this = QHash();
 }
 
 template <class Key, class T>
@@ -597,7 +637,7 @@ Q_OUTOFLINE_TEMPLATE void QHash<Key, T>::detach_helper()
 }
 
 template <class Key, class T>
-Q_INLINE_TEMPLATE QHash<Key, T> &QHash<Key, T>::operator=(const QHash<Key, T> &other)
+Q_INLINE_TEMPLATE QHash<Key, T> &QHash<Key, T>::operator=(const QHash &other)
 {
     if (d != other.d) {
         QHashData *o = other.d;
@@ -925,7 +965,7 @@ Q_OUTOFLINE_TEMPLATE typename QHash<Key, T>::Node **QHash<Key, T>::findNode(cons
 }
 
 template <class Key, class T>
-Q_OUTOFLINE_TEMPLATE bool QHash<Key, T>::operator==(const QHash<Key, T> &other) const
+Q_OUTOFLINE_TEMPLATE bool QHash<Key, T>::operator==(const QHash &other) const
 {
     if (size() != other.size())
         return false;
@@ -964,7 +1004,7 @@ public:
     }
 #endif
     QMultiHash(const QHash<Key, T> &other) : QHash<Key, T>(other) {}
-    inline void swap(QMultiHash<Key, T> &other) { QHash<Key, T>::swap(other); } // prevent QMultiHash<->QHash swaps
+    void swap(QMultiHash &other) { QHash<Key, T>::swap(other); } // prevent QMultiHash<->QHash swaps
 
     inline typename QHash<Key, T>::iterator replace(const Key &key, const T &value)
     { return QHash<Key, T>::insert(key, value); }
@@ -977,29 +1017,11 @@ public:
     inline QMultiHash operator+(const QMultiHash &other) const
     { QMultiHash result = *this; result += other; return result; }
 
-#if !defined(Q_NO_USING_KEYWORD) && !defined(Q_CC_RVCT)
-    // RVCT compiler doesn't handle using-keyword right when used functions are overloaded in child class
     using QHash<Key, T>::contains;
     using QHash<Key, T>::remove;
     using QHash<Key, T>::count;
     using QHash<Key, T>::find;
     using QHash<Key, T>::constFind;
-#else
-    inline bool contains(const Key &key) const
-    { return QHash<Key, T>::contains(key); }
-    inline int remove(const Key &key)
-    { return QHash<Key, T>::remove(key); }
-    inline int count(const Key &key) const
-    { return QHash<Key, T>::count(key); }
-    inline int count() const
-    { return QHash<Key, T>::count(); }
-    inline typename QHash<Key, T>::iterator find(const Key &key)
-    { return QHash<Key, T>::find(key); }
-    inline typename QHash<Key, T>::const_iterator find(const Key &key) const
-    { return QHash<Key, T>::find(key); }
-    inline typename QHash<Key, T>::const_iterator constFind(const Key &key) const
-    { return QHash<Key, T>::constFind(key); }
-#endif
 
     bool contains(const Key &key, const T &value) const;
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -63,7 +63,6 @@
 #include <qmath.h>
 
 #include <private/qgl_p.h>
-#include <private/qmath_p.h>
 #include <private/qpaintengineex_p.h>
 #include <QPaintEngine>
 #include <private/qpainter_p.h>
@@ -288,7 +287,7 @@ void QGL2PaintEngineExPrivate::updateBrushUniforms()
             const QConicalGradient *g = static_cast<const QConicalGradient *>(currentBrush.gradient());
             translationPoint   = g->center();
 
-            GLfloat angle = -(g->angle() * 2 * Q_PI) / 360.0;
+            GLfloat angle = -qDegreesToRadians(g->angle());
 
             shaderManager->currentProgram()->setUniformValue(location(QGLEngineShaderManager::Angle), angle);
 
@@ -400,8 +399,8 @@ void QGL2PaintEngineExPrivate::updateMatrix()
     // anti-aliased text rendering. In such cases, we snap the translate to the pixel grid.
     if (snapToPixelGrid && transform.type() == QTransform::TxTranslate) {
         // 0.50 needs to rounded down to 0.0 for consistency with raster engine:
-        dx = ceilf(dx - 0.5f);
-        dy = ceilf(dy - 0.5f);
+        dx = std::ceil(dx - 0.5f);
+        dy = std::ceil(dy - 0.5f);
     }
     pmvMatrix[0][0] = (wfactor * transform.m11())  - transform.m13();
     pmvMatrix[1][0] = (wfactor * transform.m21())  - transform.m23();
@@ -610,6 +609,21 @@ void QGL2PaintEngineExPrivate::resetGLState()
         glVertexAttrib4fv(3, color);
     }
 #endif
+}
+
+bool QGL2PaintEngineExPrivate::resetOpenGLContextActiveEngine()
+{
+    QOpenGLContext *guiGlContext = ctx->contextHandle();
+    QOpenGLContextPrivate *guiGlContextPrivate =
+        guiGlContext ? QOpenGLContextPrivate::get(guiGlContext) : 0;
+
+    if (guiGlContextPrivate && guiGlContextPrivate->active_engine) {
+        ctx->d_func()->refreshCurrentFbo();
+        guiGlContextPrivate->active_engine = 0;
+        return true;
+    }
+
+    return false;
 }
 
 void QGL2PaintEngineEx::endNativePainting()
@@ -1203,7 +1217,7 @@ void QGL2PaintEngineExPrivate::drawVertexArrays(const float *data, int *stops, i
                                                 GLenum primitive)
 {
     // Now setup the pointer to the vertex array:
-    setVertexAttributePointer(QT_VERTEX_COORDS_ATTR, (GLfloat*)data);
+    setVertexAttributePointer(QT_VERTEX_COORDS_ATTR, data);
 
     int previousStop = 0;
     for (int i=0; i<stopCount; ++i) {
@@ -1568,10 +1582,8 @@ void QGL2PaintEngineEx::drawTextItem(const QPointF &p, const QTextItem &textItem
 
         {
             QStaticTextItem staticTextItem;
-            staticTextItem.chars = const_cast<QChar *>(ti.chars);
             staticTextItem.setFontEngine(ti.fontEngine);
             staticTextItem.glyphs = glyphs.data();
-            staticTextItem.numChars = ti.num_chars;
             staticTextItem.numGlyphs = glyphs.size();
             staticTextItem.glyphPositions = positions.data();
 
@@ -1932,8 +1944,8 @@ void QGL2PaintEngineExPrivate::drawPixmapFragments(const QPainter::PixmapFragmen
         qreal s = 0;
         qreal c = 1;
         if (fragments[i].rotation != 0) {
-            s = qFastSin(fragments[i].rotation * Q_PI / 180);
-            c = qFastCos(fragments[i].rotation * Q_PI / 180);
+            s = qFastSin(qDegreesToRadians(fragments[i].rotation));
+            c = qFastCos(qDegreesToRadians(fragments[i].rotation));
         }
 
         qreal right = 0.5 * fragments[i].scaleX * fragments[i].width;
@@ -2015,6 +2027,8 @@ bool QGL2PaintEngineEx::begin(QPaintDevice *pdev)
     d->ctx = d->device->context();
     d->ctx->d_ptr->active_engine = this;
 
+    d->resetOpenGLContextActiveEngine();
+
     const QSize sz = d->device->size();
     d->width = sz.width();
     d->height = sz.height();
@@ -2080,6 +2094,8 @@ bool QGL2PaintEngineEx::end()
 
     ctx->d_ptr->active_engine = 0;
 
+    d->resetOpenGLContextActiveEngine();
+
     d->resetGLState();
 
     delete d->shaderManager;
@@ -2105,7 +2121,7 @@ void QGL2PaintEngineEx::ensureActive()
     Q_D(QGL2PaintEngineEx);
     QGLContext *ctx = d->ctx;
 
-    if (isActive() && ctx->d_ptr->active_engine != this) {
+    if (isActive() && (ctx->d_ptr->active_engine != this || d->resetOpenGLContextActiveEngine())) {
         ctx->d_ptr->active_engine = this;
         d->needsSync = true;
     }

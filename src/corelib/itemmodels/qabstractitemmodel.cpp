@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -449,9 +449,10 @@ bool QPersistentModelIndex::isValid() const
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QModelIndex &idx)
 {
+    QDebugStateSaver saver(dbg);
     dbg.nospace() << "QModelIndex(" << idx.row() << ',' << idx.column()
                   << ',' << idx.internalPointer() << ',' << idx.model() << ')';
-    return dbg.space();
+    return dbg;
 }
 
 QDebug operator<<(QDebug dbg, const QPersistentModelIndex &idx)
@@ -468,12 +469,12 @@ class QEmptyItemModel : public QAbstractItemModel
 {
 public:
     explicit QEmptyItemModel(QObject *parent = 0) : QAbstractItemModel(parent) {}
-    QModelIndex index(int, int, const QModelIndex &) const { return QModelIndex(); }
-    QModelIndex parent(const QModelIndex &) const { return QModelIndex(); }
-    int rowCount(const QModelIndex &) const { return 0; }
-    int columnCount(const QModelIndex &) const { return 0; }
-    bool hasChildren(const QModelIndex &) const { return false; }
-    QVariant data(const QModelIndex &, int) const { return QVariant(); }
+    QModelIndex index(int, int, const QModelIndex &) const Q_DECL_OVERRIDE { return QModelIndex(); }
+    QModelIndex parent(const QModelIndex &) const Q_DECL_OVERRIDE { return QModelIndex(); }
+    int rowCount(const QModelIndex &) const Q_DECL_OVERRIDE { return 0; }
+    int columnCount(const QModelIndex &) const Q_DECL_OVERRIDE { return 0; }
+    bool hasChildren(const QModelIndex &) const Q_DECL_OVERRIDE { return false; }
+    QVariant data(const QModelIndex &, int) const Q_DECL_OVERRIDE { return QVariant(); }
 };
 
 Q_GLOBAL_STATIC(QEmptyItemModel, qEmptyModel)
@@ -676,7 +677,7 @@ void QAbstractItemModelPrivate::itemsAboutToBeMoved(const QModelIndex &srcParent
   column value depending on the value of \a orientation. The indexes may also be moved to a different parent if \a parent
   differs from the existing parent for the index.
 */
-void QAbstractItemModelPrivate::movePersistentIndexes(QVector<QPersistentModelIndexData *> indexes, int change, const QModelIndex &parent, Qt::Orientation orientation)
+void QAbstractItemModelPrivate::movePersistentIndexes(const QVector<QPersistentModelIndexData *> &indexes, int change, const QModelIndex &parent, Qt::Orientation orientation)
 {
     QVector<QPersistentModelIndexData *>::const_iterator it;
     const QVector<QPersistentModelIndexData *>::const_iterator begin = indexes.constBegin();
@@ -1264,11 +1265,6 @@ void QAbstractItemModel::resetInternalData()
 */
 
 /*!
-    \fn QObject *QAbstractItemModel::parent() const
-    \internal
-*/
-
-/*!
     \fn QModelIndex QAbstractItemModel::parent(const QModelIndex &index) const = 0
 
     Returns the parent of the model item with the given \a index. If the item
@@ -1842,7 +1838,9 @@ QMimeData *QAbstractItemModel::mimeData(const QModelIndexList &indexes) const
 
 /*!
     Returns \c{true} if a model can accept a drop of the \a data. This
-    default implementation always returns \c{true}.
+    default implementation only checks if \a data has at least one format
+    in the list of mimeTypes() and if \a action is among the
+    model's supportedDropActions().
 
     Reimplement this function in your custom model, if you want to
     test whether the \a data can be dropped at \a row, \a column,
@@ -1855,12 +1853,19 @@ bool QAbstractItemModel::canDropMimeData(const QMimeData *data, Qt::DropAction a
                                          int row, int column,
                                          const QModelIndex &parent) const
 {
-    Q_UNUSED(data)
-    Q_UNUSED(action)
     Q_UNUSED(row)
     Q_UNUSED(column)
     Q_UNUSED(parent)
-    return true;
+
+    if (!(action & supportedDropActions()))
+        return false;
+
+    const QStringList modelTypes = mimeTypes();
+    for (int i = 0; i < modelTypes.count(); ++i) {
+        if (data->hasFormat(modelTypes.at(i)))
+            return true;
+    }
+    return false;
 }
 
 /*!
@@ -3341,6 +3346,14 @@ QModelIndex QAbstractTableModel::parent(const QModelIndex &) const
     return QModelIndex();
 }
 
+/*!
+    \reimp
+*/
+QModelIndex QAbstractTableModel::sibling(int row, int column, const QModelIndex &) const
+{
+    return index(row, column);
+}
+
 bool QAbstractTableModel::hasChildren(const QModelIndex &parent) const
 {
     if (parent.model() == this || !parent.isValid())
@@ -3480,6 +3493,14 @@ QModelIndex QAbstractListModel::index(int row, int column, const QModelIndex &pa
 QModelIndex QAbstractListModel::parent(const QModelIndex & /* index */) const
 {
     return QModelIndex();
+}
+
+/*!
+    \reimp
+*/
+QModelIndex QAbstractListModel::sibling(int row, int column, const QModelIndex &) const
+{
+    return index(row, column);
 }
 
 /*!

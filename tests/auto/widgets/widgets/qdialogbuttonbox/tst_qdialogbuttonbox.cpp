@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
-** Contact: http://www.qt-project.org/legal
+** Copyright (C) 2015 The Qt Company Ltd.
+** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
@@ -10,9 +10,9 @@
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and Digia. For licensing terms and
-** conditions see http://qt.digia.com/licensing. For further information
-** use the contact form at http://qt.digia.com/contact-us.
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see http://www.qt.io/terms-conditions. For further
+** information use the contact form at http://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
@@ -23,8 +23,8 @@
 ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Digia gives you certain additional
-** rights. These rights are described in the Digia Qt LGPL Exception
+** As a special exception, The Qt Company gives you certain additional
+** rights. These rights are described in The Qt Company LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** $QT_END_LICENSE$
@@ -90,6 +90,7 @@ private slots:
 //    void buttons();
 
     void testDelete();
+    void testSignalEmissionAfterDelete_QTBUG_45835();
     void testRemove();
     void testMultipleAdd();
     void testStandardButtonMapping_data();
@@ -111,6 +112,7 @@ private:
 
 tst_QDialogButtonBox::tst_QDialogButtonBox()
 {
+    qRegisterMetaType<QAbstractButton *>();
 }
 
 tst_QDialogButtonBox::~tst_QDialogButtonBox()
@@ -412,6 +414,70 @@ void tst_QDialogButtonBox::testDelete()
     children = buttonBox.findChildren<QAbstractButton *>();
     QCOMPARE(children.count(), 0);
     QCOMPARE(buttonBox.buttons().count(), 0);
+}
+
+class ObjectDeleter : public QObject
+{
+    Q_OBJECT
+public slots:
+    void deleteButton(QAbstractButton *button)
+    {
+        delete button;
+    }
+
+    void deleteSender()
+    {
+        delete sender();
+    }
+};
+
+void tst_QDialogButtonBox::testSignalEmissionAfterDelete_QTBUG_45835()
+{
+    {
+        QDialogButtonBox buttonBox;
+        QCOMPARE(buttonBox.buttons().count(), 0);
+
+        QSignalSpy buttonClickedSpy(&buttonBox, &QDialogButtonBox::clicked);
+        QVERIFY(buttonClickedSpy.isValid());
+
+        QSignalSpy buttonBoxAcceptedSpy(&buttonBox, &QDialogButtonBox::accepted);
+        QVERIFY(buttonBoxAcceptedSpy.isValid());
+
+        QPushButton *button = buttonBox.addButton("Test", QDialogButtonBox::AcceptRole);
+        QCOMPARE(buttonBox.buttons().count(), 1);
+
+        ObjectDeleter objectDeleter;
+        connect(&buttonBox, &QDialogButtonBox::clicked, &objectDeleter, &ObjectDeleter::deleteButton);
+
+        button->click();
+
+        QCOMPARE(buttonBox.buttons().count(), 0);
+        QCOMPARE(buttonClickedSpy.count(), 1);
+        QCOMPARE(buttonBoxAcceptedSpy.count(), 1);
+    }
+
+    {
+        QPointer<QDialogButtonBox> buttonBox(new QDialogButtonBox);
+        QCOMPARE(buttonBox->buttons().count(), 0);
+
+        QSignalSpy buttonClickedSpy(buttonBox.data(), &QDialogButtonBox::clicked);
+        QVERIFY(buttonClickedSpy.isValid());
+
+        QSignalSpy buttonBoxAcceptedSpy(buttonBox.data(), &QDialogButtonBox::accepted);
+        QVERIFY(buttonBoxAcceptedSpy.isValid());
+
+        QPushButton *button = buttonBox->addButton("Test", QDialogButtonBox::AcceptRole);
+        QCOMPARE(buttonBox->buttons().count(), 1);
+
+        ObjectDeleter objectDeleter;
+        connect(buttonBox.data(), &QDialogButtonBox::clicked, &objectDeleter, &ObjectDeleter::deleteSender);
+
+        button->click();
+
+        QVERIFY(buttonBox.isNull());
+        QCOMPARE(buttonClickedSpy.count(), 1);
+        QCOMPARE(buttonBoxAcceptedSpy.count(), 0);
+    }
 }
 
 void tst_QDialogButtonBox::testMultipleAdd()
