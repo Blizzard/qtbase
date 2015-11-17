@@ -622,7 +622,7 @@ void QXcbWindow::create()
 
     xcb_set_wm_hints(xcb_connection(), m_window, &hints);
 
-    xcb_window_t leader = platformScreen->clientLeader();
+    xcb_window_t leader = connection()->clientLeader();
     Q_XCB_CALL(xcb_change_property(xcb_connection(), XCB_PROP_MODE_REPLACE, m_window,
                                    atom(QXcbAtom::WM_CLIENT_LEADER), XCB_ATOM_WINDOW, 32,
                                    1, &leader));
@@ -745,6 +745,22 @@ void QXcbWindow::setGeometry(const QRect &rect)
 QMargins QXcbWindow::frameMargins() const
 {
     if (m_dirtyFrameMargins) {
+        if (connection()->wmSupport()->isSupportedByWM(atom(QXcbAtom::_NET_FRAME_EXTENTS))) {
+            xcb_get_property_cookie_t cookie = xcb_get_property(xcb_connection(), false, m_window,
+                                                                atom(QXcbAtom::_NET_FRAME_EXTENTS), XCB_ATOM_CARDINAL, 0, 4);
+            QScopedPointer<xcb_get_property_reply_t, QScopedPointerPodDeleter> reply(
+                xcb_get_property_reply(xcb_connection(), cookie, NULL));
+            if (reply && reply->type == XCB_ATOM_CARDINAL && reply->format == 32 && reply->value_len == 4) {
+                quint32 *data = (quint32 *)xcb_get_property_value(reply.data());
+                // _NET_FRAME_EXTENTS format is left, right, top, bottom
+                m_frameMargins = QMargins(data[0], data[2], data[1], data[3]);
+                m_dirtyFrameMargins = false;
+                return m_frameMargins;
+            }
+        }
+
+        // _NET_FRAME_EXTENTS property is not available, so
+        // walk up the window tree to get the frame parent
         xcb_window_t window = m_window;
         xcb_window_t parent = m_window;
 
@@ -858,7 +874,7 @@ void QXcbWindow::show()
             // Default to client leader if there is no transient parent, else modal dialogs can
             // be hidden by their parents.
             if (!transientXcbParent)
-                transientXcbParent = xcbScreen()->clientLeader();
+                transientXcbParent = connection()->clientLeader();
             if (transientXcbParent) { // ICCCM 4.1.2.6
                 Q_XCB_CALL(xcb_change_property(xcb_connection(), XCB_PROP_MODE_REPLACE, m_window,
                                                XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, 32,
@@ -871,11 +887,6 @@ void QXcbWindow::show()
 
         // update _NET_WM_STATE
         updateNetWmStateBeforeMap();
-    }
-
-    if (window()->metaObject()->indexOfProperty(wm_window_type_property_id) >= 0) {
-        QXcbWindowFunctions::WmWindowTypes wmWindowTypes(window()->property(wm_window_type_property_id).value<int>());
-        setWmWindowType(wmWindowTypes);
     }
 
     if (connection()->time() != XCB_TIME_CURRENT_TIME)
@@ -1140,7 +1151,13 @@ void QXcbWindow::setWindowFlags(Qt::WindowFlags flags)
 
     xcb_change_window_attributes(xcb_connection(), xcb_window(), mask, values);
 
-    setNetWmWindowFlags(flags);
+    QXcbWindowFunctions::WmWindowTypes wmWindowTypes = 0;
+    if (window()->dynamicPropertyNames().contains(wm_window_type_property_id)) {
+        wmWindowTypes = static_cast<QXcbWindowFunctions::WmWindowTypes>(
+            window()->property(wm_window_type_property_id).value<int>());
+    }
+
+    setWmWindowType(wmWindowTypes, flags);
     setMotifWindowFlags(flags);
 
     setTransparentForMouseEvents(flags & Qt::WindowTransparentForInput);
@@ -1289,42 +1306,6 @@ void QXcbWindow::setWindowState(Qt::WindowState state)
     connection()->sync();
 
     m_windowState = state;
-}
-
-void QXcbWindow::setNetWmWindowFlags(Qt::WindowFlags flags)
-{
-    // in order of decreasing priority
-    QVector<uint> windowTypes;
-
-    Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
-
-    switch (type) {
-    case Qt::Dialog:
-    case Qt::Sheet:
-        windowTypes.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DIALOG));
-        break;
-    case Qt::Tool:
-    case Qt::Drawer:
-        windowTypes.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_UTILITY));
-        break;
-    case Qt::ToolTip:
-        windowTypes.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLTIP));
-        break;
-    case Qt::SplashScreen:
-        windowTypes.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_SPLASH));
-        break;
-    default:
-        break;
-    }
-
-    if (flags & Qt::FramelessWindowHint)
-        windowTypes.append(atom(QXcbAtom::_KDE_NET_WM_WINDOW_TYPE_OVERRIDE));
-
-    windowTypes.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NORMAL));
-
-    Q_XCB_CALL(xcb_change_property(xcb_connection(), XCB_PROP_MODE_REPLACE, m_window,
-                                   atom(QXcbAtom::_NET_WM_WINDOW_TYPE), XCB_ATOM_ATOM, 32,
-                                   windowTypes.count(), windowTypes.constData()));
 }
 
 void QXcbWindow::updateMotifWmHintsBeforeMap()
@@ -1703,10 +1684,10 @@ QSurfaceFormat QXcbWindow::format() const
 
 void QXcbWindow::setWmWindowTypeStatic(QWindow *window, QXcbWindowFunctions::WmWindowTypes windowTypes)
 {
+    window->setProperty(wm_window_type_property_id, QVariant::fromValue(static_cast<int>(windowTypes)));
+
     if (window->handle())
-        static_cast<QXcbWindow *>(window->handle())->setWmWindowType(windowTypes);
-    else
-        window->setProperty(wm_window_type_property_id, QVariant::fromValue(static_cast<int>(windowTypes)));
+        static_cast<QXcbWindow *>(window->handle())->setWmWindowType(windowTypes, window->flags());
 }
 
 uint QXcbWindow::visualIdStatic(QWindow *window)
@@ -1787,40 +1768,82 @@ QXcbWindowFunctions::WmWindowTypes QXcbWindow::wmWindowTypes() const
     return result;
 }
 
-void QXcbWindow::setWmWindowType(QXcbWindowFunctions::WmWindowTypes types)
+void QXcbWindow::setWmWindowType(QXcbWindowFunctions::WmWindowTypes types, Qt::WindowFlags flags)
 {
     QVector<xcb_atom_t> atoms;
 
+    // manual selection 1 (these are never set by Qt and take precedence)
     if (types & QXcbWindowFunctions::Normal)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NORMAL));
     if (types & QXcbWindowFunctions::Desktop)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DESKTOP));
     if (types & QXcbWindowFunctions::Dock)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DOCK));
-    if (types & QXcbWindowFunctions::Toolbar)
-        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLBAR));
-    if (types & QXcbWindowFunctions::Menu)
-        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_MENU));
+    if (types & QXcbWindowFunctions::Notification)
+        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NOTIFICATION));
+
+    // manual selection 2 (Qt uses these during auto selection);
     if (types & QXcbWindowFunctions::Utility)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_UTILITY));
     if (types & QXcbWindowFunctions::Splash)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_SPLASH));
     if (types & QXcbWindowFunctions::Dialog)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DIALOG));
+    if (types & QXcbWindowFunctions::Tooltip)
+        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLTIP));
+    if (types & QXcbWindowFunctions::KdeOverride)
+        atoms.append(atom(QXcbAtom::_KDE_NET_WM_WINDOW_TYPE_OVERRIDE));
+
+    // manual selection 3 (these can be set by Qt, but don't have a
+    // corresponding Qt::WindowType). note that order of the *MENU
+    // atoms is important
+    if (types & QXcbWindowFunctions::Menu)
+        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_MENU));
     if (types & QXcbWindowFunctions::DropDownMenu)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DROPDOWN_MENU));
     if (types & QXcbWindowFunctions::PopupMenu)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_POPUP_MENU));
-    if (types & QXcbWindowFunctions::Tooltip)
-        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLTIP));
-    if (types & QXcbWindowFunctions::Notification)
-        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NOTIFICATION));
+    if (types & QXcbWindowFunctions::Toolbar)
+        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLBAR));
     if (types & QXcbWindowFunctions::Combo)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_COMBO));
     if (types & QXcbWindowFunctions::Dnd)
         atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DND));
-    if (types & QXcbWindowFunctions::KdeOverride)
+
+    // automatic selection
+    Qt::WindowType type = static_cast<Qt::WindowType>(int(flags & Qt::WindowType_Mask));
+    switch (type) {
+    case Qt::Dialog:
+    case Qt::Sheet:
+        if (!(types & QXcbWindowFunctions::Dialog))
+            atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_DIALOG));
+        break;
+    case Qt::Tool:
+    case Qt::Drawer:
+        if (!(types & QXcbWindowFunctions::Utility))
+            atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_UTILITY));
+        break;
+    case Qt::ToolTip:
+        if (!(types & QXcbWindowFunctions::Tooltip))
+            atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_TOOLTIP));
+        break;
+    case Qt::SplashScreen:
+        if (!(types & QXcbWindowFunctions::Splash))
+            atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_SPLASH));
+        break;
+    default:
+        break;
+    }
+
+    if ((flags & Qt::FramelessWindowHint) && !(type & QXcbWindowFunctions::KdeOverride)) {
+        // override netwm type - quick and easy for KDE noborder
         atoms.append(atom(QXcbAtom::_KDE_NET_WM_WINDOW_TYPE_OVERRIDE));
+    }
+
+    if (atoms.size() == 1 && atoms.first() == atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NORMAL))
+        atoms.clear();
+    else
+        atoms.append(atom(QXcbAtom::_NET_WM_WINDOW_TYPE_NORMAL));
 
     if (atoms.isEmpty()) {
         Q_XCB_CALL(xcb_delete_property(xcb_connection(), m_window, atom(QXcbAtom::_NET_WM_WINDOW_TYPE)));
@@ -2226,17 +2249,17 @@ void QXcbWindow::handleXIMouseEvent(xcb_ge_event_t *event)
 
     switch (ev->evtype) {
     case XI_ButtonPress:
-        qCDebug(lcQpaXInput, "XI2 mouse press, button %d", button);
+        qCDebug(lcQpaXInput, "XI2 mouse press, button %d, time %d", button, ev->time);
         conn->setButton(button, true);
         handleButtonPressEvent(event_x, event_y, root_x, root_y, ev->detail, modifiers, ev->time);
         break;
     case XI_ButtonRelease:
-        qCDebug(lcQpaXInput, "XI2 mouse release, button %d", button);
+        qCDebug(lcQpaXInput, "XI2 mouse release, button %d, time %d", button, ev->time);
         conn->setButton(button, false);
         handleButtonReleaseEvent(event_x, event_y, root_x, root_y, ev->detail, modifiers, ev->time);
         break;
     case XI_Motion:
-        qCDebug(lcQpaXInput, "XI2 mouse motion %d,%d", event_x, event_y);
+        qCDebug(lcQpaXInput, "XI2 mouse motion %d,%d, time %d", event_x, event_y, ev->time);
         handleMotionNotifyEvent(event_x, event_y, root_x, root_y, modifiers, ev->time);
         break;
     default:
@@ -2378,6 +2401,8 @@ void QXcbWindow::handlePropertyNotifyEvent(const xcb_property_notify_event_t *ev
             m_windowState = newState;
         }
         return;
+    } else if (event->atom == atom(QXcbAtom::_NET_FRAME_EXTENTS)) {
+        m_dirtyFrameMargins = true;
     } else if (event->atom == atom(QXcbAtom::_NET_WORKAREA) && xcbScreen() && event->window == xcbScreen()->root()) {
         xcbScreen()->updateGeometry(event->time);
     }

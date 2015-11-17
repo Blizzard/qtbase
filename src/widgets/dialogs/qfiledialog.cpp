@@ -189,7 +189,9 @@ Q_GLOBAL_STATIC(QUrl, lastVisitedDir)
     \value AnyFile        The name of a file, whether it exists or not.
     \value ExistingFile   The name of a single existing file.
     \value Directory      The name of a directory. Both files and
-                          directories are displayed.
+                          directories are displayed. However, the native Windows
+                          file dialog does not support displaying files in the
+                          directory chooser.
     \value ExistingFiles  The names of zero or more existing files.
 
     This value is obsolete since Qt 4.5:
@@ -2039,7 +2041,7 @@ QString QFileDialog::labelText(DialogLabel label) const
     The dialog's caption is set to \a caption. If \a caption is not specified
     then a default caption will be used.
 
-    On Windows, and Mac OS X, this static function will use the
+    On Windows, and OS X, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
@@ -2151,7 +2153,7 @@ QUrl QFileDialog::getOpenFileUrl(QWidget *parent,
     The dialog's caption is set to \a caption. If \a caption is not specified
     then a default caption will be used.
 
-    On Windows, and Mac OS X, this static function will use the
+    On Windows, and OS X, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
@@ -2279,12 +2281,12 @@ QList<QUrl> QFileDialog::getOpenFileUrls(QWidget *parent,
     The dialog's caption is set to \a caption. If \a caption is not specified,
     a default caption will be used.
 
-    On Windows, and Mac OS X, this static function will use the
+    On Windows, and OS X, this static function will use the
     native file dialog and not a QFileDialog.
 
     On Windows the dialog will spin a blocking modal event loop that will not
     dispatch any QTimers, and if \a parent is not 0 then it will position the
-    dialog just below the parent's title bar. On Mac OS X, with its native file
+    dialog just below the parent's title bar. On OS X, with its native file
     dialog, the filter argument is ignored.
 
     On Unix/X11, the normal behavior of the file dialog is to resolve and
@@ -2388,9 +2390,12 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
     pass. To ensure a native file dialog, \l{QFileDialog::}{ShowDirsOnly} must
     be set.
 
-    On Windows, and Mac OS X, this static function will use the
-    native file dialog and not a QFileDialog. On Windows CE, if the device has
-    no native file dialog, a QFileDialog will be used.
+    On Windows and OS X, this static function will use the
+    native file dialog and not a QFileDialog. However, the native Windows file
+    dialog does not support displaying files in the directory chooser. You need
+    to pass \l{QFileDialog::}{DontUseNativeDialog} to display files using a
+    QFileDialog. On Windows CE, if the device has no native file dialog, a
+    QFileDialog will be used.
 
     On Unix/X11, the normal behavior of the file dialog is to resolve and
     follow symlinks. For example, if \c{/usr/tmp} is a symlink to \c{/var/tmp},
@@ -2398,7 +2403,7 @@ QUrl QFileDialog::getSaveFileUrl(QWidget *parent,
     \a options includes DontResolveSymlinks, the file dialog will treat
     symlinks as regular directories.
 
-    On Windows the dialog will spin a blocking modal event loop that will not
+    On Windows, the dialog will spin a blocking modal event loop that will not
     dispatch any QTimers, and if \a parent is not 0 then it will position the
     dialog just below the parent's title bar.
 
@@ -2846,6 +2851,9 @@ void QFileDialogPrivate::createWidgets()
     completer = new QFSCompleter(model, q);
     qFileDialogUi->fileNameEdit->setCompleter(completer);
 #endif // QT_NO_FSCOMPLETER
+
+    qFileDialogUi->fileNameEdit->setInputMethodHints(Qt::ImhNoPredictiveText);
+
     QObject::connect(qFileDialogUi->fileNameEdit, SIGNAL(textChanged(QString)),
             q, SLOT(_q_autoCompleteFileName(QString)));
     QObject::connect(qFileDialogUi->fileNameEdit, SIGNAL(textChanged(QString)),

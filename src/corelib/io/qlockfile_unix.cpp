@@ -56,6 +56,13 @@
 #   include <cstdio>
 #elif defined(Q_OS_BSD4) && !defined(Q_OS_IOS)
 #   include <sys/user.h>
+# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
+#   include <sys/cdefs.h>
+#   include <sys/param.h>
+#   include <sys/sysctl.h>
+# else
+#   include <libutil.h>
+# endif
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -218,24 +225,43 @@ QString QLockFilePrivate::processNameByPid(qint64 pid)
 #if defined(Q_OS_OSX)
     char name[1024];
     proc_name(pid, name, sizeof(name) / sizeof(char));
-    return QString::fromUtf8(name);
+    return QFile::decodeName(name);
 #elif defined(Q_OS_LINUX)
     if (!QFile::exists(QStringLiteral("/proc/version")))
         return QString();
     char exePath[64];
-    char buf[PATH_MAX];
-    memset(buf, 0, sizeof(buf));
+    char buf[PATH_MAX + 1];
     sprintf(exePath, "/proc/%lld/exe", pid);
-    if (readlink(exePath, buf, sizeof(buf)) < 0) {
+    size_t len = (size_t)readlink(exePath, buf, sizeof(buf));
+    if (len >= sizeof(buf)) {
         // The pid is gone. Return some invalid process name to fail the test.
         return QStringLiteral("/ERROR/");
     }
-    return QFileInfo(QString::fromUtf8(buf)).fileName();
+    buf[len] = 0;
+    return QFileInfo(QFile::decodeName(buf)).fileName();
 #elif defined(Q_OS_BSD4) && !defined(Q_OS_IOS)
+# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, pid };
+    size_t len = 0;
+    if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
+        return QString();
+    kinfo_proc *proc = static_cast<kinfo_proc *>(malloc(len));
+# else
     kinfo_proc *proc = kinfo_getproc(pid);
+# endif
     if (!proc)
         return QString();
-    QString name = QString::fromUtf8(proc->ki_comm);
+# if defined(__GLIBC__) && defined(__FreeBSD_kernel__)
+    if (sysctl(mib, 4, proc, &len, NULL, 0) < 0) {
+        free(proc);
+        return QString();
+    }
+    if (proc->ki_pid != pid) {
+        free(proc);
+        return QString();
+    }
+# endif
+    QString name = QFile::decodeName(proc->ki_comm);
     free(proc);
     return name;
 #else

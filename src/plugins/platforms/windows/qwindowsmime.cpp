@@ -990,7 +990,7 @@ QVector<FORMATETC> QWindowsMimeImage::formatsForMime(const QString &mimeType, co
 {
     QVector<FORMATETC> formatetcs;
     if (mimeData->hasImage() && mimeType == QLatin1String("application/x-qt-image")) {
-        //add DIBV5 if image has alpha channel
+        //add DIBV5 if image has alpha channel. Do not add CF_PNG here as it will confuse MS Office (QTBUG47656).
         QImage image = qvariant_cast<QImage>(mimeData->imageData());
         if (!image.isNull() && image.hasAlphaChannel())
             formatetcs += setCf(CF_DIBV5);
@@ -1023,15 +1023,13 @@ bool QWindowsMimeImage::canConvertFromMime(const FORMATETC &formatetc, const QMi
     const QImage image = qvariant_cast<QImage>(mimeData->imageData());
     if (image.isNull())
         return false;
-    // QTBUG-11463, deny CF_DIB support for images with alpha to prevent loss of
-    // transparency in conversion.
-    return cf == CF_DIBV5 || (cf == CF_DIB && !image.hasAlphaChannel());
+    return cf == CF_DIBV5 || (cf == CF_DIB) || cf == int(CF_PNG);
 }
 
 bool QWindowsMimeImage::convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const
 {
     int cf = getCf(formatetc);
-    if ((cf == CF_DIB || cf == CF_DIBV5) && mimeData->hasImage()) {
+    if ((cf == CF_DIB || cf == CF_DIBV5 || cf == int(CF_PNG)) && mimeData->hasImage()) {
         QImage img = qvariant_cast<QImage>(mimeData->imageData());
         if (img.isNull())
             return false;
@@ -1041,6 +1039,12 @@ bool QWindowsMimeImage::convertFromMime(const FORMATETC &formatetc, const QMimeD
                 img = img.convertToFormat(QImage::Format_RGB32);
             const QByteArray ba = writeDib(img);
             if (!ba.isEmpty())
+                return setData(ba, pmedium);
+        } else if (cf == int(CF_PNG)) {
+            QBuffer buffer(&ba);
+            const bool written = buffer.open(QIODevice::WriteOnly) && img.save(&buffer, "PNG");
+            buffer.close();
+            if (written)
                 return setData(ba, pmedium);
         } else {
             QDataStream s(&ba, QIODevice::WriteOnly);

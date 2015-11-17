@@ -88,6 +88,14 @@ Q_DECLARE_METATYPE(QSharedPointer<char>)
 
 #include "../../../network-settings.h"
 
+// Non-OpenSSL backends are not able to report a specific error code
+// for self-signed certificates.
+#ifndef QT_NO_OPENSSL
+#define FLUKE_CERTIFICATE_ERROR QSslError::SelfSignedCertificate
+#else
+#define FLUKE_CERTIFICATE_ERROR QSslError::CertificateUntrusted
+#endif
+
 Q_DECLARE_METATYPE(QAuthenticator*)
 #ifndef QT_NO_NETWORKPROXY
 Q_DECLARE_METATYPE(QNetworkProxyQuery)
@@ -1050,7 +1058,7 @@ protected:
         // clean up QAbstractSocket's residue:
         while (client->bytesToWrite() > 0) {
             qDebug() << "Still having" << client->bytesToWrite() << "bytes to write, doing that now";
-            if (!client->waitForBytesWritten(2000)) {
+            if (!client->waitForBytesWritten(10000)) {
                 qDebug() << "ERROR: FastSender:" << client->error() << "cleaning up residue";
                 return;
             }
@@ -1070,7 +1078,7 @@ protected:
             measuredSentBytes += writeNextData(client, bytesToWrite);
 
             while (client->bytesToWrite() > 0) {
-                if (!client->waitForBytesWritten(2000)) {
+                if (!client->waitForBytesWritten(10000)) {
                     qDebug() << "ERROR: FastSender:" << client->error() << "during blocking write";
                     return;
                 }
@@ -6027,8 +6035,8 @@ void tst_QNetworkReply::ignoreSslErrorsList_data()
 
     QList<QSslError> expectedSslErrors;
     QList<QSslCertificate> certs = QSslCertificate::fromPath(testDataDir + "/certs/qt-test-server-cacert.pem");
-    QSslError rightError(QSslError::SelfSignedCertificate, certs.at(0));
-    QSslError wrongError(QSslError::SelfSignedCertificate);
+    QSslError rightError(FLUKE_CERTIFICATE_ERROR, certs.at(0));
+    QSslError wrongError(FLUKE_CERTIFICATE_ERROR);
 
     QTest::newRow("SSL-failure-empty-list") << "https://" + QtNetworkSettings::serverName() + "/index.html" << expectedSslErrors << QNetworkReply::SslHandshakeFailedError;
     expectedSslErrors.append(wrongError);
@@ -8004,7 +8012,7 @@ public slots:
         m_receivedData += data;
         if (!m_parsedHeaders && m_receivedData.contains("\r\n\r\n")) {
             m_parsedHeaders = true;
-            QTimer::singleShot(qrand()%10, this, SLOT(closeDelayed())); // simulate random network latency
+            QTimer::singleShot(qrand()%60, this, SLOT(closeDelayed())); // simulate random network latency
             // This server simulates a web server connection closing, e.g. because of Apaches MaxKeepAliveRequests or KeepAliveTimeout
             // In this case QNAM needs to re-send the upload data but it had a bug which then corrupts the upload
             // This test catches that.
@@ -8110,11 +8118,12 @@ void tst_QNetworkReply::putWithServerClosingConnectionImmediately()
 
             // get the request started and the incoming socket connected
             QTestEventLoop::instance().enterLoop(10);
+            QVERIFY(!QTestEventLoop::instance().timeout());
 
             //qDebug() << "correct=" << server.m_correctUploads << "corrupt=" << server.m_corruptUploads << "expected=" <<numUploads;
 
             // Sanity check because ecause of 9c2ecf89 most replies will error out but we want to make sure at least some of them worked
-            QVERIFY(server.m_correctUploads > 5);
+            QVERIFY(server.m_correctUploads > 2);
             // Because actually important is that we don't get any corruption:
             QCOMPARE(server.m_corruptUploads, 0);
 

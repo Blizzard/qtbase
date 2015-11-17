@@ -194,6 +194,7 @@ namespace QXcbAtom {
         _KDE_NET_WM_WINDOW_TYPE_OVERRIDE,
 
         _KDE_NET_WM_FRAME_STRUT,
+        _NET_FRAME_EXTENTS,
 
         _NET_STARTUP_INFO,
         _NET_STARTUP_INFO_BEGIN,
@@ -323,9 +324,6 @@ private:
     QMutex m_mutex;
     QXcbEventArray m_events;
     QXcbConnection *m_connection;
-
-    typedef xcb_generic_event_t * (*XcbPollForQueuedEventFunctionPointer)(xcb_connection_t *c);
-    XcbPollForQueuedEventFunctionPointer m_xcb_poll_for_queued_event;
 };
 
 class QXcbWindowEventListener
@@ -402,6 +400,7 @@ public:
 
     QXcbWMSupport *wmSupport() const { return m_wmSupport.data(); }
     xcb_window_t rootWindow();
+    xcb_window_t clientLeader();
 
     bool hasDefaultVisualId() const { return m_defaultVisualId != UINT_MAX; }
     xcb_visualid_t defaultVisualId() const { return m_defaultVisualId; }
@@ -607,7 +606,6 @@ private:
 #endif
     QXcbEventReader *m_reader;
 #if defined(XCB_USE_XINPUT2)
-    QHash<int, QWindowSystemInterface::TouchPoint> m_touchPoints;
     QHash<int, XInput2TouchDeviceData*> m_touchDevices;
 #endif
 #ifdef Q_XCB_DEBUG
@@ -640,6 +638,7 @@ private:
 
     QXcbWindow *m_focusWindow;
 
+    xcb_window_t m_clientLeader;
     QByteArray m_startupId;
     QXcbSystemTrayTracker *m_systemTrayTracker;
     QXcbGlIntegration *m_glIntegration;

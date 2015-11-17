@@ -1986,6 +1986,7 @@ void HtmlGenerator::generateHeader(const QString& title,
     out() << QString(postPostHeader).replace("\\" + COMMAND_VERSION, qdb_->version());
 
     navigationLinks.clear();
+    refMap.clear();
 
     if (node && !node->links().empty()) {
         QPair<QString,QString> linkPair;
@@ -2199,7 +2200,7 @@ void HtmlGenerator::generateRequisites(InnerNode *inner, CodeMarker *marker)
         out() << "<div class=\"table\"><table class=\"alignedsummary\">\n";
 
         QStringList::ConstIterator i;
-        for (i = requisiteorder.begin(); i != requisiteorder.constEnd(); ++i) {
+        for (i = requisiteorder.constBegin(); i != requisiteorder.constEnd(); ++i) {
 
             if (requisites.contains(*i)) {
                 out() << "<tr>"
@@ -2319,7 +2320,7 @@ void HtmlGenerator::generateQmlRequisites(QmlTypeNode *qcn, CodeMarker *marker)
         out() << "<div class=\"table\"><table class=\"alignedsummary\">\n";
 
         QStringList::ConstIterator i;
-        for (i = requisiteorder.begin(); i != requisiteorder.constEnd(); ++i) {
+        for (i = requisiteorder.constBegin(); i != requisiteorder.constEnd(); ++i) {
 
             if (requisites.contains(*i)) {
                 out() << "<tr>"
@@ -2657,7 +2658,7 @@ QString HtmlGenerator::generateLowStatusMemberFile(InnerNode *inner,
         out() << "<p><b>The following members of class "
               << "<a href=\"" << linkForNode(inner, 0) << "\">"
               << protectEnc(inner->name()) << "</a>"
-              << "are part of the "
+              << " are part of the "
                  "Qt compatibility layer.</b> We advise against "
                  "using them in new code.</p>\n";
     }

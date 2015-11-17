@@ -69,7 +69,9 @@ ImageViewer::ImageViewer()
 
 bool ImageViewer::loadFile(const QString &fileName)
 {
-    QImage image(fileName);
+    QImageReader reader(fileName);
+    reader.setAutoTransform(true);
+    const QImage image = reader.read();
     if (image.isNull()) {
         QMessageBox::information(this, QGuiApplication::applicationDisplayName(),
                                  tr("Cannot load %1.").arg(QDir::toNativeSeparators(fileName)));
@@ -107,7 +109,7 @@ void ImageViewer::open()
     mimeTypeFilters.sort();
     const QStringList picturesLocations = QStandardPaths::standardLocations(QStandardPaths::PicturesLocation);
     QFileDialog dialog(this, tr("Open File"),
-                       picturesLocations.isEmpty() ? QDir::currentPath() : picturesLocations.first());
+                       picturesLocations.isEmpty() ? QDir::currentPath() : picturesLocations.last());
     dialog.setAcceptMode(QFileDialog::AcceptOpen);
     dialog.setMimeTypeFilters(mimeTypeFilters);
     dialog.selectMimeTypeFilter("image/jpeg");

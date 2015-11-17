@@ -933,7 +933,7 @@ static bool addFontToDatabase(const QString &familyName, uchar charSet,
 }
 
 static int QT_WIN_CALLBACK storeFont(ENUMLOGFONTEX* f, NEWTEXTMETRICEX *textmetric,
-                                     int type, LPARAM)
+                                     int type, LPARAM registerAlias)
 {
     const QString familyName = QString::fromWCharArray(f->elfLogFont.lfFaceName);
     const uchar charSet = f->elfLogFont.lfCharSet;
@@ -943,13 +943,13 @@ static int QT_WIN_CALLBACK storeFont(ENUMLOGFONTEX* f, NEWTEXTMETRICEX *textmetr
     // NEWTEXTMETRICEX is a NEWTEXTMETRIC, which according to the documentation is
     // identical to a TEXTMETRIC except for the last four members, which we don't use
     // anyway
-    addFontToDatabase(familyName, charSet, (TEXTMETRIC *)textmetric, &signature, type, false);
+    addFontToDatabase(familyName, charSet, (TEXTMETRIC *)textmetric, &signature, type, registerAlias);
 
     // keep on enumerating
     return 1;
 }
 
-void QWindowsFontDatabase::populateFamily(const QString &familyName)
+void QWindowsFontDatabase::populateFamily(const QString &familyName, bool registerAlias)
 {
     qCDebug(lcQpaFonts) << familyName;
     if (familyName.size() >= LF_FACESIZE) {
@@ -962,8 +962,13 @@ void QWindowsFontDatabase::populateFamily(const QString &familyName)
     familyName.toWCharArray(lf.lfFaceName);
     lf.lfFaceName[familyName.size()] = 0;
     lf.lfPitchAndFamily = 0;
-    EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFont, 0, 0);
+    EnumFontFamiliesEx(dummy, &lf, (FONTENUMPROC)storeFont, (LPARAM)registerAlias, 0);
     ReleaseDC(0, dummy);
+}
+
+void QWindowsFontDatabase::populateFamily(const QString &familyName)
+{
+    populateFamily(familyName, false);
 }
 
 namespace {
@@ -1075,11 +1080,7 @@ QWindowsFontDatabase::~QWindowsFontDatabase()
 
 QFontEngineMulti *QWindowsFontDatabase::fontEngineMulti(QFontEngine *fontEngine, QChar::Script script)
 {
-    if (script == QChar::Script_Common)
-        return new QWindowsMultiFontEngine(fontEngine, script);
-    // ### as long as fallbacksForFamily() does not take script parameter into account,
-    // prefer QFontEngineMulti's loadEngine() implementation for complex scripts
-    return QPlatformFontDatabase::fontEngineMulti(fontEngine, script);
+    return new QWindowsMultiFontEngine(fontEngine, script);
 }
 
 QFontEngine * QWindowsFontDatabase::fontEngine(const QFontDef &fontDef, void *handle)
@@ -1169,23 +1170,19 @@ QT_WARNING_POP
         CustomFontFileLoader fontFileLoader;
         fontFileLoader.addKey(this, fontData);
 
-        IDWriteFactory *factory = 0;
-        HRESULT hres = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                                           __uuidof(IDWriteFactory),
-                                           reinterpret_cast<IUnknown **>(&factory));
-        if (FAILED(hres)) {
-            qErrnoWarning(hres, "%s: DWriteCreateFactory failed", __FUNCTION__);
+        QSharedPointer<QWindowsFontEngineData> fontEngineData = sharedFontData();
+        if (!initDirectWrite(fontEngineData.data()))
             return 0;
-        }
 
         IDWriteFontFile *fontFile = 0;
         void *key = this;
 
-        hres = factory->CreateCustomFontFileReference(&key, sizeof(void *),
-                                                      fontFileLoader.loader(), &fontFile);
+        HRESULT hres = fontEngineData->directWriteFactory->CreateCustomFontFileReference(&key,
+                                                                                         sizeof(void *),
+                                                                                         fontFileLoader.loader(),
+                                                                                         &fontFile);
         if (FAILED(hres)) {
             qErrnoWarning(hres, "%s: CreateCustomFontFileReference failed", __FUNCTION__);
-            factory->Release();
             return 0;
         }
 
@@ -1196,30 +1193,31 @@ QT_WARNING_POP
         fontFile->Analyze(&isSupportedFontType, &fontFileType, &fontFaceType, &numberOfFaces);
         if (!isSupportedFontType) {
             fontFile->Release();
-            factory->Release();
             return 0;
         }
 
         IDWriteFontFace *directWriteFontFace = 0;
-        hres = factory->CreateFontFace(fontFaceType, 1, &fontFile, 0, DWRITE_FONT_SIMULATIONS_NONE,
-                                       &directWriteFontFace);
+        hres = fontEngineData->directWriteFactory->CreateFontFace(fontFaceType,
+                                                                  1,
+                                                                  &fontFile,
+                                                                  0,
+                                                                  DWRITE_FONT_SIMULATIONS_NONE,
+                                                                  &directWriteFontFace);
         if (FAILED(hres)) {
             qErrnoWarning(hres, "%s: CreateFontFace failed", __FUNCTION__);
             fontFile->Release();
-            factory->Release();
             return 0;
         }
 
         fontFile->Release();
 
         fontEngine = new QWindowsFontEngineDirectWrite(directWriteFontFace, pixelSize,
-                                                       sharedFontData());
+                                                       fontEngineData);
 
         // Get font family from font data
         fontEngine->fontDef.family = font.familyName();
 
         directWriteFontFace->Release();
-        factory->Release();
     }
 #endif
 
@@ -1385,7 +1383,7 @@ QStringList QWindowsFontDatabase::addApplicationFont(const QByteArray &fontData,
 
         // Fonts based on files are added via populate, as they will show up in font enumeration.
         for (int j = 0; j < families.count(); ++j)
-            populateFamily(families.at(j));
+            populateFamily(families.at(j), true);
     }
 
     m_applicationFonts << font;
@@ -1664,11 +1662,10 @@ QString QWindowsFontDatabase::familyForStyleHint(QFont::StyleHint styleHint)
 
 QStringList QWindowsFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script) const
 {
-    QStringList result = QPlatformFontDatabase::fallbacksForFamily(family, style, styleHint, script);
-    if (!result.isEmpty())
-        return result;
+    QStringList result;
     result.append(QWindowsFontDatabase::familyForStyleHint(styleHint));
     result.append(QWindowsFontDatabase::extraTryFontsForFamily(family));
+    result.append(QPlatformFontDatabase::fallbacksForFamily(family, style, styleHint, script));
 
     qCDebug(lcQpaFonts) << __FUNCTION__ << family << style << styleHint
         << script << result;

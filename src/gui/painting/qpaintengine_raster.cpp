@@ -2756,12 +2756,12 @@ bool QRasterPaintEngine::drawCachedGlyphs(int numGlyphs, const glyph_t *glyphs,
             QFixed spp = fontEngine->subPixelPositionForX(positions[i].x);
 
             QPoint offset;
-            QImage *alphaMap = fontEngine->lockedAlphaMapForGlyph(glyphs[i], spp, neededFormat, s->matrix,
-                                                                  &offset);
+            const QImage *alphaMap = fontEngine->lockedAlphaMapForGlyph(glyphs[i], spp, neededFormat, s->matrix,
+                                                                        &offset);
             if (alphaMap == 0 || alphaMap->isNull())
                 continue;
 
-            alphaPenBlt(alphaMap->bits(), alphaMap->bytesPerLine(), alphaMap->depth(),
+            alphaPenBlt(alphaMap->constBits(), alphaMap->bytesPerLine(), alphaMap->depth(),
                         qFloor(positions[i].x) + offset.x(),
                         qRound(positions[i].y) + offset.y(),
                         alphaMap->width(), alphaMap->height());
@@ -3281,6 +3281,10 @@ bool QRasterPaintEngine::requiresPretransformedGlyphPositions(QFontEngine *fontE
     return QPaintEngineEx::requiresPretransformedGlyphPositions(fontEngine, m);
 }
 
+/*!
+   Indicates whether glyph caching is supported by the font engine
+   \a fontEngine with the given transform \a m applied.
+*/
 bool QRasterPaintEngine::shouldDrawCachedGlyphs(QFontEngine *fontEngine, const QTransform &m) const
 {
     // The raster engine does not support projected cached glyph drawing

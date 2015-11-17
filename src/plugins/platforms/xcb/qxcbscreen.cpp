@@ -170,38 +170,6 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
     else
         m_syncRequestSupported = true;
 
-    m_clientLeader = xcb_generate_id(xcb_connection());
-    Q_XCB_CALL2(xcb_create_window(xcb_connection(),
-                                  XCB_COPY_FROM_PARENT,
-                                  m_clientLeader,
-                                  screen()->root,
-                                  0, 0, 1, 1,
-                                  0,
-                                  XCB_WINDOW_CLASS_INPUT_OUTPUT,
-                                  screen()->root_visual,
-                                  0, 0), connection);
-#ifndef QT_NO_DEBUG
-    QByteArray ba("Qt client leader window for screen ");
-    ba += m_outputName.toUtf8();
-    Q_XCB_CALL2(xcb_change_property(xcb_connection(),
-                                   XCB_PROP_MODE_REPLACE,
-                                   m_clientLeader,
-                                   atom(QXcbAtom::_NET_WM_NAME),
-                                   atom(QXcbAtom::UTF8_STRING),
-                                   8,
-                                   ba.length(),
-                                   ba.constData()), connection);
-#endif
-
-    Q_XCB_CALL2(xcb_change_property(xcb_connection(),
-                                    XCB_PROP_MODE_REPLACE,
-                                    m_clientLeader,
-                                    atom(QXcbAtom::WM_CLIENT_LEADER),
-                                    XCB_ATOM_WINDOW,
-                                    32,
-                                    1,
-                                    &m_clientLeader), connection);
-
     xcb_depth_iterator_t depth_iterator =
         xcb_screen_allowed_depths_iterator(screen());
 
@@ -277,6 +245,18 @@ QPoint QXcbScreen::mapToNative(const QPoint &pos) const
 }
 
 QPoint QXcbScreen::mapFromNative(const QPoint &pos) const
+{
+    const int dpr = int(devicePixelRatio());
+    return (pos - m_nativeGeometry.topLeft()) / dpr + m_geometry.topLeft();
+}
+
+QPointF QXcbScreen::mapToNative(const QPointF &pos) const
+{
+    const int dpr = int(devicePixelRatio());
+    return (pos - m_geometry.topLeft()) * dpr + m_nativeGeometry.topLeft();
+}
+
+QPointF QXcbScreen::mapFromNative(const QPointF &pos) const
 {
     const int dpr = int(devicePixelRatio());
     return (pos - m_nativeGeometry.topLeft()) / dpr + m_geometry.topLeft();
@@ -780,7 +760,7 @@ static inline void formatSizeF(QDebug &debug, const QSizeF s)
     debug << s.width() << 'x' << s.height() << "mm";
 }
 
-Q_XCB_EXPORT QDebug operator<<(QDebug debug, const QXcbScreen *screen)
+QDebug operator<<(QDebug debug, const QXcbScreen *screen)
 {
     const QDebugStateSaver saver(debug);
     debug.nospace();

@@ -2168,6 +2168,9 @@ QGLContext::QGLContext(QOpenGLContext *context)
     d->setupSharing();
 }
 
+/*!
+    Returns the OpenGL context handle.
+*/
 QOpenGLContext *QGLContext::contextHandle() const
 {
     Q_D(const QGLContext);
@@ -2175,7 +2178,7 @@ QOpenGLContext *QGLContext::contextHandle() const
 }
 
 /*!
-    Returns a OpenGL context for the window context specified by the \a context
+    Returns an OpenGL context for the window context specified by the \a context
     parameter.
 */
 QGLContext *QGLContext::fromOpenGLContext(QOpenGLContext *context)
@@ -3687,7 +3690,7 @@ void QGLContext::doneCurrent()
     QGLWidget. This will side-step the issue altogether, and is what
     we recommend for users that need this kind of functionality.
 
-    On Mac OS X, when Qt is built with Cocoa support, a QGLWidget
+    On OS X, when Qt is built with Cocoa support, a QGLWidget
     can't have any sibling widgets placed ontop of itself. This is due
     to limitations in the Cocoa API and is not supported by Apple.
 
@@ -4354,6 +4357,9 @@ void QGLWidget::resizeOverlayGL(int, int)
 {
 }
 
+/*!
+    Handles the event \a e passed as a parameter.
+*/
 bool QGLWidget::event(QEvent *e)
 {
     Q_D(QGLWidget);

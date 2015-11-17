@@ -179,8 +179,9 @@ void QOpenGLTexturePrivate::destroy()
         // not created or already destroyed
         return;
     }
-    if (QOpenGLContext::currentContext() != context) {
-        qWarning("Requires a valid current OpenGL context.\n"
+    QOpenGLContext *currentContext = QOpenGLContext::currentContext();
+    if (!currentContext || !QOpenGLContext::areSharing(currentContext, context)) {
+        qWarning("Texture is not valid in the current context.\n"
                  "Texture has not been destroyed");
         return;
     }
@@ -1112,6 +1113,7 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
                                       mipLevelSize(mipLevel, dimensions[0]),
                                       1,
                                       sourceFormat, sourceType, data, options);
+        break;
 
     case QOpenGLTexture::Target2D:
         Q_UNUSED(layer);
@@ -1210,6 +1212,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
                                                 mipLevelSize(mipLevel, dimensions[0]),
                                                 1,
                                                 format, dataSize, data, options);
+        break;
 
     case QOpenGLTexture::Target2D:
         Q_UNUSED(layer);

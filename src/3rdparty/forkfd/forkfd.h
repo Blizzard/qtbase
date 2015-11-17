@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Intel Corporation
+** Copyright (C) 2015 Intel Corporation
 **
 ** Permission is hereby granted, free of charge, to any person obtaining a copy
 ** of this software and associated documentation files (the "Software"), to deal
@@ -26,9 +26,10 @@
 #define FORKFD_H
 
 #include <fcntl.h>
+#include <stdint.h>
 #include <unistd.h> // to get the POSIX flags
 
-#ifdef _POSIX_SPAWN
+#if _POSIX_SPAWN > 0
 #  include <spawn.h>
 #endif
 
@@ -41,9 +42,16 @@ extern "C" {
 
 #define FFD_CHILD_PROCESS (-2)
 
-int forkfd(int flags, pid_t *ppid);
+struct forkfd_info {
+    int32_t code;
+    int32_t status;
+};
 
-#ifdef _POSIX_SPAWN
+int forkfd(int flags, pid_t *ppid);
+int forkfd_wait(int ffd, forkfd_info *info, struct rusage *rusage);
+int forkfd_close(int ffd);
+
+#if _POSIX_SPAWN > 0
 /* only for spawnfd: */
 #  define FFD_SPAWN_SEARCH_PATH   O_RDWR
 

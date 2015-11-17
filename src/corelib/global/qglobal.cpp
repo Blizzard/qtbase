@@ -1124,7 +1124,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \value MV_10_4     Mac OS X 10.4 (unsupported)
     \value MV_10_5     Mac OS X 10.5 (unsupported)
     \value MV_10_6     Mac OS X 10.6
-    \value MV_10_7     OS X 10.7
+    \value MV_10_7     Mac OS X 10.7
     \value MV_10_8     OS X 10.8
     \value MV_10_9     OS X 10.9
     \value MV_10_10    OS X 10.10
@@ -1177,7 +1177,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \relates <QtGlobal>
 
     Defined on Darwin-based operating systems distributed by Apple, which
-    currently includes OS X and iOS, but not the open source version.
+    currently includes OS X and iOS, but not the open source versions of Darwin.
  */
 
 /*!
@@ -1199,7 +1199,7 @@ bool qSharedBuild() Q_DECL_NOTHROW
     \relates <QtGlobal>
 
     Defined on all supported versions of Windows. That is, if
-    \l Q_OS_WIN32, \l Q_OS_WIN64 or \l Q_OS_WINCE is defined.
+    \l Q_OS_WIN32, \l Q_OS_WIN64, \l Q_OS_WINCE or \l Q_OS_WINRT is defined.
 */
 
 /*!
@@ -2045,40 +2045,33 @@ QSysInfo::WinVersion QSysInfo::windowsVersion()
         } else if (osver.dwMajorVersion == 10 && osver.dwMinorVersion == 0) {
             winver = QSysInfo::WV_WINDOWS10;
         } else {
-            qWarning("Qt: Untested Windows version %d.%d detected!",
-                     int(osver.dwMajorVersion), int(osver.dwMinorVersion));
             winver = QSysInfo::WV_NT_based;
         }
     }
 
 #ifdef QT_DEBUG
     {
-        QByteArray override = qgetenv("QT_WINVER_OVERRIDE");
-        if (override.isEmpty())
-            return winver;
-
-        if (override == "Me")
-            winver = QSysInfo::WV_Me;
-        if (override == "95")
-            winver = QSysInfo::WV_95;
-        else if (override == "98")
-            winver = QSysInfo::WV_98;
-        else if (override == "NT")
-            winver = QSysInfo::WV_NT;
-        else if (override == "2000")
-            winver = QSysInfo::WV_2000;
-        else if (override == "2003")
-            winver = QSysInfo::WV_2003;
-        else if (override == "XP")
-            winver = QSysInfo::WV_XP;
-        else if (override == "VISTA")
-            winver = QSysInfo::WV_VISTA;
-        else if (override == "WINDOWS7")
-            winver = QSysInfo::WV_WINDOWS7;
-        else if (override == "WINDOWS8")
-            winver = QSysInfo::WV_WINDOWS8;
-        else if (override == "WINDOWS8_1")
-            winver = QSysInfo::WV_WINDOWS8_1;
+        if (Q_UNLIKELY(qEnvironmentVariableIsSet("QT_WINVER_OVERRIDE"))) {
+            const QByteArray winVerOverride = qgetenv("QT_WINVER_OVERRIDE");
+            if (winVerOverride == "NT")
+                winver = QSysInfo::WV_NT;
+            else if (winVerOverride == "2000")
+                winver = QSysInfo::WV_2000;
+            else if (winVerOverride == "2003")
+                winver = QSysInfo::WV_2003;
+            else if (winVerOverride == "XP")
+                winver = QSysInfo::WV_XP;
+            else if (winVerOverride == "VISTA")
+                winver = QSysInfo::WV_VISTA;
+            else if (winVerOverride == "WINDOWS7")
+                winver = QSysInfo::WV_WINDOWS7;
+            else if (winVerOverride == "WINDOWS8")
+                winver = QSysInfo::WV_WINDOWS8;
+            else if (winVerOverride == "WINDOWS8_1")
+                winver = QSysInfo::WV_WINDOWS8_1;
+            else if (winVerOverride == "WINDOWS10")
+                winver = QSysInfo::WV_WINDOWS10;
+        }
     }
 #endif
 #endif // !Q_OS_WINRT
@@ -2105,6 +2098,8 @@ static const char *winVer_helper()
         return "8";
     case QSysInfo::WV_WINDOWS8_1:
         return "8.1";
+    case QSysInfo::WV_WINDOWS10:
+        return "10";
 
     case QSysInfo::WV_CE:
         return "CE";
@@ -2264,7 +2259,8 @@ static bool readEtcRedHatRelease(QUnixOSVersion &v)
     int releaseIndex = line.indexOf(keyword);
     v.productType = QString::fromLatin1(line.mid(0, releaseIndex)).remove(QLatin1Char(' '));
     int spaceIndex = line.indexOf(' ', releaseIndex + strlen(keyword));
-    v.productVersion = QString::fromLatin1(line.mid(releaseIndex + strlen(keyword), spaceIndex > -1 ? spaceIndex - releaseIndex - strlen(keyword) : -1));
+    v.productVersion = QString::fromLatin1(line.mid(releaseIndex + strlen(keyword),
+                                                    spaceIndex > -1 ? spaceIndex - releaseIndex - int(strlen(keyword)) : -1));
     return true;
 }
 
@@ -2734,7 +2730,7 @@ QString QSysInfo::prettyProductName()
         basename = "Mac OS X Snow Leopard (";
         break;
     case MV_LION:
-        basename = "Mac OS X Lion (";
+        basename = "OS X Lion (";
         break;
     case MV_MOUNTAINLION:
         basename = "OS X Mountain Lion (";

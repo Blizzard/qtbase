@@ -51,13 +51,12 @@ QT_END_NAMESPACE
 Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 
 @interface QT_MANGLE_NAMESPACE(QNSView) : NSView <NSTextInputClient> {
-    QImage m_backingStore;
-    qreal m_pixelRatio;
+    QCocoaBackingStore* m_backingStore;
     QPoint m_backingStoreOffset;
     CGImageRef m_maskImage;
     uchar *m_maskData;
     bool m_shouldInvalidateWindowShadow;
-    QWindow *m_window;
+    QPointer<QWindow> m_window;
     QCocoaWindow *m_platformWindow;
     NSTrackingArea *m_trackingArea;
     Qt::MouseButtons m_buttons;
@@ -86,6 +85,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)setQCocoaGLContext:(QCocoaGLContext *)context;
 #endif
 - (void)flushBackingStore:(QCocoaBackingStore *)backingStore region:(const QRegion &)region offset:(QPoint)offset;
+- (void)clearBackingStore:(QCocoaBackingStore *)backingStore;
 - (void)setMaskRegion:(const QRegion *)region;
 - (void)invalidateWindowShadowIfNeeded;
 - (void)drawRect:(NSRect)dirtyRect;

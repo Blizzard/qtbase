@@ -2439,7 +2439,7 @@ FatalSignalHandler::FatalSignalHandler()
     sigemptyset(&handledSignals);
 
     const int fatalSignals[] = {
-         SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM, 0 };
+         SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM, 0 };
 
     struct sigaction act;
     memset(&act, 0, sizeof(act));
@@ -2449,6 +2449,24 @@ FatalSignalHandler::FatalSignalHandler()
 #if !defined(Q_OS_INTEGRITY)
     act.sa_flags = SA_RESETHAND;
 #endif
+
+#ifdef SA_ONSTACK
+    // Let the signal handlers use an alternate stack
+    // This is necessary if SIGSEGV is to catch a stack overflow
+#  if defined(Q_CC_GNU) && defined(Q_OF_ELF)
+    // Put the alternate stack in the .lbss (large BSS) section so that it doesn't
+    // interfere with normal .bss symbols
+    __attribute__((section(".lbss.altstack"), aligned(4096)))
+#  endif
+    static char alternate_stack[16 * 1024];
+    stack_t stack;
+    stack.ss_flags = 0;
+    stack.ss_size = sizeof alternate_stack;
+    stack.ss_sp = alternate_stack;
+    sigaltstack(&stack, 0);
+    act.sa_flags |= SA_ONSTACK;
+#endif
+
     // Block all fatal signals in our signal handler so we don't try to close
     // the testlog twice.
     sigemptyset(&act.sa_mask);
@@ -2840,6 +2858,10 @@ QSharedPointer<QTemporaryDir> QTest::qExtractTestData(const QString &dirName)
               QDir().mkpath(destinationFileInfo.path());
               if (!QFile::copy(fileInfo.filePath(), destination)) {
                   qWarning("Failed to copy '%s'.", qPrintable(fileInfo.filePath()));
+                  return result;
+              }
+              if (!QFile::setPermissions(destination, QFile::ReadUser | QFile::WriteUser | QFile::ReadGroup)) {
+                  qWarning("Failed to set permissions on '%s'.", qPrintable(destination));
                   return result;
               }
           }

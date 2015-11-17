@@ -83,6 +83,52 @@ QEnterEvent::~QEnterEvent()
 }
 
 /*!
+   \fn QPoint QEnterEvent::globalPos() const
+
+   Returns the global position of the widget \e{at the time of the event}.
+*/
+/*!
+   \fn int QEnterEvent::globalX() const
+
+   Returns the global position on the X-axis of the mouse cursor relative to the the widget.
+*/
+/*!
+   \fn int QEnterEvent::globalY() const
+
+   Returns the global position on the Y-axis of the mouse cursor relative to the the widget.
+*/
+/*!
+   \fn QPoint QEnterEvent::localPos() const
+
+   Returns the mouse cursor's position relative to the receiving widget.
+*/
+/*!
+   \fn QPoint QEnterEvent::pos() const
+
+   Returns the position of the mouse cursor in global screen coordinates.
+*/
+/*!
+   \fn QPoint QEnterEvent::screenPos() const
+
+   Returns the position of the mouse cursor relative to the receiving screen.
+*/
+/*!
+   \fn QPoint QEnterEvent::windowPos() const
+
+   Returns the position of the mouse cursor relative to the receiving window.
+*/
+/*!
+   \fn int QEnterEvent::x() const
+
+   Returns the x position of the mouse cursor relative to the receiving widget.
+*/
+/*!
+   \fn int QEnterEvent::y() const
+
+   Returns the y position of the mouse cursor relative to the receiving widget.
+*/
+
+/*!
     \class QInputEvent
     \ingroup events
     \inmodule QtGui
@@ -575,7 +621,7 @@ QHoverEvent::~QHoverEvent()
     wheel event delta: angleDelta() returns the delta in wheel
     degrees. This value is always provided. pixelDelta() returns
     the delta in screen pixels and is available on platforms that
-    have high-resolution trackpads, such as Mac OS X. If that is the
+    have high-resolution trackpads, such as OS X. If that is the
     case, source() will return Qt::MouseEventSynthesizedBySystem.
 
     The functions pos() and globalPos() return the mouse cursor's
@@ -795,7 +841,7 @@ QWheelEvent::QWheelEvent(const QPointF &pos, const QPointF& globalPos,
 
     Returns the scrolling distance in pixels on screen. This value is
     provided on platforms that support high-resolution pixel-based
-    delta values, such as Mac OS X. The value should be used directly
+    delta values, such as OS X. The value should be used directly
     to scroll content on screen.
 
     Example:
@@ -936,7 +982,7 @@ QWheelEvent::QWheelEvent(const QPointF &pos, const QPointF& globalPos,
     Returns the scrolling phase of this wheel event.
 
     \note The Qt::ScrollBegin and Qt::ScrollEnd phases are currently
-    supported only on Mac OS X.
+    supported only on OS X.
 */
 
 
@@ -1548,7 +1594,7 @@ QCloseEvent::~QCloseEvent()
    \ingroup events
 
    Icon drag events are sent to widgets when the main icon of a window
-   has been dragged away. On Mac OS X, this happens when the proxy
+   has been dragged away. On OS X, this happens when the proxy
    icon of a window is dragged off the title bar.
 
    It is normal to begin using drag and drop in response to this
@@ -3322,12 +3368,12 @@ QShowEvent::~QShowEvent()
     when the operating system requests that a file or URL should be opened.
     This is a high-level event that can be caused by different user actions
     depending on the user's desktop environment; for example, double
-    clicking on an file icon in the Finder on Mac OS X.
+    clicking on an file icon in the Finder on OS X.
 
     This event is only used to notify the application of a request.
     It may be safely ignored.
 
-    \note This class is currently supported for Mac OS X only.
+    \note This class is currently supported for OS X only.
 */
 
 /*!
@@ -3393,7 +3439,7 @@ bool QFileOpenEvent::openFile(QFile &file, QIODevice::OpenMode flags) const
     \internal
     \class QToolBarChangeEvent
     \brief The QToolBarChangeEvent class provides an event that is
-    sent whenever a the toolbar button is clicked on Mac OS X.
+    sent whenever a the toolbar button is clicked on OS X.
 
     \ingroup events
     \inmodule QtGui
@@ -4161,6 +4207,12 @@ QTouchEvent::~QTouchEvent()
     \sa QTouchDevice::type(), QTouchEvent::device()
 */
 
+/*! \fn QTouchEvent::TouchPoint::TouchPoint(TouchPoint &&other)
+
+    Move-constructs a TouchPoint instance, making it point to the same
+    object that \a other was pointing to.
+*/
+
 /*! \fn Qt::TouchPointStates QTouchEvent::touchPointStates() const
 
     Returns a bitwise OR of all the touch point states for this event.
@@ -4687,6 +4739,10 @@ void QTouchEvent::TouchPoint::setFlags(InfoFlags flags)
     \internal
  */
 
+/*!
+    \fn TouchPoint &TouchPoint::operator=(TouchPoint &&other)
+    \internal
+ */
 /*!
     \fn void QTouchEvent::TouchPoint::swap(TouchPoint &other);
     \internal

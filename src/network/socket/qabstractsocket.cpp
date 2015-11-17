@@ -420,7 +420,7 @@
     allowed to rebind, even if they pass ReuseAddressHint. This option
     provides more security than ShareAddress, but on certain operating
     systems, it requires you to run the server with administrator privileges.
-    On Unix and Mac OS X, not sharing is the default behavior for binding
+    On Unix and OS X, not sharing is the default behavior for binding
     an address and port, so this option is ignored. On Windows, this
     option uses the SO_EXCLUSIVEADDRUSE socket option.
 
@@ -430,7 +430,7 @@
     socket option. On Unix, this option is ignored.
 
     \value DefaultForPlatform The default option for the current platform.
-    On Unix and Mac OS X, this is equivalent to (DontShareAddress
+    On Unix and OS X, this is equivalent to (DontShareAddress
     + ReuseAddressHint), and on Windows, its equivalent to ShareAddress.
 */
 
@@ -739,15 +739,9 @@ bool QAbstractSocketPrivate::canReadNotification()
         return true;
     }
 
-    if (socketEngine) {
-        // turn the socket engine off if we've either:
-        // - got pending datagrams
-        // - reached the buffer size limit
-        if (isBuffered)
-            socketEngine->setReadNotificationEnabled(readBufferMaxSize == 0 || readBufferMaxSize > q->bytesAvailable());
-        else if (socketType != QAbstractSocket::TcpSocket)
-            socketEngine->setReadNotificationEnabled(!socketEngine->hasPendingDatagrams());
-    }
+    // turn the socket engine off if we've reached the buffer size limit
+    if (socketEngine && isBuffered)
+        socketEngine->setReadNotificationEnabled(readBufferMaxSize == 0 || readBufferMaxSize > q->bytesAvailable());
 
     // reset the read socket notifier state if we reentered inside the
     // readyRead() connected slot.
@@ -767,6 +761,7 @@ bool QAbstractSocketPrivate::canReadNotification()
 void QAbstractSocketPrivate::canCloseNotification()
 {
     Q_Q(QAbstractSocket);
+    // Note that this method is only called on Windows. Other platforms close in the canReadNotification()
 
 #if defined (QABSTRACTSOCKET_DEBUG)
     qDebug("QAbstractSocketPrivate::canCloseNotification()");
@@ -776,7 +771,11 @@ void QAbstractSocketPrivate::canCloseNotification()
     if (isBuffered) {
         // Try to read to the buffer, if the read fail we can close the socket.
         newBytes = buffer.size();
-        if (!readFromSocket()) {
+        qint64 oldReadBufferMaxSize = readBufferMaxSize;
+        readBufferMaxSize = 0; // temporarily disable max read buffer, we want to empty the OS buffer
+        bool hadReadFromSocket = readFromSocket();
+        readBufferMaxSize = oldReadBufferMaxSize;
+        if (!hadReadFromSocket) {
             q->disconnectFromHost();
             return;
         }

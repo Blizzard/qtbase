@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -116,7 +117,8 @@ private slots:
     void setStandardInputFile();
     void setStandardOutputFile_data();
     void setStandardOutputFile();
-    void setStandardOutputFile2();
+    void setStandardOutputFileNullDevice();
+    void setStandardOutputFileAndWaitForBytesWritten();
     void setStandardOutputProcess_data();
     void setStandardOutputProcess();
     void removeFileWhileProcessIsRunning();
@@ -150,12 +152,17 @@ private slots:
     void onlyOneStartedSignal();
     void finishProcessBeforeReadingDone();
     void waitForStartedWithoutStart();
+    void startStopStartStop();
+    void startStopStartStopBuffers_data();
+    void startStopStartStopBuffers();
 
     // keep these at the end, since they use lots of processes and sometimes
     // caused obscure failures to occur in tests that followed them (esp. on the Mac)
     void failToStart();
     void failToStartWithWait();
     void failToStartWithEventLoop();
+    void failToStartEmptyArgs_data();
+    void failToStartEmptyArgs();
 
 protected slots:
     void readFromProcess();
@@ -1558,7 +1565,7 @@ void tst_QProcess::failToStart()
     QVERIFY(finishedSpy.isValid());
     QVERIFY(finishedSpy2.isValid());
 
-// Mac OS X and HP-UX have a really low default process limit (~100), so spawning
+// OS X and HP-UX have a really low default process limit (~100), so spawning
 // to many processes here will cause test failures later on.
 #if defined Q_OS_HPUX
    const int attempts = 15;
@@ -1670,6 +1677,42 @@ void tst_QProcess::failToStartWithEventLoop()
         QCOMPARE(finishedSpy.count(), 0);
         QCOMPARE(finishedSpy2.count(), 0);
     }
+}
+
+void tst_QProcess::failToStartEmptyArgs_data()
+{
+    QTest::addColumn<int>("startOverload");
+    QTest::newRow("start(QString, QStringList, OpenMode)") << 0;
+    QTest::newRow("start(QString, OpenMode)") << 1;
+    QTest::newRow("start(OpenMode)") << 2;
+}
+
+void tst_QProcess::failToStartEmptyArgs()
+{
+    QFETCH(int, startOverload);
+    qRegisterMetaType<QProcess::ProcessError>("QProcess::ProcessError");
+
+    QProcess process;
+    QSignalSpy errorSpy(&process, static_cast<void (QProcess::*)(QProcess::ProcessError)>(&QProcess::error));
+    QVERIFY(errorSpy.isValid());
+
+    switch (startOverload) {
+    case 0:
+        process.start(QString(), QStringList(), QIODevice::ReadWrite);
+        break;
+    case 1:
+        process.start(QString(), QIODevice::ReadWrite);
+        break;
+    case 2:
+        process.start(QIODevice::ReadWrite);
+        break;
+    default:
+        QFAIL("Unhandled QProcess::start overload.");
+    };
+
+    QVERIFY(!process.waitForStarted());
+    QCOMPARE(errorSpy.count(), 1);
+    QCOMPARE(process.error(), QProcess::FailedToStart);
 }
 
 //-----------------------------------------------------------------------------
@@ -1962,22 +2005,6 @@ void tst_QProcess::setStandardOutputFile_data()
 }
 
 //-----------------------------------------------------------------------------
-#ifndef Q_OS_WINCE
-void tst_QProcess::setStandardOutputFile2()
-{
-    static const char testdata[] = "Test data.";
-
-    QProcess process;
-    process.setStandardOutputFile(QProcess::nullDevice());
-    process.start("testProcessEcho2/testProcessEcho2");
-    process.write(testdata, sizeof testdata);
-    QPROCESS_VERIFY(process,waitForFinished());
-    QCOMPARE(process.bytesAvailable(), Q_INT64_C(0));
-
-    QVERIFY(!QFileInfo(QProcess::nullDevice()).isFile());
-}
-#endif
-
 void tst_QProcess::setStandardOutputFile()
 {
     static const char data[] = "Original data. ";
@@ -2026,6 +2053,40 @@ void tst_QProcess::setStandardOutputFile()
 
     QCOMPARE(all.size(), expectedsize);
 }
+
+void tst_QProcess::setStandardOutputFileNullDevice()
+{
+    static const char testdata[] = "Test data.";
+
+    QProcess process;
+    process.setStandardOutputFile(QProcess::nullDevice());
+    process.start("testProcessEcho2/testProcessEcho2");
+    process.write(testdata, sizeof testdata);
+    QPROCESS_VERIFY(process,waitForFinished());
+    QCOMPARE(process.bytesAvailable(), Q_INT64_C(0));
+
+    QVERIFY(!QFileInfo(QProcess::nullDevice()).isFile());
+}
+
+void tst_QProcess::setStandardOutputFileAndWaitForBytesWritten()
+{
+    static const char testdata[] = "Test data.";
+
+    QFile file("data");
+    QProcess process;
+    process.setStandardOutputFile(file.fileName());
+    process.start("testProcessEcho2/testProcessEcho2");
+    process.write(testdata, sizeof testdata);
+    process.waitForBytesWritten();
+    QPROCESS_VERIFY(process, waitForFinished());
+
+    // open the file again and verify the data
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QByteArray all = file.readAll();
+    file.close();
+
+    QCOMPARE(all, QByteArray::fromRawData(testdata, sizeof testdata - 1));
+}
 #endif
 
 //-----------------------------------------------------------------------------
@@ -2034,17 +2095,19 @@ void tst_QProcess::setStandardOutputFile()
 void tst_QProcess::setStandardOutputProcess_data()
 {
     QTest::addColumn<bool>("merged");
-    QTest::newRow("separate") << false;
-    QTest::newRow("merged") << true;
+    QTest::addColumn<bool>("waitForBytesWritten");
+    QTest::newRow("separate") << false << false;
+    QTest::newRow("separate with waitForBytesWritten") << false << true;
+    QTest::newRow("merged") << true << false;
 }
 
 void tst_QProcess::setStandardOutputProcess()
 {
-
     QProcess source;
     QProcess sink;
 
     QFETCH(bool, merged);
+    QFETCH(bool, waitForBytesWritten);
     source.setReadChannelMode(merged ? QProcess::MergedChannels : QProcess::SeparateChannels);
     source.setStandardOutputProcess(&sink);
 
@@ -2053,6 +2116,8 @@ void tst_QProcess::setStandardOutputProcess()
 
     QByteArray data("Hello, World");
     source.write(data);
+    if (waitForBytesWritten)
+        source.waitForBytesWritten();
     source.closeWriteChannel();
     QPROCESS_VERIFY(source, waitForFinished());
     QPROCESS_VERIFY(sink, waitForFinished());
@@ -2291,10 +2356,108 @@ void tst_QProcess::finishProcessBeforeReadingDone()
     QCOMPARE(lines.last(), QStringLiteral("10239 -this is a number"));
 }
 
+//-----------------------------------------------------------------------------
 void tst_QProcess::waitForStartedWithoutStart()
 {
     QProcess process;
     QVERIFY(!process.waitForStarted(5000));
+}
+
+//-----------------------------------------------------------------------------
+void tst_QProcess::startStopStartStop()
+{
+    // we actually do start-stop x 3 :-)
+    QProcess process;
+    process.start("testProcessNormal/testProcessNormal");
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitCode(), 0);
+
+    process.start("testExitCodes/testExitCodes", QStringList() << "1");
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitCode(), 1);
+
+    process.start("testProcessNormal/testProcessNormal");
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitCode(), 0);
+}
+
+//-----------------------------------------------------------------------------
+void tst_QProcess::startStopStartStopBuffers_data()
+{
+    QTest::addColumn<int>("channelMode1");
+    QTest::addColumn<int>("channelMode2");
+
+    QTest::newRow("separate-separate") << int(QProcess::SeparateChannels) << int(QProcess::SeparateChannels);
+    QTest::newRow("separate-merged") << int(QProcess::SeparateChannels) << int(QProcess::MergedChannels);
+    QTest::newRow("merged-separate") << int(QProcess::MergedChannels) << int(QProcess::SeparateChannels);
+    QTest::newRow("merged-merged") << int(QProcess::MergedChannels) << int(QProcess::MergedChannels);
+    QTest::newRow("merged-forwarded") << int(QProcess::MergedChannels) << int(QProcess::ForwardedChannels);
+}
+
+void tst_QProcess::startStopStartStopBuffers()
+{
+    QFETCH(int, channelMode1);
+    QFETCH(int, channelMode2);
+
+    QProcess process;
+    process.setProcessChannelMode(QProcess::ProcessChannelMode(channelMode1));
+    process.start("testProcessHang/testProcessHang");
+    QVERIFY2(process.waitForReadyRead(), process.errorString().toLocal8Bit());
+    if (channelMode1 == QProcess::SeparateChannels || channelMode1 == QProcess::ForwardedOutputChannel) {
+        process.setReadChannel(QProcess::StandardError);
+        if (process.bytesAvailable() == 0)
+            QVERIFY(process.waitForReadyRead());
+        process.setReadChannel(QProcess::StandardOutput);
+    }
+
+    // We want to test that the write buffer still has bytes after the child
+    // exiting. We do that by writing to a child process that never reads. We
+    // just have to write more data than a pipe can hold, so that even if
+    // QProcess finds the pipe writable (during waitForFinished() or in the
+    // QWindowsPipeWriter thread), some data will remain. The worst case I know
+    // of is Linux, which defaults to 64 kB of buffer.
+
+    process.write(QByteArray(128 * 1024, 'a'));
+    QVERIFY(process.bytesToWrite() > 0);
+    process.kill();
+
+    QVERIFY(process.waitForFinished());
+
+#ifndef Q_OS_WIN
+    // confirm that our buffers are still full
+    // Note: this doesn't work on Windows because our buffers are drained into
+    // QWindowsPipeWriter before being sent to the child process.
+    QVERIFY(process.bytesToWrite() > 0);
+    QVERIFY(process.bytesAvailable() > 0); // channelMode1 is not ForwardedChannels
+    if (channelMode1 == QProcess::SeparateChannels || channelMode1 == QProcess::ForwardedOutputChannel) {
+        process.setReadChannel(QProcess::StandardError);
+        QVERIFY(process.bytesAvailable() > 0);
+        process.setReadChannel(QProcess::StandardOutput);
+    }
+#endif
+
+    process.setProcessChannelMode(QProcess::ProcessChannelMode(channelMode2));
+    process.start("testProcessEcho2/testProcessEcho2", QIODevice::ReadWrite | QIODevice::Text);
+
+    // the buffers should now be empty
+    QCOMPARE(process.bytesToWrite(), qint64(0));
+    QCOMPARE(process.bytesAvailable(), qint64(0));
+    process.setReadChannel(QProcess::StandardError);
+    QCOMPARE(process.bytesAvailable(), qint64(0));
+    process.setReadChannel(QProcess::StandardOutput);
+
+    process.write("line3\n");
+    process.closeWriteChannel();
+    QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitCode(), 0);
+
+    if (channelMode2 == QProcess::MergedChannels) {
+        QCOMPARE(process.readAll(), QByteArray("lliinnee33\n\n"));
+    } else if (channelMode2 != QProcess::ForwardedChannels) {
+        QCOMPARE(process.readAllStandardOutput(), QByteArray("line3\n"));
+        if (channelMode2 == QProcess::SeparateChannels)
+            QCOMPARE(process.readAllStandardError(), QByteArray("line3\n"));
+    }
 }
 
 #endif //QT_NO_PROCESS

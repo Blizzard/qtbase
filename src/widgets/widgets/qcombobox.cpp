@@ -1764,12 +1764,15 @@ void QComboBox::setLineEdit(QLineEdit *edit)
     delete d->lineEdit;
 
     d->lineEdit = edit;
+    qt_widget_private(d->lineEdit)->inheritsInputMethodHints = 1;
     if (d->lineEdit->parent() != this)
         d->lineEdit->setParent(this);
     connect(d->lineEdit, SIGNAL(returnPressed()), this, SLOT(_q_returnPressed()));
     connect(d->lineEdit, SIGNAL(editingFinished()), this, SLOT(_q_editingFinished()));
     connect(d->lineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(editTextChanged(QString)));
     connect(d->lineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(currentTextChanged(QString)));
+    connect(d->lineEdit, SIGNAL(cursorPositionChanged(int,int)), this, SLOT(updateMicroFocus()));
+    connect(d->lineEdit, SIGNAL(selectionChanged()), this, SLOT(updateMicroFocus()));
     d->lineEdit->setFrame(false);
     d->lineEdit->setContextMenuPolicy(Qt::NoContextMenu);
     d->updateFocusPolicy();
@@ -2092,8 +2095,10 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         const QString newText = itemText(normalized);
         if (lineEdit->text() != newText) {
             lineEdit->setText(newText);
+#ifndef QT_NO_COMPLETER
             if (lineEdit->completer())
                 lineEdit->completer()->setCompletionPrefix(newText);
+#endif
         }
         updateLineEditGeometry();
     }
@@ -2699,7 +2704,7 @@ void QComboBox::showPopup()
         qScrollEffect(container, scrollDown ? QEffects::DownScroll : QEffects::UpScroll, 150);
 #endif
 
-// Don't disable updates on Mac OS X. Windows are displayed immediately on this platform,
+// Don't disable updates on OS X. Windows are displayed immediately on this platform,
 // which means that the window will be visible before the call to container->show() returns.
 // If updates are disabled at this point we'll miss our chance at painting the popup
 // menu before it's shown, causing flicker since the window then displays the standard gray

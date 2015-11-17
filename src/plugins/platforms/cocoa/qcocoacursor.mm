@@ -73,7 +73,7 @@ void QCocoaCursor::setPos(const QPoint &position)
     pos.x = position.x();
     pos.y = position.y();
 
-    CGEventRef e = CGEventCreateMouseEvent(0, kCGEventMouseMoved, pos, 0);
+    CGEventRef e = CGEventCreateMouseEvent(0, kCGEventMouseMoved, pos, kCGMouseButtonLeft);
     CGEventPost(kCGHIDEventTap, e);
     CFRelease(e);
 }
@@ -304,7 +304,7 @@ NSCursor *QCocoaCursor::createCursorFromPixmap(const QPixmap pixmap, const QPoin
     NSImage *nsimage;
     if (pixmap.devicePixelRatio() > 1.0) {
         QSize layoutSize = pixmap.size() / pixmap.devicePixelRatio();
-        QPixmap scaledPixmap = pixmap.scaled(layoutSize);
+        QPixmap scaledPixmap = pixmap.scaled(layoutSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         nsimage = static_cast<NSImage *>(qt_mac_create_nsimage(scaledPixmap));
         CGImageRef cgImage = qt_mac_toCGImage(pixmap.toImage());
         NSBitmapImageRep *imageRep = [[NSBitmapImageRep alloc] initWithCGImage:cgImage];

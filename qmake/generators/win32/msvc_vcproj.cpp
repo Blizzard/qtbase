@@ -655,6 +655,7 @@ void VcprojGenerator::writeSubDirs(QTextStream &t)
     switch (which_dotnet_version(project->first("MSVC_VER").toLatin1())) {
     case NET2015:
         t << _slnHeader140;
+        break;
     case NET2013:
         t << _slnHeader120;
         break;
@@ -1302,7 +1303,8 @@ void VcprojGenerator::initDeploymentTool()
     }
     ProStringList dllPaths = project->values("QMAKE_DLL_PATHS");
     // Only deploy Qt libs for shared build
-    if (!dllPaths.isEmpty()) {
+    if (!dllPaths.isEmpty() &&
+        !(conf.WinRT && project->first("MSVC_VER").toQString() == "14.0")) {
         // FIXME: This code should actually resolve the libraries from all Qt modules.
         ProStringList arg = project->values("QMAKE_LIBS") + project->values("QMAKE_LIBS_PRIVATE");
         for (ProStringList::ConstIterator it = arg.constBegin(); it != arg.constEnd(); ++it) {

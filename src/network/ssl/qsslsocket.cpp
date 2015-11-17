@@ -136,7 +136,7 @@
     setDefaultCaCertificates().
     \endlist
 
-    \note If available, root certificates on Unix (excluding Mac OS X) will be
+    \note If available, root certificates on Unix (excluding OS X) will be
     loaded on demand from the standard certificate directories. If
     you do not want to load root certificates on demand, you need to call either
     the static function setDefaultCaCertificates() before the first SSL handshake
@@ -500,6 +500,7 @@ bool QSslSocket::setSocketDescriptor(qintptr socketDescriptor, SocketState state
     bool retVal = d->plainSocket->setSocketDescriptor(socketDescriptor, state, openMode);
     d->cachedSocketDescriptor = d->plainSocket->socketDescriptor();
     setSocketError(d->plainSocket->error());
+    setErrorString(d->plainSocket->errorString());
     setSocketState(state);
     setOpenMode(openMode);
     setLocalPort(d->plainSocket->localPort());
@@ -2407,6 +2408,14 @@ void QSslSocketPrivate::_q_errorSlot(QAbstractSocket::SocketError error)
     qCDebug(lcSsl) << "\tstate =" << q->state();
     qCDebug(lcSsl) << "\terrorString =" << q->errorString();
 #endif
+    // this moves encrypted bytes from plain socket into our buffer
+    if (plainSocket->bytesAvailable()) {
+        qint64 tmpReadBufferMaxSize = readBufferMaxSize;
+        readBufferMaxSize = 0; // reset temporarily so the plain sockets completely drained drained
+        transmit();
+        readBufferMaxSize = tmpReadBufferMaxSize;
+    }
+
     q->setSocketError(plainSocket->error());
     q->setErrorString(plainSocket->errorString());
     emit q->error(error);

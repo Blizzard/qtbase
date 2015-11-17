@@ -428,7 +428,7 @@
     \note If both this flag and ItemClipsChildrenToShape are set, the clip
     will be enforced. This is equivalent to just setting
     ItemClipsChildrenToShape.
-    .
+
     This flag was introduced in Qt 5.4.
 */
 
@@ -1425,10 +1425,13 @@ QGraphicsItem::~QGraphicsItem()
         QObjectPrivate *p = QObjectPrivate::get(o);
         p->wasDeleted = true;
         if (p->declarativeData) {
-            if (QAbstractDeclarativeData::destroyed)
-                QAbstractDeclarativeData::destroyed(p->declarativeData, o);
-            if (QAbstractDeclarativeData::destroyed_qml1)
-                QAbstractDeclarativeData::destroyed_qml1(p->declarativeData, o);
+            if (static_cast<QAbstractDeclarativeDataImpl*>(p->declarativeData)->ownedByQml1) {
+                if (QAbstractDeclarativeData::destroyed_qml1)
+                    QAbstractDeclarativeData::destroyed_qml1(p->declarativeData, o);
+            } else {
+                if (QAbstractDeclarativeData::destroyed)
+                    QAbstractDeclarativeData::destroyed(p->declarativeData, o);
+            }
             p->declarativeData = 0;
         }
     }

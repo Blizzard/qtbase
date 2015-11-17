@@ -313,7 +313,7 @@ bool QImageData::checkForAlphaPixels() const
     sharing}. QImage objects can also be streamed and compared.
 
     \note If you would like to load QImage objects in a static build of Qt,
-    refer to the \l{How To Create Qt Plugins}{Plugin HowTo}.
+    refer to the \l{How to Create Qt Plugins}{Plugin HowTo}.
 
     \warning Painting on a QImage with the format
     QImage::Format_Indexed8 is not supported.
@@ -568,12 +568,13 @@ bool QImageData::checkForAlphaPixels() const
 
     \endtable
 
+    \target qimage-legalese
     \section1 Legal Information
 
     For smooth scaling, the transformed() functions use code based on
     smooth scaling algorithm by Daniel M. Duley.
 
-    \legalese
+    \badcode
      Copyright (C) 2004, 2005 Daniel M. Duley
 
      Redistribution and use in source and binary forms, with or without
@@ -596,7 +597,7 @@ bool QImageData::checkForAlphaPixels() const
      THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
      (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
      THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-    \endlegalese
+    \endcode
 
     \sa QImageReader, QImageWriter, QPixmap, QSvgRenderer, {Image Composition Example},
         {Image Viewer Example}, {Scribble Example}, {Pixelator Example}
@@ -4133,9 +4134,6 @@ QImage QImage::alphaChannel() const
     if (!d)
         return QImage();
 
-    if (d->format == QImage::Format_Alpha8)
-        return *this;
-
     int w = d->width;
     int h = d->height;
 
@@ -4165,6 +4163,10 @@ QImage QImage::alphaChannel() const
             src_data += d->bytes_per_line;
             dest_data += image.d->bytes_per_line;
         }
+    } else if (d->format == Format_Alpha8) {
+        const uchar *src_data = d->data;
+        uchar *dest_data = image.d->data;
+        memcpy(dest_data, src_data, d->bytes_per_line * h);
     } else {
         QImage alpha32 = *this;
         bool canSkipConversion = (d->format == Format_ARGB32 || d->format == Format_ARGB32_Premultiplied);
@@ -4256,6 +4258,10 @@ int QImage::bitPlaneCount() const
     return bpc;
 }
 
+/*!
+   Returns a smoothly scaled copy of the image. The returned image has a size
+   of width \a w by height \a h pixels.
+*/
 QImage QImage::smoothScaled(int w, int h) const {
     QImage src = *this;
     switch (src.format()) {

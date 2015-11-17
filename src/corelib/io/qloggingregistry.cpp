@@ -210,20 +210,23 @@ void QLoggingSettingsParser::setContent(QTextStream &stream)
 
         if (_section == QLatin1String("Rules")) {
             int equalPos = line.indexOf(QLatin1Char('='));
-            if ((equalPos != -1)
-                    && (line.lastIndexOf(QLatin1Char('=')) == equalPos)) {
-                const QStringRef pattern = line.leftRef(equalPos);
-                const QStringRef valueStr = line.midRef(equalPos + 1);
-                int value = -1;
-                if (valueStr == QLatin1String("true"))
-                    value = 1;
-                else if (valueStr == QLatin1String("false"))
-                    value = 0;
-                QLoggingRule rule(pattern, (value == 1));
-                if (rule.flags != 0 && (value != -1))
-                    _rules.append(rule);
-                else
+            if (equalPos != -1) {
+                if (line.lastIndexOf(QLatin1Char('=')) == equalPos) {
+                    const QStringRef pattern = line.leftRef(equalPos);
+                    const QStringRef valueStr = line.midRef(equalPos + 1);
+                    int value = -1;
+                    if (valueStr == QLatin1String("true"))
+                        value = 1;
+                    else if (valueStr == QLatin1String("false"))
+                        value = 0;
+                    QLoggingRule rule(pattern, (value == 1));
+                    if (rule.flags != 0 && (value != -1))
+                        _rules.append(rule);
+                    else
+                        warnMsg("Ignoring malformed logging rule: '%s'", line.toUtf8().constData());
+                } else {
                     warnMsg("Ignoring malformed logging rule: '%s'", line.toUtf8().constData());
+                }
             }
         }
     }
@@ -395,10 +398,12 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     Q_ASSERT(reg->categories.contains(cat));
     QtMsgType enableForLevel = reg->categories.value(cat);
 
+    // NB: note that the numeric values of the Qt*Msg constants are
+    //     not in severity order.
     bool debug = (enableForLevel == QtDebugMsg);
-    bool info = (enableForLevel <= QtInfoMsg);
-    bool warning = (enableForLevel <= QtWarningMsg);
-    bool critical = (enableForLevel <= QtCriticalMsg);
+    bool info = debug || (enableForLevel == QtInfoMsg);
+    bool warning = info || (enableForLevel == QtWarningMsg);
+    bool critical = warning || (enableForLevel == QtCriticalMsg);
 
     // hard-wired implementation of
     //   qt.*.debug=false

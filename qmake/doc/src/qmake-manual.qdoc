@@ -728,8 +728,7 @@
     \section2 Creating and Moving Xcode Projects
 
     Developers on OS X can take advantage of the qmake support for Xcode
-    project files, as described in
-    \l{Qt is OS X Native#Development Tools}{Qt is OS X Native},
+    project files, as described in \l{Additional Command-Line Options},
     by running qmake to generate an Xcode project from an existing qmake project
     file. For example:
 
@@ -1739,6 +1738,25 @@
 
     See \l{Creating Frameworks} for more information about creating frameworks.
 
+    \target QMAKE_HOST
+    \section1 QMAKE_HOST
+
+    Provides information about the host machine running qmake.
+    For example, you can retrieve the host machine architecture from
+    \c{QMAKE_HOST.arch}.
+
+    \table
+    \header \li Keys               \li Values
+    \row    \li .arch              \li Host architecture
+    \row    \li .os                \li Host OS
+    \row    \li .cpu_count         \li Number of available cpus
+    \row    \li .name              \li Host computer name
+    \row    \li .version           \li Host OS version number
+    \row    \li .version_string    \li Host OS version string
+    \endtable
+
+    \snippet code/doc_src_qmake-manual.pro 186
+
     \target QMAKE_INCDIR
     \section1 QMAKE_INCDIR
 
@@ -2263,6 +2281,10 @@
     result in a minimal Qt project being built:
 
     \snippet code/doc_src_qmake-manual.pro 47
+
+    If your project is a \QD plugin, use the value \c uiplugin to specify that
+    the project is to be built as a library, but with specific plugin support
+    for \QD. For more information, see \l {Building and Installing the Plugin}.
 
     \section1 QTPLUGIN
 

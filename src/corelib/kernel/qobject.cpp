@@ -900,14 +900,7 @@ QObject::~QObject()
     }
 
     if (!d->isWidget && d->isSignalConnected(0)) {
-        QT_TRY {
-            emit destroyed(this);
-        } QT_CATCH(...) {
-            // all the signal/slots connections are still in place - if we don't
-            // quit now, we will crash pretty soon.
-            qWarning("Detected an unexpected exception in ~QObject while emitting destroyed().");
-            QT_RETHROW;
-        }
+        emit destroyed(this);
     }
 
     if (d->declarativeData) {
@@ -1391,6 +1384,8 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
 
     Note that the destroyed() signal will be emitted even if the signals
     for this object have been blocked.
+
+    Signals emitted while being blocked are not buffered.
 
     \sa signalsBlocked()
 */
@@ -4100,7 +4095,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     QDebugStateSaver saver(dbg);
     if (!o)
         return dbg << "QObject(0x0)";
-    dbg.nospace() << o->metaObject()->className() << '(' << (void *)o;
+    dbg.nospace() << o->metaObject()->className() << '(' << (const void *)o;
     if (!o->objectName().isEmpty())
         dbg << ", name = " << o->objectName();
     dbg << ')';
@@ -4905,13 +4900,30 @@ QMetaObject::Connection& QMetaObject::Connection::operator=(const QMetaObject::C
     return *this;
 }
 
+/*!
+    Creates a Connection instance.
+*/
+
 QMetaObject::Connection::Connection() : d_ptr(0) {}
 
+/*!
+    Destructor for QMetaObject::Connection.
+*/
 QMetaObject::Connection::~Connection()
 {
     if (d_ptr)
         static_cast<QObjectPrivate::Connection *>(d_ptr)->deref();
 }
+
+/*! \internal Returns true if the object is still connected */
+bool QMetaObject::Connection::isConnected_helper() const
+{
+    Q_ASSERT(d_ptr);    // we're only called from operator RestrictedBool() const
+    QObjectPrivate::Connection *c = static_cast<QObjectPrivate::Connection *>(d_ptr);
+
+    return c->receiver;
+}
+
 
 /*!
     \fn QMetaObject::Connection::operator bool() const

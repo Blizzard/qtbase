@@ -445,11 +445,11 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
                 receiver = popupChild;
             if (receiver != popup)
                 widgetPos = receiver->mapFromGlobal(event->globalPos());
-            QWidget *alien = m_widget->childAt(m_widget->mapFromGlobal(event->globalPos()));
+            QWidget *alien = receiver->childAt(receiver->mapFromGlobal(event->globalPos()));
             QMouseEvent e(event->type(), widgetPos, event->windowPos(), event->screenPos(), event->button(), event->buttons(), event->modifiers());
             QGuiApplicationPrivate::setMouseEventSource(&e, QGuiApplicationPrivate::mouseEventSource(event));
             e.setTimestamp(event->timestamp());
-            QApplicationPrivate::sendMouseEvent(receiver, &e, alien, m_widget, &qt_button_down, qt_last_mouse_receiver);
+            QApplicationPrivate::sendMouseEvent(receiver, &e, alien, receiver->window(), &qt_button_down, qt_last_mouse_receiver);
             qt_last_mouse_receiver = receiver;
         } else {
             // close disabled popups when a mouse button is pressed or released
@@ -892,7 +892,7 @@ void QWidgetWindow::handleTabletEvent(QTabletEvent *event)
         QGuiApplication::sendSpontaneousEvent(qt_tablet_target, &ev);
     }
 
-    if (event->type() == QEvent::TabletRelease)
+    if (event->type() == QEvent::TabletRelease && event->buttons() == Qt::NoButton)
         qt_tablet_target = 0;
 }
 #endif // QT_NO_TABLETEVENT
