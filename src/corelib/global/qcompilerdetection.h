@@ -634,7 +634,7 @@
 #    if __has_feature(cxx_strong_enums)
 #      define Q_COMPILER_CLASS_ENUM
 #    endif
-#    if __has_feature(cxx_constexpr) && Q_CC_CLANG > 302 /* CLANG 3.2 has bad/partial support */
+#    if __has_feature(cxx_constexpr) && defined(_LIBCPP_VERSION) && Q_CC_CLANG > 302 /* CLANG 3.2 has bad/partial support */
 #      define Q_COMPILER_CONSTEXPR
 #    endif
 #    if __has_feature(cxx_decltype) /* && __has_feature(cxx_decltype_incomplete_return_types) */
@@ -665,13 +665,13 @@
 #    if __has_feature(cxx_lambdas)
 #      define Q_COMPILER_LAMBDA
 #    endif
-#    if __has_feature(cxx_noexcept)
+#    if __has_feature(cxx_noexcept) && defined(_LIBCPP_VERSION)
 #      define Q_COMPILER_NOEXCEPT
 #    endif
 #    if __has_feature(cxx_nonstatic_member_init)
 #      define Q_COMPILER_NONSTATIC_MEMBER_INIT
 #    endif
-#    if __has_feature(cxx_nullptr)
+#    if __has_feature(cxx_nullptr) && defined(_LIBCPP_VERSION)
 #      define Q_COMPILER_NULLPTR
 #    endif
 #    if __has_feature(cxx_range_for)
@@ -698,7 +698,7 @@
 #    if __has_feature(cxx_user_literals)
 #      define Q_COMPILER_UDL
 #    endif
-#    if __has_feature(cxx_unicode_literals)
+#    if __has_feature(cxx_unicode_literals) && defined(_LIBCPP_VERSION)
 #      define Q_COMPILER_UNICODE_STRINGS
 #    endif
 #    if __has_feature(cxx_unrestricted_unions)
