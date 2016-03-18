@@ -116,9 +116,6 @@ void *QWindowsLibEGL::resolve(const char *name)
 bool QWindowsLibEGL::init()
 {
     const char dllName[] = QT_STRINGIFY(LIBEGL_NAME)
-#if defined(QT_DEBUG)
-    "d"
-#endif
     "";
 
     qCDebug(lcQpaGl) << "Qt: Using EGL from" << dllName;
@@ -173,9 +170,6 @@ bool QWindowsLibGLESv2::init()
 {
 
     const char dllName[] = QT_STRINGIFY(LIBGLESV2_NAME)
-#if defined(QT_DEBUG)
-    "d"
-#endif
     "";
 
     qCDebug(lcQpaGl) << "Qt: Using OpenGL ES 2.0 from" << dllName;
