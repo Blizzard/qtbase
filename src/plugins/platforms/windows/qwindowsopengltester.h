@@ -42,6 +42,7 @@
 
 #include <QtCore/qbytearray.h>
 #include <QtCore/qflags.h>
+#include <QtCore/qlist.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qversionnumber.h>
 
@@ -92,6 +93,7 @@ public:
 
     static Renderer requestedGlesRenderer();
     static Renderer requestedRenderer();
+    static QList<Renderer> requestedRenderers();
 
     static QWindowsOpenGLTester::Renderers  supportedRenderers(Renderer requested);
 

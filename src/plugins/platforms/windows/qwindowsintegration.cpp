@@ -436,6 +436,33 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
         && !QCoreApplication::testAttribute(Qt::AA_DisableShaderDiskCache)) {
         QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
     }
+
+    // try to create a renderer in the order of the requested renderers.
+    const QList<QWindowsOpenGLTester::Renderer> requestedRenderers = QWindowsOpenGLTester::requestedRenderers();
+    for (int i = 0; i < requestedRenderers.size(); ++i) {
+        const QWindowsOpenGLTester::Renderer renderer = requestedRenderers[i];
+        if (supportedRenderers & renderer) {
+            switch (renderer) {
+            case QWindowsOpenGLTester::DesktopGl:
+                if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
+                    return glCtx;
+                break;
+            case QWindowsOpenGLTester::AngleRendererD3d9:
+            case QWindowsOpenGLTester::AngleRendererD3d11:
+            case QWindowsOpenGLTester::AngleRendererD3d11Warp:
+                if (QWindowsEGLStaticContext *eglCtx = QWindowsEGLStaticContext::create(renderer))
+                    return eglCtx;
+                break;
+            case QWindowsOpenGLTester::SoftwareRasterizer:
+                if (QWindowsStaticOpenGLContext *swCtx = QOpenGLStaticContext::create(true))
+                    return swCtx;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
     if (supportedRenderers & QWindowsOpenGLTester::DesktopGl) {
         if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create()) {
             if ((supportedRenderers & QWindowsOpenGLTester::DisableRotationFlag)
