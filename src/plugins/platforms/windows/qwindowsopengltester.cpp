@@ -191,6 +191,38 @@ QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedRenderer()
     return QWindowsOpenGLTester::InvalidRenderer;
 }
 
+QList<QWindowsOpenGLTester::Renderer> QWindowsOpenGLTester::requestedRenderers()
+{
+    QList<QWindowsOpenGLTester::Renderer> renderers;
+#ifndef Q_OS_WINCE
+    const char openGlVar[] = "QT_OPENGL_RENDERERS";
+    if (qEnvironmentVariableIsSet(openGlVar)) {
+        QString requestedList = QString::fromLatin1(qgetenv(openGlVar));
+        QStringList list = requestedList.split(QLatin1Char(','), QString::SkipEmptyParts);
+        for (int i = 0; i < list.size(); ++i) {
+            const QString& requested = list[i];
+            if (requested == QLatin1String("d3d11"))
+                renderers.push_back(QWindowsOpenGLTester::AngleRendererD3d11);
+            else if (requested == QLatin1String("d3d9"))
+                renderers.push_back(QWindowsOpenGLTester::AngleRendererD3d9);
+            else if (requested == QLatin1String("warp"))
+                renderers.push_back(QWindowsOpenGLTester::AngleRendererD3d11Warp);
+            else if (requested == QLatin1String("angle")) {
+                const Renderer glesRenderer = QWindowsOpenGLTester::requestedGlesRenderer();
+                renderers.push_back(glesRenderer != InvalidRenderer ? glesRenderer : Gles);
+            }
+            else if (requested == QLatin1String("desktop"))
+                renderers.push_back(QWindowsOpenGLTester::DesktopGl);
+            else if (requested == QLatin1String("software"))
+                renderers.push_back(QWindowsOpenGLTester::SoftwareRasterizer);
+            else
+                qCWarning(lcQpaGl) << "Invalid value set for " << openGlVar << ": " << requested;
+        }
+    }
+#endif // !Q_OS_WINCE
+    return renderers;
+}
+
 #ifndef Q_OS_WINCE
 
 static inline QString resolveBugListFile(const QString &fileName)

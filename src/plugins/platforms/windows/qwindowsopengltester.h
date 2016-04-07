@@ -36,6 +36,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QFlags>
+#include <QtCore/QList>
 #include <private/qversionnumber_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -80,6 +81,7 @@ public:
 
     static Renderer requestedGlesRenderer();
     static Renderer requestedRenderer();
+    static QList<Renderer> requestedRenderers();
 
     static Renderers supportedGlesRenderers();
     static Renderers supportedRenderers();
