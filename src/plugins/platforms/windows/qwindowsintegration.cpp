@@ -373,18 +373,24 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
         break;
     }
 
-    const QWindowsOpenGLTester::Renderers supportedRenderers = QWindowsOpenGLTester::supportedRenderers();
+    const QWindowsOpenGLTester::Renderers blacklistedRenderers = QWindowsOpenGLTester::blacklistedRenderers();
 
     // try to create a renderer in the order of the requested renderers.
     const QList<QWindowsOpenGLTester::Renderer> requestedRenderers = QWindowsOpenGLTester::requestedRenderers();
     for (int i = 0; i < requestedRenderers.size(); ++i) {
         const QWindowsOpenGLTester::Renderer renderer = requestedRenderers[i];
-        if (supportedRenderers & renderer) {
+        if ((blacklistedRenderers & renderer) == 0) {
             switch (renderer) {
-            case QWindowsOpenGLTester::DesktopGl:
-                if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
-                    return glCtx;
+            case QWindowsOpenGLTester::DesktopGl: {
+                // Important! Don't try to test for OpenGL support until we actually want to use it.
+                if (QWindowsOpenGLTester::supportedRenderers() & QWindowsOpenGLTester::DesktopGl) {
+                    if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
+                        return glCtx;
+                }
                 break;
+            }
+
+            // All the following renderers are supported unless they are explicitly blacklisted.
             case QWindowsOpenGLTester::AngleRendererD3d9:
             case QWindowsOpenGLTester::AngleRendererD3d11:
             case QWindowsOpenGLTester::AngleRendererD3d11Warp:
@@ -401,6 +407,7 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
         }
     }
 
+    const QWindowsOpenGLTester::Renderers supportedRenderers = QWindowsOpenGLTester::supportedRenderers();
     if (supportedRenderers & QWindowsOpenGLTester::DesktopGl) {
         if (QWindowsStaticOpenGLContext *glCtx = QOpenGLStaticContext::create())
             return glCtx;

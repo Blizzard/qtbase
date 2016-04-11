@@ -86,6 +86,8 @@ public:
     static Renderers supportedGlesRenderers();
     static Renderers supportedRenderers();
 
+    static Renderers blacklistedRenderers();
+
 private:
     static QWindowsOpenGLTester::Renderers detectSupportedRenderers(const GpuDescription &gpu, bool glesOnly);
     static bool testDesktopGL();

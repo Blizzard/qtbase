@@ -267,9 +267,22 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
         | QWindowsOpenGLTester::AngleRendererD3d11Warp
         | QWindowsOpenGLTester::SoftwareRasterizer);
 
-    if (!glesOnly && testDesktopGL())
+    QWindowsOpenGLTester::Renderers blacklisted(blacklistedRenderers());
+
+    if (!glesOnly && ((blacklisted & QWindowsOpenGLTester::DesktopGl) == 0) && testDesktopGL())
         result |= QWindowsOpenGLTester::DesktopGl;
 
+    result &= ~blacklisted;
+
+    srCache->insert(qgpu, result);
+    return result;
+#endif // !Q_OS_WINCE && !QT_NO_OPENGL
+}
+
+QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::blacklistedRenderers()
+{
+    const GpuDescription gpu = GpuDescription::detect();
+    QOpenGLConfig::Gpu qgpu = QOpenGLConfig::Gpu::fromDevice(gpu.vendorId, gpu.deviceId, gpu.driverVersion);
     QSet<QString> features;
     const char bugListFileVar[] = "QT_OPENGL_BUGLIST";
     if (qEnvironmentVariableIsSet(bugListFileVar)) {
@@ -281,27 +294,33 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
     }
     qCDebug(lcQpaGl) << "GPU features:" << features;
 
+    QWindowsOpenGLTester::Renderers result = 0(0);
     if (features.contains(QStringLiteral("disable_desktopgl"))) { // Qt-specific
         qCWarning(lcQpaGl) << "Disabling Desktop GL: " << gpu;
-        result &= ~QWindowsOpenGLTester::DesktopGl;
+        result |= QWindowsOpenGLTester::DesktopGl;
     }
     if (features.contains(QStringLiteral("disable_angle"))) { // Qt-specific keyword
         qCWarning(lcQpaGl) << "Disabling ANGLE: " << gpu;
-        result &= ~QWindowsOpenGLTester::GlesMask;
+        // Allow Warp unless we explicitly blacklist it
+        const char blacklistWarp[] = "QT_BLACKLIST_WARP";
+        if (qEnvironmentVariableIsSet(blacklistWarp)) {
+            result |= QWindowsOpenGLTester::GlesMask;
+        } else {
+            result |= QWindowsOpenGLTester::AngleRendererD3d9;
+            result |= QWindowsOpenGLTester::AngleRendererD3d11;
+        }
     } else {
         if (features.contains(QStringLiteral("disable_d3d11"))) { // standard keyword
             qCWarning(lcQpaGl) << "Disabling D3D11: " << gpu;
-            result &= ~QWindowsOpenGLTester::AngleRendererD3d11;
+            result |= QWindowsOpenGLTester::AngleRendererD3d11;
         }
         if (features.contains(QStringLiteral("disable_d3d9"))) { // Qt-specific
             qCWarning(lcQpaGl) << "Disabling D3D9: " << gpu;
-            result &= ~QWindowsOpenGLTester::AngleRendererD3d9;
+            result |= QWindowsOpenGLTester::AngleRendererD3d9;
         }
     }
 
-    srCache->insert(qgpu, result);
     return result;
-#endif // !Q_OS_WINCE && !QT_NO_OPENGL
 }
 
 QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::supportedGlesRenderers()
