@@ -96,9 +96,12 @@ public:
     static QList<Renderer> requestedRenderers();
 
     static QWindowsOpenGLTester::Renderers  supportedRenderers(Renderer requested);
+    static QWindowsOpenGLTester::Renderers  blacklistedRenderers();
+    static QWindowsOpenGLTester::Renderers  disabledFeatures();
 
 private:
     static Renderers detectSupportedRenderers(const GpuDescription &gpu, Renderer requested);
+    static QSet<QString> determineFeatures(const GpuDescription &gpu);
     static bool testDesktopGL();
 };
 

@@ -346,13 +346,26 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
         | QWindowsOpenGLTester::AngleRendererD3d11Warp
         | QWindowsOpenGLTester::SoftwareRasterizer);
 
+    QWindowsOpenGLTester::Renderers blacklisted(blacklistedRenderers());
+
     // Don't test for GL if explicitly requested or GLES only is requested
     if (requested == DesktopGl
-        || ((requested & GlesMask) == 0 && testDesktopGL())) {
+        || ((requested & GlesMask) == 0 && (blacklisted & DesktopGl) == 0 && testDesktopGL())) {
             result |= QWindowsOpenGLTester::DesktopGl;
     }
 
+    result &= ~blacklisted;
+    result |= disabledFeatures();
+
+    srCache->insert(qgpu, result);
+    return result;
+#endif // !QT_NO_OPENGL
+}
+
+QSet<QString> QWindowsOpenGLTester::determineFeatures(const GpuDescription& gpu)
+{
     QSet<QString> features; // empty by default -> nothing gets disabled
+    QOpenGLConfig::Gpu qgpu = QOpenGLConfig::Gpu::fromDevice(gpu.vendorId, gpu.deviceId, gpu.driverVersion, gpu.description);
     if (!qEnvironmentVariableIsSet("QT_NO_OPENGL_BUGLIST")) {
         const char bugListFileVar[] = "QT_OPENGL_BUGLIST";
         QString buglistFileName = QStringLiteral(":/qt-project.org/windows/openglblacklists/default.json");
@@ -364,24 +377,48 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
         features = QOpenGLConfig::gpuFeatures(qgpu, buglistFileName);
     }
     qCDebug(lcQpaGl) << "GPU features:" << features;
+    return features;
+}
+
+QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::blacklistedRenderers()
+{
+    QWindowsOpenGLTester::Renderers result = { 0 };
+    const GpuDescription gpu = GpuDescription::detect();
+    QSet<QString> features = determineFeatures(gpu);
 
     if (features.contains(QStringLiteral("disable_desktopgl"))) { // Qt-specific
         qCDebug(lcQpaGl) << "Disabling Desktop GL: " << gpu;
-        result &= ~QWindowsOpenGLTester::DesktopGl;
+        result |= QWindowsOpenGLTester::DesktopGl;
     }
     if (features.contains(QStringLiteral("disable_angle"))) { // Qt-specific keyword
         qCDebug(lcQpaGl) << "Disabling ANGLE: " << gpu;
-        result &= ~QWindowsOpenGLTester::GlesMask;
+        // Allow Warp unless we explicitly blacklist it
+        const char blacklistWarp[] = "QT_BLACKLIST_WARP";
+        if (qEnvironmentVariableIsSet(blacklistWarp)) {
+            result |= QWindowsOpenGLTester::GlesMask;
+        } else {
+            result |= QWindowsOpenGLTester::AngleRendererD3d9;
+            result |= QWindowsOpenGLTester::AngleRendererD3d11;
+        }
     } else {
         if (features.contains(QStringLiteral("disable_d3d11"))) { // standard keyword
             qCDebug(lcQpaGl) << "Disabling D3D11: " << gpu;
-            result &= ~QWindowsOpenGLTester::AngleRendererD3d11;
+            result |= QWindowsOpenGLTester::AngleRendererD3d11;
         }
         if (features.contains(QStringLiteral("disable_d3d9"))) { // Qt-specific
             qCDebug(lcQpaGl) << "Disabling D3D9: " << gpu;
-            result &= ~QWindowsOpenGLTester::AngleRendererD3d9;
+            result |= QWindowsOpenGLTester::AngleRendererD3d9;
         }
     }
+    return result;
+}
+
+QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::disabledFeatures()
+{
+    QWindowsOpenGLTester::Renderers result = { 0 };
+    const GpuDescription gpu = GpuDescription::detect();
+    QSet<QString> features = determineFeatures(gpu);
+
     if (features.contains(QStringLiteral("disable_rotation"))) {
         qCDebug(lcQpaGl) << "Disabling rotation: " << gpu;
         result |= DisableRotationFlag;
@@ -390,9 +427,7 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
         qCDebug(lcQpaGl) << "Disabling program cache: " << gpu;
         result |= DisableProgramCacheFlag;
     }
-    srCache->insert(qgpu, result);
     return result;
-#endif // !QT_NO_OPENGL
 }
 
 QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::supportedRenderers(Renderer requested)
