@@ -50,6 +50,7 @@ public:
     void stream_data(int noOfElements);
 
 public slots:
+    void initTestCase();
     void cleanupTestCase();
 
 private slots:
@@ -243,6 +244,10 @@ private:
     void readqint64(QDataStream *s);
     void readQIcon(QDataStream *s);
     void readQEasingCurve(QDataStream *s);
+
+private:
+    QSharedPointer<QTemporaryDir> m_tempDir;
+    QString m_previousCurrent;
 };
 
 static int NColorRoles[] = {
@@ -264,7 +269,9 @@ static int NColorRoles[] = {
     QPalette::ToolTipText + 1,     // Qt_5_2
     QPalette::ToolTipText + 1,     // Qt_5_3
     QPalette::ToolTipText + 1,     // Qt_5_4
-    0                              // add the correct value for Qt_5_5 here later
+    QPalette::ToolTipText + 1,     // Qt_5_5
+    QPalette::ToolTipText + 1,     // Qt_5_6
+    0                              // add the correct value for Qt_5_7 here later
 };
 
 // Testing get/set functions
@@ -291,10 +298,20 @@ void tst_QDataStream::getSetCheck()
     QCOMPARE(QDataStream::ReadCorruptData, obj1.status());
 }
 
+void tst_QDataStream::initTestCase()
+{
+    m_previousCurrent = QDir::currentPath();
+    m_tempDir = QSharedPointer<QTemporaryDir>(new QTemporaryDir);
+    QVERIFY2(!m_tempDir.isNull(), qPrintable("Could not create temporary directory."));
+    QVERIFY2(QDir::setCurrent(m_tempDir->path()), qPrintable("Could not switch current directory"));
+}
+
 void tst_QDataStream::cleanupTestCase()
 {
     QFile::remove(QLatin1String("qdatastream.out"));
     QFile::remove(QLatin1String("datastream.tmp"));
+
+    QDir::setCurrent(m_previousCurrent);
 }
 
 static int dataIndex(const QString &tag)
@@ -1186,10 +1203,11 @@ static QTime qTimeData(int index)
     case 57: return QTime(23, 59, 59, 99);
     case 58: return QTime(23, 59, 59, 100);
     case 59: return QTime(23, 59, 59, 999);
+    case 60: return QTime();
     }
     return QTime(0, 0, 0);
 }
-#define MAX_QTIME_DATA 60
+#define MAX_QTIME_DATA 61
 
 void tst_QDataStream::stream_QTime_data()
 {
@@ -3064,6 +3082,30 @@ void tst_QDataStream::compatibility_Qt3()
         QVERIFY(in_palette.brush(QPalette::Button).style() == Qt::NoBrush);
         QVERIFY(in_palette.color(QPalette::Light) == Qt::green);
     }
+    // QTime() was serialized to (0, 0, 0, 0) in Qt3, not (0xFF, 0xFF, 0xFF, 0xFF)
+    // This is because in Qt3 a null time was valid, and there was no support for deserializing a value of -1.
+    {
+        QByteArray stream;
+        {
+            QDataStream out(&stream, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_3_3);
+            out << QTime();
+        }
+        QTime in_time;
+        {
+            QDataStream in(stream);
+            in.setVersion(QDataStream::Qt_3_3);
+            in >> in_time;
+        }
+        QVERIFY(in_time.isNull());
+
+        quint32 rawValue;
+        QDataStream in(stream);
+        in.setVersion(QDataStream::Qt_3_3);
+        in >> rawValue;
+        QCOMPARE(rawValue, quint32(0));
+    }
+
 }
 
 void tst_QDataStream::compatibility_Qt2()

@@ -46,9 +46,11 @@ QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN32
 #define QT_POPEN _popen
+#define QT_POPEN_READ "rb"
 #define QT_PCLOSE _pclose
 #else
 #define QT_POPEN popen
+#define QT_POPEN_READ "r"
 #define QT_PCLOSE pclose
 #endif
 
@@ -185,23 +187,23 @@ protected:
     virtual bool doDepends() const { return Option::mkfile::do_deps; }
 
     void filterIncludedFiles(const char *);
-    virtual void processSources() {
+    void processSources() {
         filterIncludedFiles("SOURCES");
         filterIncludedFiles("GENERATED_SOURCES");
     }
 
     //for installs
     virtual QString defaultInstall(const QString &);
+    virtual QString installRoot() const;
 
     //for prl
     QString prlFileName(bool fixify=true);
     void writePrlFile();
     bool processPrlFile(QString &);
-    virtual void processPrlFiles();
     virtual void writePrlFile(QTextStream &);
 
     //make sure libraries are found
-    virtual bool findLibraries();
+    virtual bool findLibraries(bool linkPrl, bool mergeLflags);
 
     //for retrieving values and lists of values
     virtual QString var(const ProKey &var) const;
@@ -221,6 +223,8 @@ protected:
 
     QString filePrefixRoot(const QString &, const QString &);
 
+    enum LibFlagType { LibFlagLib, LibFlagPath, LibFlagFile, LibFlagOther };
+    virtual LibFlagType parseLibFlag(const ProString &flag, ProString *arg);
     ProStringList fixLibFlags(const ProKey &var);
     virtual ProString fixLibFlag(const ProString &lib);
 
@@ -276,7 +280,10 @@ inline bool MakefileGenerator::noIO() const
 inline QString MakefileGenerator::defaultInstall(const QString &)
 { return QString(""); }
 
-inline bool MakefileGenerator::findLibraries()
+inline QString MakefileGenerator::installRoot() const
+{ return QStringLiteral("$(INSTALL_ROOT)"); }
+
+inline bool MakefileGenerator::findLibraries(bool, bool)
 { return true; }
 
 inline MakefileGenerator::~MakefileGenerator()

@@ -483,6 +483,7 @@ void tst_QItemView::spider()
     view->setHorizontalScrollMode((QAbstractItemView::ScrollMode)hscroll);
     view->setModel(treeModel);
     view->show();
+    QVERIFY(QTest::qWaitForWindowActive(view));
 #if defined(Q_OS_WINCE)
     srandom(0);
 #else
@@ -551,7 +552,7 @@ void tst_QItemView::visualRect()
 
     QFETCH(bool, displays);
     if (!displays){
-        QVERIFY(view->visualRect(topIndex) == QRect());
+        QCOMPARE(view->visualRect(topIndex), QRect());
         return;
     }
 
@@ -559,15 +560,15 @@ void tst_QItemView::visualRect()
     view->show();
     QVERIFY(view->visualRect(topIndex) != QRect());
 
-    QVERIFY(topIndex == view->indexAt(view->visualRect(topIndex).center()));
-    QVERIFY(topIndex == view->indexAt(view->visualRect(topIndex).bottomLeft()));
-    QVERIFY(topIndex == view->indexAt(view->visualRect(topIndex).bottomRight()));
-    QVERIFY(topIndex == view->indexAt(view->visualRect(topIndex).topLeft()));
-    QVERIFY(topIndex == view->indexAt(view->visualRect(topIndex).topRight()));
+    QCOMPARE(topIndex, view->indexAt(view->visualRect(topIndex).center()));
+    QCOMPARE(topIndex, view->indexAt(view->visualRect(topIndex).bottomLeft()));
+    QCOMPARE(topIndex, view->indexAt(view->visualRect(topIndex).bottomRight()));
+    QCOMPARE(topIndex, view->indexAt(view->visualRect(topIndex).topLeft()));
+    QCOMPARE(topIndex, view->indexAt(view->visualRect(topIndex).topRight()));
 
     testViews->hideIndexes(view);
     QModelIndex hiddenIndex = treeModel->index(1, 0);
-    QVERIFY(view->visualRect(hiddenIndex) == QRect());
+    QCOMPARE(view->visualRect(hiddenIndex), QRect());
 }
 
 void tst_QItemView::walkScreen(QAbstractItemView *view)
@@ -615,7 +616,7 @@ void walkIndex(QModelIndex index, QAbstractItemView *view)
             if (view->indexAt(point) != index) {
                 qDebug() << "index" << index << "visualRect" << visualRect << point << view->indexAt(point);
             }
-            QVERIFY(view->indexAt(point) == index);
+            QCOMPARE(view->indexAt(point), index);
         }
     }
 

@@ -78,6 +78,23 @@ void QHttpNetworkReply::setUrl(const QUrl &url)
     d->url = url;
 }
 
+QUrl QHttpNetworkReply::redirectUrl() const
+{
+    return d_func()->redirectUrl;
+}
+
+void QHttpNetworkReply::setRedirectUrl(const QUrl &url)
+{
+    Q_D(QHttpNetworkReply);
+    d->redirectUrl = url;
+}
+
+bool QHttpNetworkReply::isHttpRedirect(int statusCode)
+{
+    return (statusCode == 301 || statusCode == 302 || statusCode == 303
+            || statusCode == 305 || statusCode == 307);
+}
+
 qint64 QHttpNetworkReply::contentLength() const
 {
     return d_func()->contentLength();
@@ -247,6 +264,17 @@ char* QHttpNetworkReply::userProvidedDownloadBuffer()
     return d->userProvidedDownloadBuffer;
 }
 
+void QHttpNetworkReply::abort()
+{
+    Q_D(QHttpNetworkReply);
+    d->state = QHttpNetworkReplyPrivate::Aborted;
+}
+
+bool QHttpNetworkReply::isAborted() const
+{
+    return d_func()->state == QHttpNetworkReplyPrivate::Aborted;
+}
+
 bool QHttpNetworkReply::isFinished() const
 {
     return d_func()->state == QHttpNetworkReplyPrivate::AllDoneState;
@@ -265,6 +293,11 @@ bool QHttpNetworkReply::isSpdyUsed() const
 void QHttpNetworkReply::setSpdyWasUsed(bool spdy)
 {
     d_func()->spdyUsed = spdy;
+}
+
+bool QHttpNetworkReply::isRedirecting() const
+{
+    return d_func()->isRedirecting();
 }
 
 QHttpNetworkConnection* QHttpNetworkReply::connection()
@@ -521,9 +554,8 @@ qint64 QHttpNetworkReplyPrivate::readHeader(QAbstractSocket *socket)
             if (c == '\n') {
                 // check for possible header endings. As per HTTP rfc,
                 // the header endings will be marked by CRLFCRLF. But
-                // we will allow CRLFCRLF, CRLFLF, LFLF
-                if (fragment.endsWith("\r\n\r\n")
-                    || fragment.endsWith("\r\n\n")
+                // we will allow CRLFCRLF, CRLFLF, LFCRLF, LFLF
+                if (fragment.endsWith("\n\r\n")
                     || fragment.endsWith("\n\n"))
                     allHeaders = true;
 
@@ -908,6 +940,14 @@ qint64 QHttpNetworkReplyPrivate::getChunkSize(QAbstractSocket *socket, qint64 *c
     }
 
     return bytes;
+}
+
+bool QHttpNetworkReplyPrivate::isRedirecting() const
+{
+    // We're in the process of redirecting - if the HTTP status code says so and
+    // followRedirect is switched on
+    return (QHttpNetworkReply::isHttpRedirect(statusCode)
+            && request.isFollowRedirects());
 }
 
 bool QHttpNetworkReplyPrivate::shouldEmitSignals()

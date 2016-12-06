@@ -33,6 +33,7 @@
 
 #include "qwinoverlappedionotifier_p.h"
 #include <qdebug.h>
+#include <qatomic.h>
 #include <qelapsedtimer.h>
 #include <qmutex.h>
 #include <qpointer.h>
@@ -74,6 +75,22 @@ QT_BEGIN_NAMESPACE
     or WriteFile() is ignored and can be used for other purposes.
 
     \warning This class is only available on Windows.
+
+    Due to peculiarities of the Windows I/O completion port API, users of
+    QWinOverlappedIoNotifier must pay attention to the following restrictions:
+    \list
+    \li File handles with a QWinOverlappedIoNotifer are assigned to an I/O
+        completion port until the handle is closed. It is impossible to
+        disassociate the file handle from the I/O completion port.
+    \li There can be only one QWinOverlappedIoNotifer per file handle. Creating
+        another QWinOverlappedIoNotifier for that file, even with a duplicated
+        handle, will fail.
+    \li Certain Windows API functions are unavailable for file handles that are
+        assigned to an I/O completion port. This includes the functions
+        \c{ReadFileEx} and \c{WriteFileEx}.
+    \endlist
+    See also the remarks in the MSDN documentation for the
+    \c{CreateIoCompletionPort} function.
 */
 
 struct IOResult
@@ -99,8 +116,10 @@ public:
     {
     }
 
+    OVERLAPPED *waitForAnyNotified(int msecs);
     void notify(DWORD numberOfBytes, DWORD errorCode, OVERLAPPED *overlapped);
-    OVERLAPPED *_q_notified();
+    void _q_notified();
+    OVERLAPPED *dispatchNextIoResult();
 
     static QWinIoCompletionPort *iocp;
     static HANDLE iocpInstanceLock;
@@ -108,6 +127,7 @@ public:
     HANDLE hHandle;
     HANDLE hSemaphore;
     HANDLE hResultsMutex;
+    QAtomicInt waiting;
     QQueue<IOResult> results;
 };
 
@@ -286,6 +306,46 @@ void QWinOverlappedIoNotifier::setEnabled(bool enabled)
         d->iocp->unregisterNotifier(d);
 }
 
+OVERLAPPED *QWinOverlappedIoNotifierPrivate::waitForAnyNotified(int msecs)
+{
+    if (!iocp->isRunning()) {
+        qWarning("Called QWinOverlappedIoNotifier::waitForAnyNotified on inactive notifier.");
+        return 0;
+    }
+
+    if (msecs == 0)
+        iocp->drainQueue();
+
+    const DWORD wfso = WaitForSingleObject(hSemaphore, msecs == -1 ? INFINITE : DWORD(msecs));
+    switch (wfso) {
+    case WAIT_OBJECT_0:
+        return dispatchNextIoResult();
+    case WAIT_TIMEOUT:
+        return 0;
+    default:
+        qErrnoWarning("QWinOverlappedIoNotifier::waitForAnyNotified: WaitForSingleObject failed.");
+        return 0;
+    }
+}
+
+class QScopedAtomicIntIncrementor
+{
+public:
+    QScopedAtomicIntIncrementor(QAtomicInt &i)
+        : m_int(i)
+    {
+        ++m_int;
+    }
+
+    ~QScopedAtomicIntIncrementor()
+    {
+        --m_int;
+    }
+
+private:
+    QAtomicInt &m_int;
+};
+
 /*!
  * Wait synchronously for any notified signal.
  *
@@ -296,24 +356,9 @@ void QWinOverlappedIoNotifier::setEnabled(bool enabled)
 OVERLAPPED *QWinOverlappedIoNotifier::waitForAnyNotified(int msecs)
 {
     Q_D(QWinOverlappedIoNotifier);
-    if (!d->iocp->isRunning()) {
-        qWarning("Called QWinOverlappedIoNotifier::waitForAnyNotified on inactive notifier.");
-        return 0;
-    }
-
-    if (msecs == 0)
-        d->iocp->drainQueue();
-
-    switch (WaitForSingleObject(d->hSemaphore, msecs == -1 ? INFINITE : DWORD(msecs))) {
-    case WAIT_OBJECT_0:
-        ReleaseSemaphore(d->hSemaphore, 1, NULL);
-        return d->_q_notified();
-    case WAIT_TIMEOUT:
-        return 0;
-    default:
-        qErrnoWarning("QWinOverlappedIoNotifier::waitForAnyNotified: WaitForSingleObject failed.");
-        return 0;
-    }
+    QScopedAtomicIntIncrementor saii(d->waiting);
+    OVERLAPPED *result = d->waitForAnyNotified(msecs);
+    return result;
 }
 
 /*!
@@ -324,6 +369,8 @@ OVERLAPPED *QWinOverlappedIoNotifier::waitForAnyNotified(int msecs)
  */
 bool QWinOverlappedIoNotifier::waitForNotified(int msecs, OVERLAPPED *overlapped)
 {
+    Q_D(QWinOverlappedIoNotifier);
+    QScopedAtomicIntIncrementor saii(d->waiting);
     int t = msecs;
     QElapsedTimer stopWatch;
     stopWatch.start();
@@ -333,7 +380,7 @@ bool QWinOverlappedIoNotifier::waitForNotified(int msecs, OVERLAPPED *overlapped
             return false;
         if (triggeredOverlapped == overlapped)
             return true;
-        msecs = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
+        t = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
         if (t == 0)
             return false;
     }
@@ -350,20 +397,24 @@ void QWinOverlappedIoNotifierPrivate::notify(DWORD numberOfBytes, DWORD errorCod
     results.enqueue(IOResult(numberOfBytes, errorCode, overlapped));
     ReleaseMutex(hResultsMutex);
     ReleaseSemaphore(hSemaphore, 1, NULL);
-    emit q->_q_notify();
+    if (!waiting)
+        emit q->_q_notify();
 }
 
-OVERLAPPED *QWinOverlappedIoNotifierPrivate::_q_notified()
+void QWinOverlappedIoNotifierPrivate::_q_notified()
+{
+    if (WaitForSingleObject(hSemaphore, 0) == WAIT_OBJECT_0)
+        dispatchNextIoResult();
+}
+
+OVERLAPPED *QWinOverlappedIoNotifierPrivate::dispatchNextIoResult()
 {
     Q_Q(QWinOverlappedIoNotifier);
-    if (WaitForSingleObject(hSemaphore, 0) == WAIT_OBJECT_0) {
-        WaitForSingleObject(hResultsMutex, INFINITE);
-        IOResult ioresult = results.dequeue();
-        ReleaseMutex(hResultsMutex);
-        emit q->notified(ioresult.numberOfBytes, ioresult.errorCode, ioresult.overlapped);
-        return ioresult.overlapped;
-    }
-    return 0;
+    WaitForSingleObject(hResultsMutex, INFINITE);
+    IOResult ioresult = results.dequeue();
+    ReleaseMutex(hResultsMutex);
+    emit q->notified(ioresult.numberOfBytes, ioresult.errorCode, ioresult.overlapped);
+    return ioresult.overlapped;
 }
 
 QT_END_NAMESPACE

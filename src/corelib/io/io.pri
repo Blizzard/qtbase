@@ -107,8 +107,6 @@ win32 {
 
     !winrt {
         SOURCES += io/qsettings_win.cpp
-        HEADERS += io/qwindowspipewriter_p.h
-        SOURCES += io/qwindowspipewriter.cpp
         SOURCES += io/qstandardpaths_win.cpp
 
         wince* {
@@ -117,11 +115,13 @@ win32 {
         } else {
             HEADERS += \
                 io/qwinoverlappedionotifier_p.h \
-                io/qwindowspipereader_p.h
+                io/qwindowspipereader_p.h \
+                io/qwindowspipewriter_p.h
             SOURCES += \
                 io/qprocess_win.cpp \
                 io/qwinoverlappedionotifier.cpp \
                 io/qwindowspipereader.cpp \
+                io/qwindowspipewriter.cpp \
                 io/qstorageinfo_win.cpp
             LIBS += -lmpr
         }
@@ -147,7 +147,6 @@ win32 {
             SOURCES += io/qsettings_mac.cpp
             OBJECTIVE_SOURCES += io/qurl_mac.mm
         }
-        freebsd: LIBS_PRIVATE += -lutil         # qlockfile_unix.cpp requires this
         mac {
             osx {
                 OBJECTIVE_SOURCES += io/qfilesystemwatcher_fsevents.mm
@@ -160,6 +159,7 @@ win32 {
             } else:ios {
                 OBJECTIVE_SOURCES += io/qstandardpaths_ios.mm
                 SOURCES += io/qstorageinfo_mac.cpp
+                LIBS += -framework MobileCoreServices
             } else {
                 SOURCES += io/qstandardpaths_unix.cpp
             }

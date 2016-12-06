@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
@@ -50,8 +51,8 @@ class Q_DBUS_EXPORT QDBusServer: public QObject
 {
     Q_OBJECT
 public:
-    explicit QDBusServer(const QString &address, QObject *parent = 0);
-    explicit QDBusServer(QObject *parent = 0);
+    explicit QDBusServer(const QString &address, QObject *parent = Q_NULLPTR);
+    explicit QDBusServer(QObject *parent = Q_NULLPTR);
     virtual ~QDBusServer();
 
     bool isConnected() const;
@@ -66,7 +67,9 @@ Q_SIGNALS:
 
 private:
     Q_DISABLE_COPY(QDBusServer)
+    Q_PRIVATE_SLOT(d, void _q_newConnection(QDBusConnectionPrivate*))
     QDBusConnectionPrivate *d;
+    friend class QDBusConnectionPrivate;
 };
 
 QT_END_NAMESPACE

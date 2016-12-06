@@ -241,7 +241,7 @@ QSizePolicy::ControlType QSizePolicy::controlType() const
     The control type specifies the type of the widget for which this
     size policy applies. It is used by some styles, notably
     QMacStyle, to insert proper spacing between widgets. For example,
-    the Mac OS X Aqua guidelines specify that push buttons should be
+    the \macos Aqua guidelines specify that push buttons should be
     separated by 12 pixels, whereas vertically stacked radio buttons
     only require 6 pixels.
 
@@ -329,6 +329,15 @@ void QSizePolicy::setControlType(ControlType type)
     returns \c false.
 
     \sa operator==()
+*/
+
+/*!
+    \fn uint qHash(QSizePolicy key, uint seed = 0)
+    \since 5.6
+    \relates QSizePolicy
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
 */
 
 /*!
@@ -497,3 +506,5 @@ QDebug operator<<(QDebug dbg, const QSizePolicy &p)
 #endif
 
 QT_END_NAMESPACE
+
+#include "moc_qsizepolicy.cpp"

@@ -55,6 +55,7 @@
 #if defined(QT_LOCALSOCKET_TCP)
 #   include "qtcpsocket.h"
 #elif defined(Q_OS_WIN)
+#   include <private/qringbuffer_p.h>
 #   include "private/qwindowspipereader_p.h"
 #   include "private/qwindowspipewriter_p.h"
 #   include <qwineventnotifier.h>
@@ -127,6 +128,7 @@ public:
     void _q_pipeClosed();
     void _q_winError(ulong windowsError, const QString &function);
     HANDLE handle;
+    QRingBuffer writeBuffer;
     QWindowsPipeWriter *pipeWriter;
     QWindowsPipeReader *pipeReader;
     QLocalSocket::LocalSocketError error;

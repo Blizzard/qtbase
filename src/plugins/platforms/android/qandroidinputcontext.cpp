@@ -39,6 +39,7 @@
 #include "androidjniinput.h"
 #include "qandroideventdispatcher.h"
 #include "androiddeadlockprotector.h"
+#include "qandroidplatformintegration.h"
 #include <QDebug>
 #include <qevent.h>
 #include <qguiapplication.h>
@@ -47,6 +48,7 @@
 #include <qinputmethod.h>
 #include <qwindow.h>
 #include <QtCore/private/qjni_p.h>
+#include <private/qhighdpiscaling_p.h>
 
 #include <QTextCharFormat>
 
@@ -342,7 +344,7 @@ QAndroidInputContext::QAndroidInputContext()
     if (clazz == NULL) {
         qCritical() << "Native registration unable to find class '"
                     << QtNativeInputConnectionClassName
-                    << "'";
+                    << '\'';
         return;
     }
 
@@ -350,7 +352,7 @@ QAndroidInputContext::QAndroidInputContext()
     if (env->RegisterNatives(clazz, methods, sizeof(methods) / sizeof(methods[0])) < 0) {
         qCritical() << "RegisterNatives failed for '"
                     << QtNativeInputConnectionClassName
-                    << "'";
+                    << '\'';
         return;
     }
 
@@ -358,7 +360,7 @@ QAndroidInputContext::QAndroidInputContext()
     if (clazz == NULL) {
         qCritical() << "Native registration unable to find class '"
                     << QtExtractedTextClassName
-                    << "'";
+                    << '\'';
         return;
     }
 
@@ -512,7 +514,7 @@ void QAndroidInputContext::invokeAction(QInputMethod::Action action, int cursorP
 
 QRectF QAndroidInputContext::keyboardRect() const
 {
-    return QPlatformInputContext::keyboardRect();
+    return QtAndroidInput::softwareKeyboardRect();
 }
 
 bool QAndroidInputContext::isAnimating() const
@@ -541,11 +543,16 @@ void QAndroidInputContext::showInputPanel()
     if (window)
         rect = QRect(window->mapToGlobal(rect.topLeft()), rect.size());
 
-    QtAndroidInput::showSoftwareKeyboard(rect.left(),
-                                         rect.top(),
-                                         rect.width(),
-                                         rect.height(),
-                                         query->value(Qt::ImHints).toUInt());
+    double pixelDensity = window ? QHighDpiScaling::factor(window)
+                                 : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
+
+    QtAndroidInput::showSoftwareKeyboard(rect.left() * pixelDensity,
+                                         rect.top() * pixelDensity,
+                                         rect.width() * pixelDensity,
+                                         rect.height() * pixelDensity,
+                                         query->value(Qt::ImHints).toUInt(),
+                                         query->value(Qt::ImEnterKeyType).toUInt()
+                                        );
 }
 
 void QAndroidInputContext::showInputPanelLater(Qt::ApplicationState state)

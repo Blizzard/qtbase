@@ -69,12 +69,13 @@ public:
         FilePermissions = Qt::UserRole + 3
     };
 
-    explicit QFileSystemModel(QObject *parent = 0);
+    explicit QFileSystemModel(QObject *parent = Q_NULLPTR);
     ~QFileSystemModel();
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const Q_DECL_OVERRIDE;
     QModelIndex index(const QString &path, int column = 0) const;
     QModelIndex parent(const QModelIndex &child) const Q_DECL_OVERRIDE;
+    using QObject::parent;
     bool hasChildren(const QModelIndex &parent = QModelIndex()) const Q_DECL_OVERRIDE;
     bool canFetchMore(const QModelIndex &parent) const Q_DECL_OVERRIDE;
     void fetchMore(const QModelIndex &parent) Q_DECL_OVERRIDE;
@@ -132,11 +133,11 @@ public:
     inline QString fileName(const QModelIndex &index) const;
     inline QIcon fileIcon(const QModelIndex &index) const;
     QFile::Permissions permissions(const QModelIndex &index) const;
-    inline QFileInfo fileInfo(const QModelIndex &index) const;
+    QFileInfo fileInfo(const QModelIndex &index) const;
     bool remove(const QModelIndex &index);
 
 protected:
-    QFileSystemModel(QFileSystemModelPrivate &, QObject *parent = 0);
+    QFileSystemModel(QFileSystemModelPrivate &, QObject *parent = Q_NULLPTR);
     void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
     bool event(QEvent *event) Q_DECL_OVERRIDE;
 
@@ -146,7 +147,7 @@ private:
 
     Q_PRIVATE_SLOT(d_func(), void _q_directoryChanged(const QString &directory, const QStringList &list))
     Q_PRIVATE_SLOT(d_func(), void _q_performDelayedSort())
-    Q_PRIVATE_SLOT(d_func(), void _q_fileSystemChanged(const QString &path, const QList<QPair<QString, QFileInfo> > &))
+    Q_PRIVATE_SLOT(d_func(), void _q_fileSystemChanged(const QString &path, const QVector<QPair<QString, QFileInfo> > &))
     Q_PRIVATE_SLOT(d_func(), void _q_resolvedName(const QString &fileName, const QString &resolvedName))
 
     friend class QFileDialogPrivate;
@@ -156,8 +157,6 @@ inline QString QFileSystemModel::fileName(const QModelIndex &aindex) const
 { return aindex.data(Qt::DisplayRole).toString(); }
 inline QIcon QFileSystemModel::fileIcon(const QModelIndex &aindex) const
 { return qvariant_cast<QIcon>(aindex.data(Qt::DecorationRole)); }
-inline QFileInfo QFileSystemModel::fileInfo(const QModelIndex &aindex) const
-{ return QFileInfo(filePath(aindex)); }
 
 #endif // QT_NO_FILESYSTEMMODEL
 

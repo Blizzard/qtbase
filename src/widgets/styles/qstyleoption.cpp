@@ -198,7 +198,7 @@ void QStyleOption::init(const QWidget *widget)
     if (!(state & QStyle::State_Active) && !qt_mac_can_clickThrough(widget))
         state &= ~QStyle::State_Enabled;
 #endif
-#if defined(Q_OS_MACX)
+#if defined(Q_OS_OSX) && !defined(QT_NO_STYLE_MAC)
     switch (QMacStyle::widgetSizePolicy(widget)) {
     case QMacStyle::SizeSmall:
         state |= QStyle::State_Small;
@@ -475,6 +475,7 @@ QStyleOptionFocusRect::QStyleOptionFocusRect(int version)
 /*!
     \typedef QStyleOptionFrameV2
     \relates QStyleOptionFrame
+    \obsolete
 
     Synonym for QStyleOptionFrame.
 */
@@ -482,6 +483,7 @@ QStyleOptionFocusRect::QStyleOptionFocusRect(int version)
 /*!
     \typedef QStyleOptionFrameV3
     \relates QStyleOptionFrame
+    \obsolete
 
     Synonym for QStyleOptionFrame.
 */
@@ -1253,6 +1255,7 @@ QStyleOptionToolBar::QStyleOptionToolBar(int version)
 /*!
     \typedef QStyleOptionTabV2
     \relates QStyleOptionTab
+    \obsolete
 
     Synonym for QStyleOptionTab.
 */
@@ -1260,6 +1263,7 @@ QStyleOptionToolBar::QStyleOptionToolBar(int version)
 /*!
     \typedef QStyleOptionTabV3
     \relates QStyleOptionTab
+    \obsolete
 
     Synonym for QStyleOptionTab.
 */
@@ -1497,6 +1501,7 @@ QStyleOptionTab::QStyleOptionTab(int version)
 /*!
     \typedef QStyleOptionProgressBarV2
     \relates QStyleOptionProgressBar
+    \obsolete
 
     Synonym for QStyleOptionProgressBar.
 */
@@ -1739,7 +1744,7 @@ QStyleOptionMenuItem::QStyleOptionMenuItem(int version)
     \value DefaultItem A menu item that is the default action as specified with \l QMenu::defaultAction().
     \value Separator A menu separator.
     \value SubMenu Indicates the menu item points to a sub-menu.
-    \value Scroller A popup menu scroller (currently only used on OS X).
+    \value Scroller A popup menu scroller (currently only used on \macos).
     \value TearOff A tear-off handle for the menu.
     \value Margin The margin of the menu.
     \value EmptyArea The empty area of the menu.
@@ -2270,6 +2275,7 @@ QStyleOptionSpinBox::QStyleOptionSpinBox(int version)
 /*!
     \typedef QStyleOptionDockWidgetV2
     \relates QStyleOptionDockWidget
+    \obsolete
 
     Synonym for QStyleOptionDockWidget.
 */
@@ -2675,6 +2681,7 @@ QStyleOptionComboBox::QStyleOptionComboBox(int version)
 /*!
     \typedef QStyleOptionToolBoxV2
     \relates QStyleOptionToolBox
+    \obsolete
 
     Synonym for QStyleOptionToolBox.
 */
@@ -3012,6 +3019,7 @@ QStyleOptionTitleBar::QStyleOptionTitleBar(int version)
 /*!
     \typedef QStyleOptionViewItemV2
     \relates QStyleOptionViewItem
+    \obsolete
 
     Synonym for QStyleOptionViewItem.
 */
@@ -3019,6 +3027,7 @@ QStyleOptionTitleBar::QStyleOptionTitleBar(int version)
 /*!
     \typedef QStyleOptionViewItemV3
     \relates QStyleOptionViewItem
+    \obsolete
 
     Synonym for QStyleOptionViewItem.
 */
@@ -3026,6 +3035,7 @@ QStyleOptionTitleBar::QStyleOptionTitleBar(int version)
 /*!
     \typedef QStyleOptionViewItemV4
     \relates QStyleOptionViewItem
+    \obsolete
 
     Synonym for QStyleOptionViewItem.
 */
@@ -3298,6 +3308,7 @@ QStyleOptionViewItem::QStyleOptionViewItem(int version)
 /*!
     \typedef QStyleOptionTabWidgetFrameV2
     \relates QStyleOptionTabWidgetFrame
+    \obsolete
 
     Synonym for QStyleOptionTabWidgetFrame.
 */
@@ -3447,6 +3458,7 @@ QStyleOptionTabWidgetFrame::QStyleOptionTabWidgetFrame(int version)
 /*!
     \typedef QStyleOptionTabBarBaseV2
     \relates QStyleOptionTabBarBase
+    \obsolete
 
     Synonym for QStyleOptionTabBarBase.
 */

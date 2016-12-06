@@ -291,8 +291,8 @@ retry:
 // Testing get/set functions
 void tst_QCompleter::getSetCheck()
 {
-    QStandardItemModel model(3,3);
-    QCompleter completer(&model);
+    QStandardItemModel standardItemModel(3,3);
+    QCompleter completer(&standardItemModel);
 
     // QString QCompleter::completionPrefix()
     // void QCompleter::setCompletionPrefix(QString)
@@ -352,6 +352,21 @@ void tst_QCompleter::getSetCheck()
     QCOMPARE(completer.wrapAround(), true); // default value
     completer.setWrapAround(false);
     QCOMPARE(completer.wrapAround(), false);
+
+#ifndef QT_NO_FILESYSTEMMODEL
+    // QTBUG-54642, changing from QFileSystemModel to another model should restore role.
+    completer.setCompletionRole(Qt::EditRole);
+    QCOMPARE(completer.completionRole(), static_cast<int>(Qt::EditRole)); // default value
+    QFileSystemModel fileSystemModel;
+    completer.setModel(&fileSystemModel);
+    QCOMPARE(completer.completionRole(), static_cast<int>(QFileSystemModel::FileNameRole));
+    completer.setModel(&standardItemModel);
+    QCOMPARE(completer.completionRole(), static_cast<int>(Qt::EditRole));
+    completer.setCompletionRole(Qt::ToolTipRole);
+    QStandardItemModel standardItemModel2(2, 2); // Do not clobber a custom role when changing models
+    completer.setModel(&standardItemModel2);
+    QCOMPARE(completer.completionRole(), static_cast<int>(Qt::ToolTipRole));
+#endif // QT_NO_FILESYSTEMMODEL
 }
 
 void tst_QCompleter::csMatchingOnCsSortedModel_data()
@@ -1043,9 +1058,9 @@ void tst_QCompleter::setters()
     QAbstractItemModel *oldModel = completer->model();
     completer->setModel(dirModel);
     QVERIFY(completer->popup()->model() != oldModel);
-    QVERIFY(completer->popup()->model() == completer->completionModel());
+    QCOMPARE(completer->popup()->model(), completer->completionModel());
     completer->setPopup(new QListView);
-    QVERIFY(completer->popup()->model() == completer->completionModel());
+    QCOMPARE(completer->popup()->model(), completer->completionModel());
     completer->setModel(new QStringListModel(completer));
     QVERIFY(dirModel == 0); // must have been deleted
 
@@ -1062,7 +1077,7 @@ void tst_QCompleter::modelDeletion()
     QStringListModel *listModel = new QStringListModel(list);
     completer->setCompletionPrefix("i");
     completer->setModel(listModel);
-    QVERIFY(completer->completionCount() == 3);
+    QCOMPARE(completer->completionCount(), 3);
     QScopedPointer<QListView> view(new QListView);
     view->setModel(completer->completionModel());
     delete listModel;
@@ -1070,8 +1085,8 @@ void tst_QCompleter::modelDeletion()
     view->show();
     qApp->processEvents();
     view.reset();
-    QVERIFY(completer->completionCount() == 0);
-    QVERIFY(completer->currentRow() == -1);
+    QCOMPARE(completer->completionCount(), 0);
+    QCOMPARE(completer->currentRow(), -1);
 }
 
 void tst_QCompleter::multipleWidgets()
@@ -1098,7 +1113,7 @@ void tst_QCompleter::multipleWidgets()
     window.activateWindow();
     QApplication::setActiveWindow(&window);
     QTest::qWait(50);
-    QTRY_VERIFY(qApp->focusWidget() == comboBox);
+    QTRY_COMPARE(QApplication::focusWidget(), comboBox);
     comboBox->lineEdit()->setText("it");
     QCOMPARE(comboBox->currentText(), QString("it")); // should not complete with setText
     QTest::keyPress(comboBox, 'e');
@@ -1111,7 +1126,7 @@ void tst_QCompleter::multipleWidgets()
     lineEdit->show();
     lineEdit->setFocus();
     QTest::qWait(50);
-    QTRY_VERIFY(qApp->focusWidget() == lineEdit);
+    QTRY_COMPARE(QApplication::focusWidget(), lineEdit);
     lineEdit->setText("it");
     QCOMPARE(lineEdit->text(), QString("it")); // should not completer with setText
     QCOMPARE(comboBox->currentText(), QString("")); // combo box text must not change!
@@ -1148,13 +1163,13 @@ void tst_QCompleter::focusIn()
     lineEdit2->show();
 
     comboBox->setFocus();
-    QTRY_VERIFY(completer.widget() == comboBox);
+    QTRY_COMPARE(completer.widget(), comboBox);
     lineEdit->setFocus();
-    QTRY_VERIFY(completer.widget() == lineEdit);
+    QTRY_COMPARE(completer.widget(), lineEdit);
     comboBox->setFocus();
-    QTRY_VERIFY(completer.widget() == comboBox);
+    QTRY_COMPARE(completer.widget(), comboBox);
     lineEdit2->setFocus();
-    QTRY_VERIFY(completer.widget() == comboBox);
+    QTRY_COMPARE(completer.widget(), comboBox);
 }
 
 void tst_QCompleter::dynamicSortOrder()

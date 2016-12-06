@@ -204,7 +204,7 @@ QStringList QStandardPaths::standardLocations(StandardLocation type)
             CFRelease(bundleUrl);
 
             CFURLRef resourcesUrl = CFBundleCopyResourcesDirectoryURL(mainBundle);
-            CFStringRef cfResourcesPath = CFURLCopyPath(bundleUrl);
+            CFStringRef cfResourcesPath = CFURLCopyPath(resourcesUrl);
             QString resourcesPath = QCFString::toQString(cfResourcesPath);
             CFRelease(cfResourcesPath);
             CFRelease(resourcesUrl);
@@ -228,6 +228,14 @@ QString QStandardPaths::displayName(StandardLocation type)
 {
     if (QStandardPaths::HomeLocation == type)
         return QCoreApplication::translate("QStandardPaths", "Home");
+
+    if (QStandardPaths::DownloadLocation == type) {
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        NSURL *url = [fileManager URLForDirectory:NSDownloadsDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:NO error:nil];
+        if (!url)
+            return QString();
+        return QString::fromNSString([fileManager displayNameAtPath: [url absoluteString]]);
+    }
 
     FSRef ref;
     OSErr err = FSFindFolder(kOnAppropriateDisk, translateLocation(type), false, &ref);

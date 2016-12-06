@@ -32,21 +32,10 @@
 ****************************************************************************/
 
 // these might be defined via precompiled headers
-#ifndef _POSIX_C_SOURCE
-#  define _POSIX_C_SOURCE 200809L
-#endif
-#if !defined(_XOPEN_SOURCE) && !defined(__QNXNTO__) && !defined(ANDROID)
-#  define _XOPEN_SOURCE 700
-#endif
-
 #include <QtCore/qatomic.h>
 #include "qprocess_p.h"
 
-#ifdef QPROCESS_USE_SPAWN
-#  define FORKFD_NO_FORKFD
-#else
-#  define FORKFD_NO_SPAWNFD
-#endif
+#define FORKFD_NO_SPAWNFD
 
 #if defined(QT_NO_DEBUG) && !defined(NDEBUG)
 #  define NDEBUG

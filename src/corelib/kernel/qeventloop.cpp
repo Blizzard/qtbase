@@ -93,7 +93,7 @@ QEventLoop::QEventLoop(QObject *parent)
     : QObject(*new QEventLoopPrivate, parent)
 {
     Q_D(QEventLoop);
-    if (!QCoreApplication::instance()) {
+    if (!QCoreApplication::instance() && QCoreApplicationPrivate::threadRequiresCoreApplication()) {
         qWarning("QEventLoop: Cannot be used without QApplication");
     } else if (!d->threadData->eventDispatcher.load()) {
         QThreadPrivate::createEventDispatcher(d->threadData);
@@ -182,8 +182,10 @@ int QEventLoop::exec(ProcessEventsFlags flags)
         {
             if (exceptionCaught) {
                 qWarning("Qt has caught an exception thrown from an event handler. Throwing\n"
-                         "exceptions from an event handler is not supported in Qt. You must\n"
-                         "reimplement QApplication::notify() and catch all exceptions there.\n");
+                         "exceptions from an event handler is not supported in Qt.\n"
+                         "You must not let any exception whatsoever propagate through Qt code.\n"
+                         "If that is not possible, in Qt 5 you must at least reimplement\n"
+                         "QCoreApplication::notify() and catch all exceptions there.\n");
             }
             locker.relock();
             QEventLoop *eventLoop = d->threadData->eventLoops.pop();

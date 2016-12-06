@@ -168,6 +168,10 @@ QAbstractScrollAreaPrivate::QAbstractScrollAreaPrivate()
 {
 }
 
+QAbstractScrollAreaPrivate::~QAbstractScrollAreaPrivate()
+{
+}
+
 QAbstractScrollAreaScrollBarContainer::QAbstractScrollAreaScrollBarContainer(Qt::Orientation orientation, QWidget *parent)
     :QWidget(parent), scrollBar(new QScrollBar(orientation, this)),
      layout(new QBoxLayout(orientation == Qt::Horizontal ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom)),
@@ -206,10 +210,12 @@ QWidgetList QAbstractScrollAreaScrollBarContainer::widgets(LogicalPosition posit
     QWidgetList list;
     const int scrollBarIndex = scrollBarLayoutIndex();
     if (position == LogicalLeft) {
+        list.reserve(scrollBarIndex);
         for (int i = 0; i < scrollBarIndex; ++i)
             list.append(layout->itemAt(i)->widget());
     } else if (position == LogicalRight) {
         const int layoutItemCount = layout->count();
+        list.reserve(layoutItemCount - (scrollBarIndex + 1));
         for (int i = scrollBarIndex + 1; i < layoutItemCount; ++i)
             list.append(layout->itemAt(i)->widget());
     }
@@ -297,7 +303,7 @@ void QAbstractScrollAreaPrivate::init()
     viewportFilter.reset(new QAbstractScrollAreaFilter(this));
     viewport->installEventFilter(viewportFilter.data());
     viewport->setFocusProxy(q);
-    q->setFocusPolicy(Qt::WheelFocus);
+    q->setFocusPolicy(Qt::StrongFocus);
     q->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
     q->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     layoutChildren();

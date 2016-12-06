@@ -42,6 +42,7 @@
 
 #include "qdatastream.h"
 #include "qdebug.h"
+#include "qhashfunctions.h"
 #include "qstring.h"
 #include "qlocale.h"
 #include "qlocale_p.h"
@@ -88,9 +89,9 @@ QLocale::Language QLocalePrivate::codeToLanguage(const QString &code)
     int len = code.length();
     if (len != 2 && len != 3)
         return QLocale::C;
-    ushort uc1 = len-- > 0 ? code[0].toLower().unicode() : 0;
-    ushort uc2 = len-- > 0 ? code[1].toLower().unicode() : 0;
-    ushort uc3 = len-- > 0 ? code[2].toLower().unicode() : 0;
+    ushort uc1 = code[0].toLower().unicode();
+    ushort uc2 = code[1].toLower().unicode();
+    ushort uc3 = len > 2 ? code[2].toLower().unicode() : 0;
 
     const unsigned char *c = language_code_list;
     for (; *c != 0; c += 3) {
@@ -115,6 +116,13 @@ QLocale::Language QLocalePrivate::codeToLanguage(const QString &code)
         Q_STATIC_ASSERT(QLocale::Moldavian == QLocale::Romanian);
         return QLocale::Moldavian;
     }
+    // Android uses the following deprecated codes
+    if (uc1 == 'i' && uc2 == 'w' && uc3 == 0) // iw -> he
+        return QLocale::Hebrew;
+    if (uc1 == 'i' && uc2 == 'n' && uc3 == 0) // in -> id
+        return QLocale::Indonesian;
+    if (uc1 == 'j' && uc2 == 'i' && uc3 == 0) // ji -> yi
+        return QLocale::Yiddish;
 
     return QLocale::C;
 }
@@ -144,9 +152,9 @@ QLocale::Country QLocalePrivate::codeToCountry(const QString &code)
     int len = code.length();
     if (len != 2 && len != 3)
         return QLocale::AnyCountry;
-    ushort uc1 = len-- > 0 ? code[0].toUpper().unicode() : 0;
-    ushort uc2 = len-- > 0 ? code[1].toUpper().unicode() : 0;
-    ushort uc3 = len-- > 0 ? code[2].toUpper().unicode() : 0;
+    ushort uc1 = code[0].toUpper().unicode();
+    ushort uc2 = code[1].toUpper().unicode();
+    ushort uc3 = len > 2 ? code[2].toUpper().unicode() : 0;
 
     const unsigned char *c = country_code_list;
     for (; *c != 0; c += 3) {
@@ -420,7 +428,7 @@ bool qt_splitLocaleName(const QString &name, QString &lang, QString &script, QSt
             state = ScriptState;
             break;
         case ScriptState: {
-            QString scripts = QString::fromLatin1((const char *)script_code_list, sizeof(script_code_list));
+            QString scripts = QString::fromLatin1((const char *)script_code_list, sizeof(script_code_list) - 1);
             if (value.length() == 4 && scripts.indexOf(value) % 4 == 0) {
                 // script name is always 4 characters
                 script = value;
@@ -525,7 +533,7 @@ static uint default_number_options = 0;
 static const QLocaleData *const c_data = locale_data;
 static QLocalePrivate *c_private()
 {
-    static QLocalePrivate c_locale = { c_data, Q_BASIC_ATOMIC_INITIALIZER(1), 0 };
+    static QLocalePrivate c_locale = { c_data, Q_BASIC_ATOMIC_INITIALIZER(1), QLocale::OmitGroupSeparator };
     return &c_locale;
 }
 
@@ -697,7 +705,8 @@ static QLocalePrivate *localePrivateByName(const QString &name)
 {
     if (name == QLatin1String("C"))
         return c_private();
-    return QLocalePrivate::create(findLocaleData(name));
+    const QLocaleData *data = findLocaleData(name);
+    return QLocalePrivate::create(data, data->m_language_id == QLocale::C ? QLocale::OmitGroupSeparator : 0);
 }
 
 static QLocalePrivate *findLocalePrivate(QLocale::Language language, QLocale::Script script,
@@ -863,6 +872,21 @@ bool QLocale::operator==(const QLocale &other) const
 bool QLocale::operator!=(const QLocale &other) const
 {
     return d->m_data != other.d->m_data || d->m_numberOptions != other.d->m_numberOptions;
+}
+
+/*!
+    \since 5.6
+    \relates QLocale
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
+*/
+uint qHash(const QLocale &key, uint seed) Q_DECL_NOTHROW
+{
+    QtPrivate::QHashCombine hash;
+    seed = hash(seed, key.d->m_data);
+    seed = hash(seed, key.d->m_numberOptions);
+    return seed;
 }
 
 /*!
@@ -1810,7 +1834,7 @@ QTime QLocale::toTime(const QString &string, const QString &format) const
     QTime time;
 #ifndef QT_BOOTSTRAPPED
     QDateTimeParser dt(QVariant::Time, QDateTimeParser::FromString);
-    dt.defaultLocale = *this;
+    dt.setDefaultLocale(*this);
     if (dt.parseFormat(format))
         dt.fromString(string, 0, &time);
 #else
@@ -1841,7 +1865,7 @@ QDate QLocale::toDate(const QString &string, const QString &format) const
     QDate date;
 #ifndef QT_BOOTSTRAPPED
     QDateTimeParser dt(QVariant::Date, QDateTimeParser::FromString);
-    dt.defaultLocale = *this;
+    dt.setDefaultLocale(*this);
     if (dt.parseFormat(format))
         dt.fromString(string, &date, 0);
 #else
@@ -1874,7 +1898,7 @@ QDateTime QLocale::toDateTime(const QString &string, const QString &format) cons
     QDate date;
 
     QDateTimeParser dt(QVariant::DateTime, QDateTimeParser::FromString);
-    dt.defaultLocale = *this;
+    dt.setDefaultLocale(*this);
     if (dt.parseFormat(format) && dt.fromString(string, &date, &time))
         return QDateTime(date, time);
 #else
@@ -2726,9 +2750,9 @@ QString QLocaleData::doubleToString(const QChar _zero, const QChar plus, const Q
                                     const QChar exponential, const QChar group, const QChar decimal,
                                     double d, int precision, DoubleForm form, int width, unsigned flags)
 {
-    if (precision == -1)
+    if (precision < 0)
         precision = 6;
-    if (width == -1)
+    if (width < 0)
         width = 0;
 
     bool negative = false;

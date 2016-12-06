@@ -45,34 +45,42 @@
     stores its items in adjacent memory locations and provides fast
     index-based access.
 
-    QList\<T\>, QLinkedList\<T\>, and QVarLengthArray\<T\> provide
-    similar functionality. Here's an overview:
+    QList\<T\>, QLinkedList\<T\>, QVector\<T\>, and QVarLengthArray\<T\>
+    provide similar APIs and functionality. They are often interchangeable,
+    but there are performance consequences. Here is an overview of use cases:
 
     \list
-    \li For most purposes, QList is the right class to use. Operations
-       like prepend() and insert() are usually faster than with
-       QVector because of the way QList stores its items in memory
-       (see \l{Algorithmic Complexity} for details),
-       and its index-based API is more convenient than QLinkedList's
-       iterator-based API. It also expands to less code in your
-       executable.
-    \li If you need a real linked list, with guarantees of \l{constant
-       time} insertions in the middle of the list and iterators to
-       items rather than indexes, use QLinkedList.
-    \li If you want the items to occupy adjacent memory positions, or
-       if your items are larger than a pointer and you want to avoid
-       the overhead of allocating them on the heap individually at
-       insertion time, then use QVector.
-    \li If you want a low-level variable-size array, QVarLengthArray
-       may be sufficient.
+    \li QVector should be your default first choice.
+        QVector\<T\> will usually give better performance than QList\<T\>,
+        because QVector\<T\> always stores its items sequentially in memory,
+        where QList\<T\> will allocate its items on the heap unless
+        \c {sizeof(T) <= sizeof(void*)} and T has been declared to be
+        either a \c{Q_MOVABLE_TYPE} or a \c{Q_PRIMITIVE_TYPE} using
+        \l {Q_DECLARE_TYPEINFO}. See the \l {Pros and Cons of Using QList}
+        for an explanation.
+    \li However, QList is used throughout the Qt APIs for passing
+        parameters and for returning values. Use QList to interface with
+        those APIs.
+    \li If you need a real linked list, which guarantees
+        \l{Algorithmic Complexity}{constant time} insertions mid-list and
+        uses iterators to items rather than indexes, use QLinkedList.
     \endlist
+
+    \note QVector and QVarLengthArray both guarantee C-compatible
+    array layout. QList does not. This might be important if your
+    application must interface with a C API.
+
+    \note Iterators into a QLinkedList and references into
+    heap-allocating QLists remain valid long as the referenced items
+    remain in the container. This is not true for iterators and
+    references into a QVector and non-heap-allocating QLists.
 
     Here's an example of a QVector that stores integers and a QVector
     that stores QString values:
 
     \snippet code/src_corelib_tools_qvector.cpp 0
 
-    QVector stores a vector (or array) of items. Typically, vectors
+    QVector stores its items in a vector (array). Typically, vectors
     are created with an initial size. For example, the following code
     constructs a QVector with 200 elements:
 
@@ -166,6 +174,11 @@
     with references to its own values. Doing so will cause your application to
     abort with an error message.
 
+    \section2 More Information on Using Qt Containers
+
+    For a detailed discussion comparing Qt containers with each other and
+    with STL containers, see \l {Understand the Qt Containers}.
+
     \sa QVectorIterator, QMutableVectorIterator, QList, QLinkedList
 */
 
@@ -218,10 +231,11 @@
 
     Constructs a copy of \a other.
 
-    This operation takes \l{constant time}, because QVector is
-    \l{implicitly shared}. This makes returning a QVector from a
-    function very fast. If a shared instance is modified, it will be
-    copied (copy-on-write), and that takes \l{linear time}.
+    This operation takes \l{Algorithmic Complexity}{constant time},
+    because QVector is \l{implicitly shared}. This makes returning
+    a QVector from a function very fast. If a shared instance is
+    modified, it will be copied (copy-on-write), and that takes
+    \l{Algorithmic Complexity}{linear time}.
 
     \sa operator=()
 */
@@ -290,6 +304,65 @@
     \sa operator==()
 */
 
+/*! \fn bool operator<(const QVector<T> &lhs, const QVector<T> &rhs)
+    \since 5.6
+    \relates QVector
+
+    Returns \c true if vector \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically less than} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator<=(const QVector<T> &lhs, const QVector<T> &rhs)
+    \since 5.6
+    \relates QVector
+
+    Returns \c true if vector \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically less than or equal to} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator>(const QVector<T> &lhs, const QVector<T> &rhs)
+    \since 5.6
+    \relates QVector
+
+    Returns \c true if vector \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically greater than} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator>=(const QVector<T> &lhs, const QVector<T> &rhs)
+    \since 5.6
+    \relates QVector
+
+    Returns \c true if vector \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically greater than or equal to} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*!
+    \fn uint qHash(const QVector<T> &key, uint seed = 0)
+    \since 5.6
+    \relates QVector
+
+    Returns the hash value for \a key,
+    using \a seed to seed the calculation.
+
+    This function requires qHash() to be overloaded for the value type \c T.
+*/
+
 /*! \fn int QVector::size() const
 
     Returns the number of items in the vector.
@@ -311,6 +384,9 @@
     initialized with a \l{default-constructed value}. If \a size is less
     than the current size, elements are removed from the end.
 
+    Since Qt 5.6, resize() doesn't shrink the capacity anymore.
+    To shed excess capacity, use squeeze().
+
     \sa size()
 */
 
@@ -330,15 +406,24 @@
 /*! \fn void QVector::reserve(int size)
 
     Attempts to allocate memory for at least \a size elements. If you
-    know in advance how large the vector will be, you can call this
-    function, and if you call resize() often you are likely to get
-    better performance. If \a size is an underestimate, the worst
-    that will happen is that the QVector will be a bit slower.
+    know in advance how large the vector will be, you should call this
+    function to prevent reallocations and memory fragmentation.
 
-    The sole purpose of this function is to provide a means of fine
-    tuning QVector's memory usage. In general, you will rarely ever
-    need to call this function. If you want to change the size of the
-    vector, call resize().
+    If \a size is an underestimate, the worst that will happen is that
+    the QVector will be a bit slower. If \a size is an overestimate, you
+    may have used more memory than the normal QVector growth strategy
+    would have allocated—or you may have used less.
+
+    An alternative to reserve() is calling resize(). Whether or not that is
+    faster than reserve() depends on the element type, because resize()
+    default-constructs all elements, and requires assignment to existing
+    entries rather than calling append(), which copy- or move-constructs.
+    For simple types, like \c int or \c double, resize() is typically faster,
+    but for anything more complex, you should prefer reserve().
+
+    \warning If the size passed to resize() was underestimated, you run out
+    of allocated space and into undefined behavior. This problem does not
+    exist with reserve(), because it treats the size as just a hint.
 
     \sa squeeze(), capacity()
 */
@@ -461,6 +546,16 @@
     reallocating the entire vector each time.
 
     \sa operator<<(), prepend(), insert()
+*/
+
+/*!
+    \fn void QVector::append(T &&value)
+    \since 5.6
+
+    \overload
+
+    Example:
+    \snippet code/src_corelib_tools_qvector.cpp move-append
 */
 
 /*! \fn void QVector::append(const QVector<T> &value)
@@ -627,6 +722,16 @@
     Provided for compatibility with QList.
 
     \sa takeFirst(), takeLast(), QList::takeAt()
+*/
+
+/*! \fn void QVector::move(int from, int to)
+    \since 5.6
+
+    Moves the item at index position \a from to index position \a to.
+
+    Provided for compatibility with QList.
+
+    \sa QList::move()
 */
 
 /*! \fn void QVector::removeFirst()
@@ -823,6 +928,52 @@
     \sa constBegin(), end()
 */
 
+/*! \fn QVector::reverse_iterator QVector::rbegin()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the vector, in reverse order.
+
+    \sa begin(), crbegin(), rend()
+*/
+
+/*! \fn QVector::const_reverse_iterator QVector::rbegin() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QVector::const_reverse_iterator QVector::crbegin() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the vector, in reverse order.
+
+    \sa begin(), rbegin(), rend()
+*/
+
+/*! \fn QVector::reverse_iterator QVector::rend()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to one past
+    the last item in the vector, in reverse order.
+
+    \sa end(), crend(), rbegin()
+*/
+
+/*! \fn QVector::const_reverse_iterator QVector::rend() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QVector::const_reverse_iterator QVector::crend() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to one
+    past the last item in the vector, in reverse order.
+
+    \sa end(), rend(), rbegin()
+*/
+
 /*! \fn QVector::iterator QVector::erase(iterator pos)
 
     Removes the item pointed to by the iterator \a pos from the
@@ -846,7 +997,7 @@
     Returns a reference to the first item in the vector. This
     function assumes that the vector isn't empty.
 
-    \sa last(), isEmpty()
+    \sa last(), isEmpty(), constFirst()
 */
 
 /*! \fn const T& QVector::first() const
@@ -854,17 +1005,35 @@
     \overload
 */
 
+/*! \fn const T& QVector::constFirst() const
+    \since 5.6
+
+    Returns a const reference to the first item in the vector. This
+    function assumes that the vector isn't empty.
+
+    \sa constLast(), isEmpty(), first()
+*/
+
 /*! \fn T& QVector::last()
 
     Returns a reference to the last item in the vector. This function
     assumes that the vector isn't empty.
 
-    \sa first(), isEmpty()
+    \sa first(), isEmpty(), constLast()
 */
 
 /*! \fn const T& QVector::last() const
 
     \overload
+*/
+
+/*! \fn const T& QVector::constLast() const
+    \since 5.6
+
+    Returns a const reference to the last item in the vector. This function
+    assumes that the vector isn't empty.
+
+    \sa constFirst(), isEmpty(), last()
 */
 
 /*! \fn T QVector::value(int i) const
@@ -891,6 +1060,11 @@
 
     This function is provided for STL compatibility. It is equivalent
     to append(\a value).
+*/
+
+/*! \fn void QVector::push_back(T &&value)
+    \since 5.6
+    \overload
 */
 
 /*! \fn void QVector::push_front(const T &value)
@@ -1011,6 +1185,38 @@
     read \l{Implicit sharing iterator problem}.
 
     \sa QVector::constBegin(), QVector::constEnd(), QVector::iterator, QVectorIterator
+*/
+
+/*! \typedef QVector::reverse_iterator
+    \since 5.6
+
+    The QVector::reverse_iterator typedef provides an STL-style non-const
+    reverse iterator for QVector.
+
+    It is simply a typedef for \c{std::reverse_iterator<T*>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QVector::rbegin(), QVector::rend(), QVector::const_reverse_iterator, QVector::iterator
+*/
+
+/*! \typedef QVector::const_reverse_iterator
+    \since 5.6
+
+    The QVector::const_reverse_iterator typedef provides an STL-style const
+    reverse iterator for QVector.
+
+    It is simply a typedef for \c{std::reverse_iterator<const T*>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QVector::rbegin(), QVector::rend(), QVector::reverse_iterator, QVector::const_iterator
 */
 
 /*! \typedef QVector::Iterator

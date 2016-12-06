@@ -54,7 +54,10 @@
 #include <QtGui/qopengl.h>
 #include <QtGui/qopenglversionfunctions.h>
 
+#if QT_DEPRECATED_SINCE(5, 6)
 #include <QtCore/qhash.h>
+#endif
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qpair.h>
 #include <QtCore/qvariant.h>
 
@@ -63,6 +66,7 @@ QT_BEGIN_NAMESPACE
 class QOpenGLContextPrivate;
 class QOpenGLContextGroupPrivate;
 class QOpenGLFunctions;
+class QOpenGLExtraFunctions;
 class QPlatformOpenGLContext;
 
 class QScreen;
@@ -140,7 +144,7 @@ class Q_GUI_EXPORT QOpenGLContext : public QObject
     Q_OBJECT
     Q_DECLARE_PRIVATE(QOpenGLContext)
 public:
-    explicit QOpenGLContext(QObject *parent = 0);
+    explicit QOpenGLContext(QObject *parent = Q_NULLPTR);
     ~QOpenGLContext();
 
     void setFormat(const QSurfaceFormat &format);
@@ -174,6 +178,7 @@ public:
     QPlatformOpenGLContext *shareHandle() const;
 
     QOpenGLFunctions *functions() const;
+    QOpenGLExtraFunctions *extraFunctions() const;
 
     QAbstractOpenGLFunctions *versionFunctions(const QOpenGLVersionProfile &versionProfile = QOpenGLVersionProfile()) const;
 
@@ -236,6 +241,8 @@ private:
     void setTextureFunctions(QOpenGLTextureHelper* textureFuncs);
 
     void destroy();
+
+    Q_PRIVATE_SLOT(d_func(), void _q_screenDestroyed(QObject *object))
 };
 
 QT_END_NAMESPACE

@@ -202,12 +202,16 @@ public:
     QTabBar *tabBar;
     int tabBarShape;
 
+    void reparentWidgets(QWidget *p);
     bool updateTabBar() const;
     void setTabBarShape(int shape);
     QSize tabBarMinimumSize() const;
     QSize tabBarSizeHint() const;
 
     QSet<QTabBar*> usedTabBars() const;
+
+    int tabIndexToListIndex(int) const;
+    void moveTab(int from, int to);
 #endif // QT_NO_TABBAR
 };
 
@@ -229,7 +233,8 @@ public:
 
     bool isValid() const;
 
-    enum { DockWidgetStateMarker = 0xfd };
+    enum { DockWidgetStateMarker = 0xfd, FloatingDockWidgetTabMarker = 0xf9 };
+    static QRect constrainedRect(QRect rect, QWidget *widget);
     void saveState(QDataStream &stream) const;
     bool restoreState(QDataStream &stream, const QList<QDockWidget*> &widgets, bool testing = false);
 
@@ -250,6 +255,7 @@ public:
     QLayoutItem *plug(const QList<int> &path);
     QLayoutItem *unplug(const QList<int> &path);
     void remove(const QList<int> &path);
+    void removePlaceHolder(const QString &name);
 
     void fitLayout();
 
@@ -263,6 +269,7 @@ public:
     void splitDockWidget(QDockWidget *after, QDockWidget *dockWidget,
                          Qt::Orientation orientation);
     void tabifyDockWidget(QDockWidget *first, QDockWidget *second);
+    void resizeDocks(const QList<QDockWidget *> &docks, const QList<int> &sizes, Qt::Orientation o);
 
     void apply(bool animate);
 

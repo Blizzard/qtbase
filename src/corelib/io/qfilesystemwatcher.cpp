@@ -52,7 +52,7 @@
 #  include "qfilesystemwatcher_win_p.h"
 #elif defined(USE_INOTIFY)
 #  include "qfilesystemwatcher_inotify_p.h"
-#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_IOS)
+#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_OPENBSD) || defined(Q_OS_IOS)
 #  include "qfilesystemwatcher_kqueue_p.h"
 #elif defined(Q_OS_OSX)
 #  include "qfilesystemwatcher_fsevents_p.h"
@@ -68,7 +68,7 @@ QFileSystemWatcherEngine *QFileSystemWatcherPrivate::createNativeEngine(QObject 
     // there is a chance that inotify may fail on Linux pre-2.6.13 (August
     // 2005), so we can't just new inotify directly.
     return QInotifyFileSystemWatcherEngine::create(parent);
-#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_IOS)
+#elif defined(Q_OS_FREEBSD) || defined(Q_OS_NETBSD) || defined(Q_OS_OPENBSD) || defined(Q_OS_IOS)
     return QKqueueFileSystemWatcherEngine::create(parent);
 #elif defined(Q_OS_OSX)
     return QFseventsFileSystemWatcherEngine::create(parent);
@@ -177,7 +177,7 @@ void QFileSystemWatcherPrivate::_q_directoryChanged(const QString &path, bool re
     \note The act of monitoring files and directories for
     modifications consumes system resources. This implies there is a
     limit to the number of files and directories your process can
-    monitor simultaneously. On Mac OS X 10.4 and all BSD variants, for
+    monitor simultaneously. On all BSD variants, for
     example, an open file descriptor is required for each monitored
     file. Some system limits the number of open file descriptors to 256
     by default. This means that addPath() and addPaths() will fail if
@@ -185,7 +185,7 @@ void QFileSystemWatcherPrivate::_q_directoryChanged(const QString &path, bool re
     the file system monitor. Also note that your process may have
     other file descriptors open in addition to the ones for files
     being monitored, and these other open descriptors also count in
-    the total. Mac OS X 10.5 and up use a different backend and do not
+    the total. \macos uses a different backend and does not
     suffer from this issue.
 
 
@@ -296,7 +296,9 @@ QStringList QFileSystemWatcher::addPaths(const QStringList &paths)
 
     QFileSystemWatcherEngine *engine = 0;
 
-    if(!objectName().startsWith(QLatin1String("_qt_autotest_force_engine_"))) {
+    const QString on = objectName();
+
+    if (!on.startsWith(QLatin1String("_qt_autotest_force_engine_"))) {
         // Normal runtime case - search intelligently for best engine
         if(d->native) {
             engine = d->native;
@@ -307,7 +309,7 @@ QStringList QFileSystemWatcher::addPaths(const QStringList &paths)
 
     } else {
         // Autotest override case - use the explicitly selected engine only
-        QString forceName = objectName().mid(26);
+        const QStringRef forceName = on.midRef(26);
         if(forceName == QLatin1String("poller")) {
             qDebug() << "QFileSystemWatcher: skipping native engine, using only polling engine";
             d_func()->initPollerEngine();

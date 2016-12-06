@@ -38,6 +38,7 @@
 #include <qregexp.h>
 #include <qcryptographichash.h>
 #include <qdebug.h>
+#include <qsettings.h>
 #include <qstring.h>
 #include <stdlib.h>
 #include <time.h>
@@ -103,19 +104,6 @@ struct ProjectBuilderSubDirs {
 bool
 ProjectBuilderMakefileGenerator::writeSubDirs(QTextStream &t)
 {
-    if(project->isActiveConfig("generate_pbxbuild_makefile")) {
-        QString mkwrap = fileFixify(pbx_dir + Option::dir_sep + ".." + Option::dir_sep + project->first("MAKEFILE"),
-                                    FileFixifyToIndir);
-        QFile mkwrapf(mkwrap);
-        if(mkwrapf.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            debug_msg(1, "pbuilder: Creating file: %s", mkwrap.toLatin1().constData());
-            QTextStream mkwrapt(&mkwrapf);
-            writingUnixMakefileGenerator = true;
-            UnixMakefileGenerator::writeSubDirs(mkwrapt);
-            writingUnixMakefileGenerator = false;
-        }
-    }
-
     //HEADER
     const int pbVersion = pbuilderVersion();
     t << "// !$*UTF8*$!\n"
@@ -284,7 +272,7 @@ ProjectBuilderMakefileGenerator::writeSubDirs(QTextStream &t)
           << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
           << "\t\t\t" << writeSettings("children", grp_it.value(), SettingsAsList, 4) << ";\n"
           << "\t\t\t" << writeSettings("name", grp_it.key().section(Option::dir_sep, -1)) << ";\n"
-          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
           << "\t\t};\n";
     }
 
@@ -417,20 +405,24 @@ public:
     inline QString groupName() const { return group; }
     inline QString compilerName() const { return compiler; }
     inline bool isObjectOutput(const QString &file) const {
-        bool ret = object_output;
-        for(int i = 0; !ret && i < Option::c_ext.size(); ++i) {
-            if(file.endsWith(Option::c_ext.at(i))) {
-                ret = true;
-                break;
-            }
+        if (object_output)
+            return true;
+
+        if (file.endsWith(Option::objc_ext))
+            return true;
+        if (file.endsWith(Option::objcpp_ext))
+            return true;
+
+        for (int i = 0; i < Option::c_ext.size(); ++i) {
+            if (file.endsWith(Option::c_ext.at(i)))
+                return true;
         }
-        for(int i = 0; !ret && i < Option::cpp_ext.size(); ++i) {
-            if(file.endsWith(Option::cpp_ext.at(i))) {
-                ret = true;
-                break;
-            }
+        for (int i = 0; i < Option::cpp_ext.size(); ++i) {
+            if (file.endsWith(Option::cpp_ext.at(i)))
+                return true;
         }
-        return ret;
+
+        return false;
     }
 };
 
@@ -490,18 +482,44 @@ static QString xcodeFiletypeForFilename(const QString &filename)
             return "sourcecode.c.h";
     }
 
-    if (filename.endsWith(QStringLiteral(".mm")))
+    if (filename.endsWith(Option::objcpp_ext))
         return QStringLiteral("sourcecode.cpp.objcpp");
-    if (filename.endsWith(QStringLiteral(".m")))
+    if (filename.endsWith(Option::objc_ext))
         return QStringLiteral("sourcecode.c.objc");
-    if (filename.endsWith(QStringLiteral(".framework")))
+    if (filename.endsWith(QLatin1String(".framework")))
         return QStringLiteral("wrapper.framework");
-    if (filename.endsWith(QStringLiteral(".a")))
+    if (filename.endsWith(QLatin1String(".a")))
         return QStringLiteral("archive.ar");
-    if (filename.endsWith(QStringLiteral(".pro")) || filename.endsWith(QStringLiteral(".qrc")))
+    if (filename.endsWith(QLatin1String(".pro")) || filename.endsWith(QLatin1String(".qrc")))
         return QStringLiteral("text");
 
     return QString();
+}
+
+static bool compareProvisioningTeams(const QVariantMap &a, const QVariantMap &b)
+{
+    int aFree = a.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    int bFree = b.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    return aFree < bFree;
+}
+
+static QList<QVariantMap> provisioningTeams()
+{
+    const QSettings xcodeSettings(
+        QDir::homePath() + QLatin1String("/Library/Preferences/com.apple.dt.Xcode.plist"),
+        QSettings::NativeFormat);
+    const QVariantMap teamMap = xcodeSettings.value(QLatin1String("IDEProvisioningTeams")).toMap();
+    QList<QVariantMap> flatTeams;
+    for (QVariantMap::const_iterator it = teamMap.begin(), end = teamMap.end(); it != end; ++it) {
+        const QString emailAddress = it.key();
+        QVariantMap team = it.value().toMap();
+        team[QLatin1String("emailAddress")] = emailAddress;
+        flatTeams.append(team);
+    }
+
+    // Sort teams so that Free Provisioning teams come last
+    std::sort(flatTeams.begin(), flatTeams.end(), ::compareProvisioningTeams);
+    return flatTeams;
 }
 
 bool
@@ -708,7 +726,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
           << "\t\t\t" << writeSettings("children", grp_it.value(), SettingsAsList, 4) << ";\n"
           << "\t\t\t" << writeSettings("name", grp_it.key().section(Option::dir_sep, -1)) << ";\n"
-          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
           << "\t\t};\n";
     }
 
@@ -816,7 +834,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
             for(int x = 0; x < tmp.count();) {
                 bool remove = false;
                 QString library, name;
-                ProString opt = tmp[x].trimmed();
+                ProString opt = tmp[x];
                 if(opt.startsWith("-L")) {
                     QString r = opt.mid(2).toQString();
                     fixForOutput(r);
@@ -833,8 +851,8 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                                encode the version number in the Project file which might be a bad
                                things in days to come? --Sam
                             */
-                            QString lib_file = (*lit) + Option::dir_sep + lib;
-                            if(QMakeMetaInfo::libExists(lib_file)) {
+                            QString lib_file = QMakeMetaInfo::findLib(Option::normalizePath((*lit) + Option::dir_sep + lib));
+                            if (!lib_file.isEmpty()) {
                                 QMakeMetaInfo libinfo(project);
                                 if(libinfo.readLib(lib_file)) {
                                     if(!libinfo.isEmpty("QMAKE_PRL_TARGET")) {
@@ -849,8 +867,15 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                                                 QString librarySuffix = project->first("QMAKE_XCODE_LIBRARY_SUFFIX").toQString();
                                                 suffixSetting = "$(" + suffixSetting + ")";
                                                 if (!librarySuffix.isEmpty()) {
-                                                    library.replace(librarySuffix, suffixSetting);
-                                                    name.remove(librarySuffix);
+                                                    int pos = library.lastIndexOf(librarySuffix + '.');
+                                                    if (pos == -1) {
+                                                        warn_msg(WarnLogic, "Failed to find expected suffix '%s' for library '%s'.",
+                                                                            qPrintable(librarySuffix), qPrintable(library));
+                                                    } else {
+                                                        library.replace(pos, librarySuffix.length(), suffixSetting);
+                                                        if (name.endsWith(librarySuffix))
+                                                            name.chop(librarySuffix.length());
+                                                    }
                                                 } else {
                                                     library.replace(name, name + suffixSetting);
                                                 }
@@ -1036,7 +1061,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
               << "\t\t\t" << writeSettings("children", project->values("QMAKE_PBX_LIBRARIES"), SettingsAsList, 4) << ";\n"
               << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
               << "\t\t\t" << writeSettings("name", grp) << ";\n"
-              << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+              << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
               << "\t\t};\n";
         }
     }
@@ -1150,7 +1175,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("children", bundle_file_refs, SettingsAsList, 4) << ";\n"
           << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
           << "\t\t\t" << writeSettings("name", "Bundle Data") << ";\n"
-          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
           << "\t\t};\n";
     }
 
@@ -1235,7 +1260,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("children", project->values("QMAKE_PBX_PRODUCTS"), SettingsAsList, 4) << ";\n"
           << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
           << "\t\t\t" << writeSettings("name", "Products") << ";\n"
-          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
           << "\t\t};\n";
     }
 
@@ -1245,7 +1270,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
       << "\t\t\t" << writeSettings("children", project->values("QMAKE_PBX_GROUPS"), SettingsAsList, 4) << ";\n"
       << "\t\t\t" << writeSettings("isa", "PBXGroup", SettingsNoQuote) << ";\n"
       << "\t\t\t" << writeSettings("name", project->first("QMAKE_ORIG_TARGET")) << ";\n"
-      << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";\n"
+      << "\t\t\t" << writeSettings("sourceTree", "<group>") << ";\n"
       << "\t\t};\n";
 
     {
@@ -1407,6 +1432,14 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
         QString configName = (as_release ? "Release" : "Debug");
 
         QMap<QString, QString> settings;
+        if (!project->isActiveConfig("no_xcode_development_team")) {
+            const QList<QVariantMap> teams = provisioningTeams();
+            if (!teams.isEmpty()) {
+                // first suitable team we find is the one we'll use by default
+                settings.insert("DEVELOPMENT_TEAM",
+                    teams.first().value(QLatin1String("teamID")).toString());
+            }
+        }
         settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
         // Bitcode is only supported with a deployment target >= iOS 6.0.
         // Disable it for now, and consider switching it on when later
@@ -1483,21 +1516,21 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                         if (plist_in_file.open(QIODevice::ReadOnly)) {
                             QTextStream plist_in(&plist_in_file);
                             QString plist_in_text = plist_in.readAll();
-                            plist_in_text.replace("@ICON@",
+                            plist_in_text.replace(QLatin1String("@ICON@"),
                               (project->isEmpty("ICON") ? QString("") : project->first("ICON").toQString().section(Option::dir_sep, -1)));
                             if (project->first("TEMPLATE") == "app") {
-                                plist_in_text.replace("@EXECUTABLE@", project->first("QMAKE_ORIG_TARGET").toQString());
+                                plist_in_text.replace(QLatin1String("@EXECUTABLE@"), project->first("QMAKE_ORIG_TARGET").toQString());
                             } else {
-                                plist_in_text.replace("@LIBRARY@", project->first("QMAKE_ORIG_TARGET").toQString());
+                                plist_in_text.replace(QLatin1String("@LIBRARY@"), project->first("QMAKE_ORIG_TARGET").toQString());
                             }
                             QString bundlePrefix = project->first("QMAKE_TARGET_BUNDLE_PREFIX").toQString();
                             if (bundlePrefix.isEmpty())
                                 bundlePrefix = "com.yourcompany";
-                            plist_in_text.replace("@BUNDLEIDENTIFIER@", bundlePrefix + '.' + QLatin1String("${PRODUCT_NAME:rfc1034identifier}"));
+                            plist_in_text.replace(QLatin1String("@BUNDLEIDENTIFIER@"), bundlePrefix + '.' + QLatin1String("${PRODUCT_NAME:rfc1034identifier}"));
                             if (!project->values("VERSION").isEmpty()) {
-                                plist_in_text.replace("@SHORT_VERSION@", project->first("VER_MAJ") + "." + project->first("VER_MIN"));
+                                plist_in_text.replace(QLatin1String("@SHORT_VERSION@"), project->first("VER_MAJ") + "." + project->first("VER_MIN"));
                             }
-                            plist_in_text.replace("@TYPEINFO@",
+                            plist_in_text.replace(QLatin1String("@TYPEINFO@"),
                                 (project->isEmpty("QMAKE_PKGINFO_TYPEINFO")
                                     ? QString::fromLatin1("????") : project->first("QMAKE_PKGINFO_TYPEINFO").left(4).toQString()));
                             QFile plist_out_file(Option::output_dir + "/Info.plist");
@@ -1655,32 +1688,6 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
       << "\t" << writeSettings("rootObject", keyFor("QMAKE_PBX_ROOT")) << ";\n"
       << "}\n";
 
-    if(project->isActiveConfig("generate_pbxbuild_makefile")) {
-        QString mkwrap = Option::output_dir + project->first("/MAKEFILE");
-        QFile mkwrapf(mkwrap);
-        if(mkwrapf.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            writingUnixMakefileGenerator = true;
-            debug_msg(1, "pbuilder: Creating file: %s", mkwrap.toLatin1().constData());
-            QTextStream mkwrapt(&mkwrapf);
-            writeHeader(mkwrapt);
-            const char cleans[] = "preprocess_clean ";
-            const QString cmd = escapeFilePath(project->first("QMAKE_ORIG_TARGET") + projectSuffix() + "/") + " && " + pbxbuild();
-            mkwrapt << "#This is a makefile wrapper for PROJECT BUILDER\n"
-                    << "all:\n\t"
-                    << "cd " << cmd << "\n"
-                    << "install: all\n\t"
-                    << "cd " << cmd << " install\n"
-                    << "distclean clean: preprocess_clean\n\t"
-                    << "cd " << cmd << " clean\n"
-                    << (!did_preprocess ? cleans : "") << ":\n";
-            if(did_preprocess)
-                mkwrapt << cleans << ":\n\t"
-                        << "make -f "
-                        << pbx_dir << Option::dir_sep << "qt_preprocess.mak $@\n";
-            writingUnixMakefileGenerator = false;
-        }
-    }
-
     // Scheme
     {
         QString xcodeSpecDir = project->first("QMAKE_XCODE_SPECDIR").toQString();
@@ -1700,9 +1707,9 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                 QTextStream defaultSchemeStream(&defaultSchemeFile);
                 QString schemeData = defaultSchemeStream.readAll();
 
-                schemeData.replace("@QMAKE_ORIG_TARGET@", target);
-                schemeData.replace("@TARGET_PBX_KEY@", keyFor(pbx_dir + "QMAKE_PBX_TARGET"));
-                schemeData.replace("@TEST_BUNDLE_PBX_KEY@", keyFor("QMAKE_TEST_BUNDLE_REFERENCE"));
+                schemeData.replace(QLatin1String("@QMAKE_ORIG_TARGET@"), target);
+                schemeData.replace(QLatin1String("@TARGET_PBX_KEY@"), keyFor(pbx_dir + "QMAKE_PBX_TARGET"));
+                schemeData.replace(QLatin1String("@TEST_BUNDLE_PBX_KEY@"), keyFor("QMAKE_TEST_BUNDLE_REFERENCE"));
 
                 QTextStream outputSchemeStream(&outputSchemeFile);
                 outputSchemeStream << schemeData;

@@ -377,13 +377,13 @@ void tst_QMdiArea::subWindowActivated()
     while (workspace->activeSubWindow() ) {
         workspace->activeSubWindow()->close();
         qApp->processEvents();
-        QVERIFY(activeWindow == workspace->activeSubWindow());
+        QCOMPARE(activeWindow, workspace->activeSubWindow());
         QCOMPARE(spy.count(), 1);
         spy.clear();
     }
 
-    QVERIFY(activeWindow == 0);
-    QVERIFY(workspace->activeSubWindow() == 0);
+    QVERIFY(!activeWindow);
+    QVERIFY(!workspace->activeSubWindow());
     QCOMPARE(workspace->subWindowList().count(), 0);
 
     {
@@ -432,13 +432,13 @@ void tst_QMdiArea::subWindowActivated()
         QCOMPARE(spy.count(), 1);
         spy.clear();
         QVERIFY( activeWindow == window );
-        QVERIFY(workspace->activeSubWindow() == window);
+        QCOMPARE(workspace->activeSubWindow(), window);
         window->close();
         qApp->processEvents();
         QCOMPARE(spy.count(), 1);
         spy.clear();
-        QVERIFY(workspace->activeSubWindow() == 0);
-        QVERIFY( activeWindow == 0 );
+        QVERIFY(!workspace->activeSubWindow());
+        QVERIFY(!activeWindow);
     }
 }
 
@@ -497,9 +497,11 @@ void tst_QMdiArea::subWindowActivated2()
     spy.clear();
 
     mdiArea.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&mdiArea));
-    QTRY_COMPARE(spy.count(), 1);
-    QCOMPARE(mdiArea.activeSubWindow(), activeSubWindow);
+    mdiArea.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mdiArea));
+    QTRY_VERIFY(!spy.isEmpty()); // Normally 1, but 2 events might be received on some X11 window managers
+    QVERIFY(mdiArea.currentSubWindow());
+    QTRY_COMPARE(mdiArea.activeSubWindow(), activeSubWindow);
     spy.clear();
 
     if (qGuiApp->styleHints()->showIsFullScreen())
@@ -518,7 +520,7 @@ void tst_QMdiArea::subWindowActivated2()
 #ifdef Q_OS_MAC
     QSKIP("QTBUG-25298: This test is unstable on Mac.");
 #endif
-    if (qApp->platformName().toLower() == QStringLiteral("xcb"))
+    if (!QGuiApplication::platformName().compare(QLatin1String("xcb"), Qt::CaseInsensitive))
         QSKIP("QTBUG-25298: Unstable on some X11 window managers");
     QTRY_COMPARE(spy.count(), 1);
     QVERIFY(!mdiArea.activeSubWindow());
@@ -564,8 +566,8 @@ void tst_QMdiArea::subWindowActivatedWithMinimize()
 
     window1->close();
     qApp->processEvents();
-    QVERIFY(workspace->activeSubWindow() == 0);
-    QVERIFY( activeWindow == 0 );
+    QVERIFY(!workspace->activeSubWindow());
+    QVERIFY(!activeWindow);
 
     QVERIFY( workspace->subWindowList().count() == 0 );
 }
@@ -1104,7 +1106,7 @@ void tst_QMdiArea::addAndRemoveWindows()
     QVERIFY(window);
     qApp->processEvents();
     QCOMPARE(workspace.subWindowList().count(), 1);
-    QVERIFY(window->windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window->windowFlags(), DefaultWindowFlags);
     QCOMPARE(window->size(), workspace.viewport()->size());
     }
 
@@ -1115,7 +1117,7 @@ void tst_QMdiArea::addAndRemoveWindows()
     QVERIFY(window);
     qApp->processEvents();
     QCOMPARE(workspace.subWindowList().count(), 2);
-    QVERIFY(window->windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window->windowFlags(), DefaultWindowFlags);
     QCOMPARE(window->size(), window->minimumSize());
     }
 
@@ -1127,7 +1129,7 @@ void tst_QMdiArea::addAndRemoveWindows()
     QVERIFY(window);
     qApp->processEvents();
     QCOMPARE(workspace.subWindowList().count(), 3);
-    QVERIFY(window->windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window->windowFlags(), DefaultWindowFlags);
     QCOMPARE(window->size(), QSize(1500, 1500));
     }
 
@@ -1142,7 +1144,7 @@ void tst_QMdiArea::addAndRemoveWindows()
     QMdiSubWindow *window = new QMdiSubWindow;
     workspace.addSubWindow(window);
     qApp->processEvents();
-    QVERIFY(window->windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window->windowFlags(), DefaultWindowFlags);
     window->setWidget(new QWidget);
     QCOMPARE(workspace.subWindowList().count(), 4);
     QTest::ignoreMessage(QtWarningMsg, "QMdiArea::addSubWindow: window is already added");
@@ -1206,7 +1208,7 @@ void tst_QMdiArea::addAndRemoveWindowsWithReparenting()
 {
     QMdiArea workspace;
     QMdiSubWindow window(&workspace);
-    QVERIFY(window.windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window.windowFlags(), DefaultWindowFlags);
 
     // 0 because the window list contains widgets and not actual
     // windows. Silly, but that's the behavior.
@@ -1219,7 +1221,7 @@ void tst_QMdiArea::addAndRemoveWindowsWithReparenting()
     QCOMPARE(workspace.subWindowList().count(), 0);
     window.setParent(&workspace);
     QCOMPARE(workspace.subWindowList().count(), 1);
-    QVERIFY(window.windowFlags() == DefaultWindowFlags);
+    QCOMPARE(window.windowFlags(), DefaultWindowFlags);
 
     QTest::ignoreMessage(QtWarningMsg, "QMdiArea::addSubWindow: window is already added");
     workspace.addSubWindow(&window);

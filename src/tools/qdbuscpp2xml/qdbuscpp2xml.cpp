@@ -67,7 +67,7 @@ static const char docTypeHeader[] =
 
 #define PROGRAMNAME     "qdbuscpp2xml"
 #define PROGRAMVERSION  "0.2"
-#define PROGRAMCOPYRIGHT "Copyright (C) 2015 The Qt Company Ltd."
+#define PROGRAMCOPYRIGHT "Copyright (C) 2016 The Qt Company Ltd."
 
 static QString outputFile;
 static int flags;
@@ -396,6 +396,7 @@ static void parseCmdLine(QStringList &arguments)
 int main(int argc, char **argv)
 {
     QStringList args;
+    args.reserve(argc - 1);
     for (int n = 1; n < argc; ++n)
         args.append(QString::fromLocal8Bit(argv[n]));
     parseCmdLine(args);

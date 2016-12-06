@@ -91,7 +91,7 @@ public:
     }
     ~QTemporaryFileEngine();
 
-    bool isReallyOpen();
+    bool isReallyOpen() const;
     void setFileName(const QString &file);
     void setFileTemplate(const QString &fileTemplate);
 

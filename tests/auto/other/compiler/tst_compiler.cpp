@@ -336,17 +336,17 @@ struct Qxxx {};
 
 void tst_Compiler::detectDataStream()
 {
-    QVERIFY(QtTestInternal::DataStreamChecker<int>::HasDataStream == true);
-    QVERIFY(QtTestInternal::DataStreamChecker<uint>::HasDataStream == true);
+    QVERIFY(QtTestInternal::DataStreamChecker<int>::HasDataStream);
+    QVERIFY(QtTestInternal::DataStreamChecker<uint>::HasDataStream);
     QVERIFY(QtTestInternal::DataStreamChecker<char *>::HasDataStream == true);
     QVERIFY(QtTestInternal::DataStreamChecker<const int>::HasInDataStream == true);
     QVERIFY(QtTestInternal::DataStreamChecker<const int>::HasOutDataStream == false);
     QVERIFY(QtTestInternal::DataStreamChecker<const int>::HasDataStream == false);
-    QVERIFY(QtTestInternal::DataStreamChecker<double>::HasDataStream == true);
+    QVERIFY(QtTestInternal::DataStreamChecker<double>::HasDataStream);
 
-    QVERIFY(QtTestInternal::DataStreamChecker<QString>::HasDataStream == true);
-    QVERIFY(QtTestInternal::DataStreamChecker<MyString>::HasDataStream == true);
-    QVERIFY(QtTestInternal::DataStreamChecker<Qxxx>::HasDataStream == false);
+    QVERIFY(QtTestInternal::DataStreamChecker<QString>::HasDataStream);
+    QVERIFY(QtTestInternal::DataStreamChecker<MyString>::HasDataStream);
+    QVERIFY(!QtTestInternal::DataStreamChecker<Qxxx>::HasDataStream);
 
     QVERIFY(QtTestInternal::getSaveOperator<int>() != 0);
     QVERIFY(QtTestInternal::getSaveOperator<uint>() != 0);
@@ -354,7 +354,7 @@ void tst_Compiler::detectDataStream()
     QVERIFY(QtTestInternal::getSaveOperator<double>() != 0);
     QVERIFY(QtTestInternal::getSaveOperator<QString>() != 0);
     QVERIFY(QtTestInternal::getSaveOperator<MyString>() != 0);
-    QVERIFY(QtTestInternal::getSaveOperator<Qxxx>() == 0);
+    QVERIFY(!QtTestInternal::getSaveOperator<Qxxx>());
 }
 #else
 void tst_Compiler::detectDataStream()
@@ -636,8 +636,10 @@ void tst_Compiler::cxx11_alignas()
 #ifndef Q_COMPILER_ALIGNAS
     QSKIP("Compiler does not support C++11 feature");
 #else
-    alignas(double) char c;
-    QVERIFY(Q_ALIGNOF(c) == Q_ALIGNOF(double));
+    struct S {
+        alignas(double) char c;
+    };
+    QCOMPARE(Q_ALIGNOF(S), Q_ALIGNOF(double));
 #endif
 }
 
@@ -683,25 +685,105 @@ void tst_Compiler::cxx11_atomics()
 #endif
 }
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wignored-attributes")
+QT_WARNING_DISABLE_CLANG("-Wunused-local-typedefs")
+QT_WARNING_DISABLE_GCC("-Wattributes")
+QT_WARNING_DISABLE_GCC("-Wunused-local-typedefs")
+
+#ifndef __has_cpp_attribute
+#  define __has_cpp_attribute(x) 0
+#endif
+#ifdef Q_COMPILER_ATTRIBUTES
+[[noreturn]] void attribute_f1();
+void attribute_f2 [[noreturn]] ();
+#  if (defined(__cpp_namespace_attributes) && __cpp_namespace_attributes >= 201411) && __has_cpp_attribute(deprecated)
+namespace NS [[deprecated]] { }
+#  endif
+#endif
+
 void tst_Compiler::cxx11_attributes()
 {
 #ifndef Q_COMPILER_ATTRIBUTES
     QSKIP("Compiler does not support C++11 feature");
 #else
-    struct [[deprecated]] C {};
+    // Attributes in function parameters and using clauses cause MSVC 2015 to crash
+    // https://connect.microsoft.com/VisualStudio/feedback/details/2011594
+#  if (!defined(Q_CC_MSVC) || _MSC_FULL_VER >= 190023811) && !defined(Q_CC_INTEL)
+    void f([[ ]] int);
+    [[ ]] using namespace QtPrivate;
+    [[ ]] try {
+    } catch ([[]] int) {
+    }
+#  endif
+
+    struct [[ ]] A { };
+    struct B : A {
+        [[ ]] int m_i : 32;
+        [[noreturn]] void f() const { ::exit(0); }
+
+#  ifdef Q_COMPILER_DEFAULT_DELETE_MEMBERS
+        [[ ]] ~B() = default;
+        [[ ]] B(const B &) = delete;
+#  endif
+    };
+#  if __has_cpp_attribute(deprecated)
+    struct [[deprecated]] C { };
+#  endif
+    enum [[ ]] E { };
+    [[ ]] void [[ ]] * [[ ]] * [[ ]] ptr = 0;
+    int B::* [[ ]] pmm = 0;
+
+#  if __has_cpp_attribute(deprecated)
+    enum [[deprecated]] E2 {
+#    if defined(__cpp_enumerator_attributes) && __cpp_enumerator_attributes >= 201411
+        value [[deprecated]] = 0
+#    endif
+    };
+#  endif
+#  ifdef Q_COMPILER_LAMBDA
+    []()[[ ]] {}();
+#  endif
+#  ifdef Q_COMPILER_TEMPLATE_ALIAS
+    using B2 [[ ]] = B;
+#  endif
+
+    [[ ]] goto end;
+#  ifdef Q_CC_GNU
+    // Attributes in gnu:: namespace
+    [[gnu::unused]] end:
+        ;
     [[gnu::unused]] struct D {} d;
-    [[noreturn]] void f();
     struct D e [[gnu::used, gnu::unused]];
-    [[gnu::aligned(8)]] int i;
+    [[gnu::aligned(8)]] int i [[ ]];
+    int array[][[]] = { 1 };
+#  else
+    // Non GNU, so use an empty attribute
+    [[ ]] end:
+        ;
+    [[ ]] struct D {} d;
+    struct D e [[ ]];
+    [[ ]] int i [[ ]];
+    int array[][[]] = { 1 };
+#  endif
 
-[[gnu::unused]] end:
-    ;
+    int & [[ ]] lref = i;
+    int && [[ ]] rref = 1;
+    [[ ]] (void)1;
+    [[ ]] for (i = 0; i < 2; ++i)
+        ;
 
+    Q_UNUSED(ptr);
+    Q_UNUSED(pmm);
     Q_UNUSED(d);
     Q_UNUSED(e);
     Q_UNUSED(i);
+    Q_UNUSED(array);
+    Q_UNUSED(lref);
+    Q_UNUSED(rref);
 #endif
 }
+QT_WARNING_POP
 
 #ifdef Q_COMPILER_AUTO_FUNCTION
 auto autoFunction() -> unsigned
@@ -978,6 +1060,20 @@ void tst_Compiler::cxx11_nullptr()
 #endif
 }
 
+namespace SomeNamespace {
+class AdlOnly {
+    QVector<int> v;
+public:
+    AdlOnly() : v(5) { std::fill_n(v.begin(), v.size(), 42); }
+
+private:
+    friend QVector<int>::const_iterator begin(const AdlOnly &x) { return x.v.begin(); }
+    friend QVector<int>::const_iterator end(const AdlOnly &x) { return x.v.end(); }
+    friend QVector<int>::iterator begin(AdlOnly &x) { return x.v.begin(); }
+    friend QVector<int>::iterator end(AdlOnly &x) { return x.v.end(); }
+};
+}
+
 void tst_Compiler::cxx11_range_for()
 {
 #ifndef Q_COMPILER_RANGE_FOR
@@ -997,6 +1093,85 @@ void tst_Compiler::cxx11_range_for()
     l << 2;
     for (int i : ll)
         QCOMPARE(i, 2);
+
+    {
+        const int array[] = { 0, 1, 2, 3, 4 };
+        int i = 0;
+        for (const int &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (int e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (const int e : array)
+            QCOMPARE(e, array[i++]);
+#ifdef Q_COMPILER_AUTO_TYPE
+        i = 0;
+        for (const auto &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (auto &e : array) // auto deducing const
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (auto e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (const auto e : array)
+            QCOMPARE(e, array[i++]);
+#endif
+    }
+
+    {
+        int array[] = { 0, 1, 2, 3, 4 };
+        const int array2[] = { 10, 11, 12, 13, 14 };
+        int i = 0;
+        for (const int &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (int &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (int e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (const int e : array)
+            QCOMPARE(e, array[i++]);
+#ifdef Q_COMPILER_AUTO_TYPE
+        i = 0;
+        for (const auto &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (auto &e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (auto e : array)
+            QCOMPARE(e, array[i++]);
+        i = 0;
+        for (const auto e : array)
+            QCOMPARE(e, array[i++]);
+#endif
+        for (int &e : array)
+            e += 10;
+        i = 0;
+        for (const int &e : array)
+            QCOMPARE(e, array2[i++]);
+    }
+
+    {
+        const SomeNamespace::AdlOnly x;
+        for (const int &e : x)
+            QCOMPARE(e, 42);
+    }
+
+    {
+        SomeNamespace::AdlOnly x;
+        for (const int &e : x)
+            QCOMPARE(e, 42);
+        for (int &e : x)
+            e += 10;
+        for (const int &e : x)
+            QCOMPARE(e, 52);
+    }
 #endif
 }
 
@@ -1034,24 +1209,88 @@ void tst_Compiler::cxx11_ref_qualifiers()
 #endif
 }
 
+class MoveDefinedQString {
+    QString s;
+public:
+    MoveDefinedQString() : s() {}
+    explicit MoveDefinedQString(const QString &s) : s(s) {}
+    MoveDefinedQString(const MoveDefinedQString &other) : s(other.s) {}
+#ifdef Q_COMPILER_RVALUE_REFS
+    MoveDefinedQString(MoveDefinedQString &&other) : s(std::move(other.s)) { other.s.clear(); }
+    MoveDefinedQString &operator=(MoveDefinedQString &&other)
+    { s = std::move(other.s); other.s.clear(); return *this; }
+#endif
+    MoveDefinedQString &operator=(const MoveDefinedQString &other) { s = other.s; return *this; }
+
+private:
+    friend bool operator==(const MoveDefinedQString &lhs, const MoveDefinedQString &rhs)
+    { return lhs.s == rhs.s; }
+    friend bool operator!=(const MoveDefinedQString &lhs, const MoveDefinedQString &rhs)
+    { return !operator==(lhs, rhs); }
+    friend char* toString(const MoveDefinedQString &mds)
+    { using namespace QTest; return toString(mds.s); }
+};
+
 void tst_Compiler::cxx11_rvalue_refs()
 {
 #ifndef Q_COMPILER_RVALUE_REFS
     QSKIP("Compiler does not support C++11 feature");
 #else
-    int i = 1;
-    i = std::move(i);
+    // we require std::move:
+    {
+        int i = 1;
+        i = std::move(i);
 
-    QString s = "Hello";
-    QString t = std::move(s);
-    QCOMPARE(t, QString("Hello"));
+        MoveDefinedQString s("Hello");
+        MoveDefinedQString t = std::move(s);
+        QCOMPARE(t, MoveDefinedQString("Hello"));
+        QCOMPARE(s, MoveDefinedQString());
 
-    s = t;
-    t = std::move(s);
-    QCOMPARE(t, QString("Hello"));
+        s = t;
+        t = std::move(s);
+        QCOMPARE(t, MoveDefinedQString("Hello"));
+        QCOMPARE(s, MoveDefinedQString());
 
-    QString &&r = std::move(s);
-    QCOMPARE(r, QString("Hello"));
+        MoveDefinedQString &&r = std::move(t); // no actual move!
+        QCOMPARE(r, MoveDefinedQString("Hello"));
+        QCOMPARE(t, MoveDefinedQString("Hello")); // so 't' is unchanged
+    }
+
+    // we require std::forward:
+    {
+        MoveDefinedQString s("Hello");
+        MoveDefinedQString s2 = std::forward<MoveDefinedQString>(s); // forward as rvalue
+        QCOMPARE(s2, MoveDefinedQString("Hello"));
+        QCOMPARE(s, MoveDefinedQString());
+
+        MoveDefinedQString s3 = std::forward<MoveDefinedQString&>(s2); // forward as lvalue
+        QCOMPARE(s2, MoveDefinedQString("Hello"));
+        QCOMPARE(s3, MoveDefinedQString("Hello"));
+    }
+
+    // supported by MSVC only from November 2013 CTP, but only check for VC2015:
+# if !defined(Q_CC_MSVC) || defined(Q_CC_INTEL) || _MSC_VER >= 1900 // VS14 == VC2015
+    // we require automatic generation of move special member functions:
+    {
+        struct M { MoveDefinedQString s1, s2; };
+        M m1 = { MoveDefinedQString("Hello"), MoveDefinedQString("World") };
+        QCOMPARE(m1.s1, MoveDefinedQString("Hello"));
+        QCOMPARE(m1.s2, MoveDefinedQString("World"));
+        M m2 = std::move(m1);
+        QCOMPARE(m1.s1, MoveDefinedQString());
+        QCOMPARE(m1.s2, MoveDefinedQString());
+        QCOMPARE(m2.s1, MoveDefinedQString("Hello"));
+        QCOMPARE(m2.s2, MoveDefinedQString("World"));
+        M m3;
+        QCOMPARE(m3.s1, MoveDefinedQString());
+        QCOMPARE(m3.s2, MoveDefinedQString());
+        m3 = std::move(m2);
+        QCOMPARE(m2.s1, MoveDefinedQString());
+        QCOMPARE(m2.s2, MoveDefinedQString());
+        QCOMPARE(m3.s1, MoveDefinedQString("Hello"));
+        QCOMPARE(m3.s2, MoveDefinedQString("World"));
+    }
+# endif // MSVC < 2015
 #endif
 }
 
@@ -1264,9 +1503,11 @@ void tst_Compiler::cxx14_decltype_auto()
 }
 
 #if __cpp_return_type_deduction >= 201304
-auto returnTypeDeduction()
+auto returnTypeDeduction(bool choice)
 {
-    return 1U;
+    if (choice)
+        return 1U;
+    return returnTypeDeduction(!choice);
 }
 #endif
 
@@ -1275,7 +1516,7 @@ void tst_Compiler::cxx14_return_type_deduction()
 #if __cpp_return_type_deduction-0 < 201304
     QSKIP("Compiler does not support this C++14 feature");
 #else
-    QCOMPARE(returnTypeDeduction(), 1U);
+    QCOMPARE(returnTypeDeduction(false), 1U);
 #endif
 }
 

@@ -47,8 +47,13 @@ pcviewer.cfg
 *_resource.rc
 .#*
 *.*#
+*_wrapper.sh
+*_wrapper.bat
+wrapper.sh
+wrapper.bat
 core
 .qmake.cache
+.qmake.stash
 .qmake.vars
 .device.vars
 *.prl
@@ -114,6 +119,7 @@ mkspecs/default-host
 mkspecs/qconfig.pri
 mkspecs/qdevice.pri
 mkspecs/qfeatures.pri
+mkspecs/qhost.pri
 moc_*.cpp
 qmake/qmake.exe
 qmake/Makefile.bak
@@ -141,6 +147,8 @@ tools/activeqt/testcon/testcon.tlb
 translations/*.qm
 translations/*_untranslated.ts
 qrc_*.cpp
+*.version
+*.version.in
 
 # Test generated files
 QObject.log
@@ -173,6 +181,8 @@ tests/auto/cmake/build
 *.exe.embed.manifest
 *.exe_manifest.rc
 *.exe_manifest.res
+*.appxmanifest
+.qmake.winrt_uuid_*
 
 # MinGW generated files
 *.Debug
@@ -199,6 +209,7 @@ tools/qvfb/qwssignalhandler_p.h
 .rcc
 *.app
 config.status
+config.tests/common/c++default/c++default.ii
 config.tests/unix/cups/cups
 config.tests/unix/getaddrinfo/getaddrinfo
 config.tests/unix/getifaddrs/getifaddrs
@@ -222,7 +233,6 @@ config.tests/unix/sse2/sse2
 # ---------------------
 
 debug
-examples/tools/plugandpaint/plugins
 include/*
 include/*/*
 lib/*

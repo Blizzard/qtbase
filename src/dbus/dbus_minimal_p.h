@@ -34,6 +34,17 @@
 #ifndef DBUS_MINIMAL_P_H
 #define DBUS_MINIMAL_P_H
 
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists for the convenience
+// of other Qt classes.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
 extern "C" {
 
 // Equivalent to dbus-arch-deps.h
@@ -88,9 +99,11 @@ typedef dbus_uint32_t  dbus_bool_t;
 /* dbus-shared.h */
 #define DBUS_SERVICE_DBUS      "org.freedesktop.DBus"
 #define DBUS_PATH_DBUS  "/org/freedesktop/DBus"
+#define DBUS_PATH_LOCAL "/org/freedesktop/DBus/Local"
 #define DBUS_INTERFACE_DBUS           "org.freedesktop.DBus"
 #define DBUS_INTERFACE_INTROSPECTABLE "org.freedesktop.DBus.Introspectable"
 #define DBUS_INTERFACE_PROPERTIES     "org.freedesktop.DBus.Properties"
+#define DBUS_INTERFACE_LOCAL "org.freedesktop.DBus.Local"
 
 #define DBUS_NAME_FLAG_ALLOW_REPLACEMENT 0x1 /**< Allow another service to become the primary owner if requested */
 #define DBUS_NAME_FLAG_REPLACE_EXISTING  0x2 /**< Request to replace the current primary owner */

@@ -36,7 +36,6 @@
 #include "qwindowswindow.h"
 #include "qwindowsintegration.h"
 #include "qwindowsmousehandler.h"
-#include "qwindowsscaling.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QObject>
@@ -48,6 +47,8 @@
 #include <QtGui/QTextCharFormat>
 #include <QtGui/QPalette>
 #include <QtGui/QGuiApplication>
+
+#include <private/qhighdpiscaling_p.h>
 
 #include <algorithm>
 
@@ -84,6 +85,18 @@ static inline void imeNotifyCancelComposition(HWND hwnd)
     ImmNotifyIME(himc, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
     ImmReleaseContext(hwnd, himc);
 }
+
+static inline LCID languageIdFromLocaleId(LCID localeId)
+{
+    return localeId & 0xFFFF;
+}
+
+static inline LCID currentInputLanguageId()
+{
+    return languageIdFromLocaleId(reinterpret_cast<quintptr>(GetKeyboardLayout(0)));
+}
+
+Q_CORE_EXPORT QLocale qt_localeFromLCID(LCID id); // from qlocale_win.cpp
 
 /*!
     \class QWindowsInputContext
@@ -148,13 +161,16 @@ static inline void imeNotifyCancelComposition(HWND hwnd)
 HIMC QWindowsInputContext::m_defaultContext = 0;
 
 QWindowsInputContext::CompositionContext::CompositionContext() :
-    hwnd(0), haveCaret(false), position(0), isComposing(false)
+    hwnd(0), haveCaret(false), position(0), isComposing(false),
+    factor(1)
 {
 }
 
 QWindowsInputContext::QWindowsInputContext() :
     m_WM_MSIME_MOUSE(RegisterWindowMessage(L"MSIMEMouseOperation")),
-    m_endCompositionRecursionGuard(false)
+    m_endCompositionRecursionGuard(false),
+    m_languageId(currentInputLanguageId()),
+    m_locale(qt_localeFromLCID(m_languageId))
 {
     connect(QGuiApplication::inputMethod(), &QInputMethod::cursorRectangleChanged,
             this, &QWindowsInputContext::cursorRectChanged);
@@ -220,21 +236,24 @@ void QWindowsInputContext::updateEnabled()
         const bool accepted = inputMethodAccepted();
         if (QWindowsContext::verbose > 1)
             qCDebug(lcQpaInputMethods) << __FUNCTION__ << window << "accepted=" << accepted;
-        if (accepted) {
-            // Re-enable IME by associating default context saved on first disabling.
-            if (platformWindow->testFlag(QWindowsWindow::InputMethodDisabled)) {
-                ImmAssociateContext(platformWindow->handle(), QWindowsInputContext::m_defaultContext);
-                platformWindow->clearFlag(QWindowsWindow::InputMethodDisabled);
-            }
-        } else {
-            // Disable IME by associating 0 context. Store context first time.
-            if (!platformWindow->testFlag(QWindowsWindow::InputMethodDisabled)) {
-                const HIMC oldImC = ImmAssociateContext(platformWindow->handle(), 0);
-                platformWindow->setFlag(QWindowsWindow::InputMethodDisabled);
-                if (!QWindowsInputContext::m_defaultContext && oldImC)
-                    QWindowsInputContext::m_defaultContext = oldImC;
-            }
-        }
+            QWindowsInputContext::setWindowsImeEnabled(platformWindow, accepted);
+    }
+}
+
+void QWindowsInputContext::setWindowsImeEnabled(QWindowsWindow *platformWindow, bool enabled)
+{
+    if (!platformWindow || platformWindow->testFlag(QWindowsWindow::InputMethodDisabled) == !enabled)
+        return;
+    if (enabled) {
+        // Re-enable Windows IME by associating default context saved on first disabling.
+        ImmAssociateContext(platformWindow->handle(), QWindowsInputContext::m_defaultContext);
+        platformWindow->clearFlag(QWindowsWindow::InputMethodDisabled);
+    } else {
+        // Disable Windows IME by associating 0 context. Store context first time.
+        const HIMC oldImC = ImmAssociateContext(platformWindow->handle(), 0);
+        platformWindow->setFlag(QWindowsWindow::InputMethodDisabled);
+        if (!QWindowsInputContext::m_defaultContext && oldImC)
+            QWindowsInputContext::m_defaultContext = oldImC;
     }
 }
 
@@ -254,10 +273,12 @@ void QWindowsInputContext::cursorRectChanged()
     if (!m_compositionContext.hwnd)
         return;
     const QInputMethod *inputMethod = QGuiApplication::inputMethod();
-    const QRect cursorRectangleDip = inputMethod->cursorRectangle().toRect();
-    if (!cursorRectangleDip.isValid())
+    const QRectF cursorRectangleF = inputMethod->cursorRectangle();
+    if (!cursorRectangleF.isValid())
         return;
-    const QRect cursorRectangle = QWindowsScaling::mapToNative(cursorRectangleDip);
+    const QRect cursorRectangle =
+        QRectF(cursorRectangleF.topLeft() * m_compositionContext.factor,
+               cursorRectangleF.size() * m_compositionContext.factor).toRect();
 
     qCDebug(lcQpaInputMethods) << __FUNCTION__<< cursorRectangle;
 
@@ -304,13 +325,10 @@ void QWindowsInputContext::invokeAction(QInputMethod::Action action, int cursorP
     // position.
     const HIMC himc = ImmGetContext(m_compositionContext.hwnd);
     const HWND imeWindow = ImmGetDefaultIMEWnd(m_compositionContext.hwnd);
-    SendMessage(imeWindow, m_WM_MSIME_MOUSE, MAKELONG(MAKEWORD(MK_LBUTTON, cursorPosition == 0 ? 2 : 1), cursorPosition), (LPARAM)himc);
+    const WPARAM mouseOperationCode =
+        MAKELONG(MAKEWORD(MK_LBUTTON, cursorPosition == 0 ? 2 : 1), cursorPosition);
+    SendMessage(imeWindow, m_WM_MSIME_MOUSE, mouseOperationCode, LPARAM(himc));
     ImmReleaseContext(m_compositionContext.hwnd, himc);
-}
-
-QWindowsInputContext *QWindowsInputContext::instance()
-{
-    return static_cast<QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());
 }
 
 static inline QString getCompositionString(HIMC himc, DWORD dwIndex)
@@ -318,7 +336,7 @@ static inline QString getCompositionString(HIMC himc, DWORD dwIndex)
     enum { bufferSize = 256 };
     wchar_t buffer[bufferSize];
     const int length = ImmGetCompositionString(himc, dwIndex, buffer, bufferSize * sizeof(wchar_t));
-    return QString::fromWCharArray(buffer,  length / sizeof(wchar_t));
+    return QString::fromWCharArray(buffer,  size_t(length) / sizeof(wchar_t));
 }
 
 // Determine the converted string range as pair of start/length to be selected.
@@ -375,10 +393,10 @@ bool QWindowsInputContext::startComposition(HWND hwnd)
     QWindow *window = QGuiApplication::focusWindow();
     if (!window)
         return false;
-    qCDebug(lcQpaInputMethods) << __FUNCTION__ << fo << window;
+    qCDebug(lcQpaInputMethods) << __FUNCTION__ << fo << window << "language=" << m_languageId;
     if (!fo || QWindowsWindow::handleOf(window) != hwnd)
         return false;
-    initContext(hwnd, fo);
+    initContext(hwnd, QHighDpiScaling::factor(window), fo);
     startContextComposition();
     return true;
 }
@@ -474,7 +492,8 @@ bool QWindowsInputContext::composition(HWND hwnd, LPARAM lParamIn)
     if (lParam & GCS_RESULTSTR) {
         // A fixed result, return the converted string
         event->setCommitString(getCompositionString(himc, GCS_RESULTSTR));
-        endContextComposition();
+        if (!(lParam & GCS_DELTASTART))
+            endContextComposition();
     }
     const bool result = QCoreApplication::sendEvent(m_compositionContext.focusObject, event.data());
     qCDebug(lcQpaInputMethods) << '<' << __FUNCTION__ << "sending markup="
@@ -509,12 +528,13 @@ bool QWindowsInputContext::endComposition(HWND hwnd)
     return true;
 }
 
-void QWindowsInputContext::initContext(HWND hwnd, QObject *focusObject)
+void QWindowsInputContext::initContext(HWND hwnd, qreal factor, QObject *focusObject)
 {
     if (m_compositionContext.hwnd)
         doneContext();
     m_compositionContext.hwnd = hwnd;
     m_compositionContext.focusObject = focusObject;
+    m_compositionContext.factor = factor;
     // Create a hidden caret which is kept at the microfocus
     // position in update(). This is important for some
     // Chinese input methods.
@@ -548,15 +568,29 @@ bool QWindowsInputContext::handleIME_Request(WPARAM wParam,
         if (size < 0)
             return false;
         *result = size;
-        return true;
     }
-        break;
+        return true;
     case IMR_CONFIRMRECONVERTSTRING:
         return true;
     default:
         break;
     }
     return false;
+}
+
+void QWindowsInputContext::handleInputLanguageChanged(WPARAM wparam, LPARAM lparam)
+{
+    const LCID newLanguageId = languageIdFromLocaleId(WORD(lparam));
+    if (newLanguageId == m_languageId)
+        return;
+    const LCID oldLanguageId = m_languageId;
+    m_languageId = newLanguageId;
+    m_locale = qt_localeFromLCID(m_languageId);
+    emitLocaleChanged();
+
+    qCDebug(lcQpaInputMethods) << __FUNCTION__ << hex << showbase
+        << oldLanguageId  << "->" << newLanguageId << "Character set:"
+        << DWORD(wparam) << dec << noshowbase << m_locale;
 }
 
 /*!
@@ -580,13 +614,13 @@ int QWindowsInputContext::reconvertString(RECONVERTSTRING *reconv)
     if (!surroundingTextV.isValid())
         return -1;
     const QString surroundingText = surroundingTextV.toString();
-    const DWORD memSize = sizeof(RECONVERTSTRING)
-            + (surroundingText.length() + 1) * sizeof(ushort);
+    const int memSize = int(sizeof(RECONVERTSTRING))
+        + (surroundingText.length() + 1) * int(sizeof(ushort));
     qCDebug(lcQpaInputMethods) << __FUNCTION__ << " reconv=" << reconv
         << " surroundingText=" << surroundingText << " size=" << memSize;
     // If memory is not allocated, return the required size.
     if (!reconv)
-        return surroundingText.isEmpty() ? -1 : int(memSize);
+        return surroundingText.isEmpty() ? -1 : memSize;
 
     const QVariant posV = QInputMethod::queryFocusObject(Qt::ImCursorPosition, QVariant());
     const int pos = posV.isValid() ? posV.toInt() : 0;
@@ -605,18 +639,18 @@ int QWindowsInputContext::reconvertString(RECONVERTSTRING *reconv)
     QInputMethodEvent selectEvent(QString(), attributes);
     QCoreApplication::sendEvent(fo, &selectEvent);
 
-    reconv->dwSize = memSize;
+    reconv->dwSize = DWORD(memSize);
     reconv->dwVersion = 0;
 
-    reconv->dwStrLen = surroundingText.size();
+    reconv->dwStrLen = DWORD(surroundingText.size());
     reconv->dwStrOffset = sizeof(RECONVERTSTRING);
-    reconv->dwCompStrLen = endPos - startPos; // TCHAR count.
-    reconv->dwCompStrOffset = startPos * sizeof(ushort); // byte count.
+    reconv->dwCompStrLen = DWORD(endPos - startPos); // TCHAR count.
+    reconv->dwCompStrOffset = DWORD(startPos) * sizeof(ushort); // byte count.
     reconv->dwTargetStrLen = reconv->dwCompStrLen;
     reconv->dwTargetStrOffset = reconv->dwCompStrOffset;
     ushort *pastReconv = reinterpret_cast<ushort *>(reconv + 1);
     std::copy(surroundingText.utf16(), surroundingText.utf16() + surroundingText.size(),
-              pastReconv);
+              QT_MAKE_UNCHECKED_ARRAY_ITERATOR(pastReconv));
     return memSize;
 }
 

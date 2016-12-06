@@ -129,10 +129,6 @@ void QTuioHandler::processPackets()
         if (size != datagram.size())
             datagram.resize(size);
 
-        QOscBundle bundle(datagram);
-        if (!bundle.isValid())
-            continue;
-
         // "A typical TUIO bundle will contain an initial ALIVE message,
         // followed by an arbitrary number of SET messages that can fit into the
         // actual bundle capacity and a concluding FSEQ message. A minimal TUIO
@@ -140,7 +136,19 @@ void QTuioHandler::processPackets()
         // messages. The FSEQ frame ID is incremented for each delivered bundle,
         // while redundant bundles can be marked using the frame sequence ID
         // -1."
-        QList<QOscMessage> messages = bundle.messages();
+        QList<QOscMessage> messages;
+
+        QOscBundle bundle(datagram);
+        if (bundle.isValid()) {
+            messages = bundle.messages();
+        } else {
+            QOscMessage msg(datagram);
+            if (!msg.isValid()) {
+                qCWarning(lcTuioSet) << "Got invalid datagram.";
+                continue;
+            }
+            messages.push_back(msg);
+        }
 
         foreach (const QOscMessage &message, messages) {
             if (message.addressPattern() != "/tuio/2Dcur") {
@@ -202,7 +210,7 @@ void QTuioHandler::process2DCurAlive(const QOscMessage &message)
 
     for (int i = 1; i < arguments.count(); ++i) {
         if (QMetaType::Type(arguments.at(i).type()) != QMetaType::Int) {
-            qWarning() << "Ignoring malformed TUIO alive message (bad argument on position" << i << arguments << ")";
+            qWarning() << "Ignoring malformed TUIO alive message (bad argument on position" << i << arguments << ')';
             return;
         }
 
@@ -291,7 +299,6 @@ QWindowSystemInterface::TouchPoint QTuioHandler::cursorToTouchPoint(const QTuioC
         tp.normalPosition = m_transform.map(tp.normalPosition);
 
     tp.state = tc.state();
-    tp.area = QRectF(0, 0, 1, 1);
 
     // we map the touch to the size of the window. we do this, because frankly,
     // trying to figure out which part of the screen to hit in order to press an
@@ -313,10 +320,19 @@ void QTuioHandler::process2DCurFseq(const QOscMessage &message)
     Q_UNUSED(message); // TODO: do we need to do anything with the frame id?
 
     QWindow *win = QGuiApplication::focusWindow();
+    // With TUIO the first application takes exclusive ownership of the "device"
+    // we cannot attach more than one application to the same port anyway.
+    // Forcing delivery makes it easy to use simulators in the same machine
+    // and forget about headaches about unfocused TUIO windows.
+    static bool forceDelivery = qEnvironmentVariableIsSet("QT_TUIOTOUCH_DELIVER_WITHOUT_FOCUS");
+    if (!win && QGuiApplication::topLevelWindows().length() > 0 && forceDelivery)
+          win = QGuiApplication::topLevelWindows().at(0);
+
     if (!win)
         return;
 
     QList<QWindowSystemInterface::TouchPoint> tpl;
+    tpl.reserve(m_activeCursors.size() + m_deadCursors.size());
 
     foreach (const QTuioCursor &tc, m_activeCursors) {
         QWindowSystemInterface::TouchPoint tp = cursorToTouchPoint(tc, win);

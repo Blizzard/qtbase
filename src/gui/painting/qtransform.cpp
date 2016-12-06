@@ -34,6 +34,7 @@
 
 #include "qdatastream.h"
 #include "qdebug.h"
+#include "qhashfunctions.h"
 #include "qmatrix.h"
 #include "qregion.h"
 #include "qpainterpath.h"
@@ -776,6 +777,29 @@ bool QTransform::operator==(const QTransform &o) const
 }
 
 /*!
+    \since 5.6
+    \relates QTransform
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
+*/
+uint qHash(const QTransform &key, uint seed) Q_DECL_NOTHROW
+{
+    QtPrivate::QHashCombine hash;
+    seed = hash(key.m11(), seed);
+    seed = hash(key.m12(), seed);
+    seed = hash(key.m21(), seed);
+    seed = hash(key.m22(), seed);
+    seed = hash(key.dx(),  seed);
+    seed = hash(key.dy(),  seed);
+    seed = hash(key.m13(), seed);
+    seed = hash(key.m23(), seed);
+    seed = hash(key.m33(), seed);
+    return seed;
+}
+
+
+/*!
     \fn bool QTransform::operator!=(const QTransform &matrix) const
     Returns \c true if this matrix is not equal to the given \a matrix,
     otherwise returns \c false.
@@ -1357,7 +1381,9 @@ static QPolygonF mapProjective(const QTransform &transform, const QPolygonF &pol
     path = transform.map(path);
 
     QPolygonF result;
-    for (int i = 0; i < path.elementCount(); ++i)
+    const int elementCount = path.elementCount();
+    result.reserve(elementCount);
+    for (int i = 0; i < elementCount; ++i)
         result << path.elementAt(i);
     return result;
 }

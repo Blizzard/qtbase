@@ -31,12 +31,6 @@
 **
 ****************************************************************************/
 
-//#define WINVER 0x0500
-#if !defined Q_OS_WINRT && (_WIN32_WINNT < 0x0400)
-#define _WIN32_WINNT 0x0400
-#endif
-
-
 #include "qthread.h"
 #include "qthread_p.h"
 #include "qthreadstorage.h"
@@ -68,6 +62,30 @@
 
 #ifndef QT_NO_THREAD
 QT_BEGIN_NAMESPACE
+
+#ifdef Q_OS_WINRT
+inline DWORD qWinRTTlsAlloc() {
+    return FlsAlloc(0);
+}
+
+inline bool qWinRTTlsFree(DWORD dwTlsIndex) {
+    return FlsFree(dwTlsIndex);
+}
+
+inline LPVOID qWinRTTlsGetValue(DWORD dwTlsIndex) {
+    return FlsGetValue(dwTlsIndex);
+}
+
+inline bool qWinRTTlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue) {
+    return FlsSetValue(dwTlsIndex, lpTlsValue);
+}
+
+#define TlsAlloc qWinRTTlsAlloc
+#define TlsFree qWinRTTlsFree
+#define TlsSetValue qWinRTTlsSetValue
+#define TlsGetValue qWinRTTlsGetValue
+
+#endif // Q_OS_WINRT
 
 void qt_watch_adopted_thread(const HANDLE adoptedThreadHandle, QThread *qthread);
 DWORD WINAPI qt_adopted_thread_watcher_function(LPVOID);
@@ -118,10 +136,10 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         }
         threadData->deref();
         threadData->isAdopted = true;
-        threadData->threadId = reinterpret_cast<Qt::HANDLE>(GetCurrentThreadId());
+        threadData->threadId = reinterpret_cast<Qt::HANDLE>(quintptr(GetCurrentThreadId()));
 
         if (!QCoreApplicationPrivate::theMainThread) {
-            QCoreApplicationPrivate::theMainThread = threadData->thread;
+            QCoreApplicationPrivate::theMainThread = threadData->thread.load();
             // TODO: is there a way to reflect the branch's behavior using
             // WinRT API?
         } else {
@@ -340,7 +358,7 @@ unsigned int __stdcall QT_ENSURE_STACK_ALIGNED_FOR_SSE QThreadPrivate::start(voi
 
     qt_create_tls();
     TlsSetValue(qt_current_thread_data_tls_index, data);
-    data->threadId = reinterpret_cast<Qt::HANDLE>(GetCurrentThreadId());
+    data->threadId = reinterpret_cast<Qt::HANDLE>(quintptr(GetCurrentThreadId()));
 
     QThread::setTerminationEnabled(false);
 
@@ -413,7 +431,7 @@ void QThreadPrivate::finish(void *arg, bool lockAnyway)
 
 Qt::HANDLE QThread::currentThreadId() Q_DECL_NOTHROW
 {
-    return reinterpret_cast<Qt::HANDLE>(GetCurrentThreadId());
+    return reinterpret_cast<Qt::HANDLE>(quintptr(GetCurrentThreadId()));
 }
 
 int QThread::idealThreadCount() Q_DECL_NOTHROW

@@ -623,6 +623,8 @@ void QUndoStack::push(QUndoCommand *cmd)
     Marks the stack as clean and emits cleanChanged() if the stack was
     not already clean.
 
+    This is typically called when a document is saved, for example.
+
     Whenever the stack returns to this state through the use of undo/redo
     commands, it emits the signal cleanChanged(). This signal is also
     emitted when the stack leaves the clean state.
@@ -924,7 +926,7 @@ QAction *QUndoStack::createRedoAction(QObject *parent, const QString &prefix) co
     Calls to beginMacro() and endMacro() may be nested, but every call to
     beginMacro() must have a matching call to endMacro().
 
-    While a macro is composed, the stack is disabled. This means that:
+    While a macro is being composed, the stack is disabled. This means that:
     \list
     \li indexChanged() and cleanChanged() are not emitted,
     \li canUndo() and canRedo() return false,
@@ -1167,5 +1169,8 @@ bool QUndoStack::isActive() const
 */
 
 QT_END_NAMESPACE
+
+#include "moc_qundostack.cpp"
+#include "moc_qundostack_p.cpp"
 
 #endif // QT_NO_UNDOSTACK

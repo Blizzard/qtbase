@@ -222,6 +222,18 @@ qint64 QStorageInfo::bytesTotal() const
 }
 
 /*!
+    \since 5.6
+    Returns the optimal transfer block size for this filesystem.
+
+    Returns -1 if QStorageInfo could not determine the size or if the QStorageInfo
+    object is not valid.
+ */
+int QStorageInfo::blockSize() const
+{
+    return d->blockSize;
+}
+
+/*!
     Returns the type name of the filesystem.
 
     This is a platform-dependent function, and filesystem names can vary
@@ -238,7 +250,7 @@ QByteArray QStorageInfo::fileSystemType() const
 /*!
     Returns the device for this volume.
 
-    For example, on Unix filesystems (including OS X), this returns the
+    For example, on Unix filesystems (including \macos), this returns the
     devpath like \c /dev/sda0 for local storages. On Windows, it returns the UNC
     path starting with \c \\\\?\\ for local storages (in other words, the volume GUID).
 

@@ -86,7 +86,7 @@
 #include <qdatetimeedit.h>
 #include <qmath.h>
 #include <qpair.h>
-#include <qset.h>
+#include <qvector.h>
 #include <QtWidgets/qgraphicsproxywidget.h>
 #include <QtWidgets/qgraphicsview.h>
 
@@ -209,11 +209,13 @@ public:
     void drawNSViewInRect(QCocoaWidget widget, NSView *view, const QRect &rect, QPainter *p, bool isQWidget = true, QCocoaDrawRectBlock drawRectBlock = nil) const;
     void resolveCurrentNSView(QWindow *window);
 
+    void drawFocusRing(QPainter *p, const QRect &targetRect, int hMargin, int vMargin, qreal radius = 0) const;
+
 public:
     mutable QPointer<QObject> pressedButton;
     mutable QPointer<QObject> defaultButton;
     mutable QPointer<QObject> autoDefaultButton;
-    static  QSet<QPointer<QObject> > scrollBars;
+    static  QVector<QPointer<QObject> > scrollBars;
 
     struct ButtonState {
         int frame;

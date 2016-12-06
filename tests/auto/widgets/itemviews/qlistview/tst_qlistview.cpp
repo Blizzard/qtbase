@@ -38,6 +38,7 @@
 #include <qapplication.h>
 #include <qlistview.h>
 #include <private/qlistview_p.h>
+#include <private/qcoreapplication_p.h>
 #include <qlistwidget.h>
 #include <qitemdelegate.h>
 #include <qstandarditemmodel.h>
@@ -148,7 +149,10 @@ private slots:
     void spacing();
     void testScrollToWithHidden();
     void testViewOptions();
+    void taskQTBUG_39902_mutualScrollBars_data();
     void taskQTBUG_39902_mutualScrollBars();
+    void horizontalScrollingByVerticalWheelEvents();
+    void taskQTBUG_51086_skippingIndexesInSelectedIndexes();
 };
 
 // Testing get/set functions
@@ -1208,7 +1212,7 @@ void tst_QListView::scrollTo()
     list << "Short item";
     model.setStringList(list);
     lv.setModel(&model);
-    lv.setFixedSize(100, 200);
+    lv.setFixedSize(110, 200);
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
 
@@ -2017,8 +2021,7 @@ void tst_QListView::styleOptionViewItem()
         public:
             void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
             {
-                QVERIFY(qstyleoption_cast<const QStyleOptionViewItemV4 *>(&option));
-                QStyleOptionViewItemV4 opt(option);
+                QStyleOptionViewItem opt(option);
                 initStyleOption(&opt, index);
 
                 QCOMPARE(opt.index, index);
@@ -2359,8 +2362,21 @@ private:
     QStyle* m_oldStyle;
 };
 
+void tst_QListView::taskQTBUG_39902_mutualScrollBars_data()
+{
+    QTest::addColumn<QAbstractItemView::ScrollMode>("horizontalScrollMode");
+    QTest::addColumn<QAbstractItemView::ScrollMode>("verticalScrollMode");
+    QTest::newRow("per item / per item") << QAbstractItemView::ScrollPerItem << QAbstractItemView::ScrollPerItem;
+    QTest::newRow("per pixel / per item") << QAbstractItemView::ScrollPerPixel << QAbstractItemView::ScrollPerItem;
+    QTest::newRow("per item / per pixel") << QAbstractItemView::ScrollPerItem << QAbstractItemView::ScrollPerPixel;
+    QTest::newRow("per pixel / per pixel") << QAbstractItemView::ScrollPerPixel << QAbstractItemView::ScrollPerPixel;
+}
+
 void tst_QListView::taskQTBUG_39902_mutualScrollBars()
 {
+    QFETCH(QAbstractItemView::ScrollMode, horizontalScrollMode);
+    QFETCH(QAbstractItemView::ScrollMode, verticalScrollMode);
+
     QWidget window;
     window.resize(400, 300);
     QListView *view = new QListView(&window);
@@ -2371,6 +2387,9 @@ void tst_QListView::taskQTBUG_39902_mutualScrollBars()
     for (int i = 0; i < model.rowCount(); ++i)
         model.setData(model.index(i, 0), itemSize, Qt::SizeHintRole);
     view->setModel(&model);
+
+    view->setVerticalScrollMode(verticalScrollMode);
+    view->setHorizontalScrollMode(horizontalScrollMode);
 
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -2412,7 +2431,7 @@ void tst_QListView::taskQTBUG_39902_mutualScrollBars()
     QTRY_VERIFY(view->horizontalScrollBar()->isVisible());
     QTRY_VERIFY(view->verticalScrollBar()->isVisible());
 
-    // now remove just one single pixel in with -> both scroll bars will show up since they depend on each other
+    // now remove just one single pixel in width -> both scroll bars will show up since they depend on each other
     view->resize(itemSize.width() + view->frameWidth() * 2 - 1, model.rowCount() * itemSize.height() + view->frameWidth() * 2);
     QTRY_VERIFY(view->horizontalScrollBar()->isVisible());
     QTRY_VERIFY(view->verticalScrollBar()->isVisible());
@@ -2421,6 +2440,85 @@ void tst_QListView::taskQTBUG_39902_mutualScrollBars()
     view->resize(itemSize.width() + view->frameWidth() * 2, model.rowCount() * itemSize.height() + view->frameWidth() * 2);
     QTRY_VERIFY(!view->horizontalScrollBar()->isVisible());
     QTRY_VERIFY(!view->verticalScrollBar()->isVisible());
+
+   // now remove just one single pixel in height -> both scroll bars will show up since they depend on each other
+    view->resize(itemSize.width() + view->frameWidth() * 2, model.rowCount() * itemSize.height() + view->frameWidth() * 2 - 1);
+    QTRY_VERIFY(view->horizontalScrollBar()->isVisible());
+    QTRY_VERIFY(view->verticalScrollBar()->isVisible());
+}
+
+void tst_QListView::horizontalScrollingByVerticalWheelEvents()
+{
+    QListView lv;
+    lv.setWrapping(true);
+
+    TestDelegate *delegate = new TestDelegate(&lv);
+    delegate->m_sizeHint = QSize(100, 100);
+    lv.setItemDelegate(delegate);
+
+    QtTestModel model;
+    model.colCount = 1;
+    model.rCount = 100;
+
+    lv.setModel(&model);
+
+    lv.resize(300, 300);
+    lv.show();
+    QTest::qWaitForWindowExposed(&lv);
+
+    QPoint globalPos = lv.geometry().center();
+    QPoint pos = lv.viewport()->geometry().center();
+
+    QWheelEvent wheelDownEvent(pos, globalPos, QPoint(0, 0), QPoint(0, -120), -120, Qt::Vertical, 0, 0);
+    QWheelEvent wheelUpEvent(pos, globalPos, QPoint(0, 0), QPoint(0, 120), 120, Qt::Vertical, 0, 0);
+    QWheelEvent wheelLeftDownEvent(pos, globalPos, QPoint(0, 0), QPoint(120, -120), -120, Qt::Vertical, 0, 0);
+
+    int hValue = lv.horizontalScrollBar()->value();
+    QApplication::sendEvent(lv.viewport(), &wheelDownEvent);
+    QVERIFY(lv.horizontalScrollBar()->value() > hValue);
+
+    QApplication::sendEvent(lv.viewport(), &wheelUpEvent);
+    QCOMPARE(lv.horizontalScrollBar()->value(), hValue);
+
+    QApplication::sendEvent(lv.viewport(), &wheelLeftDownEvent);
+    QCOMPARE(lv.horizontalScrollBar()->value(), hValue);
+
+    // ensure that vertical wheel events are not converted when vertical
+    // scroll bar is not visible but vertical scrolling is possible
+    lv.setWrapping(false);
+    lv.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    QApplication::processEvents();
+
+    int vValue = lv.verticalScrollBar()->value();
+    QApplication::sendEvent(lv.viewport(), &wheelDownEvent);
+    QVERIFY(lv.verticalScrollBar()->value() > vValue);
+}
+
+void tst_QListView::taskQTBUG_51086_skippingIndexesInSelectedIndexes()
+{
+    // simple way to get access to selectedIndexes()
+    class QListViewWithPublicSelectedIndexes : public QListView
+    {
+    public:
+        using QListView::selectedIndexes;
+    };
+
+    QStandardItemModel data(10, 1);
+    QItemSelectionModel selections(&data);
+    QListViewWithPublicSelectedIndexes list;
+    list.setModel(&data);
+    list.setSelectionModel(&selections);
+
+    list.setRowHidden(7, true);
+    list.setRowHidden(8, true);
+
+    for (int i = 0, count = data.rowCount(); i < count; ++i)
+        selections.select(data.index(i, 0), QItemSelectionModel::Select);
+
+    const QModelIndexList indexes = list.selectedIndexes();
+
+    QVERIFY(!indexes.contains(data.index(7, 0)));
+    QVERIFY(!indexes.contains(data.index(8, 0)));
 }
 
 QTEST_MAIN(tst_QListView)

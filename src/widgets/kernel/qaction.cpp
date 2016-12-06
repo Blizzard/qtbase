@@ -39,10 +39,10 @@
 #include "qapplication.h"
 #include "qevent.h"
 #include "qlist.h"
-#include "qdebug.h"
 #include <private/qshortcutmap_p.h>
 #include <private/qapplication_p.h>
 #include <private/qmenu_p.h>
+#include <private/qdebug_p.h>
 
 #define QAPP_CHECK(functionName) \
     if (!qApp) { \
@@ -223,8 +223,9 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 
     \snippet mainwindows/application/mainwindow.cpp 19
     \codeline
-    \snippet mainwindows/application/mainwindow.cpp 28
-    \snippet mainwindows/application/mainwindow.cpp 31
+    \code
+    fileMenu->addAction(openAct);
+    \endcode
 
     We recommend that actions are created as children of the window
     they are used in. In most cases actions will be children of
@@ -248,16 +249,16 @@ void QActionPrivate::setShortcutEnabled(bool enable, QShortcutMap &map)
 /*!
     \enum QAction::MenuRole
 
-    This enum describes how an action should be moved into the application menu on OS X.
+    This enum describes how an action should be moved into the application menu on \macos.
 
     \value NoRole This action should not be put into the application menu
     \value TextHeuristicRole This action should be put in the application menu based on the action's text
            as described in the QMenuBar documentation.
     \value ApplicationSpecificRole This action should be put in the application menu with an application specific role
-    \value AboutQtRole This action matches handles the "About Qt" menu item.
+    \value AboutQtRole This action handles the "About Qt" menu item.
     \value AboutRole This action should be placed where the "About" menu item is in the application menu. The text of
            the menu item will be set to "About <application name>". The application name is fetched from the
-           \c{Info.plist} file in the application's bundle (See \l{Qt for OS X - Deployment}).
+           \c{Info.plist} file in the application's bundle (See \l{Qt for macOS - Deployment}).
     \value PreferencesRole This action should be placed where the  "Preferences..." menu item is in the application menu.
     \value QuitRole This action should be placed where the Quit menu item is in the application menu.
 
@@ -1229,12 +1230,12 @@ void QAction::activate(ActionEvent event)
     \brief the action's menu role
     \since 4.2
 
-    This indicates what role the action serves in the application menu on Mac
-    OS X. By default all action have the TextHeuristicRole, which means that
+    This indicates what role the action serves in the application menu on
+    \macos. By default all actions have the TextHeuristicRole, which means that
     the action is added based on its text (see QMenuBar for more information).
 
     The menu role can only be changed before the actions are put into the menu
-    bar in OS X (usually just before the first application window is
+    bar in \macos (usually just before the first application window is
     shown).
 */
 void QAction::setMenuRole(MenuRole menuRole)
@@ -1269,7 +1270,7 @@ QAction::MenuRole QAction::menuRole() const
     For example:
     \snippet code/src_gui_kernel_qaction.cpp 0
 
-    \sa QAction::icon, QApplication::setAttribute()
+    \sa QAction::icon, QCoreApplication::setAttribute()
 */
 void QAction::setIconVisibleInMenu(bool visible)
 {
@@ -1294,6 +1295,31 @@ bool QAction::isIconVisibleInMenu() const
     }
     return d->iconVisibleInMenu;
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+Q_WIDGETS_EXPORT QDebug operator<<(QDebug d, const QAction *action)
+{
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << "QAction(" << static_cast<const void *>(action);
+    if (action) {
+        d << " text=" << action->text();
+        if (!action->toolTip().isEmpty())
+            d << " toolTip=" << action->toolTip();
+        if (action->isCheckable())
+            d << " checked=" << action->isChecked();
+        if (!action->shortcut().isEmpty())
+            d << " shortcut=" << action->shortcut();
+        d << " menuRole=";
+        QtDebugUtils::formatQEnum(d, action->menuRole());
+        d << " visible=" << action->isVisible();
+    } else {
+        d << '0';
+    }
+    d << ')';
+    return d;
+}
+#endif // QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
 

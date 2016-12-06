@@ -39,15 +39,27 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 
-#ifdef QT_WINRT_USE_DWRITE
 #include <QtCore/QUuid>
 #include <QtGui/private/qfontengine_ft_p.h>
 #include <dwrite_1.h>
 #include <wrl.h>
 using namespace Microsoft::WRL;
-#endif // QT_WINRT_USE_DWRITE
 
 QT_BEGIN_NAMESPACE
+
+Q_LOGGING_CATEGORY(lcQpaFonts, "qt.qpa.fonts")
+
+QDebug operator<<(QDebug d, const QFontDef &def)
+{
+    QDebugStateSaver saver(d);
+    d.nospace();
+    d << "Family=" << def.family << " Stylename=" << def.styleName
+        << " pointsize=" << def.pointSize << " pixelsize=" << def.pixelSize
+        << " styleHint=" << def.styleHint << " weight=" << def.weight
+        << " stretch=" << def.stretch << " hintingPreference="
+        << def.hintingPreference;
+    return d;
+}
 
 // Based on unicode range tables at http://www.microsoft.com/typography/otspec/os2.htm#ur
 static QFontDatabase::WritingSystem writingSystemFromUnicodeRange(const DWRITE_UNICODE_RANGE &range)
@@ -116,15 +128,14 @@ static QFontDatabase::WritingSystem writingSystemFromUnicodeRange(const DWRITE_U
 
 QString QWinRTFontDatabase::fontDir() const
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__;
     QString fontDirectory = QBasicFontDatabase::fontDir();
     if (!QFile::exists(fontDirectory)) {
         // Fall back to app directory + fonts, and just app directory after that
         const QString applicationDirPath = QCoreApplication::applicationDirPath();
         fontDirectory = applicationDirPath + QLatin1String("/fonts");
         if (!QFile::exists(fontDirectory)) {
-#ifdef QT_WINRT_USE_DWRITE
             if (m_fontFamilies.isEmpty())
-#endif
                 qWarning("No fonts directory found in application package.");
             fontDirectory = applicationDirPath;
         }
@@ -132,10 +143,10 @@ QString QWinRTFontDatabase::fontDir() const
     return fontDirectory;
 }
 
-#ifdef QT_WINRT_USE_DWRITE
-
 QWinRTFontDatabase::~QWinRTFontDatabase()
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__;
+
     foreach (IDWriteFontFile *fontFile, m_fonts.keys())
         fontFile->Release();
 
@@ -155,6 +166,8 @@ bool QWinRTFontDatabase::fontsAlwaysScalable() const
 
 void QWinRTFontDatabase::populateFontDatabase()
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__;
+
     ComPtr<IDWriteFactory1> factory;
     HRESULT hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED, __uuidof(IDWriteFactory1), &factory);
     if (FAILED(hr)) {
@@ -210,6 +223,8 @@ void QWinRTFontDatabase::populateFontDatabase()
 
 void QWinRTFontDatabase::populateFamily(const QString &familyName)
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__ << familyName;
+
     IDWriteFontFamily *fontFamily = m_fontFamilies.value(familyName);
     if (!fontFamily) {
         qWarning("The font family %s was not found.", qPrintable(familyName));
@@ -373,6 +388,8 @@ void QWinRTFontDatabase::populateFamily(const QString &familyName)
 
 QFontEngine *QWinRTFontDatabase::fontEngine(const QFontDef &fontDef, void *handle)
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__ << "FONTDEF" << fontDef << handle;
+
     if (!handle) // Happens if a font family population failed
         return 0;
 
@@ -434,8 +451,27 @@ QFontEngine *QWinRTFontDatabase::fontEngine(const QFontDef &fontDef, void *handl
     return engine;
 }
 
+QStringList QWinRTFontDatabase::fallbacksForFamily(const QString &family, QFont::Style style,
+                                                   QFont::StyleHint styleHint,
+                                                   QChar::Script script) const
+{
+    Q_UNUSED(style)
+    Q_UNUSED(styleHint)
+    Q_UNUSED(script)
+
+    qCDebug(lcQpaFonts) << __FUNCTION__ << family;
+
+    QStringList result;
+    if (family == QLatin1String("Helvetica"))
+        result.append(QStringLiteral("Arial"));
+    result.append(QBasicFontDatabase::fallbacksForFamily(family, style, styleHint, script));
+    return result;
+}
+
 void QWinRTFontDatabase::releaseHandle(void *handle)
 {
+    qCDebug(lcQpaFonts) << __FUNCTION__ << handle;
+
     if (!handle)
         return;
 
@@ -448,14 +484,5 @@ void QWinRTFontDatabase::releaseHandle(void *handle)
 
     QBasicFontDatabase::releaseHandle(handle);
 }
-
-#else // QT_WINRT_USE_DWRITE
-
-QFont QWinRTFontDatabase::defaultFont() const
-{
-    return QFont(QFontDatabase().families().value(0));
-}
-
-#endif // !QT_WINRT_USE_DWRITE
 
 QT_END_NAMESPACE

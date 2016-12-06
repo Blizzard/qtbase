@@ -38,14 +38,23 @@
 #include "qdiriterator.h"
 #include "qplatformdefs.h"
 #include <QDebug>
+#include <QPair>
 
 #if defined(QT_BUILD_CORE_LIB)
 #include "qcoreapplication.h"
 #endif
 
+#if !defined(Q_OS_QNX) && !defined(Q_OS_WIN) &&!defined(Q_OS_ANDROID)
+#  define USE_SYSTEM_MKDTEMP
+#endif
+
 #include <stdlib.h> // mkdtemp
-#if defined(Q_OS_QNX) || defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
+#ifndef USE_SYSTEM_MKDTEMP
 #include <private/qfilesystemengine_p.h>
+#endif
+
+#if !defined(Q_OS_WIN)
+#include <errno.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -59,7 +68,7 @@ public:
 
     void create(const QString &templateName);
 
-    QString path;
+    QString pathOrError;
     bool autoRemove;
     bool success;
 };
@@ -86,8 +95,7 @@ static QString defaultTemplateName()
     return QDir::tempPath() + QLatin1Char('/') + baseName + QLatin1String("-XXXXXX");
 }
 
-#if defined(Q_OS_QNX ) || defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
-
+#ifndef USE_SYSTEM_MKDTEMP
 static int nextRand(int &v)
 {
     int r = v % 62;
@@ -97,31 +105,28 @@ static int nextRand(int &v)
     return r;
 }
 
-static char *q_mkdtemp(char *templateName)
+QPair<QString, bool> q_mkdtemp(QString templateName)
 {
+    Q_ASSERT(templateName.endsWith(QLatin1String("XXXXXX")));
+
     static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-    const size_t length = strlen(templateName);
+    const int length = templateName.size();
 
-    char *XXXXXX = templateName + length - 6;
-
-    if ((length < 6u) || strncmp(XXXXXX, "XXXXXX", 6))
-        return 0;
+    QChar *XXXXXX = templateName.data() + length - 6;
 
     for (int i = 0; i < 256; ++i) {
         int v = qrand();
 
         /* Fill in the random bits.  */
-        XXXXXX[0] = letters[nextRand(v)];
-        XXXXXX[1] = letters[nextRand(v)];
-        XXXXXX[2] = letters[nextRand(v)];
-        XXXXXX[3] = letters[nextRand(v)];
-        XXXXXX[4] = letters[nextRand(v)];
-        XXXXXX[5] = letters[v % 62];
+        XXXXXX[0] = QLatin1Char(letters[nextRand(v)]);
+        XXXXXX[1] = QLatin1Char(letters[nextRand(v)]);
+        XXXXXX[2] = QLatin1Char(letters[nextRand(v)]);
+        XXXXXX[3] = QLatin1Char(letters[nextRand(v)]);
+        XXXXXX[4] = QLatin1Char(letters[nextRand(v)]);
+        XXXXXX[5] = QLatin1Char(letters[v % 62]);
 
-        QString templateNameStr = QFile::decodeName(templateName);
-
-        QFileSystemEntry fileSystemEntry(templateNameStr);
+        QFileSystemEntry fileSystemEntry(templateName);
         if (QFileSystemEngine::createDirectory(fileSystemEntry, false)) {
             QSystemError error;
             QFileSystemEngine::setPermissions(fileSystemEntry,
@@ -130,33 +135,49 @@ static char *q_mkdtemp(char *templateName)
                                               QFile::ExeOwner, error);
             if (error.error() != 0) {
                 if (!QFileSystemEngine::removeDirectory(fileSystemEntry, false))
-                    qWarning() << "Unable to remove unused directory" << templateNameStr;
+                    qWarning() << "Unable to remove unused directory" << templateName;
                 continue;
             }
-            return templateName;
+            return qMakePair(templateName, true);
         }
+#  ifdef Q_OS_WIN
+        const int exists = ERROR_ALREADY_EXISTS;
+        int code = GetLastError();
+#  else
+        const int exists = EEXIST;
+        int code = errno;
+#  endif
+        if (code != exists)
+            return qMakePair(qt_error_string(code), false);
     }
-    return 0;
+    return qMakePair(qt_error_string(), false);
 }
 
-#else // defined(Q_OS_QNX ) || defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
+#else // !USE_SYSTEM_MKDTEMP
 
-static char *q_mkdtemp(char *templateName)
+QPair<QString, bool> q_mkdtemp(char *templateName)
 {
-   return mkdtemp(templateName);
+    bool ok = (mkdtemp(templateName) != 0);
+    return qMakePair(ok ? QFile::decodeName(templateName) : qt_error_string(), ok);
 }
 
-#endif
+#endif // USE_SYSTEM_MKDTEMP
 
 void QTemporaryDirPrivate::create(const QString &templateName)
 {
+#ifndef USE_SYSTEM_MKDTEMP
+    QString buffer = templateName;
+    if (!buffer.endsWith(QLatin1String("XXXXXX")))
+        buffer += QLatin1String("XXXXXX");
+    const QPair<QString, bool> result = q_mkdtemp(buffer);
+#else // !USE_SYSTEM_MKDTEMP
     QByteArray buffer = QFile::encodeName(templateName);
     if (!buffer.endsWith("XXXXXX"))
         buffer += "XXXXXX";
-    if (q_mkdtemp(buffer.data())) { // modifies buffer
-        success = true;
-        path = QFile::decodeName(buffer.constData());
-    }
+    QPair<QString, bool> result = q_mkdtemp(buffer.data()); // modifies buffer
+#endif // USE_SYSTEM_MKDTEMP
+    pathOrError = result.first;
+    success = result.second;
 }
 
 //************* QTemporaryDir
@@ -256,12 +277,24 @@ bool QTemporaryDir::isValid() const
 }
 
 /*!
+   \since 5.6
+
+   If isValid() returns \c false, this function returns the error string that
+   explains why the creation of the temporary directory failed. Otherwise, this
+   function return an empty string.
+*/
+QString QTemporaryDir::errorString() const
+{
+    return d_ptr->success ? QString() : d_ptr->pathOrError;
+}
+
+/*!
    Returns the path to the temporary directory.
    Empty if the QTemporaryDir could not be created.
 */
 QString QTemporaryDir::path() const
 {
-    return d_ptr->path;
+    return d_ptr->success ? d_ptr->pathOrError : QString();
 }
 
 /*!

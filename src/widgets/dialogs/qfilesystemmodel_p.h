@@ -70,6 +70,8 @@ class Q_AUTOTEST_EXPORT QFileSystemModelPrivate : public QAbstractItemModelPriva
     Q_DECLARE_PUBLIC(QFileSystemModel)
 
 public:
+    enum { NumColumns = 4 };
+
     class QFileSystemNode
     {
     public:
@@ -105,6 +107,7 @@ public:
                 return true;
             return false;
         }
+        inline QFileInfo fileInfo() const { if (info) return info->fileInfo(); return QFileInfo(); }
         inline bool isFile() const { if (info) return info->isFile(); return true; }
         inline bool isSystem() const { if (info) return info->isSystem(); return true; }
         inline bool isHidden() const { if (info) return info->isHidden(); return false; }
@@ -220,8 +223,8 @@ public:
     }
     QFileSystemNode *node(const QModelIndex &index) const;
     QFileSystemNode *node(const QString &path, bool fetch = true) const;
-    inline QModelIndex index(const QString &path) { return index(node(path)); }
-    QModelIndex index(const QFileSystemNode *node) const;
+    inline QModelIndex index(const QString &path, int column = 0) { return index(node(path), column); }
+    QModelIndex index(const QFileSystemNode *node, int column = 0) const;
     bool filtersAcceptsNode(const QFileSystemNode *node) const;
     bool passNameFilters(const QFileSystemNode *node) const;
     void removeNode(QFileSystemNode *parentNode, const QString &name);
@@ -280,7 +283,7 @@ public:
 
     void _q_directoryChanged(const QString &directory, const QStringList &list);
     void _q_performDelayedSort();
-    void _q_fileSystemChanged(const QString &path, const QList<QPair<QString, QFileInfo> > &);
+    void _q_fileSystemChanged(const QString &path, const QVector<QPair<QString, QFileInfo> > &);
     void _q_resolvedName(const QString &fileName, const QString &resolvedName);
 
     static int naturalCompare(const QString &s1, const QString &s2, Qt::CaseSensitivity cs);
@@ -318,6 +321,7 @@ public:
     QList<Fetching> toFetch;
 
 };
+Q_DECLARE_TYPEINFO(QFileSystemModelPrivate::Fetching, Q_MOVABLE_TYPE);
 #endif // QT_NO_FILESYSTEMMODEL
 
 QT_END_NAMESPACE

@@ -1224,7 +1224,7 @@ void QStandardItem::setSelectable(bool selectable)
   The item delegate will render a checkable item with a check box next to the
   item's text.
 
-  \sa isCheckable(), setCheckState(), setTristate()
+  \sa isCheckable(), setCheckState(), setUserTristate(), setAutoTristate()
 */
 void QStandardItem::setCheckable(bool checkable)
 {
@@ -1244,33 +1244,87 @@ void QStandardItem::setCheckable(bool checkable)
 
   The default value is false.
 
-  \sa setCheckable(), checkState(), isTristate()
+  \sa setCheckable(), checkState(), isUserTristate(), isAutoTristate()
 */
 
 /*!
-  Sets whether the item is tristate. If \a tristate is true, the
-  item is checkable with three separate states; otherwise, the item
-  is checkable with two states. (Note that this also requires that
-  the item is checkable; see isCheckable().)
+  \fn void QStandardItem::setTristate(bool tristate)
+  \obsolete
 
-  \sa isTristate(), setCheckable(), setCheckState()
+  Use QStandardItem::setAutoTristate(bool tristate) instead.
+  For a tristate checkbox that the user can change between all three
+  states, use QStandardItem::setUserTristate(bool tristate) instead.
 */
-void QStandardItem::setTristate(bool tristate)
+
+/*!
+  \fn void QStandardItem::isTristate() const
+  \obsolete
+
+  Use QStandardItem::isAutoTristate() instead.
+  For a tristate checkbox that the user can change between all three
+  states, use QStandardItem::isUserTristate() instead.
+*/
+
+/*!
+  Determines that the item is tristate and controlled by QTreeWidget if \a tristate
+  is \c true.
+  This enables automatic management of the state of parent items in QTreeWidget
+  (checked if all children are checked, unchecked if all children are unchecked,
+  or partially checked if only some children are checked).
+
+  \since 5.6
+  \sa isAutoTristate(), setCheckable(), setCheckState()
+*/
+void QStandardItem::setAutoTristate(bool tristate)
 {
     Q_D(QStandardItem);
-    d->changeFlags(tristate, Qt::ItemIsTristate);
+    d->changeFlags(tristate, Qt::ItemIsAutoTristate);
 }
 
 /*!
-  \fn bool QStandardItem::isTristate() const
+  \fn bool QStandardItem::isAutoTristate() const
 
-  Returns whether the item is tristate; that is, if it's checkable with three
-  separate states.
+  Returns whether the item is tristate and is controlled by QTreeWidget.
 
   The default value is false.
 
-  \sa setTristate(), isCheckable(), checkState()
+  \since 5.6
+  \sa setAutoTristate(), isCheckable(), checkState()
 */
+
+/*!
+  Sets whether the item is tristate and controlled by the user.
+  If \a tristate is true, the user can cycle through three separate states;
+  otherwise, the item is checkable with two states.
+  (Note that this also requires that the item is checkable; see isCheckable().)
+
+  \since 5.6
+  \sa isUserTristate(), setCheckable(), setCheckState()
+*/
+void QStandardItem::setUserTristate(bool tristate)
+{
+    Q_D(QStandardItem);
+    d->changeFlags(tristate, Qt::ItemIsUserTristate);
+}
+
+/*!
+  \fn bool QStandardItem::isUserTristate() const
+  \since 5.6
+
+  Returns whether the item is tristate; that is, if it's checkable with three
+  separate states and the user can cycle through all three states.
+
+  The default value is false.
+
+  \sa setUserTristate(), isCheckable(), checkState()
+*/
+
+#if QT_DEPRECATED_SINCE(5, 6)
+void QStandardItem::setTristate(bool tristate)
+{
+    setAutoTristate(tristate);
+}
+#endif
 
 #ifndef QT_NO_DRAGANDDROP
 
@@ -1750,6 +1804,7 @@ QList<QStandardItem*> QStandardItem::takeRow(int row)
     int index = d->childIndex(row, 0);  // Will return -1 if there are no columns
     if (index != -1) {
         int col_count = d->columnCount();
+        items.reserve(col_count);
         for (int column = 0; column < col_count; ++column) {
             QStandardItem *ch = d->children.at(index + column);
             if (ch)
@@ -2467,7 +2522,9 @@ QList<QStandardItem*> QStandardItemModel::findItems(const QString &text,
     QModelIndexList indexes = match(index(0, column, QModelIndex()),
                                     Qt::DisplayRole, text, -1, flags);
     QList<QStandardItem*> items;
-    for (int i = 0; i < indexes.size(); ++i)
+    const int numIndexes = indexes.size();
+    items.reserve(numIndexes);
+    for (int i = 0; i < numIndexes; ++i)
         items.append(itemFromIndex(indexes.at(i)));
     return items;
 }

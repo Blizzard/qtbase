@@ -66,7 +66,6 @@ public:
     struct QDirNode
     {
         QDirNode() : parent(0), populated(false), stat(false) {}
-        ~QDirNode() { children.clear(); }
         QDirNode *parent;
         QFileInfo info;
         QIcon icon; // cache the icon
@@ -203,7 +202,7 @@ void QDirModelPrivate::invalidate()
     Directories can be created and removed using mkdir(), rmdir(), and the
     model will be automatically updated to take the changes into account.
 
-    \note QDirModel requires an instance of a GUI application.
+    \note QDirModel requires an instance of \l QApplication.
 
     \sa nameFilters(), setFilter(), filter(), QListView, QTreeView, QFileSystemModel,
     {Dir View Example}, {Model Classes}
@@ -863,7 +862,7 @@ QModelIndex QDirModel::index(const QString &path, int column) const
 #endif
 
     QStringList pathElements = absolutePath.split(QLatin1Char('/'), QString::SkipEmptyParts);
-    if ((pathElements.isEmpty() || !QFileInfo(path).exists())
+    if ((pathElements.isEmpty() || !QFileInfo::exists(path))
 #if !defined(Q_OS_WIN) || defined(Q_OS_WINCE)
         && path != QLatin1String("/")
 #endif

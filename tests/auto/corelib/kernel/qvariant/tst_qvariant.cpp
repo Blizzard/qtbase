@@ -2,6 +2,7 @@
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -278,6 +279,9 @@ private slots:
     void metaEnums();
     void compareSanity_data();
     void compareSanity();
+    void compareRich();
+
+    void accessSequentialContainerKey();
 
 private:
     void dataStream_data(QDataStream::Version version);
@@ -1710,12 +1714,16 @@ void tst_QVariant::compareNumbers_data() const
     QTest::newRow("float3") << qVariantFromValue(0.f) << qVariantFromValue(-1.f) << +1;
     QTest::newRow("float4") << qVariantFromValue(-float(qInf())) << qVariantFromValue(0.f) << -1;
     QTest::newRow("float5") << qVariantFromValue(0.f) << qVariantFromValue(-float(qInf())) << +1;
+    QTest::newRow("float6") << qVariantFromValue(-float(qInf())) << qVariantFromValue(-float(qInf())) << 0;
+    QTest::newRow("float7") << qVariantFromValue(float(qInf())) << qVariantFromValue(float(qInf())) << 0;
 
     QTest::newRow("double1") << qVariantFromValue(0.) << qVariantFromValue(0.) << 0;
     QTest::newRow("double2") << qVariantFromValue(-1.) << qVariantFromValue(0.) << -1;
     QTest::newRow("double3") << qVariantFromValue(0.) << qVariantFromValue(-1.) << +1;
     QTest::newRow("double4") << qVariantFromValue(-qInf()) << qVariantFromValue(0.) << -1;
     QTest::newRow("double5") << qVariantFromValue(0.) << qVariantFromValue(-qInf()) << +1;
+    QTest::newRow("double6") << qVariantFromValue(-double(qInf())) << qVariantFromValue(-qInf()) << 0;
+    QTest::newRow("double7") << qVariantFromValue(qInf()) << qVariantFromValue(qInf()) << 0;
 
     // mixed comparisons
     // fp + fp
@@ -1724,6 +1732,8 @@ void tst_QVariant::compareNumbers_data() const
     QTest::newRow("float+double3") << qVariantFromValue(0.f) << qVariantFromValue(-1.) << +1;
     QTest::newRow("float+double4") << qVariantFromValue(-float(qInf())) << qVariantFromValue(0.) << -1;
     QTest::newRow("float+double5") << qVariantFromValue(0.f) << qVariantFromValue(-qInf()) << +1;
+    QTest::newRow("float+double6") << qVariantFromValue(-float(qInf())) << qVariantFromValue(qInf()) << 0;
+    QTest::newRow("float+double7") << qVariantFromValue(float(qInf())) << qVariantFromValue(qInf()) << 0;
 
     // fp + int
     QTest::newRow("float+int1") << qVariantFromValue(0.f) << qVariantFromValue(0) << 0;
@@ -1734,6 +1744,7 @@ void tst_QVariant::compareNumbers_data() const
     QTest::newRow("double+int3") << qVariantFromValue(0.) << qVariantFromValue(-1) << +1;
     QTest::newRow("float+int4") << qVariantFromValue(1.5f) << qVariantFromValue(1) << +1;
     QTest::newRow("double+int4") << qVariantFromValue(1.5) << qVariantFromValue(1) << +1;
+    QTest::newRow("double+int5") << qVariantFromValue(qInf()) << qVariantFromValue(1) << +1;
 
     // fp + uint
     QTest::newRow("float+uint1") << qVariantFromValue(0.f) << qVariantFromValue(0U) << 0;
@@ -2491,14 +2502,26 @@ void tst_QVariant::variantMap()
 
     QVariant v = map;
     QVariantMap map2 = qvariant_cast<QVariantMap>(v);
-
     QCOMPARE(map2.value("test").toInt(), 42);
+    QCOMPARE(map2, map);
+
+    map2 = v.toMap();
+    QCOMPARE(map2.value("test").toInt(), 42);
+    QCOMPARE(map2, map);
 
     QVariant v2 = QVariant(QMetaType::type("QVariantMap"), &map);
     QCOMPARE(qvariant_cast<QVariantMap>(v2).value("test").toInt(), 42);
 
     QVariant v3 = QVariant(QMetaType::type("QMap<QString, QVariant>"), &map);
     QCOMPARE(qvariant_cast<QVariantMap>(v3).value("test").toInt(), 42);
+
+    // multi-keys
+    map.insertMulti("test", 47);
+    v = map;
+    map2 = qvariant_cast<QVariantMap>(v);
+    QCOMPARE(map2, map);
+    map2 = v.toMap();
+    QCOMPARE(map2, map);
 }
 
 void tst_QVariant::variantHash()
@@ -2508,14 +2531,26 @@ void tst_QVariant::variantHash()
 
     QVariant v = hash;
     QVariantHash hash2 = qvariant_cast<QVariantHash>(v);
-
     QCOMPARE(hash2.value("test").toInt(), 42);
+    QCOMPARE(hash2, hash);
+
+    hash2 = v.toHash();
+    QCOMPARE(hash2.value("test").toInt(), 42);
+    QCOMPARE(hash2, hash);
 
     QVariant v2 = QVariant(QMetaType::type("QVariantHash"), &hash);
     QCOMPARE(qvariant_cast<QVariantHash>(v2).value("test").toInt(), 42);
 
     QVariant v3 = QVariant(QMetaType::type("QHash<QString, QVariant>"), &hash);
     QCOMPARE(qvariant_cast<QVariantHash>(v3).value("test").toInt(), 42);
+
+    // multi-keys
+    hash.insertMulti("test", 47);
+    v = hash;
+    hash2 = qvariant_cast<QVariantHash>(v);
+    QCOMPARE(hash2, hash);
+    hash2 = v.toHash();
+    QCOMPARE(hash2, hash);
 }
 
 class CustomQObject : public QObject {
@@ -3233,10 +3268,18 @@ void tst_QVariant::convertIterables() const
         map.insert("3", 4);
         QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
         QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+
+        map.insertMulti("3", 5);
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
     }
     {
         QVariantMap map;
         map.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
+        QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
+
+        map.insertMulti("3", 5);
         QCOMPARE(QVariant::fromValue(map).value<QVariantHash>().count(), map.count());
         QCOMPARE(QVariant::fromValue(map).value<QVariantMap>().count(), map.count());
     }
@@ -3245,10 +3288,18 @@ void tst_QVariant::convertIterables() const
         hash.insert("3", 4);
         QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
         QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+
+        hash.insertMulti("3", 5);
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
     }
     {
         QVariantHash hash;
         hash.insert("3", 4);
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
+        QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
+
+        hash.insertMulti("3", 5);
         QCOMPARE(QVariant::fromValue(hash).value<QVariantHash>().count(), hash.count());
         QCOMPARE(QVariant::fromValue(hash).value<QVariantMap>().count(), hash.count());
     }
@@ -3357,9 +3408,6 @@ void tst_QVariant::numericalConvert_data()
 
 void tst_QVariant::numericalConvert()
 {
-#if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(__x86_64__)
-    QSKIP("Known to fail due to a GCC bug on at least Ubuntu 10.04 32-bit - check QTBUG-8959");
-#endif
     QFETCH(QVariant, v);
     QFETCH(bool, isInteger);
     double num = isInteger ? 5 : 5.3;
@@ -4582,6 +4630,16 @@ template<typename Enum> void testVariant(Enum value, bool *ok)
     QVERIFY(var2.convert(QMetaType::Int));
     QCOMPARE(var2.value<int>(), static_cast<int>(value));
 
+    if (static_cast<qint64>(value) <= INT_MAX) {
+        int intValue = static_cast<int>(value);
+        QVariant intVar = intValue;
+        QVERIFY(intVar.canConvert<Enum>());
+        QCOMPARE(intVar.value<Enum>(), value);
+    }
+    qint64 longValue = static_cast<qint64>(value);
+    QVERIFY(QVariant(longValue).canConvert<Enum>());
+    QCOMPARE(QVariant(longValue).value<Enum>(), value);
+
     *ok = true;
 }
 
@@ -4687,6 +4745,85 @@ void tst_QVariant::compareSanity()
         QVERIFY((value1 < value2) || (value1 > value2));
     }
 }
+
+static void richComparison(const QVariant& less, const QVariant& more)
+{
+    QVERIFY(less.type() == more.type());
+
+    QVERIFY(less < more);
+    QVERIFY(!(more < less));
+
+    QVERIFY(more > less);
+    QVERIFY(!(less > more));
+
+    QVERIFY(less <= more);
+    QVERIFY(!(more <= less));
+    QVERIFY(less <= less);
+
+    QVERIFY(more >= less);
+    QVERIFY(!(less >= more));
+    QVERIFY(more >= more);
+}
+
+void tst_QVariant::compareRich()
+{
+    richComparison(QUuid("{49d8ad2a-2ee8-4c3d-949f-1b5a3765ddf0}"),
+                   QUuid("{f6d56824-16e9-4543-a375-add2877c2d05}"));
+    richComparison(QByteArray::fromRawData("a", 1),
+                   QByteArray::fromRawData("b", 1));
+    richComparison(QStringLiteral("a"), QStringLiteral("b"));
+    richComparison(QLatin1String("a"), QLatin1String("b"));
+    richComparison(QChar('a'), QChar('b'));
+    richComparison(QDate(2016, 7, 23), QDate(2016, 7, 24));
+    richComparison(QTime(0, 0), QTime(0, 1));
+    richComparison(QDateTime(QDate(2016, 7, 23), QTime(0, 0)),
+                   QDateTime(QDate(2016, 7, 23), QTime(0, 1)));
+
+    richComparison(QStringList(), QStringList() << QStringLiteral("a"));
+    richComparison(QStringList(), QStringList() << QStringLiteral("a")
+                                                << QStringLiteral("b"));
+    richComparison(QStringList() << QStringLiteral("a"),
+                   QStringList() << QStringLiteral("b"));
+    richComparison(QStringList() << QStringLiteral("a"),
+                   QStringList() << QStringLiteral("b")
+                                 << QStringLiteral("c"));
+    richComparison(QStringList() << QStringLiteral("a")
+                                 << QStringLiteral("c"),
+                   QStringList() << QStringLiteral("b"));
+    richComparison(QStringList() << QStringLiteral("a")
+                                 << QStringLiteral("c"),
+                   QStringList() << QStringLiteral("b")
+                                 << QStringLiteral("d"));
+    richComparison(QStringList() << QStringLiteral("a")
+                                 << QStringLiteral("c"),
+                   QStringList() << QStringLiteral("a")
+                                 << QStringLiteral("d"));
+}
+
+void tst_QVariant::accessSequentialContainerKey()
+{
+    QString nameResult;
+
+    {
+    QMap<QString, QObject*> mapping;
+    QString name = QString::fromLatin1("Seven");
+    mapping.insert(name, Q_NULLPTR);
+
+    QVariant variant = QVariant::fromValue(mapping);
+
+    QAssociativeIterable iterable = variant.value<QAssociativeIterable>();
+    QAssociativeIterable::const_iterator iit = iterable.begin();
+    const QAssociativeIterable::const_iterator end = iterable.end();
+    for ( ; iit != end; ++iit) {
+        nameResult += iit.key().toString();
+    }
+    } // Destroy mapping
+    // Regression test for QTBUG-52246 - no memory corruption/double deletion
+    // of the string key.
+
+    QCOMPARE(nameResult, QStringLiteral("Seven"));
+}
+
 
 QTEST_MAIN(tst_QVariant)
 #include "tst_qvariant.moc"

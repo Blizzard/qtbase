@@ -52,7 +52,7 @@ typedef char *(*PtrXcursorLibraryGetTheme)(void *);
 typedef int (*PtrXcursorLibrarySetTheme)(void *, const char *);
 typedef int (*PtrXcursorLibraryGetDefaultSize)(void *);
 
-#ifdef XCB_USE_XLIB
+#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
 #include <X11/Xlib.h>
 enum {
     XCursorShape = CursorShape
@@ -300,7 +300,7 @@ QXcbCursor::QXcbCursor(QXcbConnection *conn, QXcbScreen *screen)
     const char *cursorStr = "cursor";
     xcb_open_font(xcb_connection(), cursorFont, strlen(cursorStr), cursorStr);
 
-#ifdef XCB_USE_XLIB
+#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
     static bool function_ptrs_not_initialized = true;
     if (function_ptrs_not_initialized) {
         QLibrary xcursorLib(QLatin1String("Xcursor"), 1);
@@ -491,7 +491,7 @@ xcb_cursor_t QXcbCursor::createNonStandardCursor(int cshape)
     return cursor;
 }
 
-#ifdef XCB_USE_XLIB
+#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
 bool updateCursorTheme(void *dpy, const QByteArray &theme) {
     if (!ptrXcursorLibraryGetTheme
             || !ptrXcursorLibrarySetTheme)
@@ -535,7 +535,7 @@ static xcb_cursor_t loadCursor(void *dpy, int cshape)
     }
     return cursor;
 }
-#endif //XCB_USE_XLIB
+#endif //XCB_USE_XLIB / QT_NO_LIBRARY
 
 xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
 {
@@ -544,7 +544,7 @@ xcb_cursor_t QXcbCursor::createFontCursor(int cshape)
     xcb_cursor_t cursor = XCB_NONE;
 
     // Try Xcursor first
-#ifdef XCB_USE_XLIB
+#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
     if (cshape >= 0 && cshape <= Qt::LastCursor) {
         void *dpy = connection()->xlib_display();
         // special case for non-standard dnd-* cursors
@@ -607,45 +607,47 @@ xcb_cursor_t QXcbCursor::createBitmapCursor(QCursor *cursor)
 }
 #endif
 
-void QXcbCursor::queryPointer(QXcbConnection *c, xcb_window_t *rootWin, QPoint *pos, int *keybMask)
+void QXcbCursor::queryPointer(QXcbConnection *c, QXcbVirtualDesktop **virtualDesktop, QPoint *pos, int *keybMask)
 {
     if (pos)
         *pos = QPoint();
-    xcb_screen_iterator_t it = xcb_setup_roots_iterator(c->setup());
-    while (it.rem) {
-        xcb_window_t root = it.data->root;
-        xcb_query_pointer_cookie_t cookie = xcb_query_pointer(c->xcb_connection(), root);
-        xcb_generic_error_t *err = 0;
-        xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(c->xcb_connection(), cookie, &err);
-        if (!err && reply) {
-            if (pos)
-                *pos = QPoint(reply->root_x, reply->root_y);
-            if (rootWin)
-                *rootWin = root;
-            if (keybMask)
-                *keybMask = reply->mask;
-            free(reply);
-            return;
+
+    xcb_window_t root = c->primaryVirtualDesktop()->root();
+    xcb_query_pointer_cookie_t cookie = xcb_query_pointer(c->xcb_connection(), root);
+    xcb_generic_error_t *err = 0;
+    xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(c->xcb_connection(), cookie, &err);
+    if (!err && reply) {
+        if (virtualDesktop) {
+            foreach (QXcbVirtualDesktop *vd, c->virtualDesktops()) {
+                if (vd->root() == reply->root) {
+                    *virtualDesktop = vd;
+                    break;
+                }
+            }
         }
-        free(err);
+        if (pos)
+            *pos = QPoint(reply->root_x, reply->root_y);
+        if (keybMask)
+            *keybMask = reply->mask;
         free(reply);
-        xcb_screen_next(&it);
+        return;
     }
+    free(err);
+    free(reply);
 }
 
 QPoint QXcbCursor::pos() const
 {
     QPoint p;
     queryPointer(connection(), 0, &p);
-    return m_screen->mapFromNative(p);
+    return p;
 }
 
 void QXcbCursor::setPos(const QPoint &pos)
 {
-    const QPoint xPos = m_screen->mapToNative(pos);
-    xcb_window_t root = 0;
-    queryPointer(connection(), &root, 0);
-    xcb_warp_pointer(xcb_connection(), XCB_NONE, root, 0, 0, 0, 0, xPos.x(), xPos.y());
+    QXcbVirtualDesktop *virtualDesktop = Q_NULLPTR;
+    queryPointer(connection(), &virtualDesktop, 0);
+    xcb_warp_pointer(xcb_connection(), XCB_NONE, virtualDesktop->root(), 0, 0, 0, 0, pos.x(), pos.y());
     xcb_flush(xcb_connection());
 }
 

@@ -114,40 +114,6 @@
 */
 
 /*!
-    \fn QSet::QSet(const QSet<T> &other)
-
-    Constructs a copy of \a other.
-
-    This operation occurs in \l{constant time}, because QSet is
-    \l{implicitly shared}. This makes returning a QSet from a
-    function very fast. If a shared instance is modified, it will be
-    copied (copy-on-write), and this takes \l{linear time}.
-
-    \sa operator=()
-*/
-
-/*!
-    \fn QSet::QSet(QSet && other)
-
-    Move-constructs a QSet instance, making it point to the same object that
-    \a other was pointing to.
-*/
-
-
-/*!
-    \fn QSet<T> &QSet::operator=(const QSet<T> &other)
-
-    Assigns the \a other set to this set and returns a reference to
-    this set.
-*/
-
-/*!
-    \fn QSet<T> &QSet::operator=(QSet<T> &&other)
-
-    Move-assigns the \a other set to this set.
-*/
-
-/*!
     \fn void QSet::swap(QSet<T> &other)
 
     Swaps set \a other with this set. This operation is very fast and
@@ -418,6 +384,52 @@
     \sa constBegin(), end()
 */
 
+/*! \fn QSet::reverse_iterator QSet::rbegin()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the set, in reverse order.
+
+    \sa begin(), crbegin(), rend()
+*/
+
+/*! \fn QSet::const_reverse_iterator QSet::rbegin() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QSet::const_reverse_iterator QSet::crbegin() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the set, in reverse order.
+
+    \sa begin(), rbegin(), rend()
+*/
+
+/*! \fn QSet::reverse_iterator QSet::rend()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to one past
+    the last item in the set, in reverse order.
+
+    \sa end(), crend(), rbegin()
+*/
+
+/*! \fn QSet::const_reverse_iterator QSet::rend() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QSet::const_reverse_iterator QSet::crend() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to one
+    past the last item in the set, in reverse order.
+
+    \sa end(), rend(), rbegin()
+*/
+
 /*!
     \typedef QSet::Iterator
     \since 4.2
@@ -479,6 +491,38 @@
     Typedef for T. Provided for STL compatibility.
 */
 
+/*! \typedef QSet::reverse_iterator
+    \since 5.6
+
+    The QSet::reverse_iterator typedef provides an STL-style non-const
+    reverse iterator for QSet.
+
+    It is simply a typedef for \c{std::reverse_iterator<QSet::iterator>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QSet::rbegin(), QSet::rend(), QSet::const_reverse_iterator, QSet::iterator
+*/
+
+/*! \typedef QSet::const_reverse_iterator
+    \since 5.6
+
+    The QSet::const_reverse_iterator typedef provides an STL-style const
+    reverse iterator for QSet.
+
+    It is simply a typedef for \c{std::reverse_iterator<QSet::const_iterator>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QSet::rbegin(), QSet::rend(), QSet::reverse_iterator, QSet::const_iterator
+*/
+
 /*!
     \fn QSet::const_iterator QSet::insert(const T &value)
 
@@ -504,7 +548,17 @@
     Removes all items from this set that are not contained in the
     \a other set. A reference to this set is returned.
 
-    \sa operator&=(), unite(), subtract()
+    \sa intersects(), operator&=(), unite(), subtract()
+*/
+
+/*!
+    \fn bool QSet::intersects(const QSet<T> &other) const
+    \since 5.6
+
+    Returns \c true if this set has at least one item in common with
+    \a other.
+
+    \sa contains(), intersect()
 */
 
 /*!

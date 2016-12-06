@@ -140,6 +140,7 @@ QTreeModel::QTreeModel(QTreeModelPrivate &dd, QTreeWidget *parent)
 QTreeModel::~QTreeModel()
 {
     clear();
+    headerItem->view = Q_NULLPTR;
     delete headerItem;
     rootItem->view = 0;
     delete rootItem;
@@ -1720,12 +1721,12 @@ void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
         }
     } break;
     case Qt::CheckStateRole:
-        if ((itemFlags & Qt::ItemIsTristate) && value != Qt::PartiallyChecked) {
+        if ((itemFlags & Qt::ItemIsAutoTristate) && value != Qt::PartiallyChecked) {
             for (int i = 0; i < children.count(); ++i) {
                 QTreeWidgetItem *child = children.at(i);
                 if (child->data(column, role).isValid()) {// has a CheckState
                     Qt::ItemFlags f = itemFlags; // a little hack to avoid multiple dataChanged signals
-                    itemFlags &= ~Qt::ItemIsTristate;
+                    itemFlags &= ~Qt::ItemIsAutoTristate;
                     child->setData(column, role, value);
                     itemFlags = f;
                 }
@@ -1760,7 +1761,7 @@ void QTreeWidgetItem::setData(int column, int role, const QVariant &value)
         model->emitDataChanged(this, column);
         if (role == Qt::CheckStateRole) {
             QTreeWidgetItem *p;
-            for (p = par; p && (p->itemFlags & Qt::ItemIsTristate); p = p->par)
+            for (p = par; p && (p->itemFlags & Qt::ItemIsAutoTristate); p = p->par)
                 model->emitDataChanged(p, column);
         }
     }
@@ -1779,7 +1780,7 @@ QVariant QTreeWidgetItem::data(int column, int role) const
         break;
     case Qt::CheckStateRole:
         // special case for check state in tristate
-        if (children.count() && (itemFlags & Qt::ItemIsTristate))
+        if (children.count() && (itemFlags & Qt::ItemIsAutoTristate))
             return childrenCheckState(column);
         // fallthrough intended
    default:
@@ -3042,7 +3043,9 @@ QList<QTreeWidgetItem*> QTreeWidget::findItems(const QString &text, Qt::MatchFla
     QModelIndexList indexes = d->model->match(model()->index(0, column, QModelIndex()),
                                                 Qt::DisplayRole, text, -1, flags);
     QList<QTreeWidgetItem*> items;
-    for (int i = 0; i < indexes.size(); ++i)
+    const int indexesSize = indexes.size();
+    items.reserve(indexesSize);
+    for (int i = 0; i < indexesSize; ++i)
         items.append(d->item(indexes.at(i)));
     return items;
 }
@@ -3279,7 +3282,7 @@ QMimeData *QTreeWidget::mimeData(const QList<QTreeWidgetItem*> items) const
         for (int i = 0; i < items.count(); ++i) {
             QTreeWidgetItem *item = items.at(i);
             if (!item) {
-                qWarning() << "QTreeWidget::mimeData: Null-item passed";
+                qWarning("QTreeWidget::mimeData: Null-item passed");
                 return 0;
             }
 
@@ -3371,7 +3374,9 @@ void QTreeWidget::dropEvent(QDropEvent *event) {
         if (d->dropOn(event, &row, &col, &topIndex)) {
             QList<QModelIndex> idxs = selectedIndexes();
             QList<QPersistentModelIndex> indexes;
-            for (int i = 0; i < idxs.count(); i++)
+            const int indexesCount = idxs.count();
+            indexes.reserve(indexesCount);
+            for (int i = 0; i < indexesCount; i++)
                 indexes.append(idxs.at(i));
 
             if (indexes.contains(topIndex))
@@ -3382,7 +3387,7 @@ void QTreeWidget::dropEvent(QDropEvent *event) {
 
             // Remove the items
             QList<QTreeWidgetItem *> taken;
-            for (int i = indexes.count() - 1; i >= 0; --i) {
+            for (int i = 0; i < indexes.count(); ++i) {
                 QTreeWidgetItem *parent = itemFromIndex(indexes.at(i));
                 if (!parent || !parent->parent()) {
                     taken.append(takeTopLevelItem(indexes.at(i).row()));
@@ -3445,5 +3450,6 @@ bool QTreeWidget::event(QEvent *e)
 QT_END_NAMESPACE
 
 #include "moc_qtreewidget.cpp"
+#include "moc_qtreewidget_p.cpp"
 
 #endif // QT_NO_TREEWIDGET

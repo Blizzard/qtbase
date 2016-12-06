@@ -49,6 +49,7 @@
 #include <QString>
 #include <QList>
 #include <QThread>
+#include <QtCore/private/qthread_p.h>
 #include <qpa/qwindowsysteminterface.h>
 
 #if !defined(QT_NO_MTDEV)
@@ -65,33 +66,47 @@ class QEvdevTouchScreenHandler : public QObject
     Q_OBJECT
 
 public:
-    explicit QEvdevTouchScreenHandler(const QString &device, const QString &spec = QString(), QObject *parent = 0);
+    explicit QEvdevTouchScreenHandler(const QString &device, const QString &spec = QString(), QObject *parent = Q_NULLPTR);
     ~QEvdevTouchScreenHandler();
+
+    QTouchDevice *touchDevice() const;
 
 private slots:
     void readData();
 
 private:
+    void registerTouchDevice();
+    void unregisterTouchDevice();
+
     QSocketNotifier *m_notify;
     int m_fd;
     QEvdevTouchScreenData *d;
+    QTouchDevice *m_device;
 #if !defined(QT_NO_MTDEV)
     mtdev *m_mtdev;
 #endif
 };
 
-class QEvdevTouchScreenHandlerThread : public QThread
+class QEvdevTouchScreenHandlerThread : public QDaemonThread
 {
+    Q_OBJECT
 public:
-    explicit QEvdevTouchScreenHandlerThread(const QString &device, const QString &spec, QObject *parent = 0);
+    explicit QEvdevTouchScreenHandlerThread(const QString &device, const QString &spec, QObject *parent = Q_NULLPTR);
     ~QEvdevTouchScreenHandlerThread();
     void run() Q_DECL_OVERRIDE;
-    QEvdevTouchScreenHandler *handler() { return m_handler; }
+
+    bool isTouchDeviceRegistered() const;
+
+signals:
+    void touchDeviceRegistered();
 
 private:
+    Q_INVOKABLE void notifyTouchDeviceRegistered();
+
     QString m_device;
     QString m_spec;
     QEvdevTouchScreenHandler *m_handler;
+    bool m_touchDeviceRegistered;
 };
 
 QT_END_NAMESPACE

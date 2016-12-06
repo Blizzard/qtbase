@@ -67,7 +67,8 @@ public:
         RootWindow,
         ScreenSubpixelType,
         ScreenAntialiasingEnabled,
-        NoFontHinting
+        NoFontHinting,
+        AtspiBus
     };
 
     QXcbNativeInterface();
@@ -98,6 +99,7 @@ public:
     void *x11Screen();
     void *rootWindow();
     void *display();
+    void *atspiBus();
     void *connection();
     static void setStartupId(const char *);
     static void setAppTime(QScreen *screen, xcb_timestamp_t time);
@@ -105,7 +107,7 @@ public:
 
     Q_INVOKABLE void beep();
     Q_INVOKABLE bool systemTrayAvailable(const QScreen *screen) const;
-    Q_INVOKABLE void setParentRelativeBackPixmap(const QWindow *window);
+    Q_INVOKABLE void setParentRelativeBackPixmap(QWindow *window);
     Q_INVOKABLE bool systrayVisualHasAlphaChannel();
     Q_INVOKABLE bool requestSystemTrayWindowDock(const QWindow *window);
     Q_INVOKABLE QRect systemTrayWindowGlobalGeometry(const QWindow *window);
@@ -121,7 +123,6 @@ private:
     const QByteArray m_genericEventFilterType;
 
     xcb_atom_t m_sysTraySelectionAtom;
-    xcb_visualid_t m_systrayVisualId;
 
     static QXcbScreen *qPlatformScreenForWindow(QWindow *window);
 

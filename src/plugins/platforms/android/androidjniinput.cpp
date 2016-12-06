@@ -51,6 +51,7 @@ namespace QtAndroidInput
 
     static bool m_ignoreMouseEvents = false;
     static bool m_softwareKeyboardVisible = false;
+    static QRect m_softwareKeyboardRect;
 
     static QList<QWindowSystemInterface::TouchPoint> m_touchPoints;
 
@@ -70,18 +71,20 @@ namespace QtAndroidInput
                                                   candidatesEnd);
     }
 
-    void showSoftwareKeyboard(int left, int top, int width, int height, int inputHints)
+    void showSoftwareKeyboard(int left, int top, int width, int height, int inputHints, int enterKeyType)
     {
         QJNIObjectPrivate::callStaticMethod<void>(applicationClass(),
                                                   "showSoftwareKeyboard",
-                                                  "(IIIII)V",
+                                                  "(IIIIII)V",
                                                   left,
                                                   top,
                                                   width,
                                                   height,
-                                                  inputHints);
+                                                  inputHints,
+                                                  enterKeyType
+                                                 );
 #ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
-        qDebug() << "@@@ SHOWSOFTWAREKEYBOARD" << left << top << width << height << inputHints;
+        qDebug() << "@@@ SHOWSOFTWAREKEYBOARD" << left << top << width << height << inputHints << enterKeyType;
 #endif
     }
 
@@ -104,6 +107,11 @@ namespace QtAndroidInput
     bool isSoftwareKeyboardVisible()
     {
         return m_softwareKeyboardVisible;
+    }
+
+    QRect softwareKeyboardRect()
+    {
+        return m_softwareKeyboardRect;
     }
 
 
@@ -236,6 +244,63 @@ namespace QtAndroidInput
 
         QWindow *window = QtAndroid::topLevelWindowAt(m_touchPoints.at(0).area.center().toPoint());
         QWindowSystemInterface::handleTouchEvent(window, touchDevice, m_touchPoints);
+    }
+
+    static bool isTabletEventSupported(JNIEnv */*env*/, jobject /*thiz*/)
+    {
+#ifdef QT_NO_TABLETEVENT
+        return false;
+#else
+        return true;
+#endif // QT_NO_TABLETEVENT
+    }
+
+    static void tabletEvent(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint deviceId, jlong time, jint action,
+        jint pointerType, jint buttonState, jfloat x, jfloat y, jfloat pressure)
+    {
+#ifndef QT_NO_TABLETEVENT
+        QPointF globalPosF(x, y);
+        QPoint globalPos((int)x, (int)y);
+        QWindow *tlw = topLevelWindowAt(globalPos);
+        QPointF localPos = tlw ? (globalPosF - tlw->position()) : globalPosF;
+
+        // Galaxy Note with plain Android:
+        // 0 1 0    stylus press
+        // 2 1 0    stylus drag
+        // 1 1 0    stylus release
+        // 0 1 2    stylus press with side-button held
+        // 2 1 2    stylus drag with side-button held
+        // 1 1 2    stylus release with side-button held
+        // Galaxy Note 4 with Samsung firmware:
+        // 0 1 0    stylus press
+        // 2 1 0    stylus drag
+        // 1 1 0    stylus release
+        // 211 1 2  stylus press with side-button held
+        // 213 1 2  stylus drag with side-button held
+        // 212 1 2  stylus release with side-button held
+        // when action == ACTION_UP (1) it's a release; otherwise we say which button is pressed
+        Qt::MouseButtons buttons = Qt::NoButton;
+        switch (action) {
+        case 1:     // ACTION_UP
+        case 212:   // stylus release while side-button held on Galaxy Note 4
+            buttons = Qt::NoButton;
+            break;
+        default:    // action is press or drag
+            if (buttonState == 0)
+                buttons = Qt::LeftButton;
+            else // 2 means RightButton
+                buttons = Qt::MouseButtons(buttonState);
+            break;
+        }
+
+#ifdef QT_DEBUG_ANDROID_STYLUS
+        qDebug() << action << pointerType << buttonState << '@' << x << y << "pressure" << pressure << ": buttons" << buttons;
+#endif
+
+        QWindowSystemInterface::handleTabletEvent(tlw, ulong(time),
+            localPos, globalPosF, QTabletEvent::Stylus, pointerType,
+            buttons, pressure, 0, 0, 0., 0., 0, deviceId, Qt::NoModifier);
+#endif // QT_NO_TABLETEVENT
     }
 
     static int mapAndroidKey(int key)
@@ -633,7 +698,7 @@ namespace QtAndroidInput
             return Qt::Key_AudioCycleTrack;
 
         default:
-            qWarning() << "Unhandled key code " << key << "!";
+            qWarning() << "Unhandled key code " << key << '!';
             return 0;
         }
     }
@@ -686,11 +751,32 @@ namespace QtAndroidInput
     static void keyboardVisibilityChanged(JNIEnv */*env*/, jobject /*thiz*/, jboolean visibility)
     {
         m_softwareKeyboardVisible = visibility;
+        if (!visibility)
+            m_softwareKeyboardRect = QRect();
+
         QAndroidInputContext *inputContext = QAndroidInputContext::androidInputContext();
-        if (inputContext && qGuiApp)
+        if (inputContext && qGuiApp) {
             inputContext->emitInputPanelVisibleChanged();
+            if (!visibility)
+                inputContext->emitKeyboardRectChanged();
+        }
 #ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
         qDebug() << "@@@ KEYBOARDVISIBILITYCHANGED" << inputContext;
+#endif
+    }
+
+    static void keyboardGeometryChanged(JNIEnv */*env*/, jobject /*thiz*/, jint x, jint y, jint w, jint h)
+    {
+        QRect r = QRect(x, y, w, h);
+        if (r == m_softwareKeyboardRect)
+            return;
+        m_softwareKeyboardRect = r;
+        QAndroidInputContext *inputContext = QAndroidInputContext::androidInputContext();
+        if (inputContext && qGuiApp)
+            inputContext->emitKeyboardRectChanged();
+
+#ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
+        qDebug() << "@@@ KEYBOARDRECTCHANGED" << m_softwareKeyboardRect;
 #endif
     }
 
@@ -702,9 +788,12 @@ namespace QtAndroidInput
         {"mouseUp", "(III)V", (void *)mouseUp},
         {"mouseMove", "(III)V", (void *)mouseMove},
         {"longPress", "(III)V", (void *)longPress},
+        {"isTabletEventSupported", "()Z", (void *)isTabletEventSupported},
+        {"tabletEvent", "(IIJIIIFFF)V", (void *)tabletEvent},
         {"keyDown", "(IIIZ)V", (void *)keyDown},
         {"keyUp", "(IIIZ)V", (void *)keyUp},
-        {"keyboardVisibilityChanged", "(Z)V", (void *)keyboardVisibilityChanged}
+        {"keyboardVisibilityChanged", "(Z)V", (void *)keyboardVisibilityChanged},
+        {"keyboardGeometryChanged", "(IIII)V", (void *)keyboardGeometryChanged}
     };
 
     bool registerNatives(JNIEnv *env)

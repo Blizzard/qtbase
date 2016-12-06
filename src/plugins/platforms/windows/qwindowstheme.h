@@ -34,7 +34,10 @@
 #ifndef QWINDOWSTHEME_H
 #define QWINDOWSTHEME_H
 
+#include "qwindowsthreadpoolrunner.h"
 #include <qpa/qplatformtheme.h>
+
+#include <QtCore/QVariant>
 
 QT_BEGIN_NAMESPACE
 
@@ -51,9 +54,9 @@ public:
     bool usePlatformNativeDialog(DialogType type) const Q_DECL_OVERRIDE;
     QPlatformDialogHelper *createPlatformDialogHelper(DialogType type) const Q_DECL_OVERRIDE;
     QVariant themeHint(ThemeHint) const Q_DECL_OVERRIDE;
-    virtual const QPalette *palette(Palette type = SystemPalette) const
+    const QPalette *palette(Palette type = SystemPalette) const Q_DECL_OVERRIDE
         { return m_palettes[type]; }
-    virtual const QFont *font(Font type = SystemFont) const
+    const QFont *font(Font type = SystemFont) const Q_DECL_OVERRIDE
         { return m_fonts[type]; }
 
     QPixmap standardPixmap(StandardPixmap sp, const QSizeF &size) const Q_DECL_OVERRIDE;
@@ -61,6 +64,7 @@ public:
                            QPlatformTheme::IconOptions iconOptions = 0) const Q_DECL_OVERRIDE;
 
     void windowsThemeChanged(QWindow *window);
+    void displayChanged() { refreshIconPixmapSizes(); }
 
     static const char *name;
 
@@ -70,10 +74,13 @@ private:
     void refreshPalettes();
     void clearFonts();
     void refreshFonts();
+    void refreshIconPixmapSizes();
 
     static QWindowsTheme *m_instance;
     QPalette *m_palettes[NPalettes];
     QFont *m_fonts[NFonts];
+    mutable QWindowsThreadPoolRunner m_threadPoolRunner;
+    QVariant m_fileIconSizes;
 };
 
 QT_END_NAMESPACE

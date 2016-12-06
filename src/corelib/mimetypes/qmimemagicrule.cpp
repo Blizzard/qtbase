@@ -176,7 +176,7 @@ static bool matchNumber(const QMimeMagicRulePrivate *d, const QByteArray &data)
     const char *p = data.constData() + d->startPos;
     const char *e = data.constData() + qMin(data.size() - int(sizeof(T)), d->endPos + 1);
     for ( ; p <= e; ++p) {
-        if ((*reinterpret_cast<const T*>(p) & mask) == (value & mask))
+        if ((qFromUnaligned<T>(reinterpret_cast<const uchar *>(p)) & mask) == (value & mask))
             return true;
     }
 

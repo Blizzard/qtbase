@@ -78,6 +78,11 @@ using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Storage;
 using namespace ABI::Windows::ApplicationModel;
+
+#if _MSC_VER < 1900
+#define Q_OS_WINRT_WIN81
+#endif
+
 #endif // Q_OS_WINRT
 
 #ifndef SPI_GETPLATFORMTYPE
@@ -407,7 +412,7 @@ static QString readLink(const QFileSystemEntry &link)
     Q_UNUSED(link);
     return QString();
 #endif // QT_NO_LIBRARY
-#else
+#elif !defined(QT_NO_WINCE_SHELLSDK)
     wchar_t target[MAX_PATH];
     QString result;
     if (SHGetShortcutTarget((wchar_t*)QFileInfo(link.filePath()).absoluteFilePath().replace(QLatin1Char('/'),QLatin1Char('\\')).utf16(), target, MAX_PATH)) {
@@ -418,6 +423,9 @@ static QString readLink(const QFileSystemEntry &link)
             result.remove(result.size()-1,1);
     }
     return result;
+#else // QT_NO_WINCE_SHELLSDK
+    Q_UNUSED(link);
+    return QString();
 #endif // Q_OS_WINCE
 }
 
@@ -519,7 +527,7 @@ QString QFileSystemEngine::nativeAbsoluteFilePath(const QString &path)
 {
     // can be //server or //server/share
     QString absPath;
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT_WIN81)
     QVarLengthArray<wchar_t, MAX_PATH> buf(qMax(MAX_PATH, path.size() + 1));
     wchar_t *fileName = 0;
     DWORD retLen = GetFullPathName((wchar_t*)path.utf16(), buf.size(), buf.data(), &fileName);
@@ -529,6 +537,16 @@ QString QFileSystemEngine::nativeAbsoluteFilePath(const QString &path)
     }
     if (retLen != 0)
         absPath = QString::fromWCharArray(buf.data(), retLen);
+#  if defined(Q_OS_WINRT)
+    // Win32 returns eg C:/ as root directory with a trailing /.
+    // WinRT returns the sandbox root without /.
+    // Also C:/../.. returns C:/ on Win32, while for WinRT it steps outside the package
+    // and goes beyond package root. Hence force the engine to stay inside
+    // the package.
+    const QString rootPath = QDir::toNativeSeparators(QDir::rootPath());
+    if (absPath.size() < rootPath.size() && rootPath.startsWith(absPath))
+        absPath = rootPath;
+#  endif // Q_OS_WINRT
 #elif !defined(Q_OS_WINCE)
     if (QDir::isRelativePath(path))
         absPath = QDir::toNativeSeparators(QDir::cleanPath(QDir::currentPath() + QLatin1Char('/') + path));
@@ -566,7 +584,7 @@ QFileSystemEntry QFileSystemEngine::absoluteName(const QFileSystemEntry &entry)
         ret = entry.filePath();
 #endif
     } else {
-#ifndef Q_OS_WINRT
+#ifndef Q_OS_WINRT_WIN81
         ret = QDir::cleanPath(QDir::currentPath() + QLatin1Char('/') + entry.filePath());
 #else
         // Some WinRT APIs do not support absolute paths (due to sandboxing).
@@ -861,7 +879,9 @@ static bool tryDriveUNCFallback(const QFileSystemEntry &fname, QFileSystemMetaDa
 #if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     if (fname.isDriveRoot()) {
         // a valid drive ??
+        const UINT oldErrorMode = ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
         DWORD drivesBitmask = ::GetLogicalDrives();
+        ::SetErrorMode(oldErrorMode);
         int drivebit = 1 << (fname.filePath().at(0).toUpper().unicode() - QLatin1Char('A').unicode());
         if (drivesBitmask & drivebit) {
             fileAttrib = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_SYSTEM;
@@ -1215,8 +1235,8 @@ QString QFileSystemEngine::rootPath()
     if (FAILED(item->get_Path(finalWinPath.GetAddressOf())))
         return ret;
 
-    ret = QDir::fromNativeSeparators(QString::fromWCharArray(finalWinPath.GetRawBuffer(nullptr)));
-
+    const QString qtWinPath = QDir::fromNativeSeparators(QString::fromWCharArray(finalWinPath.GetRawBuffer(nullptr)));
+    ret = qtWinPath.endsWith(QLatin1Char('/')) ? qtWinPath : qtWinPath + QLatin1Char('/');
 #else
     QString ret = QString::fromLatin1(qgetenv("SystemDrive"));
     if (ret.isEmpty())
@@ -1334,7 +1354,7 @@ bool QFileSystemEngine::setCurrentPath(const QFileSystemEntry &entry)
     if(!(meta.exists() && meta.isDirectory()))
         return false;
 
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT_WIN81)
     //TODO: this should really be using nativeFilePath(), but that returns a path in long format \\?\c:\foo
     //which causes many problems later on when it's returned through currentPath()
     return ::SetCurrentDirectory(reinterpret_cast<const wchar_t*>(QDir::toNativeSeparators(entry.filePath()).utf16())) != 0;
@@ -1347,7 +1367,7 @@ bool QFileSystemEngine::setCurrentPath(const QFileSystemEntry &entry)
 QFileSystemEntry QFileSystemEngine::currentPath()
 {
     QString ret;
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT_WIN81)
     DWORD size = 0;
     wchar_t currentName[PATH_MAX];
     size = ::GetCurrentDirectory(PATH_MAX, currentName);
@@ -1363,17 +1383,17 @@ QFileSystemEntry QFileSystemEngine::currentPath()
     }
     if (ret.length() >= 2 && ret[1] == QLatin1Char(':'))
         ret[0] = ret.at(0).toUpper(); // Force uppercase drive letters.
-#else // !Q_OS_WINCE && !Q_OS_WINRT
+#else // !Q_OS_WINCE && !Q_OS_WINRT_WIN81
     //TODO - a race condition exists when using currentPath / setCurrentPath from multiple threads
     if (qfsPrivateCurrentDir.isEmpty())
-#ifndef Q_OS_WINRT
+#ifndef Q_OS_WINRT_WIN81
         qfsPrivateCurrentDir = QCoreApplication::applicationDirPath();
 #else
         qfsPrivateCurrentDir = QDir::rootPath();
 #endif
 
     ret = qfsPrivateCurrentDir;
-#endif // Q_OS_WINCE || Q_OS_WINRT
+#endif // Q_OS_WINCE || Q_OS_WINRT_WIN81
     return QFileSystemEntry(ret, QFileSystemEntry::FromNativePath());
 }
 
@@ -1398,8 +1418,9 @@ bool QFileSystemEngine::copyFile(const QFileSystemEntry &source, const QFileSyst
     COPYFILE2_EXTENDED_PARAMETERS copyParams = {
         sizeof(copyParams), COPY_FILE_FAIL_IF_EXISTS, NULL, NULL, NULL
     };
-    bool ret = ::CopyFile2((const wchar_t*)source.nativeFilePath().utf16(),
-                           (const wchar_t*)target.nativeFilePath().utf16(), &copyParams) != 0;
+    HRESULT hres = ::CopyFile2((const wchar_t*)source.nativeFilePath().utf16(),
+                           (const wchar_t*)target.nativeFilePath().utf16(), &copyParams);
+    bool ret = SUCCEEDED(hres);
 #endif // Q_OS_WINRT
     if(!ret)
         error = QSystemError(::GetLastError(), QSystemError::NativeError);

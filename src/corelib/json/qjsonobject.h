@@ -100,12 +100,13 @@ public:
         int i;
 
     public:
-        typedef std::bidirectional_iterator_tag iterator_category;
+        typedef std::random_access_iterator_tag iterator_category;
         typedef int difference_type;
         typedef QJsonValue value_type;
         typedef QJsonValueRef reference;
+        typedef QJsonValuePtr pointer;
 
-        Q_DECL_CONSTEXPR inline iterator() : o(0), i(0) {}
+        Q_DECL_CONSTEXPR inline iterator() : o(Q_NULLPTR), i(0) {}
         Q_DECL_CONSTEXPR inline iterator(QJsonObject *obj, int index) : o(obj), i(index) {}
 
         inline QString key() const { return o->keyAt(i); }
@@ -142,12 +143,13 @@ public:
         int i;
 
     public:
-        typedef std::bidirectional_iterator_tag iterator_category;
+        typedef std::random_access_iterator_tag iterator_category;
         typedef int difference_type;
         typedef QJsonValue value_type;
         typedef QJsonValue reference;
+        typedef QJsonValuePtr pointer;
 
-        Q_DECL_CONSTEXPR inline const_iterator() : o(0), i(0) {}
+        Q_DECL_CONSTEXPR inline const_iterator() : o(Q_NULLPTR), i(0) {}
         Q_DECL_CONSTEXPR inline const_iterator(const QJsonObject *obj, int index)
             : o(obj), i(index) {}
         inline const_iterator(const iterator &other)
@@ -180,10 +182,10 @@ public:
     friend class const_iterator;
 
     // STL style
-    inline iterator begin() { detach(); return iterator(this, 0); }
+    inline iterator begin() { detach2(); return iterator(this, 0); }
     inline const_iterator begin() const { return const_iterator(this, 0); }
     inline const_iterator constBegin() const { return const_iterator(this, 0); }
-    inline iterator end() { detach(); return iterator(this, size()); }
+    inline iterator end() { detach2(); return iterator(this, size()); }
     inline const_iterator end() const { return const_iterator(this, size()); }
     inline const_iterator constEnd() const { return const_iterator(this, size()); }
     iterator erase(iterator it);
@@ -213,7 +215,9 @@ private:
 
     QJsonObject(QJsonPrivate::Data *data, QJsonPrivate::Object *object);
     void initialize();
+    // ### Qt 6: remove me and merge with detach2
     void detach(uint reserve = 0);
+    bool detach2(uint reserve = 0);
     void compact();
 
     QString keyAt(int i) const;

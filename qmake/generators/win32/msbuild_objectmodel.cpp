@@ -328,7 +328,7 @@ static QString vcxCommandSeparator()
 static QString unquote(const QString &value)
 {
     QString result = value;
-    result.replace(QStringLiteral("\\\""), QStringLiteral("\""));
+    result.replace(QLatin1String("\\\""), QLatin1String("\""));
     return result;
 }
 
@@ -608,8 +608,8 @@ void VCXProjectWriter::write(XmlOutput &xml, VCProject &tool)
 
     xml.setIndentString("  ");
 
-    const QString toolsVersion = (tool.SdkVersion == QStringLiteral("10.0")) ? QStringLiteral("14.0")
-                                                                             : QStringLiteral("4.0");
+    const QString toolsVersion = (tool.SdkVersion == QLatin1String("10.0")) ? QStringLiteral("14.0")
+                                                                            : QStringLiteral("4.0");
 
     xml << decl("1.0", "utf-8")
         << tag("Project")
@@ -628,7 +628,7 @@ void VCXProjectWriter::write(XmlOutput &xml, VCProject &tool)
             << tagValue("Platform", tool.SingleProjects.at(i).PlatformName)
             << closetag();
         isWinRT = isWinRT || tool.SingleProjects.at(i).Configuration.WinRT;
-        isWinPhone = isWinPhone = tool.SingleProjects.at(i).Configuration.WinPhone;
+        isWinPhone = isWinPhone || tool.SingleProjects.at(i).Configuration.WinPhone;
     }
 
     xml << closetag()

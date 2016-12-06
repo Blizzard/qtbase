@@ -74,11 +74,11 @@ QT_BEGIN_NAMESPACE
        \l{http://standards.freedesktop.org/systemtray-spec/systemtray-spec-0.2.html freedesktop.org}
        XEmbed system tray specification.
     \li All X11 desktop environments that implement the D-Bus
-       \l{http://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/ StatusNotifierItem}
+       \l{http://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem}
        specification, including recent versions of KDE and Unity.
-    \li All supported versions of OS X. Note that the Growl
+    \li All supported versions of \macos. Note that the Growl
        notification system must be installed for
-       QSystemTrayIcon::showMessage() to display messages on Mac OS X prior to 10.8 (Mountain Lion).
+       QSystemTrayIcon::showMessage() to display messages on \macos prior to 10.8 (Mountain Lion).
     \endlist
 
     To check whether a system tray is present on the user's desktop,
@@ -157,7 +157,7 @@ QSystemTrayIcon::~QSystemTrayIcon()
     The menu will pop up when the user requests the context menu for the system
     tray icon by clicking the mouse button.
 
-    On OS X, this is currenly converted to a NSMenu, so the
+    On \macos, this is currenly converted to a NSMenu, so the
     aboutToHide() signal is not emitted.
 
     \note The system tray icon does not take ownership of the menu. You must
@@ -284,12 +284,6 @@ bool QSystemTrayIcon::isVisible() const
 */
 bool QSystemTrayIcon::event(QEvent *e)
 {
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
-    if (e->type() == QEvent::ToolTip) {
-        Q_D(QSystemTrayIcon);
-        return d->sys->deliverToolTipEvent(e);
-    }
-#endif
     return QObject::event(e);
 }
 
@@ -323,7 +317,7 @@ bool QSystemTrayIcon::event(QEvent *e)
     This signal is emitted when the message displayed using showMessage()
     was clicked by the user.
 
-    Currently this signal is not sent on OS X.
+    Currently this signal is not sent on \macos.
 
     \note We follow Microsoft Windows XP/Vista behavior, so the
     signal is also emitted when the user clicks on a tray icon with
@@ -374,7 +368,7 @@ bool QSystemTrayIcon::supportsMessages()
     On Windows, the \a millisecondsTimeoutHint is usually ignored by the system
     when the application has focus.
 
-    On OS X, the Growl notification system must be installed for this function to
+    On \macos, the Growl notification system must be installed for this function to
     display messages.
 
     Has been turned into a slot in Qt 5.2.
@@ -693,6 +687,10 @@ void QSystemTrayIconPrivate::install_sys_qpa()
 
 void QSystemTrayIconPrivate::remove_sys_qpa()
 {
+    QObject::disconnect(qpa_sys, SIGNAL(activated(QPlatformSystemTrayIcon::ActivationReason)),
+                        q_func(), SLOT(_q_emitActivated(QPlatformSystemTrayIcon::ActivationReason)));
+    QObject::disconnect(qpa_sys, &QPlatformSystemTrayIcon::messageClicked,
+                        q_func(), &QSystemTrayIcon::messageClicked);
     qpa_sys->cleanup();
 }
 
@@ -768,3 +766,4 @@ QT_END_NAMESPACE
 #endif // QT_NO_SYSTEMTRAYICON
 
 #include "moc_qsystemtrayicon.cpp"
+#include "moc_qsystemtrayicon_p.cpp"

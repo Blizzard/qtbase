@@ -110,7 +110,7 @@ public:
         QVector<QObjectUserData *> userData;
     #endif
         QList<QByteArray> propertyNames;
-        QList<QVariant> propertyValues;
+        QVector<QVariant> propertyValues;
         QVector<int> runningTimers;
         QList<QPointer<QObject> > eventFilters;
         QString objectName;
@@ -406,7 +406,7 @@ void Q_CORE_EXPORT qDeleteInEventHandler(QObject *o);
 struct QAbstractDynamicMetaObject;
 struct Q_CORE_EXPORT QDynamicMetaObjectData
 {
-    virtual ~QDynamicMetaObjectData() {}
+    virtual ~QDynamicMetaObjectData();
     virtual void objectDestroyed(QObject *) { delete this; }
 
     virtual QAbstractDynamicMetaObject *toDynamicMetaObject(QObject *) = 0;
@@ -415,6 +415,8 @@ struct Q_CORE_EXPORT QDynamicMetaObjectData
 
 struct Q_CORE_EXPORT QAbstractDynamicMetaObject : public QDynamicMetaObjectData, public QMetaObject
 {
+    ~QAbstractDynamicMetaObject();
+
     virtual QAbstractDynamicMetaObject *toDynamicMetaObject(QObject *) Q_DECL_OVERRIDE { return this; }
     virtual int createProperty(const char *, const char *) { return -1; }
     virtual int metaCall(QObject *, QMetaObject::Call c, int _id, void **a) Q_DECL_OVERRIDE

@@ -117,6 +117,8 @@ public:
         return std::floor(double(qMax(1, baseLevelSize >> mipLevel)));
     }
 
+    bool isUsingImmutableStorage() const;
+
     QOpenGLTexture *q_ptr;
     QOpenGLContext *context;
     QOpenGLTexture::Target target;
@@ -154,7 +156,6 @@ public:
     bool autoGenerateMipMaps;
     bool storageAllocated;
 
-    QPair<int, int> glVersion;
     QOpenGLTextureHelper *texFuncs;
 
     QOpenGLTexture::Features features;

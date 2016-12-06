@@ -49,6 +49,7 @@ private slots:
     void debugWithBool() const;
     void debugSpaceHandling() const;
     void debugNoQuotes() const;
+    void verbosity() const;
     void stateSaver() const;
     void veryLongWarningMessage() const;
     void qDebugQChar() const;
@@ -192,7 +193,11 @@ public:
 QDebug operator<< (QDebug s, const MyLine& line)
 {
     const QDebugStateSaver saver(s);
-    s.nospace() << "MyLine(" << line.p1 << ", " << line.p2 << ")";
+    s.nospace();
+    s << "MyLine(" << line.p1 << ", "<< line.p2;
+    if (s.verbosity() > 2)
+        s << ", Manhattan length=" << (qAbs(line.p2.v1 - line.p1.v1) + qAbs(line.p2.v2 - line.p1.v2));
+    s << ')';
     return s;
 }
 
@@ -253,6 +258,33 @@ void tst_QDebug::debugNoQuotes() const
         d << QByteArray("Hello");
     }
     QCOMPARE(s_msg, QString::fromLatin1("'H' \"Hello\" \"Hello\" H Hello Hello"));
+}
+
+void tst_QDebug::verbosity() const
+{
+    MyLine line(MyPoint(10, 11), MyPoint (12, 13));
+    QString output;
+    QDebug d(&output);
+    d.nospace();
+    d << line << '\n';
+    const int oldVerbosity = d.verbosity();
+    d.setVerbosity(0);
+    QCOMPARE(d.verbosity(), 0);
+    d.setVerbosity(7);
+    QCOMPARE(d.verbosity(), 7);
+    const int newVerbosity = oldVerbosity  + 2;
+    d.setVerbosity(newVerbosity);
+    QCOMPARE(d.verbosity(), newVerbosity);
+    d << line << '\n';
+    d.setVerbosity(oldVerbosity );
+    QCOMPARE(d.verbosity(), oldVerbosity );
+    d << line;
+    const QStringList lines = output.split(QLatin1Char('\n'));
+    QCOMPARE(lines.size(), 3);
+    // Verbose should be longer
+    QVERIFY2(lines.at(1).size() > lines.at(0).size(), qPrintable(lines.join(QLatin1Char(','))));
+    // Switching back to brief produces same output
+    QCOMPARE(lines.at(0).size(), lines.at(2).size());
 }
 
 void tst_QDebug::stateSaver() const
@@ -331,14 +363,14 @@ void tst_QDebug::qDebugQChar() const
     MessageHandlerSetter mhs(myMessageHandler);
     {
         QDebug d = qDebug();
-        d << QChar('f');
-        d.nospace().noquote() << QChar('o') << QChar('o');
+        d << QChar('f') << QChar(QLatin1Char('\xE4')); // f, ä
+        d.nospace().noquote() << QChar('o') << QChar('o')  << QChar(QLatin1Char('\xC4')); // o, o, Ä
     }
 #ifndef QT_NO_MESSAGELOGCONTEXT
     file = __FILE__; line = __LINE__ - 5; function = Q_FUNC_INFO;
 #endif
     QCOMPARE(s_msgType, QtDebugMsg);
-    QCOMPARE(s_msg, QString::fromLatin1("'f' oo"));
+    QCOMPARE(s_msg, QString::fromLatin1("'f' '\\u00e4' oo\\u00c4"));
     QCOMPARE(QString::fromLatin1(s_file), file);
     QCOMPARE(s_line, line);
     QCOMPARE(QString::fromLatin1(s_function), function);

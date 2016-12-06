@@ -76,7 +76,7 @@ struct QStringBuilderCommon
     T toLower() const { return resolved().toLower(); }
 
 protected:
-    const T resolved() const { return *static_cast<const Builder*>(this); }
+    T resolved() const { return *static_cast<const Builder*>(this); }
 };
 
 template<typename Builder, typename T>
@@ -236,9 +236,9 @@ template <> struct QConcatenable<QLatin1String> : private QAbstractConcatenable
     }
     static inline void appendTo(const QLatin1String a, char *&out)
     {
-        if (a.data()) {
-            for (const char *s = a.data(); *s; )
-                *out++ = *s++;
+        if (const char *data = a.data()) {
+            memcpy(out, data, a.size());
+            out += a.size();
         }
     }
 };
@@ -421,7 +421,7 @@ QString &operator+=(QString &a, const QStringBuilder<A, B> &b)
     a.reserve(len);
     QChar *it = a.data() + a.size();
     QConcatenable< QStringBuilder<A, B> >::appendTo(b, it);
-    a.resize(it - a.constData()); //may be smaller than len if there was conversion from utf8
+    a.resize(int(it - a.constData())); //may be smaller than len if there was conversion from utf8
     return a;
 }
 

@@ -556,6 +556,7 @@ public:
     inline bool hasFragment() const { return sectionIsPresent & Fragment; }
 
     inline bool isLocalFile() const { return flags & IsLocalFile; }
+    QString toLocalFile(QUrl::FormattingOptions options) const;
 
     QString mergePaths(const QString &relativePath) const;
 
@@ -977,10 +978,12 @@ inline bool QUrlPrivate::setScheme(const QString &value, int len, bool doSetErro
             needsLowercasing = i;
             continue;
         }
-        if (p[i] >= '0' && p[i] <= '9' && i > 0)
-            continue;
-        if (p[i] == '+' || p[i] == '-' || p[i] == '.')
-            continue;
+        if (i) {
+            if (p[i] >= '0' && p[i] <= '9')
+                continue;
+            if (p[i] == '+' || p[i] == '-' || p[i] == '.')
+                continue;
+        }
 
         // found something else
         // don't call setError needlessly:
@@ -1045,7 +1048,7 @@ inline void QUrlPrivate::setAuthority(const QString &auth, int from, int end, QU
 
         if (colonIndex == end - 1) {
             // found a colon but no digits after it
-            setError(PortEmptyError, auth, colonIndex + 1);
+            port = -1;
         } else if (uint(colonIndex) < uint(end)) {
             unsigned long x = 0;
             for (int i = colonIndex + 1; i < end; ++i) {
@@ -1175,7 +1178,7 @@ inline void QUrlPrivate::appendHost(QString &appendTo, QUrl::FormattingOptions o
     } else {
         // this is either an IPv4Address or a reg-name
         // if it is a reg-name, it is already stored in Unicode form
-        if (options == QUrl::EncodeUnicode)
+        if (options & QUrl::EncodeUnicode && !(options & 0x4000000))
             appendTo += qt_ACE_do(host, ToAceOnly, AllowLeadingDot);
         else
             appendTo += host;
@@ -1458,6 +1461,33 @@ inline void QUrlPrivate::parse(const QString &url, QUrl::ParsingMode parsingMode
         return;
     if (hash != -1)
         validateComponent(Fragment, url, hash + 1, len);
+}
+
+QString QUrlPrivate::toLocalFile(QUrl::FormattingOptions options) const
+{
+    QString tmp;
+    QString ourPath;
+    appendPath(ourPath, options, QUrlPrivate::Path);
+
+    // magic for shared drive on windows
+    if (!host.isEmpty()) {
+        tmp = QStringLiteral("//") + host;
+#ifdef Q_OS_WIN // QTBUG-42346, WebDAV is visible as local file on Windows only.
+        if (scheme == webDavScheme())
+            tmp += webDavSslTag();
+#endif
+        if (!ourPath.isEmpty() && !ourPath.startsWith(QLatin1Char('/')))
+            tmp += QLatin1Char('/');
+        tmp += ourPath;
+    } else {
+        tmp = ourPath;
+#ifdef Q_OS_WIN
+        // magic for drives on windows
+        if (ourPath.length() > 2 && ourPath.at(0) == QLatin1Char('/') && ourPath.at(2) == QLatin1Char(':'))
+            tmp.remove(0, 1);
+#endif
+    }
+    return tmp;
 }
 
 /*
@@ -2411,8 +2441,8 @@ void QUrl::setPort(int port)
     d->clearError();
 
     if (port < -1 || port > 65535) {
-        port = -1;
         d->setError(QUrlPrivate::InvalidPortError, QString::number(port), 0);
+        port = -1;
     }
 
     d->port = port;
@@ -2470,8 +2500,10 @@ void QUrl::setPath(const QString &path, ParsingMode mode)
         mode = TolerantMode;
     }
 
-    data = qt_normalizePathSegments(data, false);
-    d->setPath(data, 0, data.length());
+    int from = 0;
+    while (from < data.length() - 2 && data.midRef(from, 2) == QLatin1String("//"))
+        ++from;
+    d->setPath(data, from, data.length());
 
     // optimized out, since there is no path delimiter
 //    if (path.isNull())
@@ -3135,8 +3167,8 @@ QUrl QUrl::resolved(const QUrl &relative) const
     if (!relative.d) return *this;
 
     QUrl t;
-    // be non strict and allow scheme in relative url
-    if (!relative.d->scheme.isEmpty() && relative.d->scheme != d->scheme) {
+    // Compatibility hack (mostly for qtdeclarative) : treat "file:relative.txt" as relative even though QUrl::isRelative() says false
+    if (!relative.d->scheme.isEmpty() && (!relative.isLocalFile() || QDir::isAbsolutePath(relative.d->path))) {
         t = relative;
         t.detach();
     } else {
@@ -3255,7 +3287,7 @@ QString QUrl::toString(FormattingOptions options) const
             && (!d->hasQuery() || options.testFlag(QUrl::RemoveQuery))
             && (!d->hasFragment() || options.testFlag(QUrl::RemoveFragment))
             && isLocalFile()) {
-        return path(options);
+        return d->toLocalFile(options);
     }
 
     QString url;
@@ -3818,28 +3850,7 @@ QString QUrl::toLocalFile() const
     if (!isLocalFile())
         return QString();
 
-    QString tmp;
-    QString ourPath = path(QUrl::FullyDecoded);
-
-    // magic for shared drive on windows
-    if (!d->host.isEmpty()) {
-        tmp = QStringLiteral("//") + host();
-#ifdef Q_OS_WIN // QTBUG-42346, WebDAV is visible as local file on Windows only.
-        if (scheme() == webDavScheme())
-            tmp += webDavSslTag();
-#endif
-        if (!ourPath.isEmpty() && !ourPath.startsWith(QLatin1Char('/')))
-            tmp += QLatin1Char('/');
-        tmp += ourPath;
-    } else {
-        tmp = ourPath;
-#ifdef Q_OS_WIN
-        // magic for drives on windows
-        if (ourPath.length() > 2 && ourPath.at(0) == QLatin1Char('/') && ourPath.at(2) == QLatin1Char(':'))
-            tmp.remove(0, 1);
-#endif
-    }
-    return tmp;
+    return d->toLocalFile(QUrl::FullyDecoded);
 }
 
 /*!

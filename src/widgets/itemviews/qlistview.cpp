@@ -53,6 +53,8 @@
 
 QT_BEGIN_NAMESPACE
 
+extern bool qt_sendSpontaneousEvent(QObject *receiver, QEvent *event);
+
 /*!
     \class QListView
 
@@ -796,6 +798,35 @@ void QListView::mouseReleaseEvent(QMouseEvent *e)
     }
 }
 
+#ifndef QT_NO_WHEELEVENT
+/*!
+  \reimp
+*/
+void QListView::wheelEvent(QWheelEvent *e)
+{
+    Q_D(QListView);
+    if (e->orientation() == Qt::Vertical) {
+        if (e->angleDelta().x() == 0
+            && ((d->flow == TopToBottom && d->wrap) || (d->flow == LeftToRight && !d->wrap))
+            && d->vbar->minimum() == 0 && d->vbar->maximum() == 0) {
+            QPoint pixelDelta(e->pixelDelta().y(), e->pixelDelta().x());
+            QPoint angleDelta(e->angleDelta().y(), e->angleDelta().x());
+            QWheelEvent hwe(e->pos(), e->globalPos(), pixelDelta, angleDelta, e->delta(),
+                            Qt::Horizontal, e->buttons(), e->modifiers(), e->phase(), e->source());
+            if (e->spontaneous())
+                qt_sendSpontaneousEvent(d->hbar, &hwe);
+            else
+                QApplication::sendEvent(d->hbar, &hwe);
+            e->setAccepted(hwe.isAccepted());
+        } else {
+            QApplication::sendEvent(d->vbar, e);
+        }
+    } else {
+        QApplication::sendEvent(d->hbar, e);
+    }
+}
+#endif // QT_NO_WHEELEVENT
+
 /*!
   \reimp
 */
@@ -1406,7 +1437,7 @@ QModelIndexList QListView::selectedIndexes() const
         return QModelIndexList();
 
     QModelIndexList viewSelected = d->selectionModel->selectedIndexes();
-    for (int i = 0; i < viewSelected.count(); ++i) {
+    for (int i = 0; i < viewSelected.count();) {
         const QModelIndex &index = viewSelected.at(i);
         if (!isIndexHidden(index) && index.parent() == d->root && index.column() == d->column)
             ++i;
@@ -1846,8 +1877,7 @@ void QCommonListViewBase::updateHorizontalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    const QSize viewportSize(viewport()->width() + (qq->verticalScrollBar()->maximum() > 0 ? qq->verticalScrollBar()->width() : 0),
-                             viewport()->height() + (qq->horizontalScrollBar()->maximum() > 0 ? qq->horizontalScrollBar()->height() : 0));
+    const QSize viewportSize = qq->contentsRect().size();
 
     bool verticalWantsToShow = contentsSize.height() > viewportSize.height();
     bool horizontalWantsToShow;
@@ -1877,8 +1907,7 @@ void QCommonListViewBase::updateVerticalScrollBar(const QSize &step)
     const bool bothScrollBarsAuto = qq->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
                                     qq->horizontalScrollBarPolicy() == Qt::ScrollBarAsNeeded;
 
-    const QSize viewportSize(viewport()->width() + (qq->verticalScrollBar()->maximum() > 0 ? qq->verticalScrollBar()->width() : 0),
-                             viewport()->height() + (qq->horizontalScrollBar()->maximum() > 0 ? qq->horizontalScrollBar()->height() : 0));
+    const QSize viewportSize = qq->contentsRect().size();
 
     bool horizontalWantsToShow = contentsSize.width() > viewportSize.width();
     bool verticalWantsToShow;
@@ -1949,6 +1978,11 @@ int QCommonListViewBase::horizontalScrollToValue(const int /*index*/, QListView:
 /*
  * ListMode ListView Implementation
 */
+QListModeViewBase::QListModeViewBase(QListView *q, QListViewPrivate *d)
+    : QCommonListViewBase(q, d)
+{
+    dd->defaultDropAction = Qt::CopyAction;
+}
 
 #ifndef QT_NO_DRAGANDDROP
 QAbstractItemView::DropIndicatorPosition QListModeViewBase::position(const QPoint &pos, const QRect &rect, const QModelIndex &index) const
@@ -2715,7 +2749,7 @@ bool QIconModeViewBase::filterStartDrag(Qt::DropActions supportedActions)
         drag->setMimeData(dd->model->mimeData(indexes));
         drag->setPixmap(pixmap);
         drag->setHotSpot(dd->pressedPosition - rect.topLeft());
-        Qt::DropAction action = drag->exec(supportedActions, Qt::CopyAction);
+        Qt::DropAction action = drag->exec(supportedActions, dd->defaultDropAction);
         draggedItems.clear();
         if (action == Qt::MoveAction)
             dd->clearOrRemove();
@@ -3256,5 +3290,7 @@ QSize QListView::viewportSizeHint() const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qlistview.cpp"
 
 #endif // QT_NO_LISTVIEW

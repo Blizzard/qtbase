@@ -43,6 +43,7 @@ class tst_QIODevice : public QObject
 
 private slots:
     void initTestCase();
+    void cleanupTestCase();
     void getSetCheck();
     void constructing_QTcpSocket();
     void constructing_QFile();
@@ -59,6 +60,11 @@ private slots:
 
     void peekBug();
     void readAllKeepPosition();
+    void writeInTextMode();
+
+private:
+    QSharedPointer<QTemporaryDir> m_tempDir;
+    QString m_previousCurrent;
 };
 
 void tst_QIODevice::initTestCase()
@@ -67,6 +73,15 @@ void tst_QIODevice::initTestCase()
     QVERIFY(QFileInfo(QStringLiteral("./tst_qiodevice.cpp")).exists()
             || QFile::copy(QStringLiteral(":/tst_qiodevice.cpp"), QStringLiteral("./tst_qiodevice.cpp")));
 #endif
+    m_previousCurrent = QDir::currentPath();
+    m_tempDir = QSharedPointer<QTemporaryDir>(new QTemporaryDir);
+    QVERIFY2(!m_tempDir.isNull(), qPrintable("Could not create temporary directory."));
+    QVERIFY2(QDir::setCurrent(m_tempDir->path()), qPrintable("Could not switch current directory"));
+}
+
+void tst_QIODevice::cleanupTestCase()
+{
+    QDir::setCurrent(m_previousCurrent);
 }
 
 // Testing get/set functions
@@ -74,16 +89,15 @@ void tst_QIODevice::getSetCheck()
 {
     // OpenMode QIODevice::openMode()
     // void QIODevice::setOpenMode(OpenMode)
-    class MyIODevice : public QIODevice {
+    class MyIODevice : public QTcpSocket {
     public:
-        void setOpenMode(OpenMode openMode) { QIODevice::setOpenMode(openMode); }
+        using QTcpSocket::setOpenMode;
     };
-    QTcpSocket var1;
-    MyIODevice *obj1 = reinterpret_cast<MyIODevice*>(&var1);
-    obj1->setOpenMode(QIODevice::OpenMode(QIODevice::NotOpen));
-    QCOMPARE(QIODevice::OpenMode(QIODevice::NotOpen), obj1->openMode());
-    obj1->setOpenMode(QIODevice::OpenMode(QIODevice::ReadWrite));
-    QCOMPARE(QIODevice::OpenMode(QIODevice::ReadWrite), obj1->openMode());
+    MyIODevice var1;
+    var1.setOpenMode(QIODevice::OpenMode(QIODevice::NotOpen));
+    QCOMPARE(QIODevice::OpenMode(QIODevice::NotOpen), var1.openMode());
+    var1.setOpenMode(QIODevice::OpenMode(QIODevice::ReadWrite));
+    QCOMPARE(QIODevice::OpenMode(QIODevice::ReadWrite), var1.openMode());
 }
 
 //----------------------------------------------------------------------------------
@@ -626,6 +640,46 @@ void tst_QIODevice::readAllKeepPosition()
     QByteArray resultArray = buffer.readAll();
     QCOMPARE(buffer.pos(), qint64(0));
     QCOMPARE(resultArray, buffer.buffer());
+}
+
+class RandomAccessBuffer : public QIODevice
+{
+public:
+    RandomAccessBuffer(const char *data) : QIODevice(), buf(data) { }
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) Q_DECL_OVERRIDE
+    {
+        maxSize = qMin(maxSize, qint64(buf.size() - pos()));
+        memcpy(data, buf.constData() + pos(), maxSize);
+        return maxSize;
+    }
+    qint64 writeData(const char *data, qint64 maxSize) Q_DECL_OVERRIDE
+    {
+        maxSize = qMin(maxSize, qint64(buf.size() - pos()));
+        memcpy(buf.data() + pos(), data, maxSize);
+        return maxSize;
+    }
+
+private:
+    QByteArray buf;
+};
+
+// Test write() on skipping correct number of bytes in read buffer
+void tst_QIODevice::writeInTextMode()
+{
+    // Unlike other platforms, Windows implementation expands '\n' into
+    // "\r\n" sequence in write(). Ensure that write() properly works with
+    // a read buffer on random-access devices.
+#ifndef Q_OS_WIN
+    QSKIP("This is a Windows-only test");
+#else
+    RandomAccessBuffer buffer("one\r\ntwo\r\nthree\r\n");
+    buffer.open(QBuffer::ReadWrite | QBuffer::Text);
+    QCOMPARE(buffer.readLine(), QByteArray("one\n"));
+    QCOMPARE(buffer.write("two\n"), 4);
+    QCOMPARE(buffer.readLine(), QByteArray("three\n"));
+#endif
 }
 
 QTEST_MAIN(tst_QIODevice)

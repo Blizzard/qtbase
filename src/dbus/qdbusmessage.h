@@ -62,11 +62,18 @@ public:
 
     QDBusMessage();
     QDBusMessage(const QDBusMessage &other);
+#ifdef Q_COMPILER_RVALUE_REFS
+    QDBusMessage &operator=(QDBusMessage &&other) Q_DECL_NOTHROW { swap(other); return *this; }
+#endif
     QDBusMessage &operator=(const QDBusMessage &other);
     ~QDBusMessage();
 
+    void swap(QDBusMessage &other) Q_DECL_NOTHROW { qSwap(d_ptr, other.d_ptr); }
+
     static QDBusMessage createSignal(const QString &path, const QString &interface,
                                      const QString &name);
+    static QDBusMessage createTargetedSignal(const QString &service, const QString &path,
+                                             const QString &interface, const QString &name);
     static QDBusMessage createMethodCall(const QString &destination, const QString &path,
                                          const QString &interface, const QString &method);
     static QDBusMessage createError(const QString &name, const QString &msg);
@@ -115,6 +122,7 @@ private:
     friend class QDBusMessagePrivate;
     QDBusMessagePrivate *d_ptr;
 };
+Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6(QDBusMessage)
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_DBUS_EXPORT QDebug operator<<(QDebug, const QDBusMessage &);

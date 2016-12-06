@@ -56,6 +56,7 @@ class tst_qstandardpaths : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void dump();
     void testDefaultLocations();
     void testCustomLocations();
@@ -127,6 +128,14 @@ static const char * const enumNames[MaxStandardLocation + 1 - int(QStandardPaths
     "AppDataLocation",
     "AppConfigLocation"
 };
+
+void tst_qstandardpaths::initTestCase()
+{
+    QVERIFY2(m_localConfigTempDir.isValid(), qPrintable(m_localConfigTempDir.errorString()));
+    QVERIFY2(m_globalConfigTempDir.isValid(), qPrintable(m_globalConfigTempDir.errorString()));
+    QVERIFY2(m_localAppTempDir.isValid(), qPrintable(m_localAppTempDir.errorString()));
+    QVERIFY2(m_globalAppTempDir.isValid(), qPrintable(m_globalAppTempDir.errorString()));
+}
 
 void tst_qstandardpaths::dump()
 {
@@ -420,6 +429,8 @@ void tst_qstandardpaths::testFindExecutable()
 
 void tst_qstandardpaths::testFindExecutableLinkToDirectory()
 {
+    // WinRT has no link support
+#ifndef Q_OS_WINRT
     // link to directory
     const QString target = QDir::tempPath() + QDir::separator() + QLatin1String("link.lnk");
     QFile::remove(target);
@@ -427,15 +438,16 @@ void tst_qstandardpaths::testFindExecutableLinkToDirectory()
     QVERIFY(appFile.link(target));
     QVERIFY(QStandardPaths::findExecutable(target).isEmpty());
     QFile::remove(target);
+#endif
 }
 
 void tst_qstandardpaths::testRuntimeDirectory()
 {
+#ifdef Q_XDG_PLATFORM
     const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     QVERIFY(!runtimeDir.isEmpty());
 
     // Check that it can automatically fix permissions
-#ifdef Q_XDG_PLATFORM
     QFile file(runtimeDir);
     const QFile::Permissions wantedPerms = QFile::ReadUser | QFile::WriteUser | QFile::ExeUser;
     const QFile::Permissions additionalPerms = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
@@ -455,6 +467,15 @@ void tst_qstandardpaths::testCustomRuntimeDirectory()
 #endif
 
 #ifdef Q_XDG_PLATFORM
+    struct EnvVarRestorer
+    {
+        EnvVarRestorer() : origRuntimeDir(qgetenv("XDG_RUNTIME_DIR")) {}
+        ~EnvVarRestorer() { qputenv("XDG_RUNTIME_DIR", origRuntimeDir.constData()); }
+        const QByteArray origRuntimeDir;
+    };
+    EnvVarRestorer restorer;
+
+    // When $XDG_RUNTIME_DIR points to a directory with wrong ownership, QStandardPaths should warn
     qputenv("XDG_RUNTIME_DIR", QFile::encodeName("/tmp"));
     // It's very unlikely that /tmp is 0600 or that we can chmod it
     // The call below outputs
@@ -465,6 +486,20 @@ void tst_qstandardpaths::testCustomRuntimeDirectory()
             qPrintable(QString::fromLatin1("QStandardPaths: wrong ownership on runtime directory /tmp, 0 instead of %1").arg(uid)));
     const QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     QVERIFY2(runtimeDir.isEmpty(), qPrintable(runtimeDir));
+
+    // When $XDG_RUNTIME_DIR points to a non-existing directory, QStandardPaths should warn (QTBUG-48771)
+    qputenv("XDG_RUNTIME_DIR", "does_not_exist");
+    QTest::ignoreMessage(QtWarningMsg, "QStandardPaths: XDG_RUNTIME_DIR points to non-existing path 'does_not_exist', please create it with 0700 permissions.");
+    const QString nonExistingRuntimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    QVERIFY2(nonExistingRuntimeDir.isEmpty(), qPrintable(nonExistingRuntimeDir));
+
+    // When $XDG_RUNTIME_DIR points to a file, QStandardPaths should warn
+    const QString file = QFINDTESTDATA("tst_qstandardpaths.cpp");
+    QVERIFY(!file.isEmpty());
+    qputenv("XDG_RUNTIME_DIR", QFile::encodeName(file));
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(QString::fromLatin1("QStandardPaths: XDG_RUNTIME_DIR points to '%1' which is not a directory").arg(file)));
+    const QString noRuntimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    QVERIFY2(noRuntimeDir.isEmpty(), qPrintable(file));
 #endif
 }
 

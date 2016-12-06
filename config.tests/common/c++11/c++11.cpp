@@ -3,7 +3,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the FOO module of the Qt Toolkit.
+** This file is part of the configuration of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL21$
 ** Commercial License Usage
@@ -38,12 +38,6 @@
 #endif
 
 #include <utility>
-#if defined(__clang__)
-#  if __has_feature(cxx_generalized_initializers)
-//   On OS X, the libstdc++ headers don't include <initializer_list>
-//   This #include here forces a failure unless we're using libc++
-#    include <initializer_list>
-#  endif
-#endif
+#include <initializer_list>
 
-int main(int, char **) { return 0; }
+int main(int, char **) { return std::move(0); }

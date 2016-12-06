@@ -144,6 +144,13 @@ public:
         return *this;
     }
 };
+} // namespace QJsonPrivate
+
+template <typename T>
+class QTypeInfo<QJsonPrivate::q_littleendian<T> >
+    : public QTypeInfoMerger<QJsonPrivate::q_littleendian<T>, T> {};
+
+namespace QJsonPrivate {
 
 typedef q_littleendian<short> qle_short;
 typedef q_littleendian<unsigned short> qle_ushort;
@@ -280,7 +287,7 @@ static inline int compressedNumber(double d)
     if (non_int)
         return INT_MAX;
 
-    bool neg = (val >> 63);
+    bool neg = (val >> 63) != 0;
     val &= fraction_mask;
     val |= ((quint64)1 << 52);
     int res = (int)(val >> (52 - exp));
@@ -305,7 +312,7 @@ public:
     {
         d->length = str.length();
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
-        const qle_ushort *uc = (const qle_ushort *)str.unicode();
+        const ushort *uc = (const ushort *)str.unicode();
         for (int i = 0; i < str.length(); ++i)
             d->utf16[i] = uc[i];
 #else
@@ -395,7 +402,7 @@ public:
             // pack with itself, we'll discard the high part anyway
             chunk = _mm_packus_epi16(chunk, chunk);
             // unaligned 64-bit store
-            *(quint64*)&l[i] = _mm_cvtsi128_si64(chunk);
+            qToUnaligned(_mm_cvtsi128_si64(chunk), l + i);
             i += 8;
         }
 #  endif
@@ -543,7 +550,7 @@ public:
     offset tableOffset;
     // content follows here
 
-    inline bool isObject() const { return is_object; }
+    inline bool isObject() const { return !!is_object; }
     inline bool isArray() const { return !isObject(); }
 
     inline offset *table() const { return (offset *) (((char *) this) + tableOffset); }
@@ -662,6 +669,8 @@ public:
     bool operator ==(const Entry &other) const;
     bool operator >=(const Entry &other) const;
 };
+
+inline bool operator!=(const Entry &lhs, const Entry &rhs) { return !(lhs == rhs); }
 
 inline bool Entry::operator >=(const QString &key) const
 {
@@ -788,7 +797,11 @@ public:
         if (reserve) {
             if (reserve < 128)
                 reserve = 128;
-            size = qMax(size + reserve, size *2);
+            size = qMax(size + reserve, qMin(size *2, (int)Value::MaxSize));
+            if (size > Value::MaxSize) {
+                qWarning("QJson: Document too large to store in data structure");
+                return 0;
+            }
         }
         char *raw = (char *)malloc(size);
         Q_CHECK_PTR(raw);

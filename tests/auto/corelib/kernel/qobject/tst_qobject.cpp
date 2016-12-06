@@ -139,6 +139,7 @@ private slots:
     void connectFunctorOverloads();
     void connectFunctorQueued();
     void connectFunctorWithContext();
+    void connectFunctorWithContextUnique();
     void connectFunctorDeadlock();
     void connectStaticSlotWithObject();
     void disconnectDoesNotLeakFunctor();
@@ -147,6 +148,7 @@ private slots:
     void qmlConnect();
     void exceptions();
     void noDeclarativeParentChangedOnDestruction();
+    void mutableFunctor();
 };
 
 struct QObjectCreatedOnShutdown
@@ -279,8 +281,10 @@ static void playWithObjects()
 
 void tst_QObject::initTestCase()
 {
+#ifndef QT_NO_PROCESS
     const QString testDataDir = QFileInfo(QFINDTESTDATA("signalbug")).absolutePath();
     QVERIFY2(QDir::setCurrent(testDataDir), qPrintable("Could not chdir to " + testDataDir));
+#endif
 }
 
 void tst_QObject::disconnect()
@@ -1848,6 +1852,8 @@ void tst_QObject::moveToThread()
         thread.wait();
     }
 
+    // WinRT does not allow connection to localhost
+#ifndef Q_OS_WINRT
     {
         // make sure socket notifiers are moved with the object
         MoveToThreadThread thread;
@@ -1883,6 +1889,7 @@ void tst_QObject::moveToThread()
         QMetaObject::invokeMethod(socket, "deleteLater", Qt::QueuedConnection);
         thread.wait();
     }
+#endif
 }
 
 
@@ -1925,7 +1932,7 @@ void tst_QObject::property()
     QCOMPARE(object.property("string"), QVariant("String1"));
     QVERIFY(object.setProperty("string", "String2"));
     QCOMPARE(object.property("string"), QVariant("String2"));
-    QVERIFY(!object.setProperty("string", QVariant()));
+    QVERIFY(object.setProperty("string", QVariant()));
 
     const int idx = mo->indexOfProperty("variant");
     QVERIFY(idx != -1);
@@ -2027,7 +2034,7 @@ void tst_QObject::property()
     QCOMPARE(object.property("customString"), QVariant("String1"));
     QVERIFY(object.setProperty("customString", "String2"));
     QCOMPARE(object.property("customString"), QVariant("String2"));
-    QVERIFY(!object.setProperty("customString", QVariant()));
+    QVERIFY(object.setProperty("customString", QVariant()));
 }
 
 void tst_QObject::metamethod()
@@ -5794,6 +5801,22 @@ void tst_QObject::connectFunctorWithContext()
     context->deleteLater();
 }
 
+void tst_QObject::connectFunctorWithContextUnique()
+{
+    // Qt::UniqueConnections currently don't work for functors, but we need to
+    // be sure that they don't crash. If that is implemented, change this test.
+
+    SenderObject sender;
+    ReceiverObject receiver;
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1);
+    receiver.count_slot1 = 0;
+
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, SlotFunctor(), Qt::UniqueConnection);
+
+    sender.emitSignal1();
+    QCOMPARE(receiver.count_slot1, 1);
+}
+
 class MyFunctor
 {
 public:
@@ -5987,7 +6010,7 @@ class GetSenderObject : public QObject
 {
     Q_OBJECT
 public:
-    QObject *accessSender() { return sender(); }
+    using QObject::sender; // make public
 
 public Q_SLOTS:
     void triggerSignal() { Q_EMIT aSignal(); }
@@ -6003,8 +6026,8 @@ struct CountedStruct
     CountedStruct(GetSenderObject *sender) : sender(sender) { ++countedStructObjectsCount; }
     CountedStruct(const CountedStruct &o) : sender(o.sender) { ++countedStructObjectsCount; }
     CountedStruct &operator=(const CountedStruct &) { return *this; }
-    // accessSender here allows us to check if there's a deadlock
-    ~CountedStruct() { --countedStructObjectsCount; if (sender != Q_NULLPTR) (void)sender->accessSender(); }
+    // calling sender() here allows us to check if there's a deadlock
+    ~CountedStruct() { --countedStructObjectsCount; if (sender) (void)sender->sender(); }
     void operator()() const { }
 
     GetSenderObject *sender;
@@ -6396,7 +6419,8 @@ void tst_QObject::noDeclarativeParentChangedOnDestruction()
     QObject *parent = new QObject;
     QObject *child = new QObject;
 
-    QAbstractDeclarativeData dummy;
+    QAbstractDeclarativeDataImpl dummy;
+    dummy.ownedByQml1 = false;
     QObjectPrivate::get(child)->declarativeData = &dummy;
 
     parentChangeCalled = false;
@@ -6412,6 +6436,24 @@ void tst_QObject::noDeclarativeParentChangedOnDestruction()
 #else
     QSKIP("Needs QT_BUILD_INTERNAL");
 #endif
+}
+
+struct MutableFunctor {
+    int count;
+    MutableFunctor() : count(0) {}
+    int operator()() { return ++count; }
+};
+
+void tst_QObject::mutableFunctor()
+{
+    ReturnValue o;
+    MutableFunctor functor;
+    QCOMPARE(functor.count, 0);
+    connect(&o, &ReturnValue::returnInt, functor);
+    QCOMPARE(emit o.returnInt(0), 1);
+    QCOMPARE(emit o.returnInt(0), 2); // each emit should increase the internal count
+
+    QCOMPARE(functor.count, 0); // but the original object should have been copied at connect time
 }
 
 // Test for QtPrivate::HasQ_OBJECT_Macro

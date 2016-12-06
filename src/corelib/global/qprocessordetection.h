@@ -88,43 +88,51 @@
     auto-detection implemented below.
 */
 #if defined(__arm__) || defined(__TARGET_ARCH_ARM) || defined(_M_ARM) || defined(__aarch64__)
-#  define Q_PROCESSOR_ARM
 #  if defined(__aarch64__)
 #    define Q_PROCESSOR_ARM_64
+#    define Q_PROCESSOR_WORDSIZE 8
 #  else
 #    define Q_PROCESSOR_ARM_32
 #  endif
-#  if defined(__ARM64_ARCH_8__)
-#    define Q_PROCESSOR_ARM_V8
-#    define Q_PROCESSOR_ARM_V7
-#    define Q_PROCESSOR_ARM_V6
-#    define Q_PROCESSOR_ARM_V5
+#  if defined(__ARM_ARCH) && __ARM_ARCH > 1
+#    define Q_PROCESSOR_ARM __ARM_ARCH
+#  elif defined(__TARGET_ARCH_ARM) && __TARGET_ARCH_ARM > 1
+#    define Q_PROCESSOR_ARM __TARGET_ARCH_ARM
+#  elif defined(_M_ARM) && _M_ARM > 1
+#    define Q_PROCESSOR_ARM _M_ARM
+#  elif defined(__ARM64_ARCH_8__)
+#    define Q_PROCESSOR_ARM 8
 #  elif defined(__ARM_ARCH_7__) \
       || defined(__ARM_ARCH_7A__) \
       || defined(__ARM_ARCH_7R__) \
       || defined(__ARM_ARCH_7M__) \
       || defined(__ARM_ARCH_7S__) \
-      || defined(_ARM_ARCH_7) \
-      || (defined(__TARGET_ARCH_ARM) && __TARGET_ARCH_ARM-0 >= 7) \
-      || (defined(_M_ARM) && _M_ARM-0 >= 7)
-#    define Q_PROCESSOR_ARM_V7
-#    define Q_PROCESSOR_ARM_V6
-#    define Q_PROCESSOR_ARM_V5
+      || defined(_ARM_ARCH_7)
+#    define Q_PROCESSOR_ARM 7
 #  elif defined(__ARM_ARCH_6__) \
       || defined(__ARM_ARCH_6J__) \
       || defined(__ARM_ARCH_6T2__) \
       || defined(__ARM_ARCH_6Z__) \
       || defined(__ARM_ARCH_6K__) \
       || defined(__ARM_ARCH_6ZK__) \
-      || defined(__ARM_ARCH_6M__) \
-      || (defined(__TARGET_ARCH_ARM) && __TARGET_ARCH_ARM-0 >= 6) \
-      || (defined(_M_ARM) && _M_ARM-0 >= 6)
-#    define Q_PROCESSOR_ARM_V6
-#    define Q_PROCESSOR_ARM_V5
+      || defined(__ARM_ARCH_6M__)
+#    define Q_PROCESSOR_ARM 6
 #  elif defined(__ARM_ARCH_5TEJ__) \
-        || defined(__ARM_ARCH_5TE__) \
-        || (defined(__TARGET_ARCH_ARM) && __TARGET_ARCH_ARM-0 >= 5) \
-        || (defined(_M_ARM) && _M_ARM-0 >= 5)
+        || defined(__ARM_ARCH_5TE__)
+#    define Q_PROCESSOR_ARM 5
+#  else
+#    define Q_PROCESSOR_ARM 0
+#  endif
+#  if Q_PROCESSOR_ARM >= 8
+#    define Q_PROCESSOR_ARM_V8
+#  endif
+#  if Q_PROCESSOR_ARM >= 7
+#    define Q_PROCESSOR_ARM_V7
+#  endif
+#  if Q_PROCESSOR_ARM >= 6
+#    define Q_PROCESSOR_ARM_V6
+#  endif
+#  if Q_PROCESSOR_ARM >= 5
 #    define Q_PROCESSOR_ARM_V5
 #  endif
 #  if defined(__ARMEL__)
@@ -228,6 +236,7 @@
 #  endif
 #  if defined(_MIPS_ARCH_MIPS64) || defined(__mips64)
 #    define Q_PROCESSOR_MIPS_64
+#    define Q_PROCESSOR_WORDSIZE 8
 #  endif
 #  if defined(__MIPSEL__)
 #    define Q_BYTE_ORDER Q_LITTLE_ENDIAN
@@ -252,6 +261,7 @@
 #  define Q_PROCESSOR_POWER
 #  if defined(__ppc64__) || defined(__powerpc64__) || defined(__64BIT__)
 #    define Q_PROCESSOR_POWER_64
+#    define Q_PROCESSOR_WORDSIZE 8
 #  else
 #    define Q_PROCESSOR_POWER_32
 #  endif
@@ -323,6 +333,28 @@
 #endif
 
 /*
+   Size of a pointer and the machine register size. We detect a 64-bit system by:
+   * GCC and compatible compilers (Clang, ICC on OS X and Windows) always define
+     __SIZEOF_POINTER__. This catches all known cases of ILP32 builds on 64-bit
+     processors.
+   * Most other Unix compilers define __LP64__ or _LP64 on 64-bit mode
+     (Long and Pointer 64-bit)
+   * If Q_PROCESSOR_WORDSIZE was defined above, it's assumed to match the pointer
+     size.
+   Otherwise, we assume to be 32-bit and then check in qglobal.cpp that it is right.
+*/
+
+#if defined __SIZEOF_POINTER__
+#  define QT_POINTER_SIZE           __SIZEOF_POINTER__
+#elif defined(__LP64__) || defined(_LP64)
+#  define QT_POINTER_SIZE           8
+#elif defined(Q_PROCESSOR_WORDSIZE)
+#  define QT_POINTER_SIZE           Q_PROCESSOR_WORDSIZE
+#else
+#  define QT_POINTER_SIZE           4
+#endif
+
+/*
    Define Q_PROCESSOR_WORDSIZE to be the size of the machine's word (usually,
    the size of the register). On some architectures where a pointer could be
    smaller than the register, the macro is defined above.
@@ -330,14 +362,8 @@
    Falls back to QT_POINTER_SIZE if not set explicitly for the platform.
 */
 #ifndef Q_PROCESSOR_WORDSIZE
-#  ifdef __SIZEOF_POINTER__
-     /* GCC & friends define this */
-#    define Q_PROCESSOR_WORDSIZE        __SIZEOF_POINTER__
-#  elif defined(_LP64) || defined(__LP64__) || defined(WIN64) || defined(_WIN64)
-#    define Q_PROCESSOR_WORDSIZE        8
-#  else
-#    define Q_PROCESSOR_WORDSIZE        QT_POINTER_SIZE
-#  endif
+#  define Q_PROCESSOR_WORDSIZE        QT_POINTER_SIZE
 #endif
+
 
 #endif // QPROCESSORDETECTION_H

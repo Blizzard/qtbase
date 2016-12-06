@@ -172,13 +172,13 @@ public:
     QAccessibleTableCell(QAbstractItemView *view, const QModelIndex &m_index, QAccessible::Role role);
 
     void *interface_cast(QAccessible::InterfaceType t) Q_DECL_OVERRIDE;
-    QObject *object() const Q_DECL_OVERRIDE { return 0; }
+    QObject *object() const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     QAccessible::Role role() const Q_DECL_OVERRIDE;
     QAccessible::State state() const Q_DECL_OVERRIDE;
     QRect rect() const Q_DECL_OVERRIDE;
     bool isValid() const Q_DECL_OVERRIDE;
 
-    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return 0; }
+    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     int childCount() const Q_DECL_OVERRIDE { return 0; }
     int indexOfChild(const QAccessibleInterface *) const Q_DECL_OVERRIDE { return -1; }
 
@@ -224,13 +224,13 @@ public:
     // For header cells, pass the header view in addition
     QAccessibleTableHeaderCell(QAbstractItemView *view, int index, Qt::Orientation orientation);
 
-    QObject *object() const Q_DECL_OVERRIDE { return 0; }
+    QObject *object() const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     QAccessible::Role role() const Q_DECL_OVERRIDE;
     QAccessible::State state() const Q_DECL_OVERRIDE;
     QRect rect() const Q_DECL_OVERRIDE;
     bool isValid() const Q_DECL_OVERRIDE;
 
-    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return 0; }
+    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     int childCount() const Q_DECL_OVERRIDE { return 0; }
     int indexOfChild(const QAccessibleInterface *) const Q_DECL_OVERRIDE { return -1; }
 
@@ -261,13 +261,13 @@ public:
         :view(view_)
     {}
 
-    QObject *object() const Q_DECL_OVERRIDE { return 0; }
+    QObject *object() const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     QAccessible::Role role() const Q_DECL_OVERRIDE { return QAccessible::Pane; }
     QAccessible::State state() const Q_DECL_OVERRIDE { return QAccessible::State(); }
     QRect rect() const Q_DECL_OVERRIDE { return QRect(); }
     bool isValid() const Q_DECL_OVERRIDE { return true; }
 
-    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return 0; }
+    QAccessibleInterface *childAt(int, int) const Q_DECL_OVERRIDE { return Q_NULLPTR; }
     int childCount() const Q_DECL_OVERRIDE { return 0; }
     int indexOfChild(const QAccessibleInterface *) const Q_DECL_OVERRIDE { return -1; }
 
@@ -278,7 +278,7 @@ public:
         return QAccessible::queryAccessibleInterface(view);
     }
     QAccessibleInterface *child(int) const Q_DECL_OVERRIDE {
-        return 0;
+        return Q_NULLPTR;
     }
 
 private:

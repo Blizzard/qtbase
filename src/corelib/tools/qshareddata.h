@@ -36,7 +36,10 @@
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qatomic.h>
+#if QT_DEPRECATED_SINCE(5, 6)
 #include <QtCore/qhash.h>
+#endif
+#include <QtCore/qhashfunctions.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -76,7 +79,7 @@ public:
     inline bool operator==(const QSharedDataPointer<T> &other) const { return d == other.d; }
     inline bool operator!=(const QSharedDataPointer<T> &other) const { return d != other.d; }
 
-    inline QSharedDataPointer() { d = 0; }
+    inline QSharedDataPointer() { d = Q_NULLPTR; }
     inline ~QSharedDataPointer() { if (d && !d->ref.deref()) delete d; }
 
     explicit QSharedDataPointer(T *data) Q_DECL_NOTHROW;
@@ -142,17 +145,17 @@ public:
         if(d && !d->ref.deref())
             delete d;
 
-        d = 0;
+        d = Q_NULLPTR;
     }
 
-    inline operator bool () const { return d != 0; }
+    inline operator bool () const { return d != Q_NULLPTR; }
 
     inline bool operator==(const QExplicitlySharedDataPointer<T> &other) const { return d == other.d; }
     inline bool operator!=(const QExplicitlySharedDataPointer<T> &other) const { return d != other.d; }
     inline bool operator==(const T *ptr) const { return d == ptr; }
     inline bool operator!=(const T *ptr) const { return d != ptr; }
 
-    inline QExplicitlySharedDataPointer() { d = 0; }
+    inline QExplicitlySharedDataPointer() { d = Q_NULLPTR; }
     inline ~QExplicitlySharedDataPointer() { if (d && !d->ref.deref()) delete d; }
 
     explicit QExplicitlySharedDataPointer(T *data) Q_DECL_NOTHROW;

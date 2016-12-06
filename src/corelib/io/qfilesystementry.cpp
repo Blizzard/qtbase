@@ -53,8 +53,7 @@ static bool isUncRoot(const QString &server)
     if (idx == -1 || idx + 1 == localPath.length())
         return true;
 
-    localPath = localPath.right(localPath.length() - idx - 1).trimmed();
-    return localPath.isEmpty();
+    return localPath.rightRef(localPath.length() - idx - 1).trimmed().isEmpty();
 }
 
 static inline QString fixIfRelativeUncPath(const QString &path)
@@ -167,6 +166,12 @@ void QFileSystemEntry::resolveNativeFilePath() const
             m_nativeFilePath.remove(0,1);
         if (m_nativeFilePath.isEmpty())
             m_nativeFilePath.append(QLatin1Char('.'));
+        // WinRT/MSVC2015 allows a maximum of 256 characters for a filepath
+        // unless //?/ is prepended which extends the rule to have a maximum
+        // of 256 characters in the filename plus the preprending path
+#if _MSC_VER >= 1900
+        m_nativeFilePath.prepend("\\\\?\\");
+#endif
 #endif
     }
 }
@@ -255,17 +260,21 @@ QString QFileSystemEntry::completeSuffix() const
 bool QFileSystemEntry::isRelative() const
 {
     resolveFilePath();
-    return (m_filePath.isEmpty() || (!m_filePath.isEmpty() && (m_filePath.at(0).unicode() != '/')
-        && (!(m_filePath.length() >= 2 && m_filePath.at(1).unicode() == ':'))));
+    return (m_filePath.isEmpty()
+            || (m_filePath.at(0).unicode() != '/'
+                && !(m_filePath.length() >= 2 && m_filePath.at(1).unicode() == ':')));
 }
 
 bool QFileSystemEntry::isAbsolute() const
 {
     resolveFilePath();
-    return (!m_filePath.isEmpty() && ((m_filePath.length() >= 3
-                                       && (m_filePath.at(0).isLetter() && m_filePath.at(1).unicode() == ':' && m_filePath.at(2).unicode() == '/'))
-                                      || (m_filePath.length() >= 2 && (m_filePath.at(0) == QLatin1Char('/') && m_filePath.at(1) == QLatin1Char('/')))
-                                      ));
+    return ((m_filePath.length() >= 3
+             && m_filePath.at(0).isLetter()
+             && m_filePath.at(1).unicode() == ':'
+             && m_filePath.at(2).unicode() == '/')
+         || (m_filePath.length() >= 2
+             && m_filePath.at(0) == QLatin1Char('/')
+             && m_filePath.at(1) == QLatin1Char('/')));
 }
 #else
 bool QFileSystemEntry::isRelative() const
@@ -284,9 +293,13 @@ bool QFileSystemEntry::isAbsolute() const
 bool QFileSystemEntry::isDriveRoot() const
 {
     resolveFilePath();
+#ifndef Q_OS_WINRT
     return (m_filePath.length() == 3
            && m_filePath.at(0).isLetter() && m_filePath.at(1) == QLatin1Char(':')
            && m_filePath.at(2) == QLatin1Char('/'));
+#else // !Q_OS_WINRT
+    return m_filePath == QDir::rootPath();
+#endif // !Q_OS_WINRT
 }
 #endif
 

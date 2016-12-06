@@ -203,6 +203,7 @@ private slots:
     void taskQTBUG_8777_scrollToSpans();
     void taskQTBUG_10169_sizeHintForRow();
     void taskQTBUG_30653_doItemsLayout();
+    void taskQTBUG_50171_selectRowAfterSwapColumns();
 
 #ifndef QT_NO_WHEELEVENT
     void mouseWheel_data();
@@ -2249,11 +2250,11 @@ void tst_QTableView::resizeColumnsToContents_data()
     QTest::addColumn<int>("rowHeight");
     QTest::addColumn<int>("columnWidth");
 
-    QTest::newRow("10x10 grid shown 40x40")
-        << 10 << 10 << false << 40 << 40 << 40 << 40;
+    QTest::newRow("10x10 grid not shown 60x60")
+        << 10 << 10 << false << 60 << 60 << 60 << 60;
 
-    QTest::newRow("10x10 grid not shown 40x40")
-        << 10 << 10 << true << 40 << 40 << 41 << 41;
+    QTest::newRow("10x10 grid shown 60x60")
+        << 10 << 10 << true << 60 << 60 << 61 << 61;
 }
 
 void tst_QTableView::resizeColumnsToContents()
@@ -4051,9 +4052,9 @@ void tst_QTableView::mouseWheel()
     QWheelEvent verticalEvent(pos, delta, 0, 0, Qt::Vertical);
     QWheelEvent horizontalEvent(pos, delta, 0, 0, Qt::Horizontal);
     QApplication::sendEvent(view.viewport(), &horizontalEvent);
-    QVERIFY(qAbs(view.horizontalScrollBar()->value() - horizontalPositon) < 10);
+    QVERIFY(qAbs(view.horizontalScrollBar()->value() - horizontalPositon) < 15);
     QApplication::sendEvent(view.viewport(), &verticalEvent);
-    QVERIFY(qAbs(view.verticalScrollBar()->value() - verticalPosition) < 10);
+    QVERIFY(qAbs(view.verticalScrollBar()->value() - verticalPosition) < 15);
 }
 #endif // !QT_NO_WHEELEVENT
 
@@ -4474,6 +4475,41 @@ void tst_QTableView::taskQTBUG_30653_doItemsLayout()
     int doItemsLayoutOffset = view.verticalHeader()->offset();
 
     QCOMPARE(scrollToBottomOffset, doItemsLayoutOffset);
+}
+
+void tst_QTableView::taskQTBUG_50171_selectRowAfterSwapColumns()
+{
+    {
+        QtTestTableView tableView;
+        QtTestTableModel model(2, 3);
+        tableView.setModel(&model);
+
+        tableView.horizontalHeader()->swapSections(1, 2);
+        tableView.horizontalHeader()->hideSection(0);
+        tableView.selectRow(1);
+
+        QItemSelectionModel* tableSelectionModel = tableView.selectionModel();
+        QCOMPARE(tableSelectionModel->isRowSelected(1, QModelIndex()), true);
+        QCOMPARE(tableSelectionModel->isSelected(tableView.model()->index(0, 0)), false);
+        QCOMPARE(tableSelectionModel->isSelected(tableView.model()->index(0, 1)), false);
+        QCOMPARE(tableSelectionModel->isSelected(tableView.model()->index(0, 2)), false);
+    }
+
+    {
+        QtTestTableView tableView;
+        QtTestTableModel model(3, 2);
+        tableView.setModel(&model);
+
+        tableView.verticalHeader()->swapSections(1, 2);
+        tableView.verticalHeader()->hideSection(0);
+        tableView.selectColumn(1);
+
+        QItemSelectionModel* sModel = tableView.selectionModel();
+        QCOMPARE(sModel->isColumnSelected(1, QModelIndex()), true);
+        QCOMPARE(sModel->isSelected(tableView.model()->index(0, 0)), false);
+        QCOMPARE(sModel->isSelected(tableView.model()->index(1, 0)), false);
+        QCOMPARE(sModel->isSelected(tableView.model()->index(2, 0)), false);
+    }
 }
 
 QTEST_MAIN(tst_QTableView)

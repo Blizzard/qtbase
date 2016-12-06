@@ -77,6 +77,7 @@ public:
     void testEvent();
     void testhorizontalOffset();
     void testverticalOffset();
+    void testVisualRegionForSelection();
     friend class tst_QHeaderView;
 };
 
@@ -211,6 +212,7 @@ private slots:
     void QTBUG8650_crashOnInsertSections();
     void QTBUG12268_hiddenMovedSectionSorting();
     void QTBUG14242_hideSectionAutoSize();
+    void QTBUG50171_visualRegionForSwappedItems();
     void ensureNoIndexAtLength();
     void offsetConsistent();
 
@@ -238,6 +240,8 @@ private slots:
     void resizeToContentTest();
     void testStreamWithHide();
     void testStylePosition();
+
+    void sizeHintCrash();
 
 protected:
     void setupTestData(bool use_reset_model = false);
@@ -403,7 +407,7 @@ void tst_QHeaderView::init()
     view = new QHeaderView(Qt::Vertical,topLevel);
     // Some initial value tests before a model is added
     QCOMPARE(view->length(), 0);
-    QVERIFY(view->sizeHint() == QSize(0,0));
+    QCOMPARE(view->sizeHint(), QSize(0,0));
     QCOMPARE(view->sectionSizeHint(0), -1);
 
     /*
@@ -925,9 +929,9 @@ void tst_QHeaderView::moveSection()
     QFETCH(QList<int>, logical);
     QFETCH(int, count);
 
-    QVERIFY(from.count() == to.count());
-    QVERIFY(from.count() == moved.count());
-    QVERIFY(view->count() == logical.count());
+    QCOMPARE(from.count(), to.count());
+    QCOMPARE(from.count(), moved.count());
+    QCOMPARE(view->count(), logical.count());
 
     QSignalSpy spy1(view, SIGNAL(sectionMoved(int,int,int)));
     QCOMPARE(view->sectionsMoved(), false);
@@ -1370,15 +1374,15 @@ void tst_QHeaderView::unhideSection()
     QCOMPARE(view->sectionsHidden(), false);
     view->setSectionHidden(0, true);
     QCOMPARE(view->sectionsHidden(), true);
-    QVERIFY(view->sectionSize(0) == 0);
+    QCOMPARE(view->sectionSize(0), 0);
     view->setSectionResizeMode(QHeaderView::Interactive);
     view->setSectionHidden(0, false);
     QVERIFY(view->sectionSize(0) > 0);
 
     view->setSectionHidden(0, true);
-    QVERIFY(view->sectionSize(0) == 0);
+    QCOMPARE(view->sectionSize(0), 0);
     view->setSectionHidden(0, true);
-    QVERIFY(view->sectionSize(0) == 0);
+    QCOMPARE(view->sectionSize(0), 0);
     view->setSectionResizeMode(QHeaderView::Stretch);
     view->setSectionHidden(0, false);
     QVERIFY(view->sectionSize(0) > 0);
@@ -1645,7 +1649,7 @@ void tst_QHeaderView::saveRestore()
 
     QByteArray s2 = h2.saveState();
 
-    QVERIFY(s1 == s2);
+    QCOMPARE(s1, s2);
     QVERIFY(!h2.restoreState(QByteArrayLiteral("Garbage")));
 
     // QTBUG-40462
@@ -1659,7 +1663,7 @@ void tst_QHeaderView::saveRestore()
     int sectionItemsLengthTotal = 0;
     for (int i = 0; i < h2.count(); ++i)
         sectionItemsLengthTotal += h2.sectionSize(i);
-    QVERIFY(sectionItemsLengthTotal == h2.length());
+    QCOMPARE(sectionItemsLengthTotal, h2.length());
 
     // Buggy setting where sum(sectionItems) != length. Check false is returned and this corrupted
     // state isn't restored
@@ -1676,8 +1680,8 @@ void tst_QHeaderView::saveRestore()
     // Check setting is correctly recognized as corrupted
     QVERIFY(!h2.restoreState(settings_buggy_length));
     // Check nothing has been actually restored
-    QVERIFY(h2.length() == old_length);
-    QVERIFY(h2.saveState() == old_state);
+    QCOMPARE(h2.length(), old_length);
+    QCOMPARE(h2.saveState(), old_state);
 }
 
 void tst_QHeaderView::defaultSectionSizeTest()
@@ -1699,7 +1703,7 @@ void tst_QHeaderView::defaultSectionSizeTest()
     // no hidden Sections
     hv->resizeSection(1, 0);
     hv->setDefaultSectionSize(defaultSize);
-    QVERIFY(hv->sectionSize(1) == defaultSize);
+    QCOMPARE(hv->sectionSize(1), defaultSize);
 
     // with hidden sections
     hv->resizeSection(1, 0);
@@ -2277,7 +2281,25 @@ void tst_QHeaderView::QTBUG14242_hideSectionAutoSize()
     for (int u = 0; u < hv->count(); ++u)
         calced_length += hv->sectionSize(u);
 
-    QVERIFY(calced_length == afterlength);
+    QCOMPARE(calced_length, afterlength);
+}
+
+void tst_QHeaderView::QTBUG50171_visualRegionForSwappedItems()
+{
+    protected_QHeaderView headerView(Qt::Horizontal);
+    QtTestModel model;
+    model.rows = 2;
+    model.cols = 3;
+    headerView.setModel(&model);
+    headerView.swapSections(1, 2);
+    headerView.hideSection(0);
+    headerView.testVisualRegionForSelection();
+}
+
+void protected_QHeaderView::testVisualRegionForSelection()
+{
+    QRegion r = visualRegionForSelection(QItemSelection(model()->index(1, 0), model()->index(1, 2)));
+    QCOMPARE(r.boundingRect().contains(QRect(1, 1, length() - 2, 1)), true);
 }
 
 void tst_QHeaderView::ensureNoIndexAtLength()
@@ -2286,9 +2308,9 @@ void tst_QHeaderView::ensureNoIndexAtLength()
     QStandardItemModel amodel(4, 4);
     qtv.setModel(&amodel);
     QHeaderView *hv = qtv.verticalHeader();
-    QVERIFY(hv->visualIndexAt(hv->length()) == -1);
+    QCOMPARE(hv->visualIndexAt(hv->length()), -1);
     hv->resizeSection(hv->count() - 1, 0);
-    QVERIFY(hv->visualIndexAt(hv->length()) == -1);
+    QCOMPARE(hv->visualIndexAt(hv->length()), -1);
 }
 
 void tst_QHeaderView::offsetConsistent()
@@ -2307,7 +2329,7 @@ void tst_QHeaderView::offsetConsistent()
     hv->hideSection(sectionToHide);
     hv->setOffsetToSectionPosition(150);
     int offset2 = hv->offset();
-    QVERIFY(offset1 == offset2);
+    QCOMPARE(offset1, offset2);
     // Ensure that hidden indexes (still) is considered.
     hv->resizeSection(sectionToHide, hv->sectionSize(200) * 2);
     hv->setOffsetToSectionPosition(800);
@@ -2600,8 +2622,8 @@ void tst_QHeaderView::logicalIndexAtTest()
     //qDebug() << "logicalIndexAtTest" << check1 << check2;
     const int precalced_check1 = 106327;
     const int precalced_check2 = 29856418;
-    QVERIFY(precalced_check1 == check1);
-    QVERIFY(precalced_check2 == check2);
+    QCOMPARE(precalced_check1, check1);
+    QCOMPARE(precalced_check2, check2);
 
     const int precalced_results[] = { 1145298384, -1710423344, -650981936, 372919464, -1544372176, -426463328, 12124 };
     calculateAndCheck(__LINE__, precalced_results);
@@ -2628,8 +2650,8 @@ void tst_QHeaderView::visualIndexAtTest()
     //qDebug() << "visualIndexAtTest" << check1 << check2;
     const int precalced_check1 = 72665;
     const int precalced_check2 = 14015890;
-    QVERIFY(precalced_check1 == check1);
-    QVERIFY(precalced_check2 == check2);
+    QCOMPARE(precalced_check1, check1);
+    QCOMPARE(precalced_check2, check2);
 
     const int precalced_results[] = { 1145298384, -1710423344, -1457520212, 169223959, 557466160, -324939600, 5453 };
     calculateAndCheck(__LINE__, precalced_results);
@@ -2877,6 +2899,16 @@ void tst_QHeaderView::testStylePosition()
     view->setSectionHidden(0, true);
     header->paintSection(&p, view->rect(), 2);
     QCOMPARE(proxy.lastPosition, QStyleOptionHeader::OnlyOneSection);
+}
+
+void tst_QHeaderView::sizeHintCrash()
+{
+    QTreeView treeView;
+    QStandardItemModel *model = new QStandardItemModel(&treeView);
+    model->appendRow(new QStandardItem("QTBUG-48543"));
+    treeView.setModel(model);
+    treeView.header()->sizeHintForColumn(0);
+    treeView.header()->sizeHintForRow(0);
 }
 
 QTEST_MAIN(tst_QHeaderView)

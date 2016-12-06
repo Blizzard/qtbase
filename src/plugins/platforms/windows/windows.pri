@@ -13,7 +13,6 @@ wince: DEFINES *= QT_LIBINFIX=L"\"\\\"$${QT_LIBINFIX}\\\"\""
 DEFINES *= QT_NO_CAST_FROM_ASCII
 
 contains(QT_CONFIG, directwrite) {
-    LIBS *= -ldwrite
     SOURCES += $$PWD/qwindowsfontenginedirectwrite.cpp
     HEADERS += $$PWD/qwindowsfontenginedirectwrite.h
 } else {
@@ -29,7 +28,6 @@ SOURCES += \
     $$PWD/qwindowsfontengine.cpp \
     $$PWD/qwindowsfontdatabase.cpp \
     $$PWD/qwindowsmousehandler.cpp \
-    $$PWD/qwindowsguieventdispatcher.cpp \
     $$PWD/qwindowsole.cpp \
     $$PWD/qwindowsmime.cpp \
     $$PWD/qwindowsinternalmimedata.cpp \
@@ -40,7 +38,6 @@ SOURCES += \
     $$PWD/qwindowsservices.cpp \
     $$PWD/qwindowsnativeimage.cpp \
     $$PWD/qwindowsnativeinterface.cpp \
-    $$PWD/qwindowsscaling.cpp \
     $$PWD/qwindowsopengltester.cpp
 
 HEADERS += \
@@ -52,7 +49,6 @@ HEADERS += \
     $$PWD/qwindowsfontengine.h \
     $$PWD/qwindowsfontdatabase.h \
     $$PWD/qwindowsmousehandler.h \
-    $$PWD/qwindowsguieventdispatcher.h \
     $$PWD/qtwindowsglobal.h \
     $$PWD/qtwindows_additional.h \
     $$PWD/qwindowsole.h \
@@ -67,8 +63,8 @@ HEADERS += \
     $$PWD/qplatformfunctions_wince.h \
     $$PWD/qwindowsnativeimage.h \
     $$PWD/qwindowsnativeinterface.h \
-    $$PWD/qwindowsscaling.h \
-    $$PWD/qwindowsopengltester.h
+    $$PWD/qwindowsopengltester.h \
+    $$PWD/qwindowsthreadpoolrunner.h
 
 INCLUDEPATH += $$PWD
 
@@ -128,6 +124,7 @@ contains(QT_CONFIG, freetype) {
     SOURCES += \
                $$PWD/qwindowsfontdatabase_ft.cpp
 } else:contains(QT_CONFIG, system-freetype) {
+    CONFIG += qpa/basicunixfontdatabase
     include($$QT_SOURCE_TREE/src/platformsupport/fontdatabases/basic/basic.pri)
     HEADERS += \
                $$PWD/qwindowsfontdatabase_ft.h
@@ -136,3 +133,6 @@ contains(QT_CONFIG, freetype) {
 }
 
 contains(QT_CONFIG, accessibility):include($$PWD/accessible/accessible.pri)
+
+DEFINES *= LIBEGL_NAME=$${LIBEGL_NAME}
+DEFINES *= LIBGLESV2_NAME=$${LIBGLESV2_NAME}

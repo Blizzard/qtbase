@@ -139,6 +139,7 @@ public:
     int lastKeypadScrollValue;
 #endif
 };
+Q_DECLARE_TYPEINFO(QTextBrowserPrivate::HistoryEntry, Q_MOVABLE_TYPE);
 
 QString QTextBrowserPrivate::findFile(const QUrl &name) const
 {
@@ -652,6 +653,7 @@ void QTextBrowserPrivate::init()
 #ifndef QT_NO_CURSOR
     viewport->setCursor(oldCursor);
 #endif
+    q->setAttribute(Qt::WA_InputMethodEnabled, !q->isReadOnly());
     q->setUndoRedoEnabled(false);
     viewport->setMouseTracking(true);
     QObject::connect(q->document(), SIGNAL(contentsChanged()), q, SLOT(_q_documentModified()));

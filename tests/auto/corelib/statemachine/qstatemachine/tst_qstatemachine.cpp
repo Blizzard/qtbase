@@ -249,7 +249,10 @@ private slots:
     void qtbug_44783();
     void internalTransition();
     void conflictingTransition();
+    void conflictingTransition2();
     void qtbug_46059();
+    void qtbug_46703();
+    void postEventFromBeginSelectTransitions();
 };
 
 class TestState : public QState
@@ -265,7 +268,7 @@ public:
     TestState(ChildMode mode, const QString &objectName = QString())
         : QState(mode)
     { setObjectName(objectName); }
-    QList<QPair<int, Event> > events;
+    QVector<QPair<int, Event> > events;
 protected:
     virtual void onEntry(QEvent *) {
         events.append(qMakePair(globalTick++, Entry));
@@ -281,7 +284,7 @@ public:
     TestTransition(QAbstractState *target, const QString &objectName = QString())
         : QAbstractTransition()
     { setTargetState(target); setObjectName(objectName); }
-    QList<int> triggers;
+    QVector<int> triggers;
 protected:
     virtual bool eventTest(QEvent *) {
         return true;
@@ -4860,7 +4863,7 @@ public:
         signalList.append(signal);
     }
 
-    QList<QMetaMethod> signalList;
+    QVector<QMetaMethod> signalList;
 };
 
 void tst_QStateMachine::testIncrementReceivers()
@@ -6447,6 +6450,71 @@ void tst_QStateMachine::conflictingTransition()
     QVERIFY(machine.isRunning());
 }
 
+void tst_QStateMachine::conflictingTransition2()
+{
+    SignalEmitter emitter;
+
+    QStateMachine machine;
+    QState s0(&machine);
+        QState p0(QState::ParallelStates, &s0);
+            QState p0s1(&p0);
+            QState p0s2(&p0);
+            QState p0s3(&p0);
+    QState s1(&machine);
+
+    machine.setInitialState(&s0);
+    s0.setInitialState(&p0);
+
+    QSignalTransition *t1 = new QSignalTransition(&emitter, SIGNAL(signalWithNoArg()));
+    p0s1.addTransition(t1);
+    QSignalTransition *t2 = p0s2.addTransition(&emitter, SIGNAL(signalWithNoArg()), &p0s1);
+    QSignalTransition *t3 = p0s3.addTransition(&emitter, SIGNAL(signalWithNoArg()), &s1);
+    QSignalSpy t1Spy(t1, &QAbstractTransition::triggered);
+    QSignalSpy t2Spy(t2, &QAbstractTransition::triggered);
+    QSignalSpy t3Spy(t3, &QAbstractTransition::triggered);
+    QVERIFY(t1Spy.isValid());
+    QVERIFY(t2Spy.isValid());
+    QVERIFY(t3Spy.isValid());
+
+    s0.setObjectName("s0");
+    p0.setObjectName("p0");
+    p0s1.setObjectName("p0s1");
+    p0s2.setObjectName("p0s2");
+    p0s3.setObjectName("p0s3");
+    s1.setObjectName("s1");
+    t1->setObjectName("p0s1->p0s1");
+    t2->setObjectName("p0s2->p0s1");
+    t3->setObjectName("p0s3->s1");
+
+    machine.start();
+
+    QTRY_COMPARE(machine.configuration().contains(&s0), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s1), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s2), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s3), true);
+    QTRY_COMPARE(machine.configuration().contains(&s1), false);
+
+    QCOMPARE(t1Spy.count(), 0);
+    QCOMPARE(t2Spy.count(), 0);
+    QCOMPARE(t3Spy.count(), 0);
+
+    emitter.emitSignalWithNoArg();
+
+    QTRY_COMPARE(machine.configuration().contains(&s0), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s1), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s2), true);
+    QTRY_COMPARE(machine.configuration().contains(&p0s3), true);
+    QTRY_COMPARE(machine.configuration().contains(&s1), false);
+
+    QCOMPARE(t1Spy.count(), 1);
+    QCOMPARE(t2Spy.count(), 1);
+    QCOMPARE(t3Spy.count(), 0); // t3 got preempted by t2
+
+    QVERIFY(machine.isRunning());
+}
+
 void tst_QStateMachine::qtbug_46059()
 {
     QStateMachine machine;
@@ -6480,6 +6548,88 @@ void tst_QStateMachine::qtbug_46059()
     QTRY_COMPARE(machine.configuration().contains(&b), false);
     QTRY_COMPARE(machine.configuration().contains(&c), false);
     QTRY_COMPARE(machine.configuration().contains(&failure), false);
+    QTRY_COMPARE(machine.configuration().contains(&success), true);
+
+    QVERIFY(machine.isRunning());
+}
+
+void tst_QStateMachine::qtbug_46703()
+{
+    QStateMachine machine;
+    QState root(&machine);
+        QHistoryState h(&root);
+        QState p(QState::ParallelStates, &root);
+            QState a(&p);
+                QState a1(&a);
+                QState a2(&a);
+                QState a3(&a);
+            QState b(&p);
+                QState b1(&b);
+                QState b2(&b);
+
+    machine.setObjectName("machine");
+    root.setObjectName("root");
+    h.setObjectName("h");
+    p.setObjectName("p");
+    a.setObjectName("a");
+    a1.setObjectName("a1");
+    a2.setObjectName("a2");
+    a3.setObjectName("a3");
+    b.setObjectName("b");
+    b1.setObjectName("b1");
+    b2.setObjectName("b2");
+
+    machine.setInitialState(&root);
+    root.setInitialState(&h);
+    a.setInitialState(&a3);
+    b.setInitialState(&b1);
+    struct : public QAbstractTransition {
+        virtual bool eventTest(QEvent *) { return false; }
+        virtual void onTransition(QEvent *) {}
+    } defaultTransition;
+    defaultTransition.setTargetStates(QList<QAbstractState*>() << &a2 << &b2);
+    h.setDefaultTransition(&defaultTransition);
+
+    machine.start();
+    QCoreApplication::processEvents();
+
+    QTRY_COMPARE(machine.configuration().contains(&root), true);
+    QTRY_COMPARE(machine.configuration().contains(&h), false);
+    QTRY_COMPARE(machine.configuration().contains(&p), true);
+    QTRY_COMPARE(machine.configuration().contains(&a), true);
+    QTRY_COMPARE(machine.configuration().contains(&a1), false);
+    QTRY_COMPARE(machine.configuration().contains(&a2), true);
+    QTRY_COMPARE(machine.configuration().contains(&a3), false);
+    QTRY_COMPARE(machine.configuration().contains(&b), true);
+    QTRY_COMPARE(machine.configuration().contains(&b1), false);
+    QTRY_COMPARE(machine.configuration().contains(&b2), true);
+
+    QVERIFY(machine.isRunning());
+}
+
+void tst_QStateMachine::postEventFromBeginSelectTransitions()
+{
+    class StateMachine : public QStateMachine {
+    protected:
+        void beginSelectTransitions(QEvent* e) Q_DECL_OVERRIDE {
+            if (e->type() == QEvent::Type(QEvent::User + 2))
+                postEvent(new QEvent(QEvent::Type(QEvent::User + 1)), QStateMachine::HighPriority);
+        }
+    } machine;
+    QState a(&machine);
+    QState success(&machine);
+
+    machine.setInitialState(&a);
+    a.addTransition(new EventTransition(QEvent::Type(QEvent::User + 1), &success));
+
+    machine.start();
+
+    QTRY_COMPARE(machine.configuration().contains(&a), true);
+    QTRY_COMPARE(machine.configuration().contains(&success), false);
+
+    machine.postEvent(new QEvent(QEvent::Type(QEvent::User + 2)), QStateMachine::NormalPriority);
+
+    QTRY_COMPARE(machine.configuration().contains(&a), false);
     QTRY_COMPARE(machine.configuration().contains(&success), true);
 
     QVERIFY(machine.isRunning());

@@ -243,11 +243,11 @@ public class QtActivity extends Activity
             @SuppressWarnings("rawtypes")
             Class loaderClass = m_classLoader.loadClass(loaderParams.getString(LOADER_CLASS_NAME_KEY)); // load QtLoader class
             Object qtLoader = loaderClass.newInstance(); // create an instance
-            Method perpareAppMethod = qtLoader.getClass().getMethod("loadApplication",
+            Method prepareAppMethod = qtLoader.getClass().getMethod("loadApplication",
                                                                     Activity.class,
                                                                     ClassLoader.class,
                                                                     Bundle.class);
-            if (!(Boolean)perpareAppMethod.invoke(qtLoader, this, m_classLoader, loaderParams))
+            if (!(Boolean)prepareAppMethod.invoke(qtLoader, this, m_classLoader, loaderParams))
                 throw new Exception("");
 
             QtApplication.setQtActivityDelegate(qtLoader);
@@ -454,7 +454,7 @@ public class QtActivity extends Activity
     {
         ArrayList<String> libs = new ArrayList<String>();
 
-        String dataDir = getApplicationInfo().dataDir + "/";
+        String libsDir = getApplicationInfo().nativeLibraryDir + "/";
 
         long packageVersion = -1;
         try {
@@ -489,7 +489,7 @@ public class QtActivity extends Activity
 
                 for (String bundledImportBinary : list) {
                     String[] split = bundledImportBinary.split(":");
-                    String sourceFileName = dataDir + "lib/" + split[0];
+                    String sourceFileName = libsDir + split[0];
                     String destinationFileName = pluginsPrefix + split[1];
                     createBundledBinary(sourceFileName, destinationFileName);
                 }
@@ -897,6 +897,12 @@ public class QtActivity extends Activity
             } else {
                 ENVIRONMENT_VARIABLES += "QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=1\t";
             }
+
+            if (m_activityInfo.metaData.containsKey("android.app.auto_screen_scale_factor")
+                && m_activityInfo.metaData.getBoolean("android.app.auto_screen_scale_factor")) {
+                ENVIRONMENT_VARIABLES += "QT_AUTO_SCREEN_SCALE_FACTOR=1\t";
+            }
+
             startApp(true);
         }
     }
@@ -1061,7 +1067,7 @@ public class QtActivity extends Activity
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event)
     {
-        if (QtApplication.m_delegateObject != null  && QtApplication.onKeyDown != null)
+        if (QtApplication.m_delegateObject != null  && QtApplication.onKeyUp != null)
             return (Boolean) QtApplication.invokeDelegateMethod(QtApplication.onKeyUp, keyCode, event);
         else
             return super.onKeyUp(keyCode, event);

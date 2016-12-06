@@ -218,7 +218,6 @@
 #include "private/qhttpsocketengine_p.h"
 #include "qauthenticator.h"
 #include "qdebug.h"
-#include "qhash.h"
 #include "qmutex.h"
 #include "qstringlist.h"
 #include "qurl.h"
@@ -1523,7 +1522,7 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
     those settings are not found, this function will attempt to obtain
     Internet Explorer's settings and use them.
 
-    On MacOS X, this function will obtain the proxy settings using the
+    On \macos, this function will obtain the proxy settings using the
     SystemConfiguration framework from Apple. It will apply the FTP,
     HTTP and HTTPS proxy configurations for queries that contain the
     protocol tag "ftp", "http" and "https", respectively. If the SOCKS
@@ -1548,7 +1547,7 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
     listed here.
 
     \list
-    \li On MacOS X, this function will ignore the Proxy Auto Configuration
+    \li On \macos, this function will ignore the Proxy Auto Configuration
     settings, since it cannot execute the associated ECMAScript code.
 
     \li On Windows platforms, this function may take several seconds to
@@ -1606,7 +1605,7 @@ QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
         debug << "Unknown proxy " << int(type);
         break;
     }
-    debug << "\"" << proxy.hostName() << ":" << proxy.port() << "\" ";
+    debug << '"' << proxy.hostName() << ':' << proxy.port() << "\" ";
     QNetworkProxy::Capabilities caps = proxy.capabilities();
     QStringList scaps;
     if (caps & QNetworkProxy::TunnelingCapability)
@@ -1619,7 +1618,7 @@ QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
         scaps << QStringLiteral("Caching");
     if (caps & QNetworkProxy::HostNameLookupCapability)
         scaps << QStringLiteral("NameLookup");
-    debug << "[" << scaps.join(QLatin1Char(' ')) << "]";
+    debug << '[' << scaps.join(QLatin1Char(' ')) << ']';
     return debug;
 }
 #endif

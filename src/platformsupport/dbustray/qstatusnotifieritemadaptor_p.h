@@ -45,6 +45,17 @@
 #ifndef QSTATUSNOTIFIERITEMADAPTER_P_H
 #define QSTATUSNOTIFIERITEMADAPTER_P_H
 
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
 #ifndef QT_NO_SYSTEMTRAYICON
 
 #include <QtCore/QObject>
@@ -75,19 +86,19 @@ class QStatusNotifierItemAdaptor: public QDBusAbstractAdaptor
 "    <property access=\"read\" type=\"o\" name=\"Menu\"/>\n"
 "    <property access=\"read\" type=\"b\" name=\"ItemIsMenu\"/>\n"
 "    <property access=\"read\" type=\"s\" name=\"IconName\"/>\n"
-"    <property access=\"read\" type=\"(iiay)\" name=\"IconPixmap\">\n"
+"    <property access=\"read\" type=\"a(iiay)\" name=\"IconPixmap\">\n"
 "      <annotation value=\"QXdgDBusImageVector\" name=\"org.qtproject.QtDBus.QtTypeName\"/>\n"
 "    </property>\n"
 "    <property access=\"read\" type=\"s\" name=\"OverlayIconName\"/>\n"
-"    <property access=\"read\" type=\"(iiay)\" name=\"OverlayIconPixmap\">\n"
+"    <property access=\"read\" type=\"a(iiay)\" name=\"OverlayIconPixmap\">\n"
 "      <annotation value=\"QXdgDBusImageVector\" name=\"org.qtproject.QtDBus.QtTypeName\"/>\n"
 "    </property>\n"
 "    <property access=\"read\" type=\"s\" name=\"AttentionIconName\"/>\n"
-"    <property access=\"read\" type=\"(iiay)\" name=\"AttentionIconPixmap\">\n"
+"    <property access=\"read\" type=\"a(iiay)\" name=\"AttentionIconPixmap\">\n"
 "      <annotation value=\"QXdgDBusImageVector\" name=\"org.qtproject.QtDBus.QtTypeName\"/>\n"
 "    </property>\n"
 "    <property access=\"read\" type=\"s\" name=\"AttentionMovieName\"/>\n"
-"    <property access=\"read\" type=\"(s(iiay)ss)\" name=\"ToolTip\">\n"
+"    <property access=\"read\" type=\"(sa(iiay)ss)\" name=\"ToolTip\">\n"
 "      <annotation value=\"QXdgDBusToolTipStruct\" name=\"org.qtproject.QtDBus.QtTypeName\"/>\n"
 "    </property>\n"
 "    <method name=\"ContextMenu\">\n"

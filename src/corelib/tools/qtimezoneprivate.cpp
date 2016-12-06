@@ -246,8 +246,8 @@ QTimeZonePrivate::Data QTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
 QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs) const
 {
     if (!hasDaylightTime() ||!hasTransitions()) {
-        // No daylight time means same offset for all local msecs
-        // Having daylight time but no transitions means we can't calculate, so use nearest
+        // No DST means same offset for all local msecs
+        // Having DST but no transitions means we can't calculate, so use nearest
         return data(forLocalMSecs - (standardTimeOffset(forLocalMSecs) * 1000));
     }
 
@@ -276,16 +276,16 @@ QTimeZonePrivate::Data QTimeZonePrivate::dataForLocalTime(qint64 forLocalMSecs) 
     }
 
     if (tran.daylightTimeOffset == 0) {
-        // If tran is in StandardTime, then need to check if falls close either daylight transition
+        // If tran is in StandardTime, then need to check if falls close to either DST transition.
         // If it does, then it may need adjusting for missing hour or for second occurrence
         qint64 diffPrevTran = forLocalMSecs
                               - (tran.atMSecsSinceEpoch + (tran.offsetFromUtc * 1000));
         qint64 diffNextTran = nextTran.atMSecsSinceEpoch + (nextTran.offsetFromUtc * 1000)
                               - forLocalMSecs;
         if (diffPrevTran >= 0 && diffPrevTran < MSECS_TRAN_WINDOW) {
-            // If tran picked is for standard time check if changed from daylight in last 6 hours,
+            // If tran picked is for standard time check if changed from DST in last 6 hours,
             // as the local msecs may be ambiguous and represent two valid utc msecs.
-            // If in last 6 hours then get prev tran and if diff falls within the daylight offset
+            // If in last 6 hours then get prev tran and if diff falls within the DST offset
             // then use the prev tran as we default to the FirstOccurrence
             // TODO Check if faster to just always get prev tran, or if faster using 6 hour check.
             Data dstTran = previousTransition(tran.atMSecsSinceEpoch);
@@ -441,22 +441,45 @@ QTimeZone::OffsetData QTimeZonePrivate::toOffsetData(const QTimeZonePrivate::Dat
     return offsetData;
 }
 
-// If the format of the ID is valid
+// Is the format of the ID valid ?
 bool QTimeZonePrivate::isValidId(const QByteArray &ianaId)
 {
-    // Rules for defining TZ/IANA names as per ftp://ftp.iana.org/tz/code/Theory
-    // 1. Use only valid POSIX file name components
-    // 2. Within a file name component, use only ASCII letters, `.', `-' and `_'.
-    // 3. Do not use digits
-    // 4. A file name component must not exceed 14 characters or start with `-'
-    // Aliases such as "Etc/GMT+7" and "SystemV/EST5EDT" are valid so we need to accept digits, ':', and '+'.
+    /*
+      Main rules for defining TZ/IANA names as per ftp://ftp.iana.org/tz/code/Theory
+       1. Use only valid POSIX file name components
+       2. Within a file name component, use only ASCII letters, `.', `-' and `_'.
+       3. Do not use digits (except in a [+-]\d+ suffix, when used).
+       4. A file name component must not exceed 14 characters or start with `-'
+      However, the rules are really guidelines - a later one says
+       - Do not change established names if they only marginally violate the
+         above rules.
+      We may, therefore, need to be a bit slack in our check here, if we hit
+      legitimate exceptions in real time-zone databases.
 
-    // The following would be preferable if QRegExp would work on QByteArrays directly:
-    // const QRegExp rx(QStringLiteral("[a-z0-9:+._][a-z0-9:+._-]{,13}(?:/[a-z0-9:+._][a-z0-9:+._-]{,13})*"),
-    //                  Qt::CaseInsensitive);
-    // return rx.exactMatch(ianaId);
+      In particular, aliases such as "Etc/GMT+7" and "SystemV/EST5EDT" are valid
+      so we need to accept digits, ':', and '+'; aliases typically have the form
+      of POSIX TZ strings, which allow a suffix to a proper IANA name.  A POSIX
+      suffix starts with an offset (as in GMT+7) and may continue with another
+      name (as in EST5EDT, giving the DST name of the zone); a further offset is
+      allowed (for DST).  The ("hard to describe and [...] error-prone in
+      practice") POSIX form even allows a suffix giving the dates (and
+      optionally times) of the annual DST transitions.  Hopefully, no TZ aliases
+      go that far, but we at least need to accept an offset and (single
+      fragment) DST-name.
 
-    // hand-rolled version:
+      But for the legacy complications, the following would be preferable if
+      QRegExp would work on QByteArrays directly:
+          const QRegExp rx(QStringLiteral("[a-z+._][a-z+._-]{,13}"
+                                      "(?:/[a-z+._][a-z+._-]{,13})*"
+                                          // Optional suffix:
+                                          "(?:[+-]?\d{1,2}(?::\d{1,2}){,2}" // offset
+                                             // one name fragment (DST):
+                                             "(?:[a-z+._][a-z+._-]{,13})?)"),
+                           Qt::CaseInsensitive);
+          return rx.exactMatch(ianaId);
+    */
+
+    // Somewhat slack hand-rolled version:
     const int MinSectionLength = 1;
     const int MaxSectionLength = 14;
     int sectionLength = 0;
@@ -472,11 +495,11 @@ bool QTimeZonePrivate::isValidId(const QByteArray &ianaId)
         } else if (!(ch >= 'a' && ch <= 'z')
                 && !(ch >= 'A' && ch <= 'Z')
                 && !(ch == '_')
+                && !(ch == '.')
+                   // Should ideally check these only happen as an offset:
                 && !(ch >= '0' && ch <= '9')
-                && !(ch == '-')
                 && !(ch == '+')
-                && !(ch == ':')
-                && !(ch == '.')) {
+                && !(ch == ':')) {
             return false; // violates (2)
         }
     }
@@ -627,10 +650,11 @@ QTimeZonePrivate *QUtcTimeZonePrivate::clone()
 
 QTimeZonePrivate::Data QUtcTimeZonePrivate::data(qint64 forMSecsSinceEpoch) const
 {
-    Data d = invalidData();
+    Data d;
     d.abbreviation = m_abbreviation;
     d.atMSecsSinceEpoch = forMSecsSinceEpoch;
-    d.offsetFromUtc = m_offsetFromUtc;
+    d.standardTimeOffset = d.offsetFromUtc = m_offsetFromUtc;
+    d.daylightTimeOffset = 0;
     return d;
 }
 
@@ -700,6 +724,7 @@ QByteArray QUtcTimeZonePrivate::systemTimeZoneId() const
 QList<QByteArray> QUtcTimeZonePrivate::availableTimeZoneIds() const
 {
     QList<QByteArray> result;
+    result.reserve(utcDataTableSize);
     for (int i = 0; i < utcDataTableSize; ++i)
         result << utcId(utcData(i));
     std::sort(result.begin(), result.end()); // ### or already sorted??

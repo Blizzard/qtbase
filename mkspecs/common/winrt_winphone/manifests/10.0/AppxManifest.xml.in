@@ -4,7 +4,8 @@
   xmlns=\"http://schemas.microsoft.com/appx/manifest/foundation/windows10\"
   xmlns:mp=\"http://schemas.microsoft.com/appx/2014/phone/manifest\"
   xmlns:uap=\"http://schemas.microsoft.com/appx/manifest/uap/windows10\"
-  IgnorableNamespaces=\"uap mp\">
+  xmlns:mobile=\"http://schemas.microsoft.com/appx/manifest/mobile/windows10\"
+  IgnorableNamespaces=\"uap mp mobile\">
 
   <Identity
     Name=\"$${WINRT_MANIFEST.identity}\"
@@ -21,7 +22,9 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name=\"Windows.Universal\" MinVersion=\"10.0.10069.0\" MaxVersionTested=\"10.0.10069.0\" />$${WINRT_MANIFEST.dependencies}
+    <TargetDeviceFamily Name=\"Windows.Universal\"
+      MinVersion=\"$${WINRT_MANIFEST.minVersion}\"
+      MaxVersionTested=\"$${WINRT_MANIFEST.maxVersionTested}\" />$${WINRT_MANIFEST.dependencies}
   </Dependencies>
 
   <Resources>
@@ -43,8 +46,5 @@
       </uap:VisualElements>
     </Application>
   </Applications>
-
-  <Capabilities>
-    <Capability Name=\"internetClient\" />
-  </Capabilities>
+  $${WINRT_MANIFEST.capabilities}
 </Package>

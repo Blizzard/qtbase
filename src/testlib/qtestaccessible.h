@@ -126,7 +126,7 @@ public:
     static void cleanup()
     {
         delete instance();
-        instance() = 0;
+        instance() = Q_NULLPTR;
     }
     static void clearEvents() { eventList().clear(); }
     static EventList events() { return eventList(); }
@@ -135,13 +135,12 @@ public:
         for (int i = 0; eventList().isEmpty() && i < 5; ++i)
             QTest::qWait(50);
         if (eventList().isEmpty()) {
-            qWarning("%s: Timeout waiting for accessibility event.", Q_FUNC_INFO);
+            qWarning("Timeout waiting for accessibility event.");
             return false;
         }
         const bool res = *eventList().first() == *ev;
         if (!res)
-            qWarning("%s: %s", Q_FUNC_INFO,
-                     qPrintable(msgAccessibilityEventListMismatch(eventList(), ev)));
+            qWarning("%s", qPrintable(msgAccessibilityEventListMismatch(eventList(), ev)));
         delete eventList().takeFirst();
         return res;
     }
@@ -162,8 +161,8 @@ private:
 
     ~QTestAccessibility()
     {
-        QAccessible::installUpdateHandler(0);
-        QAccessible::installRootObjectHandler(0);
+        QAccessible::installUpdateHandler(Q_NULLPTR);
+        QAccessible::installRootObjectHandler(Q_NULLPTR);
     }
 
     static void rootObjectHandler(QObject *object)
@@ -172,9 +171,9 @@ private:
         if (object) {
             QGuiApplication* app = qobject_cast<QGuiApplication*>(object);
             if ( !app )
-                qWarning("%s: root Object is not a QGuiApplication!", Q_FUNC_INFO);
+                qWarning("root Object is not a QGuiApplication!");
         } else {
-            qWarning("%s: root Object called with 0 pointer", Q_FUNC_INFO);
+            qWarning("root Object called with 0 pointer");
         }
     }
 
@@ -268,7 +267,7 @@ private:
 
     static QTestAccessibility *&instance()
     {
-        static QTestAccessibility *ta = 0;
+        static QTestAccessibility *ta = Q_NULLPTR;
         return ta;
     }
 

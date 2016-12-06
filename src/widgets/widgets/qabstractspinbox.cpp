@@ -720,7 +720,16 @@ void QAbstractSpinBox::interpretText()
 QVariant QAbstractSpinBox::inputMethodQuery(Qt::InputMethodQuery query) const
 {
     Q_D(const QAbstractSpinBox);
-    return d->edit->inputMethodQuery(query);
+    const QVariant lineEditValue = d->edit->inputMethodQuery(query);
+    switch (query) {
+    case Qt::ImHints:
+        if (const int hints = inputMethodHints())
+            return QVariant(hints | lineEditValue.toInt());
+        break;
+    default:
+        break;
+    }
+    return lineEditValue;
 }
 
 /*!
@@ -742,8 +751,7 @@ bool QAbstractSpinBox::event(QEvent *event)
     case QEvent::HoverEnter:
     case QEvent::HoverLeave:
     case QEvent::HoverMove:
-        if (const QHoverEvent *he = static_cast<const QHoverEvent *>(event))
-            d->updateHoverControl(he->pos());
+        d->updateHoverControl(static_cast<const QHoverEvent *>(event)->pos());
         break;
     case QEvent::ShortcutOverride:
         if (d->edit->event(event))
@@ -1075,6 +1083,8 @@ void QAbstractSpinBox::keyPressEvent(QKeyEvent *event)
     }
 
     d->edit->event(event);
+    if (!d->edit->text().isEmpty())
+        d->cleared = false;
     if (!isVisible())
         d->ignoreUpdateEdit = true;
 }

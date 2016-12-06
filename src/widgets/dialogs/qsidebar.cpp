@@ -60,6 +60,8 @@ void QSideBarDelegate::initStyleOption(QStyleOptionViewItem *option,
 }
 
 /*!
+    \internal
+    \class QUrlModel
     QUrlModel lets you have indexes from a QFileSystemModel to a list.  When QFileSystemModel
     changes them QUrlModel will automatically update.
 
@@ -190,7 +192,9 @@ void QUrlModel::setUrl(const QModelIndex &index, const QUrl &url, const QModelIn
 
         QIcon newIcon = qvariant_cast<QIcon>(dirIndex.data(Qt::DecorationRole));
         if (!dirIndex.isValid()) {
-            newIcon = fileSystemModel->iconProvider()->icon(QFileIconProvider::Folder);
+            const QFileIconProvider *provider = fileSystemModel->iconProvider();
+            if (provider)
+                newIcon = provider->icon(QFileIconProvider::Folder);
             newName = QFileInfo(url.toLocalFile()).fileName();
             if (!invalidUrls.contains(url))
                 invalidUrls.append(url);
@@ -274,7 +278,9 @@ void QUrlModel::addUrls(const QList<QUrl> &list, int row, bool move)
 QList<QUrl> QUrlModel::urls() const
 {
     QList<QUrl> list;
-    for (int i = 0; i < rowCount(); ++i)
+    const int numRows = rowCount();
+    list.reserve(numRows);
+    for (int i = 0; i < numRows; ++i)
         list.append(data(index(i, 0), UrlRole).toUrl());
     return list;
 }
@@ -334,10 +340,12 @@ void QUrlModel::dataChanged(const QModelIndex &topLeft, const QModelIndex &botto
 void QUrlModel::layoutChanged()
 {
     QStringList paths;
-    for (int i = 0; i < watching.count(); ++i)
+    const int numPaths = watching.count();
+    paths.reserve(numPaths);
+    for (int i = 0; i < numPaths; ++i)
         paths.append(watching.at(i).second);
     watching.clear();
-    for (int i = 0; i < paths.count(); ++i) {
+    for (int i = 0; i < numPaths; ++i) {
         QString path = paths.at(i);
         QModelIndex newIndex = fileSystemModel->index(path);
         watching.append(QPair<QModelIndex, QString>(newIndex, path));
@@ -453,12 +461,15 @@ void QSidebar::removeEntry()
 {
     QList<QModelIndex> idxs = selectionModel()->selectedIndexes();
     QList<QPersistentModelIndex> indexes;
-    for (int i = 0; i < idxs.count(); i++)
+    const int numIndexes = idxs.count();
+    indexes.reserve(numIndexes);
+    for (int i = 0; i < numIndexes; i++)
         indexes.append(idxs.at(i));
 
-    for (int i = 0; i < indexes.count(); ++i)
+    for (int i = 0; i < numIndexes; ++i) {
         if (!indexes.at(i).data(QUrlModel::UrlRole).toUrl().path().isEmpty())
             model()->removeRow(indexes.at(i).row());
+    }
 }
 
 /*!
@@ -499,5 +510,7 @@ bool QSidebar::event(QEvent * event)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qsidebar_p.cpp"
 
 #endif

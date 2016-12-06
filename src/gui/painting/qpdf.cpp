@@ -377,8 +377,8 @@ QByteArray QPdf::generateDashes(const QPen &pen)
         s << dw;
     }
     s << ']';
-    //qDebug() << "dasharray: pen has" << dasharray;
-    //qDebug() << "  => " << result;
+    s << pen.dashOffset() * w;
+    s << " d\n";
     return result;
 }
 
@@ -996,6 +996,35 @@ void QPdfEngine::drawTextItem(const QPointF &p, const QTextItem &textItem)
     *d->currentPage << "Q\n";
 }
 
+void QPdfEngine::drawHyperlink(const QRectF &r, const QUrl &url)
+{
+    Q_D(QPdfEngine);
+
+    const uint annot = d->addXrefEntry(-1);
+    const QByteArray urlascii = url.toEncoded();
+    int len = urlascii.size();
+    QVarLengthArray<char> url_esc;
+    url_esc.reserve(len + 1);
+    for (int j = 0; j < len; j++) {
+        if (urlascii[j] == '(' || urlascii[j] == ')' || urlascii[j] == '\\')
+            url_esc.append('\\');
+        url_esc.append(urlascii[j]);
+    }
+    url_esc.append('\0');
+
+    char buf[256];
+    const QRectF rr = d->pageMatrix().mapRect(r);
+    d->xprintf("<<\n/Type /Annot\n/Subtype /Link\n/Rect [");
+    d->xprintf("%s ", qt_real_to_string(rr.left(), buf));
+    d->xprintf("%s ", qt_real_to_string(rr.top(), buf));
+    d->xprintf("%s ", qt_real_to_string(rr.right(), buf));
+    d->xprintf("%s", qt_real_to_string(rr.bottom(), buf));
+    d->xprintf("]\n/Border [0 0 0]\n/A <<\n");
+    d->xprintf("/Type /Action\n/S /URI\n/URI (%s)\n", url_esc.constData());
+    d->xprintf(">>\n>>\n");
+    d->xprintf("endobj\n");
+    d->currentPage->annotations.append(annot);
+}
 
 void QPdfEngine::updateState(const QPaintEngineState &state)
 {
@@ -1167,7 +1196,7 @@ void QPdfEngine::setPen()
     switch(d->pen.joinStyle()) {
     case Qt::MiterJoin:
     case Qt::SvgMiterJoin:
-        *d->currentPage << d->pen.miterLimit() << "M ";
+        *d->currentPage << qMax(qreal(1.0), d->pen.miterLimit()) << "M ";
         pdfJoinStyle = 0;
         break;
     case Qt::BevelJoin:
@@ -1181,7 +1210,7 @@ void QPdfEngine::setPen()
     }
     *d->currentPage << pdfJoinStyle << "j ";
 
-    *d->currentPage << QPdf::generateDashes(d->pen) << " 0 d\n";
+    *d->currentPage << QPdf::generateDashes(d->pen);
 }
 
 
@@ -1317,6 +1346,9 @@ int QPdfEngine::metric(QPaintDevice::PaintDeviceMetric metricType) const
         break;
     case QPaintDevice::PdmDevicePixelRatio:
         val = 1;
+        break;
+    case QPaintDevice::PdmDevicePixelRatioScaled:
+        val = 1 * QPaintDevice::devicePixelRatioFScale();
         break;
     default:
         qWarning("QPdfWriter::metric: Invalid metric command");
@@ -1467,7 +1499,7 @@ void QPdfEnginePrivate::writeInfo()
     printString(creator);
     xprintf("\n/Producer ");
     printString(QString::fromLatin1("Qt " QT_VERSION_STR));
-    QDateTime now = QDateTime::currentDateTime().toUTC();
+    QDateTime now = QDateTime::currentDateTimeUtc();
     QTime t = now.time();
     QDate d = now.date();
     xprintf("\n/CreationDate (D:%d%02d%02d%02d%02d%02d)\n",
@@ -1524,6 +1556,7 @@ void QPdfEnginePrivate::embedFont(QFontSubset *font)
     int toUnicode = requestObject();
 
     QFontEngine::Properties properties = font->fontEngine->properties();
+    QByteArray postscriptName = properties.postscriptName.replace(' ', '_');
 
     {
         qreal scale = 1000/properties.emSquare.toReal();
@@ -1537,7 +1570,7 @@ void QPdfEnginePrivate::embedFont(QFontSubset *font)
             s << (char)('A' + (tag % 26));
             tag /= 26;
         }
-        s <<  '+' << properties.postscriptName << "\n"
+        s <<  '+' << postscriptName << "\n"
             "/Flags " << 4 << "\n"
             "/FontBBox ["
           << properties.boundingBox.x()*scale
@@ -1580,7 +1613,7 @@ void QPdfEnginePrivate::embedFont(QFontSubset *font)
         QPdf::ByteStream s(&cid);
         s << "<< /Type /Font\n"
             "/Subtype /CIDFontType2\n"
-            "/BaseFont /" << properties.postscriptName << "\n"
+            "/BaseFont /" << postscriptName << "\n"
             "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>\n"
             "/FontDescriptor " << fontDescriptor << "0 R\n"
             "/CIDToGIDMap /Identity\n"
@@ -1604,7 +1637,7 @@ void QPdfEnginePrivate::embedFont(QFontSubset *font)
         QPdf::ByteStream s(&font);
         s << "<< /Type /Font\n"
             "/Subtype /Type0\n"
-            "/BaseFont /" << properties.postscriptName << "\n"
+            "/BaseFont /" << postscriptName << "\n"
             "/Encoding /Identity-H\n"
             "/DescendantFonts [" << cidfont << "0 R]\n"
             "/ToUnicode " << toUnicode << "0 R"
@@ -1762,7 +1795,7 @@ void QPdfEnginePrivate::printString(const QString &string) {
             array.append(part[j]);
         }
     }
-    array.append(")");
+    array.append(')');
     write(array);
 }
 
@@ -1952,7 +1985,9 @@ int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from
         stops.append(QGradientStop(1, stops.at(stops.size() - 1).second));
 
     QVector<int> functions;
-    for (int i = 0; i < stops.size() - 1; ++i) {
+    const int numStops = stops.size();
+    functions.reserve(numStops - 1);
+    for (int i = 0; i < numStops - 1; ++i) {
         int f = addXrefEntry(-1);
         QByteArray data;
         QPdf::ByteStream s(&data);
@@ -1974,10 +2009,11 @@ int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from
     }
 
     QVector<QGradientBound> gradientBounds;
+    gradientBounds.reserve((to - from) * (numStops - 1));
 
     for (int step = from; step < to; ++step) {
         if (reflect && step % 2) {
-            for (int i = stops.size() - 1; i > 0; --i) {
+            for (int i = numStops - 1; i > 0; --i) {
                 QGradientBound b;
                 b.start = step + 1 - qBound(qreal(0.), stops.at(i).first, qreal(1.));
                 b.stop = step + 1 - qBound(qreal(0.), stops.at(i - 1).first, qreal(1.));
@@ -1986,7 +2022,7 @@ int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from
                 gradientBounds << b;
             }
         } else {
-            for (int i = 0; i < stops.size() - 1; ++i) {
+            for (int i = 0; i < numStops - 1; ++i) {
                 QGradientBound b;
                 b.start = step + qBound(qreal(0.), stops.at(i).first, qreal(1.));
                 b.stop = step + qBound(qreal(0.), stops.at(i + 1).first, qreal(1.));
@@ -2098,9 +2134,9 @@ int QPdfEnginePrivate::generateLinearGradientShader(const QLinearGradient *gradi
 int QPdfEnginePrivate::generateRadialGradientShader(const QRadialGradient *gradient, const QTransform &matrix, bool alpha)
 {
     QPointF p1 = gradient->center();
-    double r1 = gradient->centerRadius();
+    qreal r1 = gradient->centerRadius();
     QPointF p0 = gradient->focalPoint();
-    double r0 = gradient->focalRadius();
+    qreal r0 = gradient->focalRadius();
 
     Q_ASSERT(gradient->coordinateMode() == QGradient::LogicalMode);
 

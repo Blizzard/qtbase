@@ -50,7 +50,6 @@
 
 #include <QtCore/qobject.h>
 #include <QtCore/qmap.h>
-#include <QtCore/qhash.h>
 #include <QtCore/qreadwritelock.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/qvector.h>
@@ -127,6 +126,7 @@ public: // member variables
 private:
     static int relaySlotMethodIndex();
 };
+Q_DECLARE_TYPEINFO(QDBusAdaptorConnector::AdaptorData, Q_PRIMITIVE_TYPE);
 
 extern QDBusAdaptorConnector *qDBusFindAdaptorConnector(QObject *object);
 extern QDBusAdaptorConnector *qDBusCreateAdaptorConnector(QObject *object);

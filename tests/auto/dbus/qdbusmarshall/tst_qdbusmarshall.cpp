@@ -41,6 +41,11 @@
 #include <QtDBus/private/qdbusconnection_p.h>
 #include <QtDBus/private/qdbus_symbols_p.h>
 
+#ifndef DBUS_TYPE_UNIX_FD
+#  define DBUS_TYPE_UNIX_FD int('h')
+#  define DBUS_TYPE_UNIX_FD_AS_STRING "h"
+#endif
+
 static const char serviceName[] = "org.qtproject.autotests.qpong";
 static const char objectPath[] = "/org/qtproject/qpong";
 static const char *interfaceName = serviceName;
@@ -150,7 +155,11 @@ int tst_QDBusMarshall::fileDescriptorForTest()
 {
     if (!tempFile.isOpen()) {
         tempFile.setFileTemplate(QDir::tempPath() + "/qdbusmarshalltestXXXXXX.tmp");
-        tempFile.open();
+        if (!tempFile.open()) {
+            qWarning("%s: Cannot create temporary file: %s", Q_FUNC_INFO,
+                     qPrintable(tempFile.errorString()));
+            return 0;
+        }
     }
     return tempFile.handle();
 }
@@ -869,7 +878,7 @@ void tst_QDBusMarshall::sendSignalErrors()
                                                   "signalName");
     msg << QVariant::fromValue(QDBusObjectPath());
 
-    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid object path passed in arguments");
+    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal to service \"\" path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid object path passed in arguments");
     QVERIFY(!con.send(msg));
 
     msg.setArguments(QVariantList());
@@ -879,19 +888,19 @@ void tst_QDBusMarshall::sendSignalErrors()
     path.setPath("abc");
     msg << QVariant::fromValue(path);
 
-    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid object path passed in arguments");
+    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal to service \"\" path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid object path passed in arguments");
     QVERIFY(!con.send(msg));
 
     QDBusSignature sig;
     msg.setArguments(QVariantList() << QVariant::fromValue(sig));
-    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid signature passed in arguments");
+    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal to service \"\" path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid signature passed in arguments");
     QVERIFY(!con.send(msg));
 
     QTest::ignoreMessage(QtWarningMsg, "QDBusSignature: invalid signature \"a\"");
     sig.setSignature("a");
     msg.setArguments(QVariantList());
     msg << QVariant::fromValue(sig);
-    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid signature passed in arguments");
+    QTest::ignoreMessage(QtWarningMsg, "QDBusConnection: error: could not send signal to service \"\" path \"/foo\" interface \"local.interfaceName\" member \"signalName\": Marshalling failed: Invalid signature passed in arguments");
     QVERIFY(!con.send(msg));
 }
 
@@ -1079,14 +1088,11 @@ static bool canSendUnixFd(DBusConnection *connection)
 # if DBUS_VERSION-0 >= 0x010400
     can_send_type = dbus_connection_can_send_type;
 # endif
-#else
+#elif !defined(QT_NO_LIBRARY)
     // run-time check if the next functions are available
     can_send_type = (can_send_type_t)qdbus_resolve_conditionally("dbus_connection_can_send_type");
 #endif
 
-#ifndef DBUS_TYPE_UNIX_FD
-# define DBUS_TYPE_UNIX_FD int('h')
-#endif
     return can_send_type && can_send_type(connection, DBUS_TYPE_UNIX_FD);
 }
 

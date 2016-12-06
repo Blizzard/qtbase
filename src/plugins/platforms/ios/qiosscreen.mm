@@ -40,7 +40,30 @@
 #include "qiosviewcontroller.h"
 #include "quiview.h"
 
+#include <QtGui/private/qwindow_p.h>
+
 #include <sys/sysctl.h>
+
+// -------------------------------------------------------------------------
+
+typedef void (^DisplayLinkBlock)(CADisplayLink *displayLink);
+
+@implementation UIScreen (DisplayLinkBlock)
+- (CADisplayLink*)displayLinkWithBlock:(DisplayLinkBlock)block
+{
+    return [self displayLinkWithTarget:[[block copy] autorelease]
+        selector:@selector(invokeDisplayLinkBlock:)];
+}
+@end
+
+@implementation NSObject (DisplayLinkBlock)
+- (void)invokeDisplayLinkBlock:(CADisplayLink *)sender
+{
+    DisplayLinkBlock block = static_cast<id>(self);
+    block(sender);
+}
+@end
+
 
 // -------------------------------------------------------------------------
 
@@ -104,12 +127,12 @@ static QIOSScreen* qtPlatformScreenFor(UIScreen *uiScreen)
     @public
     QIOSScreen *m_screen;
 }
-- (id) initWithQIOSScreen:(QIOSScreen *)screen;
+- (id)initWithQIOSScreen:(QIOSScreen *)screen;
 @end
 
 @implementation QIOSOrientationListener
 
-- (id) initWithQIOSScreen:(QIOSScreen *)screen
+- (id)initWithQIOSScreen:(QIOSScreen *)screen
 {
     self = [super init];
     if (self) {
@@ -123,7 +146,7 @@ static QIOSScreen* qtPlatformScreenFor(UIScreen *uiScreen)
     return self;
 }
 
-- (void) dealloc
+- (void)dealloc
 {
     [[UIDevice currentDevice] endGeneratingDeviceOrientationNotifications];
     [[NSNotificationCenter defaultCenter]
@@ -132,7 +155,7 @@ static QIOSScreen* qtPlatformScreenFor(UIScreen *uiScreen)
     [super dealloc];
 }
 
-- (void) orientationChanged:(NSNotification *)notification
+- (void)orientationChanged:(NSNotification *)notification
 {
     Q_UNUSED(notification);
     m_screen->updateProperties();
@@ -170,23 +193,28 @@ QIOSScreen::QIOSScreen(UIScreen *screen)
     if (screen == [UIScreen mainScreen]) {
         QString deviceIdentifier = deviceModelIdentifier();
 
-        if (deviceIdentifier == QLatin1String("iPhone2,1") /* iPhone 3GS */
-            || deviceIdentifier == QLatin1String("iPod3,1") /* iPod touch 3G */) {
-            m_depth = 18;
-        } else {
-            m_depth = 24;
-        }
+        // Based on https://en.wikipedia.org/wiki/List_of_iOS_devices#Display
 
-        if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad
-            && !deviceIdentifier.contains(QRegularExpression("^iPad2,[567]$")) /* excluding iPad Mini */) {
-            m_unscaledDpi = 132;
+        // iPhone (1st gen), 3G, 3GS, and iPod Touch (1st–3rd gen) are 18-bit devices
+        if (deviceIdentifier.contains(QRegularExpression("^(iPhone1,[12]|iPhone2,1|iPod[1-3],1)$")))
+            m_depth = 18;
+        else
+            m_depth = 24;
+
+        if (deviceIdentifier.contains(QRegularExpression("^iPhone(7,1|8,2)$"))) {
+            // iPhone 6 Plus or iPhone 6S Plus
+            m_physicalDpi = 401;
+        } else if (deviceIdentifier.contains(QRegularExpression("^iPad(1,1|2,[1-4]|3,[1-6]|4,[1-3]|5,[3-4]|6,[7-8])$"))) {
+            // All iPads except the iPad Mini series
+            m_physicalDpi = 132 * devicePixelRatio();
         } else {
-            m_unscaledDpi = 163; // Regular iPhone DPI
+            // All non-Plus iPhones, and iPad Minis
+            m_physicalDpi = 163 * devicePixelRatio();
         }
     } else {
         // External display, hard to say
         m_depth = 24;
-        m_unscaledDpi = 96;
+        m_physicalDpi = 96;
     }
 
     for (UIWindow *existingWindow in [[UIApplication sharedApplication] windows]) {
@@ -203,10 +231,16 @@ QIOSScreen::QIOSScreen(UIScreen *screen)
     }
 
     updateProperties();
+
+    m_displayLink = [m_uiScreen displayLinkWithBlock:^(CADisplayLink *) { deliverUpdateRequests(); }];
+    m_displayLink.paused = YES; // Enabled when clients call QWindow::requestUpdate()
+    [m_displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 }
 
 QIOSScreen::~QIOSScreen()
 {
+    [m_displayLink invalidate];
+
     [m_orientationListener release];
     [m_uiWindow release];
 }
@@ -248,8 +282,23 @@ void QIOSScreen::updateProperties()
     }
 
     if (m_geometry != previousGeometry) {
-        const qreal millimetersPerInch = 25.4;
-        m_physicalSize = QSizeF(m_geometry.size()) / m_unscaledDpi * millimetersPerInch;
+        QRectF physicalGeometry;
+        if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_8_0) {
+             // We can't use the primaryOrientation of screen(), as we haven't reported the new geometry yet
+            Qt::ScreenOrientation primaryOrientation = m_geometry.width() >= m_geometry.height() ?
+                Qt::LandscapeOrientation : Qt::PortraitOrientation;
+
+            // On iPhone 6+ devices, or when display zoom is enabled, the render buffer is scaled
+            // before being output on the physical display. We have to take this into account when
+            // computing the physical size. Note that unlike the native bounds, the physical size
+            // follows the primary orientation of the screen.
+            physicalGeometry = mapBetween(nativeOrientation(), primaryOrientation, fromCGRect(m_uiScreen.nativeBounds).toRect());
+        } else {
+            physicalGeometry = QRectF(0, 0, m_geometry.width() * devicePixelRatio(), m_geometry.height() * devicePixelRatio());
+        }
+
+        static const qreal millimetersPerInch = 25.4;
+        m_physicalSize = physicalGeometry.size() / m_physicalDpi * millimetersPerInch;
     }
 
     // At construction time, we don't yet have an associated QScreen, but we still want
@@ -269,6 +318,35 @@ void QIOSScreen::updateProperties()
 
     if (m_geometry != previousGeometry || m_availableGeometry != previousAvailableGeometry)
         QWindowSystemInterface::handleScreenGeometryChange(screen(), m_geometry, m_availableGeometry);
+}
+
+void QIOSScreen::setUpdatesPaused(bool paused)
+{
+    m_displayLink.paused = paused;
+}
+
+void QIOSScreen::deliverUpdateRequests() const
+{
+    bool pauseUpdates = true;
+
+    QList<QWindow*> windows = QGuiApplication::allWindows();
+    for (int i = 0; i < windows.size(); ++i) {
+        if (platformScreenForWindow(windows.at(i)) != this)
+            continue;
+
+        QWindowPrivate *wp = static_cast<QWindowPrivate *>(QObjectPrivate::get(windows.at(i)));
+        if (!wp->updateRequestPending)
+            continue;
+
+        wp->deliverUpdateRequest();
+
+        // Another update request was triggered, keep the display link running
+        if (wp->updateRequestPending)
+            pauseUpdates = false;
+    }
+
+    // Pause the display link if there are no pending update requests
+    m_displayLink.paused = pauseUpdates;
 }
 
 QRect QIOSScreen::geometry() const

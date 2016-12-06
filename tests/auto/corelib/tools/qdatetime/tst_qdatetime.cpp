@@ -68,7 +68,10 @@ private slots:
     void timeSpec();
     void toTime_t_data();
     void toTime_t();
+    void daylightSavingsTimeChange_data();
     void daylightSavingsTimeChange();
+    void springForward_data();
+    void springForward();
     void setDate();
     void setTime_data();
     void setTime();
@@ -152,7 +155,7 @@ private slots:
 
 private:
     enum { LocalTimeIsUtc = 0, LocalTimeAheadOfUtc = 1, LocalTimeBehindUtc = -1} localTimeType;
-    bool europeanTimeZone;
+    bool zoneIsCET;
     QDate defDate() const { return QDate(1900, 1, 1); }
     QTime defTime() const { return QTime(0, 0, 0); }
     QDateTime defDateTime() const { return QDateTime(defDate(), defTime()); }
@@ -168,37 +171,86 @@ Q_DECLARE_METATYPE(Qt::DateFormat)
 
 tst_QDateTime::tst_QDateTime()
 {
-    uint x1 = QDateTime(QDate(1990, 1, 1), QTime()).toTime_t();
-    uint x2 = QDateTime(QDate(1990, 6, 1), QTime()).toTime_t();
-    europeanTimeZone = (x1 == 631148400 && x2 == 644191200);
+    /*
+      Due to some jurisdictions changing their zones and rules, it's possible
+      for a non-CET zone to accidentally match CET at a few tested moments but
+      be different a few years later or earlier.  This would lead to tests
+      failing if run in the partially-aliasing zone (e.g. Algeria, Lybia).  So
+      test thoroughly; ideally at every mid-winter or mid-summer in whose
+      half-year any test below assumes zoneIsCET means what it says.  (Tests at
+      or near a DST transition implicate both of the half-years that meet
+      there.)  Years outside the 1970--2038 range, however, are likely not
+      properly handled by the TZ-database; and QDateTime explicitly handles them
+      differently, so don't probe them here.
+    */
+    const uint day = 24 * 3600; // in seconds
+    zoneIsCET = (QDateTime(QDate(2038, 1, 19), QTime(4, 14, 7)).toTime_t() == 0x7fffffff
+                 // Entries a year apart robustly differ by multiples of day.
+                 && QDateTime(QDate(2015, 7, 1), QTime()).toTime_t() == 1435701600
+                 && QDateTime(QDate(2015, 1, 1), QTime()).toTime_t() == 1420066800
+                 && QDateTime(QDate(2013, 7, 1), QTime()).toTime_t() == 1372629600
+                 && QDateTime(QDate(2013, 1, 1), QTime()).toTime_t() == 1356994800
+                 && QDateTime(QDate(2012, 7, 1), QTime()).toTime_t() == 1341093600
+                 && QDateTime(QDate(2012, 1, 1), QTime()).toTime_t() == 1325372400
+                 && QDateTime(QDate(2008, 7, 1), QTime()).toTime_t() == 1214863200
+                 && QDateTime(QDate(2004, 1, 1), QTime()).toTime_t() == 1072911600
+                 && QDateTime(QDate(2000, 1, 1), QTime()).toTime_t() == 946681200
+                 && QDateTime(QDate(1990, 7, 1), QTime()).toTime_t() == 646783200
+                 && QDateTime(QDate(1990, 1, 1), QTime()).toTime_t() == 631148400
+                 && QDateTime(QDate(1979, 1, 1), QTime()).toTime_t() == 283993200
+                 // .toTime_t() returns -1 for everything before this:
+                 && QDateTime(QDate(1970, 1, 1), QTime(1, 0, 0)).toTime_t() == 0);
+    // Use .toMSecsSinceEpoch() if you really need to test anything earlier.
 
-    QDateTime dt1 = QDateTime::fromTime_t(0);
-    QDateTime dt2 = QDateTime::fromTime_t(181 * 86400); // six months later, Jul 1
-    if (dt1.date().year() < 1970 || dt2.date().month() < 7) {
-        localTimeType = LocalTimeBehindUtc;
-    } else if (dt1.time().hour() > 0 || dt1.date().day() > 1) {
-        localTimeType = LocalTimeAheadOfUtc;
-    } else if (dt2.time().hour() > 0 || dt2.date().day() > 1) {
-        localTimeType = LocalTimeAheadOfUtc;
-    } else {
-        localTimeType = LocalTimeIsUtc;
+    /*
+      Again, rule changes can cause a TZ to look like UTC at some sample dates
+      but deviate at some date relevant to a test using localTimeType.  These
+      tests mostly use years outside the 1970--2038 range for which TZ data is
+      credible, so we can't helpfully be exhaustive.  So scan a sample of years'
+      starts and middles.
+    */
+    const int sampled = 3;
+    // UTC starts of months in 2004, 2038 and 1970:
+    uint jans[sampled] = { 12418 * day, 24837 * day, 0 };
+    uint juls[sampled] = { 12600 * day, 25018 * day, 181 * day };
+    localTimeType = LocalTimeIsUtc;
+    for (int i = sampled; i-- > 0; ) {
+        QDateTime jan = QDateTime::fromTime_t(jans[i]);
+        QDateTime jul = QDateTime::fromTime_t(juls[i]);
+        if (jan.date().year() < 1970 || jul.date().month() < 7) {
+            localTimeType = LocalTimeBehindUtc;
+            break;
+        } else if (jan.time().hour() > 0 || jul.time().hour() > 0
+                   || jan.date().day() > 1 || jul.date().day() > 1) {
+            localTimeType = LocalTimeAheadOfUtc;
+            break;
+        }
     }
+    /*
+      Even so, TZ=Africa/Algiers will fail fromMSecsSinceEpoch(-1) because it
+      switched from WET without DST (i.e. UTC) in the late 1960s to WET with DST
+      for all of 1970 - so they had a DST transition *on the epoch*.  They've
+      since switched to CET with no DST, making life simple; but our tests for
+      mistakes around the epoch can't tell the difference between what Algeria
+      really did and the symptoms we can believe a bug might produce: there's
+      not much we can do about that, that wouldn't hide real bugs.
+    */
 }
 
 void tst_QDateTime::initTestCase()
 {
     // Never construct a message like this in an i18n context...
-    const char *typemsg1, *typemsg2 = "and therefore not";
+    const char *typemsg1 = "exactly";
+    const char *typemsg2 = "and therefore not";
     switch (localTimeType) {
     case LocalTimeIsUtc:
-        typemsg1 = "exactly";
         break;
     case LocalTimeBehindUtc:
         typemsg1 = "behind";
         break;
     case LocalTimeAheadOfUtc:
         typemsg1 = "ahead of";
-        typemsg2 = europeanTimeZone ? "and is" : "but isn't";
+        typemsg2 = zoneIsCET ? "and is" : "but isn't";
         break;
     }
 
@@ -242,7 +294,7 @@ void tst_QDateTime::ctor()
     QCOMPARE(dt3.timeSpec(), Qt::UTC);
 
     QVERIFY(dt1 == dt2);
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QVERIFY(dt1 != dt3);
         QVERIFY(dt1 < dt3);
         QVERIFY(dt1.addSecs(3600).toUTC() == dt3);
@@ -489,7 +541,7 @@ void tst_QDateTime::setTime_t()
 
     dt1.setTime_t(123456);
     QCOMPARE(dt1, QDateTime(QDate(1970, 1, 2), QTime(10, 17, 36), Qt::UTC));
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QDateTime dt2;
         dt2.setTime_t(123456);
         QCOMPARE(dt2, QDateTime(QDate(1970, 1, 2), QTime(11, 17, 36), Qt::LocalTime));
@@ -497,7 +549,7 @@ void tst_QDateTime::setTime_t()
 
     dt1.setTime_t((uint)(quint32)-123456);
     QCOMPARE(dt1, QDateTime(QDate(2106, 2, 5), QTime(20, 10, 40), Qt::UTC));
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QDateTime dt2;
         dt2.setTime_t((uint)(quint32)-123456);
         QCOMPARE(dt2, QDateTime(QDate(2106, 2, 5), QTime(21, 10, 40), Qt::LocalTime));
@@ -505,7 +557,7 @@ void tst_QDateTime::setTime_t()
 
     dt1.setTime_t(1214567890);
     QCOMPARE(dt1, QDateTime(QDate(2008, 6, 27), QTime(11, 58, 10), Qt::UTC));
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QDateTime dt2;
         dt2.setTime_t(1214567890);
         QCOMPARE(dt2, QDateTime(QDate(2008, 6, 27), QTime(13, 58, 10), Qt::LocalTime));
@@ -513,7 +565,7 @@ void tst_QDateTime::setTime_t()
 
     dt1.setTime_t(0x7FFFFFFF);
     QCOMPARE(dt1, QDateTime(QDate(2038, 1, 19), QTime(3, 14, 7), Qt::UTC));
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QDateTime dt2;
         dt2.setTime_t(0x7FFFFFFF);
         QCOMPARE(dt2, QDateTime(QDate(2038, 1, 19), QTime(4, 14, 7), Qt::LocalTime));
@@ -530,7 +582,7 @@ void tst_QDateTime::setMSecsSinceEpoch_data()
 {
     QTest::addColumn<qint64>("msecs");
     QTest::addColumn<QDateTime>("utc");
-    QTest::addColumn<QDateTime>("european");
+    QTest::addColumn<QDateTime>("cet");
 
     QTest::newRow("zero")
             << Q_INT64_C(0)
@@ -581,7 +633,7 @@ void tst_QDateTime::setMSecsSinceEpoch()
 {
     QFETCH(qint64, msecs);
     QFETCH(QDateTime, utc);
-    QFETCH(QDateTime, european);
+    QFETCH(QDateTime, cet);
 
     QDateTime dt;
     dt.setTimeSpec(Qt::UTC);
@@ -592,8 +644,8 @@ void tst_QDateTime::setMSecsSinceEpoch()
     QCOMPARE(dt.time(), utc.time());
     QCOMPARE(dt.timeSpec(), Qt::UTC);
 
-    if (europeanTimeZone) {
-        QCOMPARE(dt.toLocalTime(), european);
+    if (zoneIsCET) {
+        QCOMPARE(dt.toLocalTime(), cet);
 
         // Test converting from LocalTime to UTC back to LocalTime.
         QDateTime localDt;
@@ -610,13 +662,13 @@ void tst_QDateTime::setMSecsSinceEpoch()
         QDateTime dt2;
         dt2.setTimeZone(europe);
         dt2.setMSecsSinceEpoch(msecs);
-        QCOMPARE(dt2.date(), european.date());
+        QCOMPARE(dt2.date(), cet.date());
 
         // don't compare the time if the date is too early or too late: prior
         // to 1916, timezones in Europe were not standardised and some OS APIs
         // have hard limits. Let's restrict it to the 32-bit Unix range
         if (dt2.date().year() >= 1970 && dt2.date().year() <= 2037)
-            QCOMPARE(dt2.time(), european.time());
+            QCOMPARE(dt2.time(), cet.time());
         QCOMPARE(dt2.timeSpec(), Qt::TimeZone);
         QCOMPARE(dt2.timeZone(), europe);
     }
@@ -640,7 +692,7 @@ void tst_QDateTime::fromMSecsSinceEpoch()
 {
     QFETCH(qint64, msecs);
     QFETCH(QDateTime, utc);
-    QFETCH(QDateTime, european);
+    QFETCH(QDateTime, cet);
 
     QDateTime dtLocal = QDateTime::fromMSecsSinceEpoch(msecs, Qt::LocalTime);
     QDateTime dtUtc = QDateTime::fromMSecsSinceEpoch(msecs, Qt::UTC);
@@ -662,12 +714,10 @@ void tst_QDateTime::fromMSecsSinceEpoch()
     if (msecs != std::numeric_limits<qint64>::max())
         QCOMPARE(dtOffset.time(), utc.time().addMSecs(60*60*1000));
 
-    if (europeanTimeZone) {
-        QCOMPARE(dtLocal.toLocalTime(), european);
-        QCOMPARE(dtUtc.toLocalTime(), european);
-        QCOMPARE(dtOffset.toLocalTime(), european);
-    } else {
-        QSKIP("You must test using Central European (CET/CEST) time zone, e.g. TZ=Europe/Oslo");
+    if (zoneIsCET) {
+        QCOMPARE(dtLocal.toLocalTime(), cet);
+        QCOMPARE(dtUtc.toLocalTime(), cet);
+        QCOMPARE(dtOffset.toLocalTime(), cet);
     }
 
     // LocalTime will overflow for max
@@ -750,16 +800,18 @@ void tst_QDateTime::toString_textDate_data()
     QTest::addColumn<QDateTime>("datetime");
     QTest::addColumn<QString>("expected");
 
+    QString wednesdayJanuary = QDate::shortDayName(3) + ' ' + QDate::shortMonthName(1);
+
     QTest::newRow("localtime")  << QDateTime(QDate(2013, 1, 2), QTime(1, 2, 3), Qt::LocalTime)
-                                << QString("Wed Jan 2 01:02:03 2013");
+                                << wednesdayJanuary + QString(" 2 01:02:03 2013");
     QTest::newRow("utc")        << QDateTime(QDate(2013, 1, 2), QTime(1, 2, 3), Qt::UTC)
-                                << QString("Wed Jan 2 01:02:03 2013 GMT");
+                                << wednesdayJanuary + QString(" 2 01:02:03 2013 GMT");
     QTest::newRow("offset+")    << QDateTime(QDate(2013, 1, 2), QTime(1, 2, 3), Qt::OffsetFromUTC,
                                              10 * 60 * 60)
-                                << QString("Wed Jan 2 01:02:03 2013 GMT+1000");
+                                << wednesdayJanuary + QString(" 2 01:02:03 2013 GMT+1000");
     QTest::newRow("offset-")    << QDateTime(QDate(2013, 1, 2), QTime(1, 2, 3), Qt::OffsetFromUTC,
                                              -10 * 60 * 60)
-                                << QString("Wed Jan 2 01:02:03 2013 GMT-1000");
+                                << wednesdayJanuary + QString(" 2 01:02:03 2013 GMT-1000");
     QTest::newRow("invalid")    << QDateTime()
                                 << QString("");
 }
@@ -768,9 +820,6 @@ void tst_QDateTime::toString_textDate()
 {
     QFETCH(QDateTime, datetime);
     QFETCH(QString, expected);
-
-    QLocale oldLocale;
-    QLocale::setDefault(QLocale("en_US"));
 
     QString result = datetime.toString(Qt::TextDate);
     QCOMPARE(result, expected);
@@ -781,8 +830,6 @@ void tst_QDateTime::toString_textDate()
     QCOMPARE(resultDatetime.time(), datetime.time());
     QCOMPARE(resultDatetime.timeSpec(), datetime.timeSpec());
     QCOMPARE(resultDatetime.utcOffset(), datetime.utcOffset());
-
-    QLocale::setDefault(oldLocale);
 }
 
 void tst_QDateTime::toString_rfcDate_data()
@@ -790,7 +837,7 @@ void tst_QDateTime::toString_rfcDate_data()
     QTest::addColumn<QDateTime>("dt");
     QTest::addColumn<QString>("formatted");
 
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QTest::newRow("localtime")
                 << QDateTime(QDate(1978, 11, 9), QTime(13, 28, 34))
                 << QString("09 Nov 1978 13:28:34 +0100");
@@ -1047,7 +1094,7 @@ void tst_QDateTime::addSecs_data()
     QTest::newRow("utc9") << QDateTime(QDate(4000, 1, 1), standardTime, Qt::UTC) << 0
                        << QDateTime(QDate(4000, 1, 1), standardTime, Qt::UTC);
 
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QTest::newRow("cet0") << QDateTime(QDate(2004, 1, 1), standardTime, Qt::LocalTime) << 86400
                            << QDateTime(QDate(2004, 1, 2), standardTime, Qt::LocalTime);
         QTest::newRow("cet1") << QDateTime(QDate(2004, 1, 1), standardTime, Qt::LocalTime) << (86400 * 185)
@@ -1159,7 +1206,7 @@ void tst_QDateTime::toTimeSpec_data()
         << QDateTime(QDate(-271821, 4, 20), QTime(23, 0, 0), Qt::UTC)
         << QDateTime(QDate(-271821, 4, 21), QTime(0, 0, 0), Qt::LocalTime);
 
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QTest::newRow("summer1") << QDateTime(QDate(2004, 6, 30), utcTime, Qt::UTC)
                                  << QDateTime(QDate(2004, 6, 30), localDaylightTime, Qt::LocalTime);
         QTest::newRow("summer2") << QDateTime(QDate(1760, 6, 30), utcTime, Qt::UTC)
@@ -1182,7 +1229,7 @@ void tst_QDateTime::toTimeSpec_data()
 
 void tst_QDateTime::toTimeSpec()
 {
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QFETCH(QDateTime, fromUtc);
         QFETCH(QDateTime, fromLocal);
 
@@ -1237,7 +1284,7 @@ void tst_QDateTime::toTimeSpec()
         QCOMPARE(localToOffset.time(), fromUtc.time());
         QCOMPARE(localToOffset.timeSpec(), Qt::UTC);
     } else {
-        QSKIP("Not tested with timezone other than Central European (CET/CST)");
+        QSKIP("Not tested with timezone other than Central European (CET/CEST)");
     }
 }
 
@@ -1248,7 +1295,7 @@ void tst_QDateTime::toLocalTime_data()
 
 void tst_QDateTime::toLocalTime()
 {
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QFETCH(QDateTime, fromUtc);
         QFETCH(QDateTime, fromLocal);
 
@@ -1259,7 +1306,7 @@ void tst_QDateTime::toLocalTime()
         QCOMPARE(fromUtc.toLocalTime(), fromLocal);
         QCOMPARE(fromUtc.toLocalTime(), fromLocal.toLocalTime());
     } else {
-        QSKIP("Not tested with timezone other than Central European (CET/CST)");
+        QSKIP("Not tested with timezone other than Central European (CET/CEST)");
     }
 }
 
@@ -1270,7 +1317,7 @@ void tst_QDateTime::toUTC_data()
 
 void tst_QDateTime::toUTC()
 {
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QFETCH(QDateTime, fromUtc);
         QFETCH(QDateTime, fromLocal);
 
@@ -1281,7 +1328,7 @@ void tst_QDateTime::toUTC()
         QCOMPARE(fromLocal.toUTC(), fromUtc);
         QCOMPARE(fromUtc.toUTC(), fromLocal.toUTC());
     } else {
-        QSKIP("Not tested with timezone other than Central European (CET/CST)");
+        QSKIP("Not tested with timezone other than Central European (CET/CEST)");
     }
 
     QDateTime dt = QDateTime::currentDateTime();
@@ -1561,36 +1608,181 @@ void tst_QDateTime::toTime_t()
     }
 }
 
+void tst_QDateTime::daylightSavingsTimeChange_data()
+{
+    QTest::addColumn<QDate>("inDST");
+    QTest::addColumn<QDate>("outDST");
+    QTest::addColumn<int>("days"); // from in to out; -ve if reversed
+    QTest::addColumn<int>("months");
+
+    QTest::newRow("Autumn") << QDate(2006, 8, 1) << QDate(2006, 12, 1)
+                            << 122 << 4;
+
+    QTest::newRow("Spring") << QDate(2006, 5, 1) << QDate(2006, 2, 1)
+                            << -89 << -3;
+}
+
 void tst_QDateTime::daylightSavingsTimeChange()
 {
-    // This is a regression test for an old bug where starting with a date in
-    // DST and then moving to a date outside it (or vice-versa) caused 1-hour
-    // jumps in time when addSecs() was called.
+    // This has grown from a regression test for an old bug where starting with
+    // a date in DST and then moving to a date outside it (or vice-versa) caused
+    // 1-hour jumps in time when addSecs() was called.
     //
     // The bug was caused by QDateTime knowing more than it lets show.
     // Internally, if it knows, QDateTime stores a flag indicating if the time is
     // DST or not. If it doesn't, it sets to "LocalUnknown".  The problem happened
     // because some functions did not reset the flag when moving in or out of DST.
 
-    // WARNING: This test only works if there's a Daylight Savings Time change
-    // in the current locale between 2006-11-06 and 2006-10-16
-    // This is true for Central European Time
+    // WARNING: This only tests anything if there's a Daylight Savings Time change
+    // in the current locale between inDST and outDST.
+    // This is true for Central European Time and may be elsewhere.
 
-    if (!europeanTimeZone)
-        QSKIP("Not tested with timezone other than Central European (CET/CEST)");
+    QFETCH(QDate, inDST);
+    QFETCH(QDate, outDST);
+    QFETCH(int, days);
+    QFETCH(int, months);
 
-    QDateTime dt = QDateTime(QDate(2006, 11, 6), QTime(0, 0, 0), Qt::LocalTime);
-    dt.setDate(QDate(2006, 10, 16));
+    // First with simple construction
+    QDateTime dt = QDateTime(outDST, QTime(0, 0, 0), Qt::LocalTime);
+    int outDSTsecs = dt.toTime_t();
+
+    dt.setDate(inDST);
     dt = dt.addSecs(1);
-    QCOMPARE(dt.date(), QDate(2006, 10, 16));
-    QCOMPARE(dt.time(), QTime(0, 0, 1));
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 0, 1)));
+
+    // now using addDays:
+    dt = dt.addDays(days).addSecs(1);
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 0, 2)));
+
+    // ... and back again:
+    dt = dt.addDays(-days).addSecs(1);
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 0, 3)));
+
+    // now using addMonths:
+    dt = dt.addMonths(months).addSecs(1);
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 0, 4)));
+
+    // ... and back again:
+    dt = dt.addMonths(-months).addSecs(1);
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 0, 5)));
 
     // now using fromTime_t
-    dt = QDateTime::fromTime_t(1162767600); // 2006-11-06 00:00:00 +0100
-    dt.setDate(QDate(2006, 10, 16));
-    dt = dt.addSecs (1);
-    QCOMPARE(dt.date(), QDate(2006, 10, 16));
-    QCOMPARE(dt.time(), QTime(0, 0, 1));
+    dt = QDateTime::fromTime_t(outDSTsecs);
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 0, 0)));
+
+    dt.setDate(inDST);
+    dt = dt.addSecs(60);
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 1, 0)));
+
+    // using addMonths:
+    dt = dt.addMonths(months).addSecs(60);
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 2, 0)));
+    // back again:
+    dt = dt.addMonths(-months).addSecs(60);
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 3, 0)));
+
+    // using addDays:
+    dt = dt.addDays(days).addSecs(60);
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 4, 0)));
+    // back again:
+    dt = dt.addDays(-days).addSecs(60);
+    QCOMPARE(dt, QDateTime(inDST, QTime(0, 5, 0)));
+
+    // Now use the result of a UTC -> LocalTime conversion
+    dt = QDateTime(outDST, QTime(0, 0, 0), Qt::LocalTime).toUTC();
+    dt = QDateTime(dt.date(), dt.time(), Qt::UTC).toLocalTime();
+    QCOMPARE(dt, QDateTime(outDST, QTime(0, 0, 0)));
+
+    // using addDays:
+    dt = dt.addDays(-days).addSecs(3600);
+    QCOMPARE(dt, QDateTime(inDST, QTime(1, 0, 0)));
+    // back again
+    dt = dt.addDays(days).addSecs(3600);
+    QCOMPARE(dt, QDateTime(outDST, QTime(2, 0, 0)));
+
+    // using addMonths:
+    dt = dt.addMonths(-months).addSecs(3600);
+    QCOMPARE(dt, QDateTime(inDST, QTime(3, 0, 0)));
+    // back again:
+    dt = dt.addMonths(months).addSecs(3600);
+    QCOMPARE(dt, QDateTime(outDST, QTime(4, 0, 0)));
+
+    // using setDate:
+    dt.setDate(inDST);
+    dt = dt.addSecs(3600);
+    QCOMPARE(dt, QDateTime(inDST, QTime(5, 0, 0)));
+}
+
+void tst_QDateTime::springForward_data()
+{
+    QTest::addColumn<QDate>("day"); // day of DST transition
+    QTest::addColumn<QTime>("time"); // in the "missing hour"
+    QTest::addColumn<int>("step"); // days to step; +ve from before, -ve from after
+    QTest::addColumn<int>("adjust"); // minutes ahead of UTC on day stepped from
+
+    /*
+      Zone tests compare a summer and winter moment's time_t to known values.
+      This could in principle be flawed (two DST-using zones in the same
+      hemisphere with the same DST and standard times but different transition
+      times) but no actual example is known where this is a problem.  Please
+      document any such conflicts, if discovered.
+
+      See http://www.timeanddate.com/time/zones/ for data on more candidates to
+      test.
+     */
+
+    uint winter = QDateTime(QDate(2015, 1, 1), QTime()).toTime_t();
+    uint summer = QDateTime(QDate(2015, 7, 1), QTime()).toTime_t();
+
+    if (winter == 1420066800 && summer == 1435701600) {
+        QTest::newRow("CET from day before") << QDate(2015, 3, 29) << QTime(2, 30, 0) << 1 << 60;
+        QTest::newRow("CET from day after") << QDate(2015, 3, 29) << QTime(2, 30, 0) << -1 << 120;
+    } else if (winter == 1420063200 && summer == 1435698000) {
+        // e.g. Finland, where our CI runs ...
+        QTest::newRow("EET from day before") << QDate(2015, 3, 29) << QTime(3, 30, 0) << 1 << 120;
+        QTest::newRow("EET from day after") << QDate(2015, 3, 29) << QTime(3, 30, 0) << -1 << 180;
+    } else if (winter == 1420070400 && summer == 1435705200) {
+        // Western European Time, WET/WEST; a.k.a. GMT/BST
+        QTest::newRow("WET from day before") << QDate(2015, 3, 29) << QTime(1, 30, 0) << 1 << 0;
+        QTest::newRow("WET from day after") << QDate(2015, 3, 29) << QTime(1, 30, 0) << -1 << 60;
+    } else if (winter == 1420099200 && summer == 1435734000) {
+        // Western USA, Canada: Pacific Time (e.g. US/Pacific)
+        QTest::newRow("PT from day before") << QDate(2015, 3, 8) << QTime(2, 30, 0) << 1 << -480;
+        QTest::newRow("PT from day after") << QDate(2015, 3, 8) << QTime(2, 30, 0) << -1 << -420;
+    } else if (winter == 1420088400 && summer == 1435723200) {
+        // Eastern USA, Canada: Eastern Time (e.g. US/Eastern)
+        QTest::newRow("ET from day before") << QDate(2015, 3, 8) << QTime(2, 30, 0) << 1 << -300;
+        QTest::newRow("ET from day after") << QDate(2015, 3, 8) << QTime(2, 30, 0) << -1 << -240;
+    } else {
+        // Includes the numbers you need to test for your zone, as above:
+        QString msg(QString::fromLatin1("No spring forward test data for this TZ (%1, %2)"
+                        ).arg(winter).arg(summer));
+        QSKIP(qPrintable(msg));
+    }
+}
+
+void tst_QDateTime::springForward()
+{
+    QFETCH(QDate, day);
+    QFETCH(QTime, time);
+    QFETCH(int, step);
+    QFETCH(int, adjust);
+
+    QDateTime direct = QDateTime(day.addDays(-step), time, Qt::LocalTime).addDays(step);
+    QCOMPARE(direct.date(), day);
+    QCOMPARE(direct.time().minute(), time.minute());
+    QCOMPARE(direct.time().second(), time.second());
+    int off = direct.time().hour() - time.hour();
+    QVERIFY(off == 1 || off == -1);
+    // Note: function doc claims always +1, but this should be reviewed !
+
+    // Repeat, but getting there via .toLocalTime():
+    QDateTime detour = QDateTime(day.addDays(-step),
+                                 time.addSecs(-60 * adjust),
+                                 Qt::UTC).toLocalTime();
+    QCOMPARE(detour.time(), time);
+    detour = detour.addDays(step);
+    QCOMPARE(detour, direct); // Insist on consistency.
 }
 
 void tst_QDateTime::operator_eqeq_data()
@@ -1633,7 +1825,7 @@ void tst_QDateTime::operator_eqeq_data()
     QTest::newRow("invalid == invalid") << invalidDateTime() << invalidDateTime() << true << false;
     QTest::newRow("invalid == valid #1") << invalidDateTime() << dateTime1 << false << false;
 
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QTest::newRow("data14") << QDateTime(QDate(2004, 1, 2), QTime(2, 2, 3), Qt::LocalTime)
              << QDateTime(QDate(2004, 1, 2), QTime(1, 2, 3), Qt::UTC) << true << true;
     }
@@ -1665,7 +1857,7 @@ void tst_QDateTime::operator_eqeq()
     if (equal)
         QVERIFY(qHash(dt1) == qHash(dt2));
 
-    if (checkEuro && europeanTimeZone) {
+    if (checkEuro && zoneIsCET) {
         QVERIFY(dt1.toUTC() == dt2);
         QVERIFY(dt1 == dt2.toLocalTime());
     }
@@ -2092,7 +2284,9 @@ void tst_QDateTime::fromStringStringFormat_data()
     QTest::newRow("data5") << QString("10") << QString("'") << invalidDateTime();
     QTest::newRow("data6") << QString("pm") << QString("ap") << QDateTime(defDate(), QTime(12, 0, 0));
     QTest::newRow("data7") << QString("foo") << QString("ap") << invalidDateTime();
-    QTest::newRow("data8") << QString("101010") << QString("dMyy") << QDateTime(QDate(1910, 10, 10), QTime());
+    // Day non-conflict should not hide earlier year conflict (1963-03-01 was a
+    // Friday; asking for Thursday moves this, without conflict, to the 7th):
+    QTest::newRow("data8") << QString("77 03 1963 " + thu) << QString("yy MM yyyy ddd") << invalidDateTime();
     QTest::newRow("data9") << QString("101010") << QString("dMyy") << QDateTime(QDate(1910, 10, 10), QTime());
     QTest::newRow("data10") << QString("101010") << QString("dMyy") << QDateTime(QDate(1910, 10, 10), QTime());
     QTest::newRow("data11") << date << QString("dd MMM yy") << QDateTime(QDate(1910, 10, 10), QTime());
@@ -2170,6 +2364,7 @@ void tst_QDateTime::offsetFromUtc()
     // Offset constructor
     QDateTime dt1(QDate(2013, 1, 1), QTime(1, 0, 0), Qt::OffsetFromUTC, 60 * 60);
     QCOMPARE(dt1.offsetFromUtc(), 60 * 60);
+    QVERIFY(dt1.timeZone().isValid());
     dt1 = QDateTime(QDate(2013, 1, 1), QTime(1, 0, 0), Qt::OffsetFromUTC, -60 * 60);
     QCOMPARE(dt1.offsetFromUtc(), -60 * 60);
 
@@ -2178,7 +2373,7 @@ void tst_QDateTime::offsetFromUtc()
     QCOMPARE(dt2.offsetFromUtc(), 0);
 
     // LocalTime should vary
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         // Time definitely in Standard Time so 1 hour ahead
         QDateTime dt3(QDate(2013, 1, 1), QTime(0, 0, 0), Qt::LocalTime);
         QCOMPARE(dt3.offsetFromUtc(), 1 * 60 * 60);
@@ -2303,7 +2498,7 @@ void tst_QDateTime::timeZoneAbbreviation()
     QCOMPARE(dt3.timeZoneAbbreviation(), QString("UTC"));
 
     // LocalTime should vary
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         // Time definitely in Standard Time
         QDateTime dt4(QDate(2013, 1, 1), QTime(0, 0, 0), Qt::LocalTime);
 #ifdef Q_OS_WIN
@@ -2427,7 +2622,7 @@ void tst_QDateTime::isDaylightTime() const
     QDateTime offset2(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::OffsetFromUTC, 1 * 60 * 60);
     QVERIFY(!offset2.isDaylightTime());
 
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         QDateTime cet1(QDate(2012, 1, 1), QTime(0, 0, 0));
         QVERIFY(!cet1.isDaylightTime());
         QDateTime cet2(QDate(2012, 6, 1), QTime(0, 0, 0));
@@ -2439,7 +2634,7 @@ void tst_QDateTime::isDaylightTime() const
 
 void tst_QDateTime::daylightTransitions() const
 {
-    if (europeanTimeZone) {
+    if (zoneIsCET) {
         // CET transitions occur at 01:00:00 UTC on last Sunday in March and October
         // 2011-03-27 02:00:00 CET  became 03:00:00 CEST at msecs = 1301187600000
         // 2011-10-30 03:00:00 CEST became 02:00:00 CET  at msecs = 1319936400000

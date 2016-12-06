@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -148,6 +149,17 @@ void QListData::realloc(int alloc)
         d->begin = d->end = 0;
 }
 
+void QListData::realloc_grow(int growth)
+{
+    Q_ASSERT(!d->ref.isShared());
+    int alloc = grow(d->alloc + growth);
+    Data *x = static_cast<Data *>(::realloc(d, DataHeaderSize + alloc * sizeof(void *)));
+    Q_CHECK_PTR(x);
+
+    d = x;
+    d->alloc = alloc;
+}
+
 void QListData::dispose(Data *d)
 {
     Q_ASSERT(!d->ref.isShared());
@@ -167,7 +179,7 @@ void **QListData::append(int n)
             ::memcpy(d->array, d->array + b, e * sizeof(void *));
             d->begin = 0;
         } else {
-            realloc(grow(d->alloc + n));
+            realloc_grow(n);
         }
     }
     d->end = e + n;
@@ -191,7 +203,7 @@ void **QListData::prepend()
     Q_ASSERT(!d->ref.isShared());
     if (d->begin == 0) {
         if (d->end >= d->alloc / 3)
-            realloc(grow(d->alloc + 1));
+            realloc_grow(1);
 
         if (d->end < d->alloc / 3)
             d->begin = d->alloc - 2 * d->end;
@@ -218,7 +230,7 @@ void **QListData::insert(int i)
     if (d->begin == 0) {
         if (d->end == d->alloc) {
             // If the array is full, we expand it and move some items rightward
-            realloc(grow(d->alloc + 1));
+            realloc_grow(1);
         } else {
             // If there is free space at the end of the array, we move some items rightward
         }
@@ -332,41 +344,56 @@ void **QListData::erase(void **xi)
     \reentrant
 
     QList\<T\> is one of Qt's generic \l{container classes}. It
-    stores a list of values and provides fast index-based access as
-    well as fast insertions and removals.
+    stores items in a list that provides fast index-based access
+    and index-based insertions and removals.
 
     QList\<T\>, QLinkedList\<T\>, and QVector\<T\> provide similar
-    functionality. Here's an overview:
+    APIs and functionality. They are often interchangeable, but there
+    are performance consequences. Here is an overview of use cases:
 
     \list
-    \li For most purposes, QList is the right class to use. Its
-       index-based API is more convenient than QLinkedList's
-       iterator-based API, and it is usually faster than
-       QVector because of the way it stores its items in
-       memory. It also expands to less code in your executable.
-    \li If you need a real linked list, with guarantees of \l{constant
-       time} insertions in the middle of the list and iterators to
-       items rather than indexes, use QLinkedList.
-    \li If you want the items to occupy adjacent memory positions,
-       use QVector.
+    \li QVector should be your default first choice.
+        QVector\<T\> will usually give better performance than QList\<T\>,
+        because QVector\<T\> always stores its items sequentially in memory,
+        where QList\<T\> will allocate its items on the heap unless
+        \c {sizeof(T) <= sizeof(void*)} and T has been declared to be
+        either a \c{Q_MOVABLE_TYPE} or a \c{Q_PRIMITIVE_TYPE} using
+        \l {Q_DECLARE_TYPEINFO}. See the \l {Pros and Cons of Using QList}
+        for an explanation.
+    \li However, QList is used throughout the Qt APIs for passing
+        parameters and for returning values. Use QList to interface with
+        those APIs.
+    \li If you need a real linked list, which guarantees
+        \l {Algorithmic Complexity}{constant time} insertions mid-list and
+        uses iterators to items rather than indexes, use QLinkedList.
     \endlist
 
+    \note QVector and QVarLengthArray both guarantee C-compatible
+    array layout. QList does not. This might be important if your
+    application must interface with a C API.
 
-    Internally, QList\<T\> is represented as an array of pointers to
-    items of type T. If T is itself a pointer type or a basic type
-    that is no larger than a pointer, or if T is one of Qt's \l{shared
-    classes}, then QList\<T\> stores the items directly in the pointer
-    array. For lists under a thousand items, this array representation
-    allows for very fast insertions in the middle, and it allows
-    index-based access. Furthermore, operations like prepend() and
-    append() are very fast, because QList preallocates memory at both
+    \note Iterators into a QLinkedList and references into
+    heap-allocating QLists remain valid long as the referenced items
+    remain in the container. This is not true for iterators and
+    references into a QVector and non-heap-allocating QLists.
+
+    Internally, QList\<T\> is represented as an array of T if
+    \c{sizeof(T) <= sizeof(void*)} and T has been declared to be
+    either a \c{Q_MOVABLE_TYPE} or a \c{Q_PRIMITIVE_TYPE} using
+    \l {Q_DECLARE_TYPEINFO}. Otherwise, QList\<T\> is represented
+    as an array of T* and the items are allocated on the heap.
+
+    The array representation allows very fast insertions and
+    index-based access. The prepend() and append() operations are
+    also very fast because QList preallocates memory at both
     ends of its internal array. (See \l{Algorithmic Complexity} for
-    details.) Note, however, that for unshared list items that are
-    larger than a pointer, each append or insert of a new item
-    requires allocating the new item on the heap, and this per item
-    allocation might make QVector a better choice in cases that do
-    lots of appending or inserting, since QVector allocates memory for
-    its items in a single heap allocation.
+    details.
+
+    Note, however, that when the conditions specified above are not met,
+    each append or insert of a new item requires allocating the new item
+    on the heap, and this per item allocation will make QVector a better
+    choice for use cases that do a lot of appending or inserting, because
+    QVector can allocate memory for many items in a single heap allocation.
 
     Note that the internal array only ever gets bigger over the life
     of the list. It never shrinks. The internal array is deallocated
@@ -401,9 +428,10 @@ void **QListData::erase(void **xi)
 
     \snippet code/src_corelib_tools_qlistdata.cpp 2
 
-    Because QList is implemented as an array of pointers, this
-    operation is very fast (\l{constant time}). For read-only access,
-    an alternative syntax is to use at():
+    Because QList is implemented as an array of pointers for types
+    that are larger than a pointer or are not movable, this operation
+    requires (\l{Algorithmic Complexity}{constant time}). For read-only
+    access, an alternative syntax is to use at():
 
     \snippet code/src_corelib_tools_qlistdata.cpp 3
 
@@ -417,10 +445,10 @@ void **QListData::erase(void **xi)
 
     \snippet code/src_corelib_tools_qlistdata.cpp 4
 
-    Inserting and removing items at either ends of the list is very
-    fast (\l{constant time} in most cases), because QList
-    preallocates extra space on both sides of its internal buffer to
-    allow for fast growth at both ends of the list.
+    Inserting and removing items at either end of the list is very
+    fast (\l{Algorithmic Complexity}{constant time} in most cases),
+    because QList preallocates extra space on both sides of its
+    internal buffer to allow for fast growth at both ends of the list.
 
     If you want to find all occurrences of a particular value in a
     list, use indexOf() or lastIndexOf(). The former searches forward
@@ -481,6 +509,11 @@ void **QListData::erase(void **xi)
     \l{QStringList::removeDuplicates()}{removeDuplicates},
     \l{QStringList::sort()}{sort}.
 
+    \section1 More Information on Using Qt Containers
+
+    For a detailed discussion comparing Qt containers with each other and
+    with STL containers, see \l {Understand the Qt Containers}.
+
     \sa QListIterator, QMutableListIterator, QLinkedList, QVector
 */
 
@@ -512,10 +545,11 @@ void **QListData::erase(void **xi)
 
     Constructs a copy of \a other.
 
-    This operation takes \l{constant time}, because QList is
-    \l{implicitly shared}. This makes returning a QList from a
-    function very fast. If a shared instance is modified, it will be
-    copied (copy-on-write), and that takes \l{linear time}.
+    This operation takes \l{Algorithmic Complexity}{constant time},
+    because QList is \l{implicitly shared}. This makes returning a
+    QList from a function very fast. If a shared instance is modified,
+    it will be copied (copy-on-write), and that takes
+    \l{Algorithmic Complexity}{linear time}.
 
     \sa operator=()
 */
@@ -584,6 +618,65 @@ void **QListData::erase(void **xi)
     \sa operator==()
 */
 
+/*! \fn bool operator<(const QList<T> &lhs, const QList<T> &rhs)
+    \since 5.6
+    \relates QList
+
+    Returns \c true if list \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically less than} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator<=(const QList<T> &lhs, const QList<T> &rhs)
+    \since 5.6
+    \relates QList
+
+    Returns \c true if list \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically less than or equal to} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator>(const QList<T> &lhs, const QList<T> &rhs)
+    \since 5.6
+    \relates QList
+
+    Returns \c true if list \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically greater than} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*! \fn bool operator>=(const QList<T> &lhs, const QList<T> &rhs)
+    \since 5.6
+    \relates QList
+
+    Returns \c true if list \a lhs is
+    \l{http://en.cppreference.com/w/cpp/algorithm/lexicographical_compare}
+    {lexicographically greater than or equal to} \a rhs; otherwise returns \c false.
+
+    This function requires the value type to have an implementation
+    of \c operator<().
+*/
+
+/*!
+    \fn uint qHash(const QList<T> &key, uint seed = 0)
+    \since 5.6
+    \relates QList
+
+    Returns the hash value for \a key,
+    using \a seed to seed the calculation.
+
+    This function requires qHash() to be overloaded for the value type \c T.
+*/
+
 /*!
     \fn int QList::size() const
 
@@ -641,7 +734,7 @@ void **QListData::erase(void **xi)
     Returns the item at index position \a i in the list. \a i must be
     a valid index position in the list (i.e., 0 <= \a i < size()).
 
-    This function is very fast (\l{constant time}).
+    This function is very fast (\l{Algorithmic Complexity}{constant time}).
 
     \sa value(), operator[]()
 */
@@ -654,8 +747,8 @@ void **QListData::erase(void **xi)
 
     If this function is called on a list that is currently being shared, it
     will trigger a copy of all elements. Otherwise, this function runs in
-    \l{constant time}. If you do not want to modify the list you should use
-    QList::at().
+    \l{Algorithmic Complexity}{constant time}. If you do not want to modify
+    the list you should use QList::at().
 
     \sa at(), value()
 */
@@ -664,7 +757,7 @@ void **QListData::erase(void **xi)
 
     \overload
 
-    Same as at(). This function runs in \l{constant time}.
+    Same as at(). This function runs in \l{Algorithmic Complexity}{constant time}.
 */
 
 /*! \fn QList::reserve(int alloc)
@@ -690,9 +783,9 @@ void **QListData::erase(void **xi)
     This is the same as list.insert(size(), \a value).
 
     If this list is not shared, this operation is typically
-    very fast (amortized \l{constant time}), because QList
-    preallocates extra space on both sides of its internal
-    buffer to allow for fast growth at both ends of the list.
+    very fast (amortized \l{Algorithmic Complexity}{constant time}),
+    because QList preallocates extra space on both sides of its
+    internal buffer to allow for fast growth at both ends of the list.
 
     \sa operator<<(), prepend(), insert()
 */
@@ -718,17 +811,17 @@ void **QListData::erase(void **xi)
     This is the same as list.insert(0, \a value).
 
     If this list is not shared, this operation is typically
-    very fast (amortized \l{constant time}), because QList
-    preallocates extra space on both sides of its internal
-    buffer to allow for fast growth at both ends of the list.
+    very fast (amortized \l{Algorithmic Complexity}{constant time}),
+    because QList preallocates extra space on both sides of its
+    internal buffer to allow for fast growth at both ends of the list.
 
     \sa append(), insert()
 */
 
 /*! \fn void QList::insert(int i, const T &value)
 
-    Inserts \a value at index position \a i in the list. If \a i
-    is 0, the value is prepended to the list. If \a i is size(), the
+    Inserts \a value at index position \a i in the list. If \a i <= 0,
+    the value is prepended to the list. If \a i >= size(), the
     value is appended to the list.
 
     Example:
@@ -811,7 +904,8 @@ void **QListData::erase(void **xi)
     same as takeAt(0). This function assumes the list is not empty. To
     avoid failure, call isEmpty() before calling this function.
 
-    If this list is not shared, this operation takes \l{constant time}.
+    If this list is not shared, this operation takes
+    \l {Algorithmic Complexity}{constant time}.
 
     If you don't use the return value, removeFirst() is more
     efficient.
@@ -826,7 +920,8 @@ void **QListData::erase(void **xi)
     not empty. To avoid failure, call isEmpty() before calling this
     function.
 
-    If this list is not shared, this operation takes \l{constant time}.
+    If this list is not shared, this operation takes
+    \l {Algorithmic Complexity}{constant time}.
 
     If you don't use the return value, removeLast() is more
     efficient.
@@ -1000,6 +1095,52 @@ void **QListData::erase(void **xi)
     \sa constBegin(), end()
 */
 
+/*! \fn QList::reverse_iterator QList::rbegin()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the list, in reverse order.
+
+    \sa begin(), crbegin(), rend()
+*/
+
+/*! \fn QList::const_reverse_iterator QList::rbegin() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QList::const_reverse_iterator QList::crbegin() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    item in the list, in reverse order.
+
+    \sa begin(), rbegin(), rend()
+*/
+
+/*! \fn QList::reverse_iterator QList::rend()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to one past
+    the last item in the list, in reverse order.
+
+    \sa end(), crend(), rbegin()
+*/
+
+/*! \fn QList::const_reverse_iterator QList::rend() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QList::const_reverse_iterator QList::crend() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to one
+    past the last item in the list, in reverse order.
+
+    \sa end(), rend(), rbegin()
+*/
+
 /*! \fn QList::iterator QList::erase(iterator pos)
 
     Removes the item associated with the iterator \a pos from the
@@ -1070,6 +1211,38 @@ void **QListData::erase(void **xi)
     Typedef for const T &. Provided for STL compatibility.
 */
 
+/*! \typedef QList::reverse_iterator
+    \since 5.6
+
+    The QList::reverse_iterator typedef provides an STL-style non-const
+    reverse iterator for QList.
+
+    It is simply a typedef for \c{std::reverse_iterator<iterator>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QList::rbegin(), QList::rend(), QList::const_reverse_iterator, QList::iterator
+*/
+
+/*! \typedef QList::const_reverse_iterator
+    \since 5.6
+
+    The QList::const_reverse_iterator typedef provides an STL-style const
+    reverse iterator for QList.
+
+    It is simply a typedef for \c{std::reverse_iterator<const_iterator>}.
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QList::rbegin(), QList::rend(), QList::reverse_iterator, QList::const_iterator
+*/
+
 /*! \fn int QList::count() const
 
     Returns the number of items in the list. This is effectively the
@@ -1090,12 +1263,22 @@ void **QListData::erase(void **xi)
     not be empty. If the list can be empty, call isEmpty() before
     calling this function.
 
-    \sa last(), isEmpty()
+    \sa constFirst(), last(), isEmpty()
 */
 
 /*! \fn const T& QList::first() const
 
     \overload
+*/
+
+/*! \fn const T& QList::constFirst() const
+    \since 5.6
+
+    Returns a const reference to the first item in the list. The list must
+    not be empty. If the list can be empty, call isEmpty() before
+    calling this function.
+
+    \sa constLast(), isEmpty(), first()
 */
 
 /*! \fn T& QList::last()
@@ -1104,12 +1287,22 @@ void **QListData::erase(void **xi)
     not be empty. If the list can be empty, call isEmpty() before
     calling this function.
 
-    \sa first(), isEmpty()
+    \sa constLast(), first(), isEmpty()
 */
 
 /*! \fn const T& QList::last() const
 
     \overload
+*/
+
+/*! \fn const T& QList::constLast() const
+    \since 5.6
+
+    Returns a reference to the last item in the list. The list must
+    not be empty. If the list can be empty, call isEmpty() before
+    calling this function.
+
+    \sa constFirst(), isEmpty(), last()
 */
 
 /*! \fn void QList::removeFirst()

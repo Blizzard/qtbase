@@ -106,6 +106,9 @@ public:
     QMouseEvent(Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
                 Qt::MouseButton button, Qt::MouseButtons buttons,
                 Qt::KeyboardModifiers modifiers);
+    QMouseEvent(Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
+                Qt::MouseButton button, Qt::MouseButtons buttons,
+                Qt::KeyboardModifiers modifiers, Qt::MouseEventSource source);
     ~QMouseEvent();
 
 #ifndef QT_NO_INTEGER_EVENT_COORDINATES
@@ -216,6 +219,8 @@ protected:
     uint ph : 2;
     uint src: 2;
     int reserved : 28;
+
+    friend class QApplication;
 };
 #endif
 
@@ -521,7 +526,7 @@ public:
     };
     class Attribute {
     public:
-        Attribute(AttributeType t, int s, int l, QVariant val) : type(t), start(s), length(l), value(val) {}
+        Attribute(AttributeType typ, int s, int l, QVariant val) : type(typ), start(s), length(l), value(qMove(val)) {}
         AttributeType type;
 
         int start;
@@ -530,6 +535,8 @@ public:
     };
     QInputMethodEvent();
     QInputMethodEvent(const QString &preeditText, const QList<Attribute> &attributes);
+    ~QInputMethodEvent();
+
     void setCommitString(const QString &commitString, int replaceFrom = 0, int replaceLength = 0);
     inline const QList<Attribute> &attributes() const { return attrs; }
     inline const QString &preeditString() const { return preedit; }
@@ -696,7 +703,7 @@ class Q_GUI_EXPORT QActionEvent : public QEvent
 {
     QAction *act, *bef;
 public:
-    QActionEvent(int type, QAction *action, QAction *before = 0);
+    QActionEvent(int type, QAction *action, QAction *before = Q_NULLPTR);
     ~QActionEvent();
 
     inline QAction *action() const { return act; }
@@ -792,7 +799,7 @@ public:
         TouchPoint(const TouchPoint &other);
 #ifdef Q_COMPILER_RVALUE_REFS
         TouchPoint(TouchPoint &&other) Q_DECL_NOEXCEPT
-            : d(0)
+            : d(Q_NULLPTR)
         { qSwap(d, other.d); }
         TouchPoint &operator=(TouchPoint &&other) Q_DECL_NOEXCEPT
         { qSwap(d, other.d); return *this; }
@@ -873,9 +880,9 @@ public:
 #endif
 
     explicit QTouchEvent(QEvent::Type eventType,
-                         QTouchDevice *device = 0,
+                         QTouchDevice *device = Q_NULLPTR,
                          Qt::KeyboardModifiers modifiers = Qt::NoModifier,
-                         Qt::TouchPointStates touchPointStates = 0,
+                         Qt::TouchPointStates touchPointStates = Qt::TouchPointStates(),
                          const QList<QTouchEvent::TouchPoint> &touchPoints = QList<QTouchEvent::TouchPoint>());
     ~QTouchEvent();
 

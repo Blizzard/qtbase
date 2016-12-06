@@ -83,21 +83,11 @@ private slots:
     void isInSubnet();
     void isLoopback_data();
     void isLoopback();
+    void isMulticast_data();
+    void isMulticast();
     void convertv4v6_data();
     void convertv4v6();
 };
-
-QT_BEGIN_NAMESPACE
-namespace QTest {
-    template<>
-    char *toString(const QHostAddress &addr)
-    {
-        if (addr.protocol() == QAbstractSocket::UnknownNetworkLayerProtocol)
-            return qstrdup("<invalid>");
-        return qstrdup(addr.toString().toLatin1());
-    }
-}
-QT_END_NAMESPACE
 
 tst_QHostAddress::tst_QHostAddress()
 {
@@ -169,8 +159,16 @@ void tst_QHostAddress::setAddress_QString_data()
     QTest::newRow("ip4_06")  << QString("123.0.0") << true << QString("123.0.0.0") << 4;
 
     // for the format of IPv6 addresses see also RFC 5952
-    QTest::newRow("ip6_00")  << QString("FEDC:BA98:7654:3210:FEDC:BA98:7654:3210") << true << QString("fedc:ba98:7654:3210:fedc:ba98:7654:3210") << 6;
-    QTest::newRow("ip6_01")  << QString("1080:0000:0000:0000:0008:0800:200C:417A") << true << QString("1080::8:800:200c:417a") << 6;
+    // rule 4.1: Leading zeros MUST be suppressed
+    // rule 4.2.1: Shorten as Much as Possible
+    // rule 4.2.2: The symbol "::" MUST NOT be used to shorten just one 16-bit 0 field.
+    // rule 4.2.3: the longest run of consecutive 16-bit 0 fields MUST be shortened
+    //             When the length of the consecutive 16-bit 0 fields, the first sequence
+    //             of zero bits MUST be shortened
+    // rule 4.3: The characters "a", "b", "c", "d", "e", and "f" in an IPv6 address
+    //           MUST be represented in lowercase
+    QTest::newRow("ip6_00")  << QString("FEDC:BA98:7654:3210:FEDC:BA98:7654:3210") << true << QString("fedc:ba98:7654:3210:fedc:ba98:7654:3210") << 6; // 4.3
+    QTest::newRow("ip6_01")  << QString("1080:0000:0000:0000:0008:0800:200C:417A") << true << QString("1080::8:800:200c:417a") << 6; // 4.1, 4.2.1
     QTest::newRow("ip6_02")  << QString("1080:0:0:0:8:800:200C:417A") << true << QString("1080::8:800:200c:417a") << 6;
     QTest::newRow("ip6_03")  << QString("1080::8:800:200C:417A") << true << QString("1080::8:800:200c:417a") << 6;
     QTest::newRow("ip6_04")  << QString("FF01::43") << true << QString("ff01::43") << 6;
@@ -183,10 +181,11 @@ void tst_QHostAddress::setAddress_QString_data()
     QTest::newRow("ip6_11")  << QString("::FFFF:129.144.52.38") << true << QString("::ffff:129.144.52.38") << 6;
     QTest::newRow("ip6_12")  << QString("1::FFFF:129.144.52.38") << true << QString("1::ffff:8190:3426") << 6;
     QTest::newRow("ip6_13")  << QString("A:B::D:E") << true << QString("a:b::d:e") << 6;
-    QTest::newRow("ip6_14")  << QString("1080:0:1:0:8:800:200C:417A") << true << QString("1080:0:1:0:8:800:200c:417a") << 6;
+    QTest::newRow("ip6_14")  << QString("1080:0:1:0:8:800:200C:417A") << true << QString("1080:0:1:0:8:800:200c:417a") << 6; // 4.2.2
     QTest::newRow("ip6_15")  << QString("1080:0:1:0:8:800:200C:0") << true << QString("1080:0:1:0:8:800:200c:0") << 6;
     QTest::newRow("ip6_16")  << QString("1080:0:1:0:8:800:0:0") << true << QString("1080:0:1:0:8:800::") << 6;
-    QTest::newRow("ip6_17")  << QString("1080:0:0:0:8:800:0:0") << true << QString("1080::8:800:0:0") << 6;
+    QTest::newRow("ip6_17a") << QString("1080:0:0:8:800:0:0:0") << true << QString("1080:0:0:8:800::") << 6; // 4.2.3a
+    QTest::newRow("ip6_17b") << QString("1080:0:0:0:8:0:0:0") << true << QString("1080::8:0:0:0") << 6; // 4.2.3b
     QTest::newRow("ip6_18")  << QString("0:1:1:1:8:800:0:0") << true << QString("0:1:1:1:8:800::") << 6;
     QTest::newRow("ip6_19")  << QString("0:1:1:1:8:800:0:1") << true << QString("0:1:1:1:8:800:0:1") << 6;
 
@@ -234,7 +233,7 @@ void tst_QHostAddress::setAddress_QString()
     QFETCH(int, protocol);
 
     QHostAddress hostAddr;
-    QVERIFY(hostAddr.setAddress(address) == ok);
+    QCOMPARE(hostAddr.setAddress(address), ok);
 
     if (ok)
         QTEST(hostAddr.toString(), "resAddr");
@@ -316,7 +315,7 @@ void tst_QHostAddress::compare_data()
     QTest::newRow("6") << QHostAddress(QHostAddress::LocalHost) << QHostAddress(QHostAddress::LocalHostIPv6) << false;
     QTest::newRow("7") << QHostAddress() << QHostAddress(QHostAddress::LocalHostIPv6) << false;
 
-    Q_IPV6ADDR localhostv4mapped = { 0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 255, 255,  127, 0, 0, 1 };
+    Q_IPV6ADDR localhostv4mapped = { { 0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 255, 255,  127, 0, 0, 1 } };
     QTest::newRow("v4-v4mapped") << QHostAddress(QHostAddress::LocalHost) << QHostAddress("::ffff:127.0.0.1") << false;
     QTest::newRow("v4-v4mapped-2") << QHostAddress(QHostAddress::LocalHost) << QHostAddress(localhostv4mapped) << false;
 }
@@ -330,7 +329,7 @@ void tst_QHostAddress::compare()
     QCOMPARE(first == second, result);
     QCOMPARE(second == first, result);
     if (result == true)
-        QVERIFY(qHash(first) == qHash(second));
+        QCOMPARE(qHash(first), qHash(second));
 }
 
 void tst_QHostAddress::assignment()
@@ -399,11 +398,11 @@ void tst_QHostAddress::streaming()
     QByteArray ba;
     QDataStream ds1(&ba, QIODevice::WriteOnly);
     ds1 << address;
-    QVERIFY(ds1.status() == QDataStream::Ok);
+    QCOMPARE(ds1.status(), QDataStream::Ok);
     QDataStream ds2(&ba, QIODevice::ReadOnly);
     QHostAddress address2;
     ds2 >> address2;
-    QVERIFY(ds2.status() == QDataStream::Ok);
+    QCOMPARE(ds2.status(), QDataStream::Ok);
     QCOMPARE(address, address2);
 }
 
@@ -631,6 +630,9 @@ void tst_QHostAddress::isLoopback_data()
     QTest::addColumn<QHostAddress>("address");
     QTest::addColumn<bool>("result");
 
+    QTest::newRow("default") << QHostAddress() << false;
+    QTest::newRow("invalid") << QHostAddress("&&&") << false;
+
     QTest::newRow("ipv6_loop") << QHostAddress(QHostAddress::LocalHostIPv6) << true;
     QTest::newRow("::1") << QHostAddress("::1") << true;
 
@@ -639,7 +641,6 @@ void tst_QHostAddress::isLoopback_data()
     QTest::newRow("127.0.0.2") << QHostAddress("127.0.0.2") << true;
     QTest::newRow("127.3.2.1") << QHostAddress("127.3.2.1") << true;
 
-    QTest::newRow("default") << QHostAddress() << false;
     QTest::newRow("1.2.3.4") << QHostAddress("1.2.3.4") << false;
     QTest::newRow("10.0.0.4") << QHostAddress("10.0.0.4") << false;
     QTest::newRow("192.168.3.4") << QHostAddress("192.168.3.4") << false;
@@ -650,10 +651,12 @@ void tst_QHostAddress::isLoopback_data()
     QTest::newRow("AnyIPv6") << QHostAddress(QHostAddress::AnyIPv6) << false;
     QTest::newRow("Broadcast") << QHostAddress(QHostAddress::Broadcast) << false;
     QTest::newRow("Null") << QHostAddress(QHostAddress::Null) << false;
+    QTest::newRow("ipv6-all-ffff") << QHostAddress("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff") << false;
 
     QTest::newRow("::ffff:127.0.0.1") << QHostAddress("::ffff:127.0.0.1") << true;
     QTest::newRow("::ffff:127.0.0.2") << QHostAddress("::ffff:127.0.0.2") << true;
     QTest::newRow("::ffff:127.3.2.1") << QHostAddress("::ffff:127.3.2.1") << true;
+
 }
 
 void tst_QHostAddress::isLoopback()
@@ -662,6 +665,50 @@ void tst_QHostAddress::isLoopback()
     QFETCH(bool, result);
 
     QCOMPARE(address.isLoopback(), result);
+}
+
+void tst_QHostAddress::isMulticast_data()
+{
+    QTest::addColumn<QHostAddress>("address");
+    QTest::addColumn<bool>("result");
+
+    QTest::newRow("default") << QHostAddress() << false;
+    QTest::newRow("invalid") << QHostAddress("&&&") << false;
+
+    QTest::newRow("ipv6_loop") << QHostAddress(QHostAddress::LocalHostIPv6) << false;
+    QTest::newRow("::1") << QHostAddress("::1") << false;
+    QTest::newRow("ipv4_loop") << QHostAddress(QHostAddress::LocalHost) << false;
+    QTest::newRow("127.0.0.1") << QHostAddress("127.0.0.1") << false;
+    QTest::newRow("::") << QHostAddress("::") << false;
+    QTest::newRow("Any") << QHostAddress(QHostAddress::Any) << false;
+    QTest::newRow("AnyIPv4") << QHostAddress(QHostAddress::AnyIPv4) << false;
+    QTest::newRow("AnyIPv6") << QHostAddress(QHostAddress::AnyIPv6) << false;
+    QTest::newRow("Broadcast") << QHostAddress(QHostAddress::Broadcast) << false;
+    QTest::newRow("Null") << QHostAddress(QHostAddress::Null) << false;
+
+    QTest::newRow("223.255.255.255") << QHostAddress("223.255.255.255") << false;
+    QTest::newRow("224.0.0.0") << QHostAddress("224.0.0.0") << true;
+    QTest::newRow("239.255.255.255") << QHostAddress("239.255.255.255") << true;
+    QTest::newRow("240.0.0.0") << QHostAddress("240.0.0.0") << false;
+
+    QTest::newRow("::ffff:223.255.255.255") << QHostAddress("::ffff:223.255.255.255") << false;
+    QTest::newRow("::ffff:224.0.0.0") << QHostAddress("::ffff:224.0.0.0") << true;
+    QTest::newRow("::ffff:239.255.255.255") << QHostAddress("::ffff:239.255.255.255") << true;
+    QTest::newRow("::ffff:240.0.0.0") << QHostAddress("::ffff:240.0.0.0") << false;
+
+    QTest::newRow("fc00::") << QHostAddress("fc00::") << false;
+    QTest::newRow("fe80::") << QHostAddress("fe80::") << false;
+    QTest::newRow("fec0::") << QHostAddress("fec0::") << false;
+    QTest::newRow("ff00::") << QHostAddress("ff00::") << true;
+    QTest::newRow("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff") << QHostAddress("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff") << true;
+}
+
+void tst_QHostAddress::isMulticast()
+{
+    QFETCH(QHostAddress, address);
+    QFETCH(bool, result);
+
+    QCOMPARE(address.isMulticast(), result);
 }
 
 void tst_QHostAddress::convertv4v6_data()

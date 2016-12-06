@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -43,7 +43,6 @@
 #include <qstringlist.h>
 #include <qthread.h>
 #include <qvariant.h>
-#include <qhash.h>
 #include <qdebug.h>
 #include <qsemaphore.h>
 
@@ -3029,6 +3028,11 @@ QVariant QMetaProperty::read(const QObject *object) const
     Writes \a value as the property's value to the given \a object. Returns
     true if the write succeeded; otherwise returns \c false.
 
+    If \a value is not of the same type type as the property, a conversion
+    is attempted. An empty QVariant() is equivalent to a call to reset()
+    if this property is resetable, or setting a default-constructed object
+    otherwise.
+
     \sa read(), reset(), isWritable()
 */
 bool QMetaProperty::write(QObject *object, const QVariant &value) const
@@ -3069,8 +3073,15 @@ bool QMetaProperty::write(QObject *object, const QVariant &value) const
             if (t == QMetaType::UnknownType)
                 return false;
         }
-        if (t != QMetaType::QVariant && t != (uint)value.userType() && (t < QMetaType::User && !v.convert((QVariant::Type)t)))
-            return false;
+        if (t != QMetaType::QVariant && int(t) != value.userType()) {
+            if (!value.isValid()) {
+                if (isResettable())
+                    return reset(object);
+                v = QVariant(t, 0);
+            } else if (!v.convert(t)) {
+                return false;
+            }
+        }
     }
 
     // the status variable is changed by qt_metacall to indicate what it did

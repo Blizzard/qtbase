@@ -57,7 +57,7 @@ class QImageWriter;
 struct Q_GUI_EXPORT QImageData {        // internal image data
     QImageData();
     ~QImageData();
-    static QImageData *create(const QSize &size, QImage::Format format, int numColors = 0);
+    static QImageData *create(const QSize &size, QImage::Format format);
     static QImageData *create(uchar *data, int w, int h,  int bpl, QImage::Format format, bool readOnly, QImageCleanupFunction cleanupFunction = 0, void *cleanupInfo = 0);
 
     QAtomicInt ref;
@@ -111,8 +111,6 @@ bool convert_generic_inplace(QImageData *data, QImage::Format dst_format, Qt::Im
 
 void dither_to_Mono(QImageData *dst, const QImageData *src, Qt::ImageConversionFlags flags, bool fromalpha);
 
-void qInitImageConversions();
-
 const uchar *qt_get_bitflip_array();
 Q_GUI_EXPORT void qGamma_correct_back_to_linear_cs(QImage *image);
 
@@ -163,9 +161,50 @@ inline int qt_depthForFormat(QImage::Format format)
     }
     return depth;
 }
+
 #if defined(_M_ARM)
 #pragma optimize("", on)
 #endif
+
+inline QImage::Format qt_alphaVersion(QImage::Format format)
+{
+    switch (format) {
+    case QImage::Format_RGB16:
+        return QImage::Format_ARGB8565_Premultiplied;
+    case QImage::Format_RGB555:
+        return QImage::Format_ARGB8555_Premultiplied;
+    case QImage::Format_RGB666:
+        return QImage::Format_ARGB6666_Premultiplied;
+    case QImage::Format_RGB444:
+        return QImage::Format_ARGB4444_Premultiplied;
+    case QImage::Format_RGBX8888:
+        return QImage::Format_RGBA8888_Premultiplied;
+    case QImage::Format_BGR30:
+        return QImage::Format_A2BGR30_Premultiplied;
+    case QImage::Format_RGB30:
+        return QImage::Format_A2RGB30_Premultiplied;
+    default:
+        break;
+    }
+    return QImage::Format_ARGB32_Premultiplied;
+}
+
+inline QImage::Format qt_maybeAlphaVersionWithSameDepth(QImage::Format format)
+{
+    const QImage::Format toFormat = qt_alphaVersion(format);
+    return qt_depthForFormat(format) == qt_depthForFormat(toFormat) ? toFormat : format;
+}
+
+inline QImage::Format qt_alphaVersionForPainting(QImage::Format format)
+{
+    QImage::Format toFormat = qt_alphaVersion(format);
+#if defined(__ARM_NEON__) || defined(__SSE2__)
+    // If we are switching depth anyway and we have optimized ARGB32PM routines, upgrade to that.
+    if (qt_depthForFormat(format) != qt_depthForFormat(toFormat))
+        toFormat = QImage::Format_ARGB32_Premultiplied;
+#endif
+    return toFormat;
+}
 
 QT_END_NAMESPACE
 

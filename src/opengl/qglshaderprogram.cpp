@@ -246,8 +246,7 @@ bool QGLShaderPrivate::create()
         else
             shader = glfuncs->glCreateShader(GL_FRAGMENT_SHADER);
         if (!shader) {
-            qWarning("%s: Could not create shader of type %d.",
-                     Q_FUNC_INFO, int(shaderType));
+            qWarning("Could not create shader of type %d.", int(shaderType));
             return false;
         }
         shaderGuard = createSharedResourceGuard(context, shader, freeShaderFunc);
@@ -1706,7 +1705,7 @@ void QGLShaderProgram::setAttributeBuffer
     Q_UNUSED(d);
     if (location != -1) {
         d->glfuncs->glVertexAttribPointer(location, tupleSize, type, GL_TRUE, stride,
-                              reinterpret_cast<const void *>(offset));
+                              reinterpret_cast<const void *>(qintptr(offset)));
     }
 }
 

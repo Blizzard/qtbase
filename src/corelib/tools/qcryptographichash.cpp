@@ -65,7 +65,7 @@ typedef HashReturn (SHA3Init)(hashState *state, int hashbitlen);
 typedef HashReturn (SHA3Update)(hashState *state, const BitSequence *data, DataLength databitlen);
 typedef HashReturn (SHA3Final)(hashState *state, BitSequence *hashval);
 
-#if QT_POINTER_SIZE == 8 // 64 bit version
+#if Q_PROCESSOR_WORDSIZE == 8 // 64 bit version
 
 #include "../../3rdparty/sha3/KeccakF-1600-opt64.c"
 
@@ -89,9 +89,29 @@ static SHA3Final * const sha3Final = Final;
     available on all platforms (MSVC 2008, for example), we #define them to the
     Qt equivalents.
 */
+
+#ifdef uint64_t
+#undef uint64_t
+#endif
+
 #define uint64_t QT_PREPEND_NAMESPACE(quint64)
+
+#ifdef uint32_t
+#undef uint32_t
+#endif
+
 #define uint32_t QT_PREPEND_NAMESPACE(quint32)
+
+#ifdef uint8_t
+#undef uint8_t
+#endif
+
 #define uint8_t QT_PREPEND_NAMESPACE(quint8)
+
+#ifdef int_least16_t
+#undef int_least16_t
+#endif
+
 #define int_least16_t QT_PREPEND_NAMESPACE(qint16)
 
 // Header from rfc6234 with 1 modification:

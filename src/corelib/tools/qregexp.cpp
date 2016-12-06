@@ -38,6 +38,7 @@
 #include "qcache.h"
 #include "qdatastream.h"
 #include "qdebug.h"
+#include "qhashfunctions.h"
 #include "qlist.h"
 #include "qmap.h"
 #include "qmutex.h"
@@ -491,7 +492,7 @@ int qFindString(const QChar *haystack, int haystackLen, int from,
          when it is followed by 'char'.
     \endtable
 
-    \keyword QRegExp wildcard matching
+    \target QRegExp wildcard matching
     \section1 Wildcard Matching
 
     Most command shells such as \e bash or \e cmd.exe support "file
@@ -886,6 +887,15 @@ static bool operator==(const QRegExpEngineKey &key1, const QRegExpEngineKey &key
            && key1.cs == key2.cs;
 }
 
+static uint qHash(const QRegExpEngineKey &key, uint seed = 0) Q_DECL_NOTHROW
+{
+    QtPrivate::QHashCombine hash;
+    seed = hash(seed, key.pattern);
+    seed = hash(seed, key.patternSyntax);
+    seed = hash(seed, key.cs);
+    return seed;
+}
+
 class QRegExpEngine;
 
 //Q_DECLARE_TYPEINFO(QVector<int>, Q_MOVABLE_TYPE);
@@ -1019,9 +1029,6 @@ class QRegExpCharClass
 {
 public:
     QRegExpCharClass();
-    inline QRegExpCharClass(const QRegExpCharClass &cc) { operator=(cc); }
-
-    QRegExpCharClass &operator=(const QRegExpCharClass &cc);
 
     void clear();
     bool negative() const { return n; }
@@ -2317,17 +2324,6 @@ QRegExpCharClass::QRegExpCharClass()
 #ifndef QT_NO_REGEXP_OPTIM
     occ1.fill(NoOccurrence, NumBadChars);
 #endif
-}
-
-QRegExpCharClass &QRegExpCharClass::operator=(const QRegExpCharClass &cc)
-{
-    c = cc.c;
-    r = cc.r;
-    n = cc.n;
-#ifndef QT_NO_REGEXP_OPTIM
-    occ1 = cc.occ1;
-#endif
-    return *this;
 }
 
 void QRegExpCharClass::clear()
@@ -3811,11 +3807,6 @@ struct QRegExpPrivate
 };
 
 #if !defined(QT_NO_REGEXP_OPTIM)
-uint qHash(const QRegExpEngineKey &key, uint seed = 0) Q_DECL_NOTHROW
-{
-    return qHash(key.pattern, seed);
-}
-
 typedef QCache<QRegExpEngineKey, QRegExpEngine> EngineCache;
 Q_GLOBAL_STATIC(EngineCache, globalEngineCache)
 static QBasicMutex globalEngineCacheMutex;
@@ -4034,6 +4025,21 @@ QRegExp &QRegExp::operator=(const QRegExp &rx)
 bool QRegExp::operator==(const QRegExp &rx) const
 {
     return priv->engineKey == rx.priv->engineKey && priv->minimal == rx.priv->minimal;
+}
+
+/*!
+    \since 5.6
+    \relates QRegExp
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
+*/
+uint qHash(const QRegExp &key, uint seed) Q_DECL_NOTHROW
+{
+    QtPrivate::QHashCombine hash;
+    seed = hash(seed, key.priv->engineKey);
+    seed = hash(seed, key.priv->minimal);
+    return seed;
 }
 
 /*!

@@ -12,6 +12,7 @@
 load(qt_app)
 
 CONFIG += console
+DEFINES *= QT_USE_QSTRINGBUILDER
 
 # If we are doing a prefix build, create a "module" pri which enables
 # qtPrepareTool() to work with the non-installed build.
@@ -63,3 +64,5 @@ CONFIG += console
         cache(QT_TOOL.$${MODULE}.$$var, transient)
 
 }
+# The variable is re-used by qtPrepareTool(), and we really don't want that.
+unset(QT_TOOL_ENV)

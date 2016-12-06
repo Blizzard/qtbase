@@ -1175,13 +1175,12 @@ QLayoutItem *QLayout::replaceWidget(QWidget *from, QWidget *to, Qt::FindChildOpt
     if (index == -1)
         return 0;
 
+    addChildWidget(to);
     QLayoutItem *newitem = new QWidgetItem(to);
     newitem->setAlignment(item->alignment());
     QLayoutItem *r = d->replaceAt(index, newitem);
     if (!r)
         delete newitem;
-    else
-        addChildWidget(to);
     return r;
 }
 
@@ -1472,3 +1471,5 @@ QSize QLayout::closestAcceptableSize(const QWidget *widget, const QSize &size)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qlayout.cpp"

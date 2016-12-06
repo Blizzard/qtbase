@@ -71,7 +71,7 @@ Arguments:
   startcode       pointer to start of the whole pattern's code
   options         the compiling options
   recurses        chain of recurse_check to catch mutual recursion
-  countptr        pointer to call count (to catch over complexity) 
+  countptr        pointer to call count (to catch over complexity)
 
 Returns:   the minimum length
            -1 if \C in UTF-8 mode or (*ACCEPT) was encountered
@@ -1371,7 +1371,7 @@ do
             for (c = 0; c < 16; c++) start_bits[c] |= map[c];
             for (c = 128; c < 256; c++)
               {
-              if ((map[c/8] && (1 << (c&7))) != 0)
+              if ((map[c/8] & (1 << (c&7))) != 0)
                 {
                 int d = (c >> 6) | 0xc0;            /* Set bit for this starter */
                 start_bits[d/8] |= (1 << (d&7));    /* and then skip on to the */

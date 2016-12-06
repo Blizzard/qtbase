@@ -111,9 +111,13 @@ QAndroidPlatformScreen::~QAndroidPlatformScreen()
 
 QWindow *QAndroidPlatformScreen::topWindow() const
 {
-    foreach (QAndroidPlatformWindow *w, m_windowStack)
-        if (w->window()->type() == Qt::Window || w->window()->type() == Qt::Dialog)
+    foreach (QAndroidPlatformWindow *w, m_windowStack) {
+        if (w->window()->type() == Qt::Window ||
+                w->window()->type() == Qt::Popup ||
+                w->window()->type() == Qt::Dialog) {
             return w->window();
+        }
+    }
     return 0;
 }
 
@@ -380,6 +384,11 @@ QDpi QAndroidPlatformScreen::logicalDpi() const
 {
     qreal lDpi = QtAndroid::scaledDensity() * 72;
     return QDpi(lDpi, lDpi);
+}
+
+qreal QAndroidPlatformScreen::pixelDensity() const
+{
+    return QtAndroid::pixelDensity();
 }
 
 Qt::ScreenOrientation QAndroidPlatformScreen::orientation() const

@@ -90,7 +90,9 @@ void foo()
 #include "qvector.h"
 #include "qqueue.h"
 
+QT_BEGIN_NAMESPACE
 template class QList<int>;
+QT_END_NAMESPACE
 
 class tst_Collections : public QObject
 {
@@ -2235,7 +2237,7 @@ void tst_Collections::qstring()
 void tst_Collections::bitArray()
 {
     QBitArray ba(20);
-    QVERIFY(ba.testBit(17) == false);
+    QVERIFY(!ba.testBit(17));
     ba.setBit(17);
     QVERIFY(ba.size() == 20);
     QVERIFY(ba.testBit(17)==true);

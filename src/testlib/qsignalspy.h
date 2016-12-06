@@ -82,7 +82,7 @@ public:
         }
 
         if (!QMetaObject::connect(obj, sigIndex, this, memberOffset,
-                    Qt::DirectConnection, 0)) {
+                    Qt::DirectConnection, Q_NULLPTR)) {
             qWarning("QSignalSpy: QMetaObject::connect returned false. Unable to connect.");
             return;
         }
@@ -175,8 +175,11 @@ private:
                     tp = QMetaType::UnknownType;
             }
             if (tp == QMetaType::UnknownType) {
-                qWarning("Don't know how to handle '%s', use qRegisterMetaType to register it.",
-                         member.parameterNames().at(i).constData());
+                qWarning("QSignalSpy: Unable to handle parameter '%s' of type '%s' of method '%s',"
+                         " use qRegisterMetaType to register it.",
+                         member.parameterNames().at(i).constData(),
+                         member.parameterTypes().at(i).constData(),
+                         member.name().constData());
             }
             args << tp;
         }

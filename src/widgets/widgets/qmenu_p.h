@@ -126,7 +126,7 @@ public:
 
     enum MouseEventResult {
         EventIsProcessed,
-        EventShouldBePropogated,
+        EventShouldBePropagated,
         EventDiscardsSloppyState
     };
 
@@ -187,14 +187,14 @@ public:
             m_parent->stopTimer();
 
         if (!m_enabled)
-            return EventShouldBePropogated;
+            return EventShouldBePropagated;
 
         if (!m_time.isActive())
             startTimer();
 
         if (!m_sub_menu) {
             reset();
-            return EventShouldBePropogated;
+            return EventShouldBePropagated;
         }
 
         QSetValueOnDestroy<bool> setFirstMouse(m_first_mouse, false);
@@ -208,7 +208,7 @@ public:
 
         if (m_action_rect.contains(mousePos)) {
             startTimer();
-            return currentAction == m_menu->menuAction() ? EventIsProcessed : EventShouldBePropogated;
+            return currentAction == m_menu->menuAction() ? EventIsProcessed : EventShouldBePropagated;
         }
 
         if (m_uni_directional && !m_first_mouse && resetAction != m_origin_action) {
@@ -247,7 +247,7 @@ public:
 
         }
 
-        return m_select_other_actions ? EventShouldBePropogated : EventIsProcessed;
+        return m_select_other_actions ? EventShouldBePropagated : EventIsProcessed;
     }
 
     void setSubMenuPopup(const QRect &actionRect, QAction *resetAction, QMenu *subMenu);
@@ -422,7 +422,7 @@ public:
         QPointer<QWidget> widget;
         QPointer<QAction> action;
     };
-    virtual QList<QPointer<QWidget> > calcCausedStack() const;
+    virtual QVector<QPointer<QWidget> > calcCausedStack() const;
     QMenuCaused causedPopup;
     void hideUpToMenuBar();
     void hideMenu(QMenu *menu);
@@ -450,7 +450,7 @@ public:
 
     //firing of events
     void activateAction(QAction *, QAction::ActionEvent, bool self=true);
-    void activateCausedStack(const QList<QPointer<QWidget> > &, QAction *, QAction::ActionEvent, bool);
+    void activateCausedStack(const QVector<QPointer<QWidget> > &, QAction *, QAction::ActionEvent, bool);
 
     void _q_actionTriggered();
     void _q_actionHovered();

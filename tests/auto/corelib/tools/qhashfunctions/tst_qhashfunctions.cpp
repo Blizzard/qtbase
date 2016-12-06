@@ -45,11 +45,15 @@ class tst_QHashFunctions : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void qhash();
+    void qhash_of_empty_and_null_qstring();
+    void qhash_of_empty_and_null_qbytearray();
     void fp_qhash_of_zero_is_zero();
     void qthash_data();
     void qthash();
     void range();
     void rangeCommutative();
+
+    void setGlobalQHashSeed();
 };
 
 void tst_QHashFunctions::qhash()
@@ -113,6 +117,20 @@ void tst_QHashFunctions::qhash()
 
         QVERIFY(qHash(pA) != qHash(pB));
     }
+}
+
+void tst_QHashFunctions::qhash_of_empty_and_null_qstring()
+{
+    QString null, empty("");
+    QCOMPARE(null, empty);
+    QCOMPARE(qHash(null), qHash(empty));
+}
+
+void tst_QHashFunctions::qhash_of_empty_and_null_qbytearray()
+{
+    QByteArray null, empty("");
+    QCOMPARE(null, empty);
+    QCOMPARE(qHash(null), qHash(empty));
 }
 
 void tst_QHashFunctions::fp_qhash_of_zero_is_zero()
@@ -205,6 +223,22 @@ void tst_QHashFunctions::rangeCommutative()
     static const size_t numHashables = sizeof hashables / sizeof *hashables;
     // compile check: is qHash() found using ADL?
     (void)qHashRangeCommutative(hashables, hashables + numHashables);
+}
+
+void tst_QHashFunctions::setGlobalQHashSeed()
+{
+    // Setter works as advertised
+    qSetGlobalQHashSeed(0x10101010);
+    QCOMPARE(qGlobalQHashSeed(), 0x10101010);
+
+    // Creating a new QHash doesn't reset the seed
+    QHash<QString, int> someHash;
+    someHash.insert("foo", 42);
+    QCOMPARE(qGlobalQHashSeed(), 0x10101010);
+
+    // Reset works as advertised
+    qSetGlobalQHashSeed(-1);
+    QVERIFY(qGlobalQHashSeed() != -1);
 }
 
 QTEST_APPLESS_MAIN(tst_QHashFunctions)

@@ -53,6 +53,54 @@
 
 QT_BEGIN_NAMESPACE
 
+QLabelPrivate::QLabelPrivate()
+    : QFramePrivate(),
+      sh(),
+      msh(),
+      text(),
+      pixmap(Q_NULLPTR),
+      scaledpixmap(Q_NULLPTR),
+      cachedimage(Q_NULLPTR),
+#ifndef QT_NO_PICTURE
+      picture(Q_NULLPTR),
+#endif
+#ifndef QT_NO_MOVIE
+      movie(),
+#endif
+      control(Q_NULLPTR),
+      shortcutCursor(),
+#ifndef QT_NO_CURSOR
+      cursor(),
+#endif
+#ifndef QT_NO_SHORTCUT
+      buddy(),
+      shortcutId(0),
+#endif
+      textformat(Qt::AutoText),
+      textInteractionFlags(Qt::LinksAccessibleByMouse),
+      sizePolicy(),
+      margin(0),
+      align(Qt::AlignLeft | Qt::AlignVCenter | Qt::TextExpandTabs),
+      indent(-1),
+      valid_hints(false),
+      scaledcontents(false),
+      textLayoutDirty(false),
+      textDirty(false),
+      isRichText(false),
+      isTextLabel(false),
+      hasShortcut(/*???*/),
+#ifndef QT_NO_CURSOR
+      validCursor(false),
+      onAnchor(false),
+#endif
+      openExternalLinks(false)
+{
+}
+
+QLabelPrivate::~QLabelPrivate()
+{
+}
+
 /*!
     \class QLabel
     \brief The QLabel widget provides a text or image display.
@@ -202,41 +250,8 @@ void QLabelPrivate::init()
 {
     Q_Q(QLabel);
 
-    valid_hints = false;
-    margin = 0;
-#ifndef QT_NO_MOVIE
-    movie = 0;
-#endif
-#ifndef QT_NO_SHORTCUT
-    shortcutId = 0;
-#endif
-    pixmap = 0;
-    scaledpixmap = 0;
-    cachedimage = 0;
-#ifndef QT_NO_PICTURE
-    picture = 0;
-#endif
-    align = Qt::AlignLeft | Qt::AlignVCenter | Qt::TextExpandTabs;
-    indent = -1;
-    scaledcontents = false;
-    textLayoutDirty = false;
-    textDirty = false;
-    textformat = Qt::AutoText;
-    control = 0;
-    textInteractionFlags = Qt::LinksAccessibleByMouse;
-    isRichText = false;
-    isTextLabel = false;
-
     q->setSizePolicy(QSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred,
                                  QSizePolicy::Label));
-
-#ifndef QT_NO_CURSOR
-    validCursor = false;
-    onAnchor = false;
-#endif
-
-    openExternalLinks = false;
-
     setLayoutItemMargins(QStyle::SE_LabelLayoutItem);
 }
 
@@ -1076,14 +1091,16 @@ void QLabel::paintEvent(QPaintEvent *)
     if (d->pixmap && !d->pixmap->isNull()) {
         QPixmap pix;
         if (d->scaledcontents) {
-            if (!d->scaledpixmap || d->scaledpixmap->size() != cr.size()) {
+            QSize scaledSize = cr.size() * devicePixelRatioF();
+            if (!d->scaledpixmap || d->scaledpixmap->size() != scaledSize) {
                 if (!d->cachedimage)
                     d->cachedimage = new QImage(d->pixmap->toImage());
                 delete d->scaledpixmap;
                 QImage scaledImage =
-                    d->cachedimage->scaled(cr.size() * devicePixelRatio(),
+                    d->cachedimage->scaled(scaledSize,
                                            Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
                 d->scaledpixmap = new QPixmap(QPixmap::fromImage(scaledImage));
+                d->scaledpixmap->setDevicePixelRatio(devicePixelRatioF());
             }
             pix = *d->scaledpixmap;
         } else

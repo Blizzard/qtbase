@@ -35,11 +35,11 @@
 #include "qeglfskmsscreen.h"
 #include "qeglfskmsdevice.h"
 #include "qeglfskmscursor.h"
+#include "qeglfsintegration.h"
 
 #include <QtCore/QLoggingCategory>
 
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtPlatformSupport/private/qeglplatformintegration_p.h>
 #include <QtPlatformSupport/private/qfbvthandler_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -50,17 +50,13 @@ class QEglFSKmsInterruptHandler : public QObject
 {
 public:
     QEglFSKmsInterruptHandler(QEglFSKmsScreen *screen) : m_screen(screen) {
-        m_vtHandler = static_cast<QEGLPlatformIntegration *>(QGuiApplicationPrivate::platformIntegration())->vtHandler();
+        m_vtHandler = static_cast<QEglFSIntegration *>(QGuiApplicationPrivate::platformIntegration())->vtHandler();
         connect(m_vtHandler, &QFbVtHandler::interrupted, this, &QEglFSKmsInterruptHandler::restoreVideoMode);
-        connect(m_vtHandler, &QFbVtHandler::suspendRequested, this, &QEglFSKmsInterruptHandler::handleSuspendRequest);
+        connect(m_vtHandler, &QFbVtHandler::aboutToSuspend, this, &QEglFSKmsInterruptHandler::restoreVideoMode);
     }
 
 public slots:
     void restoreVideoMode() { m_screen->restoreMode(); }
-    void handleSuspendRequest() {
-        m_screen->restoreMode();
-        m_vtHandler->suspend();
-    }
 
 private:
     QFbVtHandler *m_vtHandler;
@@ -119,6 +115,7 @@ QEglFSKmsScreen::QEglFSKmsScreen(QEglFSKmsIntegration *integration,
     , m_output(output)
     , m_pos(position)
     , m_cursor(Q_NULLPTR)
+    , m_powerState(PowerStateOn)
     , m_interruptHandler(new QEglFSKmsInterruptHandler(this))
 {
     m_siblings << this;
@@ -126,6 +123,10 @@ QEglFSKmsScreen::QEglFSKmsScreen(QEglFSKmsIntegration *integration,
 
 QEglFSKmsScreen::~QEglFSKmsScreen()
 {
+    if (m_output.dpms_prop) {
+        drmModeFreeProperty(m_output.dpms_prop);
+        m_output.dpms_prop = Q_NULLPTR;
+    }
     restoreMode();
     if (m_output.saved_crtc) {
         drmModeFreeCrtc(m_output.saved_crtc);
@@ -159,10 +160,10 @@ QSizeF QEglFSKmsScreen::physicalSize() const
 
 QDpi QEglFSKmsScreen::logicalDpi() const
 {
-    QSizeF ps = physicalSize();
-    QSize s = geometry().size();
+    const QSizeF ps = physicalSize();
+    const QSize s = geometry().size();
 
-    if (ps.isValid() && s.isValid())
+    if (!ps.isEmpty() && !s.isEmpty())
         return QDpi(25.4 * s.width() / ps.width(),
                     25.4 * s.height() / ps.height());
     else
@@ -266,10 +267,12 @@ void QEglFSKmsScreen::flip()
                                  &m_output.connector_id, 1,
                                  &m_output.modes[m_output.mode]);
 
-        if (ret)
+        if (ret) {
             qErrnoWarning("Could not set DRM mode!");
-        else
+        } else {
             m_output.mode_set = true;
+            setPowerState(PowerStateOn);
+        }
     }
 
     int ret = drmModePageFlip(m_device->fd(),
@@ -312,6 +315,39 @@ qreal QEglFSKmsScreen::refreshRate() const
 {
     quint32 refresh = m_output.modes[m_output.mode].vrefresh;
     return refresh > 0 ? refresh : 60;
+}
+
+QPlatformScreen::SubpixelAntialiasingType QEglFSKmsScreen::subpixelAntialiasingTypeHint() const
+{
+    switch (m_output.subpixel) {
+    default:
+    case DRM_MODE_SUBPIXEL_UNKNOWN:
+    case DRM_MODE_SUBPIXEL_NONE:
+        return Subpixel_None;
+    case DRM_MODE_SUBPIXEL_HORIZONTAL_RGB:
+        return Subpixel_RGB;
+    case DRM_MODE_SUBPIXEL_HORIZONTAL_BGR:
+        return Subpixel_BGR;
+    case DRM_MODE_SUBPIXEL_VERTICAL_RGB:
+        return Subpixel_VRGB;
+    case DRM_MODE_SUBPIXEL_VERTICAL_BGR:
+        return Subpixel_VBGR;
+    }
+}
+
+QPlatformScreen::PowerState QEglFSKmsScreen::powerState() const
+{
+    return m_powerState;
+}
+
+void QEglFSKmsScreen::setPowerState(QPlatformScreen::PowerState state)
+{
+    if (!m_output.dpms_prop)
+        return;
+
+    drmModeConnectorSetProperty(m_device->fd(), m_output.connector_id,
+                                m_output.dpms_prop->prop_id, (int)state);
+    m_powerState = state;
 }
 
 QT_END_NAMESPACE

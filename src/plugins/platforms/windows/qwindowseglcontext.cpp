@@ -39,7 +39,7 @@
 #include <QtGui/QOpenGLContext>
 
 #if defined(QT_OPENGL_ES_2_ANGLE) || defined(QT_OPENGL_DYNAMIC)
-#  include <QtANGLE/EGL/eglext.h>
+#  include <EGL/eglext.h>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -178,9 +178,9 @@ bool QWindowsLibGLESv2::init()
 
     qCDebug(lcQpaGl) << "Qt: Using OpenGL ES 2.0 from" << dllName;
 #if !defined(QT_STATIC) || defined(QT_OPENGL_DYNAMIC)
-    m_lib = ::LoadLibraryW((const wchar_t *) QString::fromLatin1(dllName).utf16());
+    m_lib = ::LoadLibraryW(reinterpret_cast<LPCWSTR>(QString::fromLatin1(dllName).utf16()));
     if (!m_lib) {
-        qErrnoWarning(::GetLastError(), "Failed to load %s", dllName);
+        qErrnoWarning(int(GetLastError()), "Failed to load %s", dllName);
         return false;
     }
 #endif // !QT_STATIC
@@ -333,9 +333,48 @@ bool QWindowsLibGLESv2::init()
     return glBindTexture && glCreateShader && glClearDepthf;
 }
 
-QWindowsEGLStaticContext::QWindowsEGLStaticContext(EGLDisplay display, int version)
-    : m_display(display), m_version(version)
+QWindowsEGLStaticContext::QWindowsEGLStaticContext(EGLDisplay display)
+    : m_display(display)
 {
+}
+
+bool QWindowsEGLStaticContext::initializeAngle(QWindowsOpenGLTester::Renderers preferredType, HDC dc,
+                                               EGLDisplay *display, EGLint *major, EGLint *minor)
+{
+#ifdef EGL_ANGLE_platform_angle
+    if (libEGL.eglGetPlatformDisplayEXT
+        && (preferredType & QWindowsOpenGLTester::AngleBackendMask)) {
+        const EGLint anglePlatformAttributes[][5] = {
+            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_NONE },
+            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, EGL_NONE },
+            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
+              EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE, EGL_NONE }
+        };
+        const EGLint *attributes = 0;
+        if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11)
+            attributes = anglePlatformAttributes[0];
+        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d9)
+            attributes = anglePlatformAttributes[1];
+        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11Warp)
+            attributes = anglePlatformAttributes[2];
+        if (attributes) {
+            *display = libEGL.eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, dc, attributes);
+            if (!libEGL.eglInitialize(*display, major, minor)) {
+                libEGL.eglTerminate(*display);
+                *display = EGL_NO_DISPLAY;
+                *major = *minor = 0;
+                return false;
+            }
+        }
+    }
+#else // EGL_ANGLE_platform_angle
+    Q_UNUSED(preferredType);
+    Q_UNUSED(dc);
+    Q_UNUSED(display);
+    Q_UNUSED(major);
+    Q_UNUSED(minor);
+#endif
+    return true;
 }
 
 QWindowsEGLStaticContext *QWindowsEGLStaticContext::create(QWindowsOpenGLTester::Renderers preferredType)
@@ -358,35 +397,15 @@ QWindowsEGLStaticContext *QWindowsEGLStaticContext::create(QWindowsOpenGLTester:
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLint major = 0;
     EGLint minor = 0;
-#ifdef EGL_ANGLE_platform_angle
-    if (libEGL.eglGetPlatformDisplayEXT
-        && (preferredType & QWindowsOpenGLTester::AngleBackendMask)) {
-        const EGLint anglePlatformAttributes[][5] = {
-            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_NONE },
-            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, EGL_NONE },
-            { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
-              EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE, EGL_NONE }
-        };
-        const EGLint *attributes = 0;
-        if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11)
-            attributes = anglePlatformAttributes[0];
-        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d9)
-            attributes = anglePlatformAttributes[1];
-        else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11Warp)
-            attributes = anglePlatformAttributes[2];
-        if (attributes) {
-            display = libEGL.eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, dc, attributes);
-            if (!libEGL.eglInitialize(display, &major, &minor)) {
-                display = EGL_NO_DISPLAY;
-                major = minor = 0;
-            }
-        }
+
+    if (!initializeAngle(preferredType, dc, &display, &major, &minor)
+        && (preferredType & QWindowsOpenGLTester::AngleRendererD3d11)) {
+        preferredType &= ~QWindowsOpenGLTester::AngleRendererD3d11;
+        initializeAngle(preferredType, dc, &display, &major, &minor);
     }
-#else // EGL_ANGLE_platform_angle
-    Q_UNUSED(preferredType)
-#endif
+
     if (display == EGL_NO_DISPLAY)
-        display = libEGL.eglGetDisplay((EGLNativeDisplayType)dc);
+        display = libEGL.eglGetDisplay(dc);
     if (!display) {
         qWarning("%s: Could not obtain EGL display", __FUNCTION__);
         return 0;
@@ -401,7 +420,7 @@ QWindowsEGLStaticContext *QWindowsEGLStaticContext::create(QWindowsOpenGLTester:
     }
 
     qCDebug(lcQpaGl) << __FUNCTION__ << "Created EGL display" << display << 'v' <<major << '.' << minor;
-    return new QWindowsEGLStaticContext(display, (major << 8) | minor);
+    return new QWindowsEGLStaticContext(display);
 }
 
 QWindowsEGLStaticContext::~QWindowsEGLStaticContext()
@@ -418,8 +437,8 @@ QWindowsOpenGLContext *QWindowsEGLStaticContext::createContext(QOpenGLContext *c
 void *QWindowsEGLStaticContext::createWindowSurface(void *nativeWindow, void *nativeConfig, int *err)
 {
     *err = 0;
-    EGLSurface surface = libEGL.eglCreateWindowSurface(m_display, (EGLConfig) nativeConfig,
-                                                       (EGLNativeWindowType) nativeWindow, 0);
+    EGLSurface surface = libEGL.eglCreateWindowSurface(m_display, nativeConfig,
+                                                       static_cast<EGLNativeWindowType>(nativeWindow), 0);
     if (surface == EGL_NO_SURFACE) {
         *err = libEGL.eglGetError();
         qWarning("%s: Could not create the EGL window surface: 0x%x", __FUNCTION__, *err);
@@ -430,7 +449,7 @@ void *QWindowsEGLStaticContext::createWindowSurface(void *nativeWindow, void *na
 
 void QWindowsEGLStaticContext::destroyWindowSurface(void *nativeSurface)
 {
-    libEGL.eglDestroySurface(m_display, (EGLSurface) nativeSurface);
+    libEGL.eglDestroySurface(m_display, nativeSurface);
 }
 
 QSurfaceFormat QWindowsEGLStaticContext::formatFromConfig(EGLDisplay display, EGLConfig config,
@@ -485,7 +504,7 @@ QSurfaceFormat QWindowsEGLStaticContext::formatFromConfig(EGLDisplay display, EG
     \list
     \o Install the Direct X SDK
     \o Checkout and build ANGLE (SVN repository) as explained here:
-       \l{http://code.google.com/p/angleproject/wiki/DevSetup}{ANGLE-Project}.
+       \l{https://chromium.googlesource.com/angle/angle/+/master/README.md}
        When building for 64bit, de-activate the "WarnAsError" option
        in every project file (as otherwise integer conversion
        warnings will break the build).
@@ -981,7 +1000,7 @@ EGLConfig QWindowsEGLContext::chooseConfig(const QSurfaceFormat &format)
         QVector<EGLConfig> configs(matching);
         QWindowsEGLStaticContext::libEGL.eglChooseConfig(display, configureAttributes.constData(), configs.data(), configs.size(), &matching);
         if (!cfg && matching > 0)
-            cfg = configs.first();
+            cfg = configs.constFirst();
 
         EGLint red = 0;
         EGLint green = 0;

@@ -34,10 +34,11 @@
 #ifndef QIMAGE_H
 #define QIMAGE_H
 
-#include <QtGui/qtransform.h>
-#include <QtGui/qpaintdevice.h>
+#include <QtGui/qcolor.h>
 #include <QtGui/qrgb.h>
+#include <QtGui/qpaintdevice.h>
 #include <QtGui/qpixelformat.h>
+#include <QtGui/qtransform.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qrect.h>
 #include <QtCore/qstring.h>
@@ -124,20 +125,20 @@ public:
     QImage() Q_DECL_NOEXCEPT;
     QImage(const QSize &size, Format format);
     QImage(int width, int height, Format format);
-    QImage(uchar *data, int width, int height, Format format, QImageCleanupFunction cleanupFunction = 0, void *cleanupInfo = 0);
-    QImage(const uchar *data, int width, int height, Format format, QImageCleanupFunction cleanupFunction = 0, void *cleanupInfo = 0);
-    QImage(uchar *data, int width, int height, int bytesPerLine, Format format, QImageCleanupFunction cleanupFunction = 0, void *cleanupInfo = 0);
-    QImage(const uchar *data, int width, int height, int bytesPerLine, Format format, QImageCleanupFunction cleanupFunction = 0, void *cleanupInfo = 0);
+    QImage(uchar *data, int width, int height, Format format, QImageCleanupFunction cleanupFunction = Q_NULLPTR, void *cleanupInfo = Q_NULLPTR);
+    QImage(const uchar *data, int width, int height, Format format, QImageCleanupFunction cleanupFunction = Q_NULLPTR, void *cleanupInfo = Q_NULLPTR);
+    QImage(uchar *data, int width, int height, int bytesPerLine, Format format, QImageCleanupFunction cleanupFunction = Q_NULLPTR, void *cleanupInfo = Q_NULLPTR);
+    QImage(const uchar *data, int width, int height, int bytesPerLine, Format format, QImageCleanupFunction cleanupFunction = Q_NULLPTR, void *cleanupInfo = Q_NULLPTR);
 
 #ifndef QT_NO_IMAGEFORMAT_XPM
     explicit QImage(const char * const xpm[]);
 #endif
-    explicit QImage(const QString &fileName, const char *format = 0);
+    explicit QImage(const QString &fileName, const char *format = Q_NULLPTR);
 
     QImage(const QImage &);
 #ifdef Q_COMPILER_RVALUE_REFS
     inline QImage(QImage &&other) Q_DECL_NOEXCEPT
-        : QPaintDevice(), d(0)
+        : QPaintDevice(), d(Q_NULLPTR)
     { qSwap(d, other.d); }
 #endif
     ~QImage();
@@ -220,6 +221,12 @@ public:
     void setPixel(int x, int y, uint index_or_rgb);
     void setPixel(const QPoint &pt, uint index_or_rgb);
 
+    QColor pixelColor(int x, int y) const;
+    QColor pixelColor(const QPoint &pt) const;
+
+    void setPixelColor(int x, int y, const QColor &c);
+    void setPixelColor(const QPoint &pt, const QColor &c);
+
     QVector<QRgb> colorTable() const;
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     void setColorTable(const QVector<QRgb> &colors);
@@ -272,16 +279,16 @@ public:
 
 
     bool load(QIODevice *device, const char* format);
-    bool load(const QString &fileName, const char* format=0);
-    bool loadFromData(const uchar *buf, int len, const char *format = 0);
-    inline bool loadFromData(const QByteArray &data, const char* aformat=0)
+    bool load(const QString &fileName, const char *format = Q_NULLPTR);
+    bool loadFromData(const uchar *buf, int len, const char *format = Q_NULLPTR);
+    inline bool loadFromData(const QByteArray &data, const char *aformat = Q_NULLPTR)
         { return loadFromData(reinterpret_cast<const uchar *>(data.constData()), data.size(), aformat); }
 
-    bool save(const QString &fileName, const char* format=0, int quality=-1) const;
-    bool save(QIODevice *device, const char* format=0, int quality=-1) const;
+    bool save(const QString &fileName, const char *format = Q_NULLPTR, int quality = -1) const;
+    bool save(QIODevice *device, const char *format = Q_NULLPTR, int quality = -1) const;
 
-    static QImage fromData(const uchar *data, int size, const char *format = 0);
-    inline static QImage fromData(const QByteArray &data, const char *format = 0)
+    static QImage fromData(const uchar *data, int size, const char *format = Q_NULLPTR);
+    inline static QImage fromData(const QByteArray &data, const char *format = Q_NULLPTR)
         { return fromData(reinterpret_cast<const uchar *>(data.constData()), data.size(), format); }
 
 #if QT_DEPRECATED_SINCE(5, 0)
@@ -308,7 +315,7 @@ public:
     static QImage::Format toImageFormat(QPixelFormat format) Q_DECL_NOTHROW;
 
 #if QT_DEPRECATED_SINCE(5, 0)
-    QT_DEPRECATED inline QString text(const char* key, const char* lang=0) const;
+    QT_DEPRECATED inline QString text(const char *key, const char *lang = Q_NULLPTR) const;
     QT_DEPRECATED inline QList<QImageTextKeyLang> textList() const;
     QT_DEPRECATED inline QStringList textLanguages() const;
     QT_DEPRECATED inline QString text(const QImageTextKeyLang&) const;
@@ -352,6 +359,8 @@ inline bool QImage::valid(const QPoint &pt) const { return valid(pt.x(), pt.y())
 inline int QImage::pixelIndex(const QPoint &pt) const { return pixelIndex(pt.x(), pt.y());}
 inline QRgb QImage::pixel(const QPoint &pt) const { return pixel(pt.x(), pt.y()); }
 inline void QImage::setPixel(const QPoint &pt, uint index_or_rgb) { setPixel(pt.x(), pt.y(), index_or_rgb); }
+inline QColor QImage::pixelColor(const QPoint &pt) const { return pixelColor(pt.x(), pt.y()); }
+inline void QImage::setPixelColor(const QPoint &pt, const QColor &c) { setPixelColor(pt.x(), pt.y(), c); }
 
 #if QT_DEPRECATED_SINCE(5, 0)
 

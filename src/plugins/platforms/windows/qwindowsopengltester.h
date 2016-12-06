@@ -37,7 +37,7 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QFlags>
 #include <QtCore/QList>
-#include <private/qversionnumber_p.h>
+#include <QtCore/qversionnumber.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -52,16 +52,18 @@ struct GpuDescription
     QString toString() const;
     QVariant toVariant() const;
 
-    int vendorId;
-    int deviceId;
-    int revision;
-    int subSysId;
+    uint vendorId;
+    uint deviceId;
+    uint revision;
+    uint subSysId;
     QVersionNumber driverVersion;
     QByteArray driverName;
     QByteArray description;
 };
 
+#ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug d, const GpuDescription &gd);
+#endif
 
 class QWindowsOpenGLTester
 {
@@ -75,7 +77,9 @@ public:
         AngleBackendMask        = AngleRendererD3d11 | AngleRendererD3d9 | AngleRendererD3d11Warp,
         Gles                    = 0x0010, // ANGLE/unspecified or Generic GLES for Windows CE.
         GlesMask                = Gles | AngleBackendMask,
-        SoftwareRasterizer      = 0x0020
+        SoftwareRasterizer      = 0x0020,
+        RendererMask            = 0x00FF,
+        DisableRotationFlag     = 0x0100
     };
     Q_DECLARE_FLAGS(Renderers, Renderer)
 

@@ -34,10 +34,16 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
 #include <QtGui/QPainter>
+#include <QtGui/QOffscreenSurface>
 #include <qpa/qplatformbackingstore.h>
+#include <private/qwindow_p.h>
 
 #include "qopenglcompositorbackingstore_p.h"
 #include "qopenglcompositor_p.h"
+
+#ifndef GL_UNPACK_ROW_LENGTH
+#define GL_UNPACK_ROW_LENGTH              0x0CF2
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -67,6 +73,7 @@ QOpenGLCompositorBackingStore::QOpenGLCompositorBackingStore(QWindow *window)
     : QPlatformBackingStore(window),
       m_window(window),
       m_bsTexture(0),
+      m_bsTextureContext(0),
       m_textures(new QPlatformTextureList),
       m_lockedWidgetTextures(0)
 {
@@ -74,7 +81,30 @@ QOpenGLCompositorBackingStore::QOpenGLCompositorBackingStore(QWindow *window)
 
 QOpenGLCompositorBackingStore::~QOpenGLCompositorBackingStore()
 {
-    delete m_textures;
+    if (m_bsTexture) {
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        // With render-to-texture-widgets QWidget makes sure the TLW's shareContext() is
+        // made current before destroying backingstores. That is however not the case for
+        // windows with regular widgets only.
+        QScopedPointer<QOffscreenSurface> tempSurface;
+        if (!ctx) {
+            ctx = QOpenGLCompositor::instance()->context();
+            tempSurface.reset(new QOffscreenSurface);
+            tempSurface->setFormat(ctx->format());
+            tempSurface->create();
+            ctx->makeCurrent(tempSurface.data());
+        }
+
+        if (ctx && m_bsTextureContext && ctx->shareGroup() == m_bsTextureContext->shareGroup())
+            glDeleteTextures(1, &m_bsTexture);
+        else
+            qWarning("QOpenGLCompositorBackingStore: Texture is not valid in the current context");
+
+        if (tempSurface)
+            ctx->doneCurrent();
+    }
+
+    delete m_textures; // this does not actually own any GL resources
 }
 
 QPaintDevice *QOpenGLCompositorBackingStore::paintDevice()
@@ -85,6 +115,8 @@ QPaintDevice *QOpenGLCompositorBackingStore::paintDevice()
 void QOpenGLCompositorBackingStore::updateTexture()
 {
     if (!m_bsTexture) {
+        m_bsTextureContext = QOpenGLContext::currentContext();
+        Q_ASSERT(m_bsTextureContext);
         glGenTextures(1, &m_bsTexture);
         glBindTexture(GL_TEXTURE_2D, m_bsTexture);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -100,29 +132,39 @@ void QOpenGLCompositorBackingStore::updateTexture()
         QRegion fixed;
         QRect imageRect = m_image.rect();
 
-        foreach (const QRect &rect, m_dirty.rects()) {
-            // intersect with image rect to be sure
-            QRect r = imageRect & rect;
-
-            // if the rect is wide enough it's cheaper to just
-            // extend it instead of doing an image copy
-            if (r.width() >= imageRect.width() / 2) {
-                r.setX(0);
-                r.setWidth(imageRect.width());
+        QOpenGLContext *ctx = QOpenGLContext::currentContext();
+        if (!ctx->isOpenGLES() || ctx->format().majorVersion() >= 3) {
+            foreach (const QRect &rect, m_dirty.rects()) {
+                QRect r = imageRect & rect;
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, m_image.width());
+                glTexSubImage2D(GL_TEXTURE_2D, 0, r.x(), r.y(), r.width(), r.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                                m_image.constScanLine(r.y()) + r.x() * 4);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             }
+        } else {
+            foreach (const QRect &rect, m_dirty.rects()) {
+                // intersect with image rect to be sure
+                QRect r = imageRect & rect;
 
-            fixed |= r;
-        }
+                // if the rect is wide enough it's cheaper to just
+                // extend it instead of doing an image copy
+                if (r.width() >= imageRect.width() / 2) {
+                    r.setX(0);
+                    r.setWidth(imageRect.width());
+                }
 
-        foreach (const QRect &rect, fixed.rects()) {
-            // if the sub-rect is full-width we can pass the image data directly to
-            // OpenGL instead of copying, since there's no gap between scanlines
-            if (rect.width() == imageRect.width()) {
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                                m_image.constScanLine(rect.y()));
-            } else {
-                glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                    m_image.copy(rect).constBits());
+                fixed |= r;
+            }
+            foreach (const QRect &rect, fixed.rects()) {
+                // if the sub-rect is full-width we can pass the image data directly to
+                // OpenGL instead of copying, since there's no gap between scanlines
+                if (rect.width() == imageRect.width()) {
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                                    m_image.constScanLine(rect.y()));
+                } else {
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+                                    m_image.copy(rect).constBits());
+                }
             }
         }
 
@@ -132,16 +174,15 @@ void QOpenGLCompositorBackingStore::updateTexture()
 
 void QOpenGLCompositorBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
 {
-    // Called for ordinary raster windows. This is rare since RasterGLSurface
-    // support is claimed which leads to having all QWidget windows marked as
-    // RasterGLSurface instead of just Raster. These go through
-    // compositeAndFlush() instead of this function.
+    // Called for ordinary raster windows.
 
     Q_UNUSED(region);
     Q_UNUSED(offset);
 
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QOpenGLContext *dstCtx = compositor->context();
+    Q_ASSERT(dstCtx);
+
     QWindow *dstWin = compositor->targetWindow();
     if (!dstWin)
         return;
@@ -158,7 +199,7 @@ void QOpenGLCompositorBackingStore::composeAndFlush(QWindow *window, const QRegi
                                                QPlatformTextureList *textures, QOpenGLContext *context,
                                                bool translucentBackground)
 {
-    // QOpenGLWidget/QQuickWidget content provided as textures. The raster content should go on top.
+    // QOpenGLWidget/QQuickWidget content provided as textures. The raster content goes on top.
 
     Q_UNUSED(region);
     Q_UNUSED(offset);
@@ -167,11 +208,19 @@ void QOpenGLCompositorBackingStore::composeAndFlush(QWindow *window, const QRegi
 
     QOpenGLCompositor *compositor = QOpenGLCompositor::instance();
     QOpenGLContext *dstCtx = compositor->context();
+    Q_ASSERT(dstCtx); // setTarget() must have been called before, e.g. from QEGLFSWindow
+
+    // The compositor's context and the context to which QOpenGLWidget/QQuickWidget
+    // textures belong are not the same. They share resources, though.
+    Q_ASSERT(context->shareGroup() == dstCtx->shareGroup());
+
     QWindow *dstWin = compositor->targetWindow();
     if (!dstWin)
         return;
 
     dstCtx->makeCurrent(dstWin);
+
+    QWindowPrivate::get(window)->lastComposeTime.start();
 
     m_textures->clear();
     for (int i = 0; i < textures->count(); ++i)
@@ -226,6 +275,7 @@ void QOpenGLCompositorBackingStore::resize(const QSize &size, const QRegion &sta
     if (m_bsTexture) {
         glDeleteTextures(1, &m_bsTexture);
         m_bsTexture = 0;
+        m_bsTextureContext = Q_NULLPTR;
     }
 }
 

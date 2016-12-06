@@ -63,6 +63,10 @@ QWindowsDirect2DPaintDevice::QWindowsDirect2DPaintDevice(QWindowsDirect2DBitmap 
 {
 }
 
+QWindowsDirect2DPaintDevice::~QWindowsDirect2DPaintDevice()
+{
+}
+
 QPaintEngine *QWindowsDirect2DPaintDevice::paintEngine() const
 {
     Q_D(const QWindowsDirect2DPaintDevice);
@@ -112,6 +116,9 @@ int QWindowsDirect2DPaintDevice::metric(QPaintDevice::PaintDeviceMetric metric) 
         break;
     case QPaintDevice::PdmDevicePixelRatio:
         return 1;
+        break;
+    case QPaintDevice::PdmDevicePixelRatioScaled:
+        return 1 * devicePixelRatioFScale();
         break;
     case QPaintDevice::PdmWidthMM:
     case QPaintDevice::PdmHeightMM:

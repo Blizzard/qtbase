@@ -1,4 +1,3 @@
-
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
@@ -52,6 +51,7 @@
 #include <qbytearray.h>
 #include <qdatetime.h>
 #include <qbasicatomic.h>
+#include <qendian.h>
 #include <private/qsimd_p.h>
 
 #ifndef QT_BOOTSTRAPPED
@@ -106,24 +106,24 @@ static uint crc32(const Char *ptr, size_t len, uint h)
 
     p += 8;
     for ( ; p <= e; p += 8)
-        h2 = _mm_crc32_u64(h2, *reinterpret_cast<const qlonglong *>(p - 8));
+        h2 = _mm_crc32_u64(h2, qFromUnaligned<qlonglong>(p - 8));
     h = h2;
     p -= 8;
 
     len = e - p;
     if (len & 4) {
-        h = _mm_crc32_u32(h, *reinterpret_cast<const uint *>(p));
+        h = _mm_crc32_u32(h, qFromUnaligned<uint>(p));
         p += 4;
     }
 #  else
     p += 4;
     for ( ; p <= e; p += 4)
-        h = _mm_crc32_u32(h, *reinterpret_cast<const uint *>(p - 4));
+        h = _mm_crc32_u32(h, qFromUnaligned<uint>(p - 4));
     p -= 4;
     len = e - p;
 #  endif
     if (len & 2) {
-        h = _mm_crc32_u16(h, *reinterpret_cast<const ushort *>(p));
+        h = _mm_crc32_u16(h, qFromUnaligned<ushort>(p));
         p += 2;
     }
     if (sizeof(Char) == 1 && len & 1)
@@ -287,6 +287,53 @@ static void qt_initialize_qhash_seed()
     if (qt_qhash_seed.load() == -1) {
         int x(qt_create_qhash_seed() & INT_MAX);
         qt_qhash_seed.testAndSetRelaxed(-1, x);
+    }
+}
+
+/*! \relates QHash
+    \since 5.6
+
+    Returns the current global QHash seed.
+
+    The seed is set in any newly created QHash. See \l{qHash} about how this seed
+    is being used by QHash.
+
+    \sa qSetGlobalQHashSeed
+ */
+int qGlobalQHashSeed()
+{
+    return qt_qhash_seed.load();
+}
+
+/*! \relates QHash
+    \since 5.6
+
+    Sets the global QHash seed to \a newSeed.
+
+    Manually setting the global QHash seed value should be done only for testing
+    and debugging purposes, when deterministic and reproducible behavior on a QHash
+    is needed. We discourage to do it in production code as it can make your
+    application susceptible to \l{algorithmic complexity attacks}.
+
+    The seed is set in any newly created QHash. See \l{qHash} about how this seed
+    is being used by QHash.
+
+    If the environment variable \c QT_HASH_SEED is set, calling this function will
+    result in a no-op.
+
+    Passing the value -1 will reinitialize the global QHash seed to a random value.
+
+    \sa qGlobalQHashSeed
+ */
+void qSetGlobalQHashSeed(int newSeed)
+{
+    if (qEnvironmentVariableIsSet("QT_HASH_SEED"))
+        return;
+    if (newSeed == -1) {
+        int x(qt_create_qhash_seed() & INT_MAX);
+        qt_qhash_seed.store(x);
+    } else {
+        qt_qhash_seed.store(newSeed & INT_MAX);
     }
 }
 
@@ -1132,7 +1179,8 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     where you temporarily need deterministic behavior, for example for debugging or
     regression testing. To disable the randomization, define the environment
     variable \c QT_HASH_SEED. The contents of that variable, interpreted as a
-    decimal value, will be used as the seed for qHash().
+    decimal value, will be used as the seed for qHash(). Alternatively, you can
+    call the qSetGlobalQHashSeed() function.
 
     \sa QHashIterator, QMutableHashIterator, QMap, QSet
 */
@@ -1536,6 +1584,15 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     \sa begin(), constEnd()
 */
 
+/*! \fn QHash::key_iterator QHash::keyBegin() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the first key
+    in the hash.
+
+    \sa keyEnd()
+*/
+
 /*! \fn QHash::iterator QHash::end()
 
     Returns an \l{STL-style iterators}{STL-style iterator} pointing to the imaginary item
@@ -1564,6 +1621,15 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     item after the last item in the hash.
 
     \sa cbegin(), end()
+*/
+
+/*! \fn QHash::key_iterator QHash::keyEnd() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the imaginary
+    item after the last key in the hash.
+
+    \sa keyBegin()
 */
 
 /*! \fn QHash::iterator QHash::erase(iterator pos)
@@ -1729,6 +1795,26 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     \internal
 */
 
+/*! \typedef QHash::key_iterator::difference_type
+    \internal
+*/
+
+/*! \typedef QHash::key_iterator::iterator_category
+    \internal
+*/
+
+/*! \typedef QHash::key_iterator::pointer
+    \internal
+*/
+
+/*! \typedef QHash::key_iterator::reference
+    \internal
+*/
+
+/*! \typedef QHash::key_iterator::value_type
+    \internal
+*/
+
 /*! \class QHash::iterator
     \inmodule QtCore
     \brief The QHash::iterator class provides an STL-style non-const iterator for QHash and QMultiHash.
@@ -1802,7 +1888,7 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     while iterators are active on that container. For more information,
     read \l{Implicit sharing iterator problem}.
 
-    \sa QHash::const_iterator, QMutableHashIterator
+    \sa QHash::const_iterator, QHash::key_iterator, QMutableHashIterator
 */
 
 /*! \fn QHash::iterator::iterator()
@@ -2153,6 +2239,114 @@ uint qHash(long double key, uint seed) Q_DECL_NOTHROW
     This operation can be slow for large \a j values.
 
     \sa operator+=(), operator-()
+*/
+
+/*! \class QHash::key_iterator
+    \inmodule QtCore
+    \since 5.6
+    \brief The QHash::key_iterator class provides an STL-style const iterator for QHash and QMultiHash keys.
+
+    QHash::key_iterator is essentially the same as QHash::const_iterator
+    with the difference that operator*() and operator->() return a key
+    instead of a value.
+
+    For most uses QHash::iterator and QHash::const_iterator should be used,
+    you can easily access the key by calling QHash::iterator::key():
+
+    \snippet code/src_corelib_tools_qhash.cpp 27
+
+    However, to have interoperability between QHash's keys and STL-style
+    algorithms we need an iterator that dereferences to a key instead
+    of a value. With QHash::key_iterator we can apply an algorithm to a
+    range of keys without having to call QHash::keys(), which is inefficient
+    as it costs one QHash iteration and memory allocation to create a temporary
+    QList.
+
+    \snippet code/src_corelib_tools_qhash.cpp 28
+
+    QHash::key_iterator is const, it's not possible to modify the key.
+
+    The default QHash::key_iterator constructor creates an uninitialized
+    iterator. You must initialize it using a QHash function like
+    QHash::keyBegin() or QHash::keyEnd().
+
+    \warning Iterators on implicitly shared containers do not work
+    exactly like STL-iterators. You should avoid copying a container
+    while iterators are active on that container. For more information,
+    read \l{Implicit sharing iterator problem}.
+
+    \sa QHash::const_iterator, QHash::iterator
+*/
+
+/*! \fn const T &QHash::key_iterator::operator*() const
+
+    Returns the current item's key.
+*/
+
+/*! \fn const T *QHash::key_iterator::operator->() const
+
+    Returns a pointer to the current item's key.
+*/
+
+/*! \fn bool QHash::key_iterator::operator==(key_iterator other) const
+
+    Returns \c true if \a other points to the same item as this
+    iterator; otherwise returns \c false.
+
+    \sa operator!=()
+*/
+
+/*! \fn bool QHash::key_iterator::operator!=(key_iterator other) const
+
+    Returns \c true if \a other points to a different item than this
+    iterator; otherwise returns \c false.
+
+    \sa operator==()
+*/
+
+/*!
+    \fn QHash::key_iterator &QHash::key_iterator::operator++()
+
+    The prefix ++ operator (\c{++i}) advances the iterator to the
+    next item in the hash and returns an iterator to the new current
+    item.
+
+    Calling this function on QHash::keyEnd() leads to undefined results.
+
+    \sa operator--()
+*/
+
+/*! \fn QHash::key_iterator QHash::key_iterator::operator++(int)
+
+    \overload
+
+    The postfix ++ operator (\c{i++}) advances the iterator to the
+    next item in the hash and returns an iterator to the previous
+    item.
+*/
+
+/*! \fn QHash::key_iterator &QHash::key_iterator::operator--()
+
+    The prefix -- operator (\c{--i}) makes the preceding item
+    current and returns an iterator pointing to the new current item.
+
+    Calling this function on QHash::keyBegin() leads to undefined
+    results.
+
+    \sa operator++()
+*/
+
+/*! \fn QHash::key_iterator QHash::key_iterator::operator--(int)
+
+    \overload
+
+    The postfix -- operator (\c{i--}) makes the preceding item
+    current and returns an iterator pointing to the previous
+    item.
+*/
+
+/*! \fn const_iterator QHash::key_iterator::base() const
+    Returns the underlying const_iterator this key_iterator is based on.
 */
 
 /*! \fn QDataStream &operator<<(QDataStream &out, const QHash<Key, T>& hash)

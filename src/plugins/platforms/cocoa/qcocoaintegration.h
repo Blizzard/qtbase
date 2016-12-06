@@ -36,7 +36,6 @@
 
 #include <Cocoa/Cocoa.h>
 
-#include "qcocoaautoreleasepool.h"
 #include "qcocoacursor.h"
 #include "qcocoawindow.h"
 #include "qcocoanativeinterface.h"
@@ -74,6 +73,7 @@ public:
     QPlatformCursor *cursor() const Q_DECL_OVERRIDE { return m_cursor; }
     QWindow *topLevelAt(const QPoint &point) const Q_DECL_OVERRIDE;
     QList<QPlatformScreen *> virtualSiblings() const Q_DECL_OVERRIDE { return m_siblings; }
+    QPlatformScreen::SubpixelAntialiasingType subpixelAntialiasingTypeHint() const Q_DECL_OVERRIDE;
 
     // ----------------------------------------------------
     // Additional methods
@@ -98,34 +98,42 @@ public:
 class QCocoaIntegration : public QPlatformIntegration
 {
 public:
-    QCocoaIntegration();
+    enum Option {
+        UseFreeTypeFontEngine = 0x1
+    };
+    Q_DECLARE_FLAGS(Options, Option)
+
+    QCocoaIntegration(const QStringList &paramList);
     ~QCocoaIntegration();
 
     static QCocoaIntegration *instance();
+    Options options() const;
 
-    bool hasCapability(QPlatformIntegration::Capability cap) const;
-    QPlatformWindow *createPlatformWindow(QWindow *window) const;
+    bool hasCapability(QPlatformIntegration::Capability cap) const Q_DECL_OVERRIDE;
+    QPlatformWindow *createPlatformWindow(QWindow *window) const Q_DECL_OVERRIDE;
 #ifndef QT_NO_OPENGL
-    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const;
+    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const Q_DECL_OVERRIDE;
 #endif
-    QPlatformBackingStore *createPlatformBackingStore(QWindow *widget) const;
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *widget) const Q_DECL_OVERRIDE;
 
-    QAbstractEventDispatcher *createEventDispatcher() const;
+    QAbstractEventDispatcher *createEventDispatcher() const Q_DECL_OVERRIDE;
 
-    QCoreTextFontDatabase *fontDatabase() const;
-    QCocoaNativeInterface *nativeInterface() const;
-    QCocoaInputContext *inputContext() const;
-    QCocoaAccessibility *accessibility() const;
-    QCocoaClipboard *clipboard() const;
-    QCocoaDrag *drag() const;
+    QCoreTextFontDatabase *fontDatabase() const Q_DECL_OVERRIDE;
+    QCocoaNativeInterface *nativeInterface() const Q_DECL_OVERRIDE;
+    QPlatformInputContext *inputContext() const Q_DECL_OVERRIDE;
+#ifndef QT_NO_ACCESSIBILITY
+    QCocoaAccessibility *accessibility() const Q_DECL_OVERRIDE;
+#endif
+    QCocoaClipboard *clipboard() const Q_DECL_OVERRIDE;
+    QCocoaDrag *drag() const Q_DECL_OVERRIDE;
 
-    QStringList themeNames() const;
-    QPlatformTheme *createPlatformTheme(const QString &name) const;
-    QCocoaServices *services() const;
-    QVariant styleHint(StyleHint hint) const;
+    QStringList themeNames() const Q_DECL_OVERRIDE;
+    QPlatformTheme *createPlatformTheme(const QString &name) const Q_DECL_OVERRIDE;
+    QCocoaServices *services() const Q_DECL_OVERRIDE;
+    QVariant styleHint(StyleHint hint) const Q_DECL_OVERRIDE;
 
-    Qt::KeyboardModifiers queryKeyboardModifiers() const;
-    QList<int> possibleKeys(const QKeyEvent *event) const;
+    Qt::KeyboardModifiers queryKeyboardModifiers() const Q_DECL_OVERRIDE;
+    QList<int> possibleKeys(const QKeyEvent *event) const Q_DECL_OVERRIDE;
 
     void updateScreens();
     QCocoaScreen *screenAtIndex(int index);
@@ -139,13 +147,14 @@ public:
     QCocoaWindow *activePopupWindow() const;
     QList<QCocoaWindow *> *popupWindowStack();
 
-    void setApplicationIcon(const QIcon &icon) const;
+    void setApplicationIcon(const QIcon &icon) const Q_DECL_OVERRIDE;
 private:
     static QCocoaIntegration *mInstance;
+    Options mOptions;
 
     QScopedPointer<QCoreTextFontDatabase> mFontDb;
 
-    QScopedPointer<QCocoaInputContext> mInputContext;
+    QScopedPointer<QPlatformInputContext> mInputContext;
 #ifndef QT_NO_ACCESSIBILITY
     QScopedPointer<QCocoaAccessibility> mAccessibility;
 #endif
@@ -160,6 +169,8 @@ private:
     QHash<QWindow *, NSToolbar *> mToolbars;
     QList<QCocoaWindow *> m_popupWindowStack;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QCocoaIntegration::Options)
 
 QT_END_NAMESPACE
 

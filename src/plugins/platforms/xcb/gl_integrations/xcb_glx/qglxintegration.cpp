@@ -175,7 +175,11 @@ QGLXContext::QGLXContext(QXcbScreen *screen, const QSurfaceFormat &format, QPlat
 void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
 {
     if (m_format.renderableType() == QSurfaceFormat::DefaultRenderableType)
+#if defined(QT_OPENGL_ES_2)
+        m_format.setRenderableType(QSurfaceFormat::OpenGLES);
+#else
         m_format.setRenderableType(QSurfaceFormat::OpenGL);
+#endif
     if (m_format.renderableType() != QSurfaceFormat::OpenGL && m_format.renderableType() != QSurfaceFormat::OpenGLES)
         return;
 
@@ -188,16 +192,18 @@ void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
     Window window = 0; // Temporary window used to query OpenGL context
 
     if (config) {
+        const QByteArrayList glxExt = QByteArray(glXQueryExtensionsString(m_display, screen->screenNumber())).split(' ');
+
         // Resolve entry point for glXCreateContextAttribsARB
         glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
-        glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc) glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
+        if (glxExt.contains("GLX_ARB_create_context"))
+            glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc) glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
 
-        QList<QByteArray> glxExt = QByteArray(glXQueryExtensionsString(m_display, screen->screenNumber())).split(' ');
-        bool supportsProfiles = glxExt.contains("GLX_ARB_create_context_profile");
+        const bool supportsProfiles = glxExt.contains("GLX_ARB_create_context_profile");
 
         // Use glXCreateContextAttribsARB if available
         // Also, GL ES context creation requires GLX_EXT_create_context_es2_profile
-        if (glxExt.contains("GLX_ARB_create_context") && glXCreateContextAttribsARB != 0
+        if (glXCreateContextAttribsARB != 0
                 && (m_format.renderableType() != QSurfaceFormat::OpenGLES || (supportsProfiles && glxExt.contains("GLX_EXT_create_context_es2_profile")))) {
             // Try to create an OpenGL context for each known OpenGL version in descending
             // order from the requested version.
@@ -561,10 +567,12 @@ void (*QGLXContext::getProcAddress(const QByteArray &procName)) ()
             if (!glXGetProcAddressARB)
 #endif
             {
+#ifndef QT_NO_LIBRARY
                 extern const QString qt_gl_library_name();
 //                QLibrary lib(qt_gl_library_name());
                 QLibrary lib(QLatin1String("GL"));
                 glXGetProcAddressARB = (qt_glXGetProcAddressARB) lib.resolve("glXGetProcAddressARB");
+#endif
             }
         }
         resolved = true;
@@ -644,7 +652,13 @@ void QGLXContext::queryDummyContext()
         oldSurface = oldContext->surface();
 
     QScopedPointer<QSurface> surface;
-    const char *glxvendor = glXGetClientString(glXGetCurrentDisplay(), GLX_VENDOR);
+    Display *display = glXGetCurrentDisplay();
+    if (!display) {
+        // FIXME: Since Qt 5.6 we don't need to check whether primary screen is NULL
+        if (QScreen *screen = QGuiApplication::primaryScreen())
+            display = DISPLAY_FROM_XCB(static_cast<QXcbScreen *>(screen->handle()));
+    }
+    const char *glxvendor = glXGetClientString(display, GLX_VENDOR);
     if (glxvendor && !strcmp(glxvendor, "ATI")) {
         QWindow *window = new QWindow;
         window->resize(64, 64);

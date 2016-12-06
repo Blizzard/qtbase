@@ -78,7 +78,6 @@ public:
           customNetworkConfiguration(false),
           networkSessionRequired(networkConfigurationManager.capabilities()
                                  & QNetworkConfigurationManager::NetworkSessionRequired),
-          networkAccessible(QNetworkAccessManager::Accessible),
           activeReplyCount(0),
           online(false),
           initializeSession(true),
@@ -86,7 +85,20 @@ public:
           cookieJarCreated(false),
           defaultAccessControl(true),
           authenticationManager(QSharedPointer<QNetworkAccessAuthenticationManager>::create())
-    { }
+    {
+#ifndef QT_NO_BEARERMANAGEMENT
+        // we would need all active configurations to check for
+        // d->networkConfigurationManager.isOnline(), which is asynchronous
+        // and potentially expensive. We can just check the configuration here
+        online = (networkConfiguration.state().testFlag(QNetworkConfiguration::Active));
+        if (online)
+            networkAccessible = QNetworkAccessManager::Accessible;
+        else if (networkConfiguration.state().testFlag(QNetworkConfiguration::Undefined))
+            networkAccessible = QNetworkAccessManager::UnknownAccessibility;
+        else
+            networkAccessible = QNetworkAccessManager::NotAccessible;
+#endif
+    }
     ~QNetworkAccessManagerPrivate();
 
     void _q_replyFinished();
@@ -131,6 +143,11 @@ public:
                                                         bool isSeamless);
     void _q_networkSessionStateChanged(QNetworkSession::State state);
     void _q_onlineStateChanged(bool isOnline);
+    void _q_configurationChanged(const QNetworkConfiguration &configuration);
+    void _q_networkSessionFailed(QNetworkSession::SessionError error);
+
+    QSet<QString> onlineConfigurations;
+
 #endif
 
     QNetworkRequest prepareMultipart(const QNetworkRequest &request, QHttpMultiPart *multiPart);

@@ -47,6 +47,7 @@
 #include <QtCore/QVariant>
 #include <QtCore/QDebug>
 #include <QtCore/QTextStream>
+#include <QtCore/QJsonDocument>
 
 #include <algorithm>
 
@@ -107,6 +108,7 @@ private slots:
     void testConfiguration();
     void testGlConfiguration();
     void testBugList();
+    void testDefaultWindowsBlacklist();
 };
 
 static void dumpConfiguration(QTextStream &str)
@@ -155,11 +157,13 @@ static void dumpConfiguration(QTextStream &str)
     }
 
     // On Windows, this will provide addition GPU info similar to the output of dxdiag.
-    const QVariant gpuInfoV = QGuiApplication::platformNativeInterface()->property("gpu");
-    if (gpuInfoV.type() == QVariant::Map) {
-        const QString description = gpuInfoV.toMap().value(QStringLiteral("printable")).toString();
-        if (!description.isEmpty())
-            str << "\nGPU:\n" << description << "\n\n";
+    if (QGuiApplication::platformNativeInterface()) {
+        const QVariant gpuInfoV = QGuiApplication::platformNativeInterface()->property("gpu");
+        if (gpuInfoV.type() == QVariant::Map) {
+            const QString description = gpuInfoV.toMap().value(QStringLiteral("printable")).toString();
+            if (!description.isEmpty())
+                str << "\nGPU:\n" << description << "\n\n";
+        }
     }
 }
 
@@ -243,27 +247,59 @@ void tst_QOpenGlConfig::testBugList()
     QSet<QString> expectedFeatures;
     expectedFeatures << "feature1";
 
+    // adapter info
     QVersionNumber driverVersion(QVector<int>() << 9 << 18 << 13 << 4460);
-    QOpenGLConfig::Gpu gpu = QOpenGLConfig::Gpu::fromDevice(0x10DE, 0x0DE9, driverVersion);
+    QOpenGLConfig::Gpu gpu = QOpenGLConfig::Gpu::fromDevice(0x10DE, 0x0DE9, driverVersion, QByteArrayLiteral("Unknown"));
 
     QSet<QString> actualFeatures = QOpenGLConfig::gpuFeatures(gpu, QStringLiteral("win"),
-                                                              QVersionNumber(6, 3), fileName);
+                                                              QVersionNumber(6, 3), QStringLiteral("7"), fileName);
     QVERIFY2(expectedFeatures == actualFeatures,
              msgSetMismatch(expectedFeatures, actualFeatures));
 
+    // driver_description
+    gpu = QOpenGLConfig::Gpu::fromDevice(0xDEAD, 0xBEEF, driverVersion, QByteArrayLiteral("Very Long And Special Driver Description"));
+    actualFeatures = QOpenGLConfig::gpuFeatures(gpu, QStringLiteral("win"),
+                                                QVersionNumber(6, 3), QStringLiteral("8"), fileName);
+    expectedFeatures = QSet<QString>() << "feature2";
+    QVERIFY2(expectedFeatures == actualFeatures,
+             msgSetMismatch(expectedFeatures, actualFeatures));
+
+    // os.release
+    gpu = QOpenGLConfig::Gpu::fromDevice(0xDEAD, 0xBEEF, driverVersion, QByteArrayLiteral("WinVerTest"));
+    actualFeatures = QOpenGLConfig::gpuFeatures(gpu, QStringLiteral("win"),
+                                                QVersionNumber(12, 34), QStringLiteral("10"), fileName);
+    expectedFeatures = QSet<QString>() << "win10_feature";
+    QVERIFY2(expectedFeatures == actualFeatures,
+             msgSetMismatch(expectedFeatures, actualFeatures));
+
+    // gl_vendor
     gpu = QOpenGLConfig::Gpu::fromGLVendor(QByteArrayLiteral("Somebody Else"));
     expectedFeatures.clear();
     actualFeatures = QOpenGLConfig::gpuFeatures(gpu, QStringLiteral("linux"),
-                                                QVersionNumber(1, 0), fileName);
+                                                QVersionNumber(1, 0), QString(), fileName);
     QVERIFY2(expectedFeatures == actualFeatures,
              msgSetMismatch(expectedFeatures, actualFeatures));
 
     gpu = QOpenGLConfig::Gpu::fromGLVendor(QByteArrayLiteral("The Qt Company"));
     expectedFeatures = QSet<QString>() << "cool_feature";
     actualFeatures = QOpenGLConfig::gpuFeatures(gpu, QStringLiteral("linux"),
-                                                QVersionNumber(1, 0), fileName);
+                                                QVersionNumber(1, 0), QString(), fileName);
     QVERIFY2(expectedFeatures == actualFeatures,
              msgSetMismatch(expectedFeatures, actualFeatures));
+}
+
+void tst_QOpenGlConfig::testDefaultWindowsBlacklist()
+{
+    if (QGuiApplication::platformName().compare(QLatin1String("windows"), Qt::CaseInsensitive))
+        QSKIP("Only applicable to Windows");
+
+    QFile f(QStringLiteral(":/qt-project.org/windows/openglblacklists/default.json"));
+    QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    QVERIFY2(err.error == 0,
+             QStringLiteral("Failed to parse built-in Windows GPU blacklist. %1 : %2")
+             .arg(err.offset).arg(err.errorString()).toLatin1());
 }
 
 QTEST_MAIN(tst_QOpenGlConfig)

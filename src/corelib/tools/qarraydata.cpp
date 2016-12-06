@@ -32,6 +32,7 @@
 ****************************************************************************/
 
 #include <QtCore/qarraydata.h>
+#include <QtCore/private/qnumeric_p.h>
 #include <QtCore/private/qtools_p.h>
 
 #include <stdlib.h>
@@ -64,7 +65,7 @@ QArrayData *QArrayData::allocate(size_t objectSize, size_t alignment,
 
     // Don't allocate empty headers
     if (!(options & RawData) && !capacity) {
-#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
+#if !defined(QT_NO_UNSHARABLE_CONTAINERS)
         if (options & Unsharable)
             return const_cast<QArrayData *>(&qt_array_unsharable_empty);
 #endif
@@ -87,23 +88,33 @@ QArrayData *QArrayData::allocate(size_t objectSize, size_t alignment,
         if (capacity > std::numeric_limits<size_t>::max() / objectSize)
             return 0;
 
-        size_t alloc = objectSize * capacity;
+        size_t alloc;
+        if (mul_overflow(objectSize, capacity, &alloc))
+            return 0;
 
-        // Make sure qAllocMore won't overflow.
+        // Make sure qAllocMore won't overflow qAllocMore.
         if (headerSize > size_t(MaxAllocSize) || alloc > size_t(MaxAllocSize) - headerSize)
             return 0;
 
         capacity = qAllocMore(int(alloc), int(headerSize)) / int(objectSize);
     }
 
-    size_t allocSize = headerSize + objectSize * capacity;
+    size_t allocSize;
+    if (mul_overflow(objectSize, capacity, &allocSize))
+        return 0;
+    if (add_overflow(allocSize, headerSize, &allocSize))
+        return 0;
 
     QArrayData *header = static_cast<QArrayData *>(::malloc(allocSize));
     if (header) {
         quintptr data = (quintptr(header) + sizeof(QArrayData) + alignment - 1)
                 & ~(alignment - 1);
 
+#if !defined(QT_NO_UNSHARABLE_CONTAINERS)
         header->ref.atomic.store(bool(!(options & Unsharable)));
+#else
+        header->ref.atomic.store(1);
+#endif
         header->size = 0;
         header->alloc = capacity;
         header->capacityReserved = bool(options & CapacityReserved);
@@ -121,7 +132,7 @@ void QArrayData::deallocate(QArrayData *data, size_t objectSize,
             && !(alignment & (alignment - 1)));
     Q_UNUSED(objectSize) Q_UNUSED(alignment)
 
-#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
+#if !defined(QT_NO_UNSHARABLE_CONTAINERS)
     if (data == &qt_array_unsharable_empty)
         return;
 #endif

@@ -74,7 +74,7 @@ public:
     int dayOfYear() const;
     int daysInMonth() const;
     int daysInYear() const;
-    int weekNumber(int *yearNum = 0) const;
+    int weekNumber(int *yearNum = Q_NULLPTR) const;
 
 #ifndef QT_NO_TEXTDATE
     static QString shortMonthName(int month, MonthNameType type = DateFormat);
@@ -115,8 +115,8 @@ QT_DEPRECATED inline bool setYMD(int y, int m, int d)
     static bool isValid(int y, int m, int d);
     static bool isLeapYear(int year);
 
-    static Q_DECL_CONSTEXPR inline QDate fromJulianDay(qint64 jd)
-    { return jd >= minJd() && jd <= maxJd() ? QDate(jd) : QDate() ; }
+    static Q_DECL_CONSTEXPR inline QDate fromJulianDay(qint64 jd_)
+    { return jd_ >= minJd() && jd_ <= maxJd() ? QDate(jd_) : QDate() ; }
     Q_DECL_CONSTEXPR inline qint64 toJulianDay() const { return jd; }
 
 private:
@@ -222,9 +222,12 @@ public:
     QDateTime(const QDateTime &other);
     ~QDateTime();
 
+#ifdef Q_COMPILER_RVALUE_REFS
+    QDateTime &operator=(QDateTime &&other) Q_DECL_NOTHROW { swap(other); return *this; }
+#endif
     QDateTime &operator=(const QDateTime &other);
 
-    inline void swap(QDateTime &other) { qSwap(d, other.d); }
+    void swap(QDateTime &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
 
     bool isNull() const;
     bool isValid() const;

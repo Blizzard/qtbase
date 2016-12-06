@@ -47,13 +47,12 @@
 
 class Widget : public QWidget
 {
+    Q_OBJECT
 public:
-    Widget() { }
-
     QList<QEvent::Type> events;
 
 protected:
-    bool event(QEvent *ev) {
+    bool event(QEvent *ev) Q_DECL_OVERRIDE {
         events.append(ev->type());
         return QWidget::event(ev);
     }
@@ -62,19 +61,14 @@ protected:
 
 class tst_QLabel : public QObject
 {
-Q_OBJECT
+    Q_OBJECT
 
-public:
-    tst_QLabel();
-    virtual ~tst_QLabel();
-
-
-public slots:
+private Q_SLOTS:
     void initTestCase();
     void cleanupTestCase();
     void init();
     void cleanup();
-private slots:
+
     void getSetCheck();
     void setText_data();
     void setText();
@@ -111,7 +105,6 @@ private:
     QLabel *testWidget;
     QPointer<Widget> test_box;
     QPointer<QLabel> test_label;
-    QLineEdit *test_edit;
 };
 
 // Testing get/set functions
@@ -144,15 +137,6 @@ void tst_QLabel::getSetCheck()
     delete var3;
 }
 
-
-tst_QLabel::tst_QLabel(): test_box(0)
-{
-}
-
-tst_QLabel::~tst_QLabel()
-{
-}
-
 void tst_QLabel::initTestCase()
 {
     // Create the test class
@@ -165,8 +149,7 @@ void tst_QLabel::cleanupTestCase()
 {
     delete testWidget;
     testWidget = 0;
-    if (test_box)
-        delete test_box;
+    delete test_box;
 }
 
 void tst_QLabel::init()
@@ -196,7 +179,7 @@ void tst_QLabel::setBuddy()
     test_box = new Widget;
     test_label= new QLabel( test_box );
     test_label->setText( "&Test with a buddy" );
-    test_edit = new QLineEdit( test_box );
+    QWidget *test_edit = new QLineEdit( test_box );
     QVBoxLayout *layout = new QVBoxLayout(test_box);
     layout->addWidget(test_label);
     layout->addWidget(test_edit);
@@ -322,7 +305,7 @@ void tst_QLabel::eventPropagation()
     test_label->setText(text);
     test_box->events.clear();
     test_label->setTextInteractionFlags(Qt::TextInteractionFlags(textInteractionFlags));
-    QVERIFY(int(test_label->focusPolicy()) == focusPolicy);
+    QCOMPARE(int(test_label->focusPolicy()), focusPolicy);
     QTest::mousePress(test_label, Qt::LeftButton);
     QVERIFY(test_box->events.contains(QEvent::MouseButtonPress) == propagation); // should have propagated!
 }

@@ -46,7 +46,6 @@
 #include "qregexp.h"
 #include "qtimer.h"
 #include "qfileinfo.h"
-#include "qhash.h"
 #include "qtcpserver.h"
 #include "qlocale.h"
 
@@ -612,7 +611,7 @@ bool QFtpDTP::parseDir(const QByteArray &buffer, const QString &userName, QUrlIn
     if (buffer.isEmpty())
         return false;
 
-    QString bufferStr = QString::fromLatin1(buffer).trimmed();
+    QString bufferStr = QString::fromUtf8(buffer).trimmed();
 
     // Unix style FTP servers
     QRegExp unixPattern(QLatin1String("^([\\-dl])([a-zA-Z\\-]{9,9})\\s+\\d+\\s+(\\S*)\\s+"
@@ -677,7 +676,7 @@ void QFtpDTP::socketReadyRead()
                 // does not exist, but rather write a text to the data socket
                 // -- try to catch these cases
                 if (line.endsWith("No such file or directory\r\n"))
-                    err = QString::fromLatin1(line);
+                    err = QString::fromUtf8(line);
             }
         }
     } else {
@@ -933,7 +932,7 @@ void QFtpPI::readyRead()
 
     while (commandSocket.canReadLine()) {
         // read line with respect to line continuation
-        QString line = QString::fromLatin1(commandSocket.readLine());
+        QString line = QString::fromUtf8(commandSocket.readLine());
         if (replyText.isEmpty()) {
             if (line.length() < 3) {
                 // protocol error
@@ -965,7 +964,7 @@ void QFtpPI::readyRead()
                 replyText += line;
             if (!commandSocket.canReadLine())
                 return;
-            line = QString::fromLatin1(commandSocket.readLine());
+            line = QString::fromUtf8(commandSocket.readLine());
             lineLeft4 = line.left(4);
         }
         replyText += line.mid(4); // strip reply code 'xyz '
@@ -1216,7 +1215,7 @@ bool QFtpPI::startNextCmd()
     qDebug("QFtpPI send: %s", currentCmd.left(currentCmd.length()-2).toLatin1().constData());
 #endif
     state = Waiting;
-    commandSocket.write(currentCmd.toLatin1());
+    commandSocket.write(currentCmd.toUtf8());
     return true;
 }
 

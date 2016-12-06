@@ -918,10 +918,11 @@ void QTextEngine::shapeLine(const QScriptLine &line)
 {
     QFixed x;
     bool first = true;
-    const int end = findItem(line.from + line.length - 1);
     int item = findItem(line.from);
     if (item == -1)
         return;
+
+    const int end = findItem(line.from + line.length - 1, item);
     for ( ; item <= end; ++item) {
         QScriptItem &si = layoutData->items[item];
         if (si.analysis.flags == QScriptAnalysis::Tab) {
@@ -1058,7 +1059,7 @@ void QTextEngine::shapeText(int item) const
 
 #ifdef QT_ENABLE_HARFBUZZ_NG
     if (Q_LIKELY(qt_useHarfbuzzNG()))
-        si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled);
+        si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled, letterSpacing != 0);
     else
 #endif
     si.num_glyphs = shapeTextWithHarfbuzz(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled);
@@ -1120,7 +1121,13 @@ QT_BEGIN_INCLUDE_NAMESPACE
 
 QT_END_INCLUDE_NAMESPACE
 
-int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *string, int itemLength, QFontEngine *fontEngine, const QVector<uint> &itemBoundaries, bool kerningEnabled) const
+int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
+                                         const ushort *string,
+                                         int itemLength,
+                                         QFontEngine *fontEngine,
+                                         const QVector<uint> &itemBoundaries,
+                                         bool kerningEnabled,
+                                         bool hasLetterSpacing) const
 {
     uint glyphs_shaped = 0;
 
@@ -1134,7 +1141,8 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
 
     hb_segment_properties_t props = HB_SEGMENT_PROPERTIES_DEFAULT;
     props.direction = si.analysis.bidiLevel % 2 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR;
-    props.script = hb_qt_script_to_script(QChar::Script(si.analysis.script));
+    QChar::Script script = QChar::Script(si.analysis.script);
+    props.script = hb_qt_script_to_script(script);
     // ### props.language = hb_language_get_default_for_script(props.script);
 
     for (int k = 0; k < itemBoundaries.size(); k += 3) {
@@ -1167,12 +1175,37 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
             Q_ASSERT(hb_font);
             hb_qt_font_set_use_design_metrics(hb_font, option.useDesignMetrics() ? uint(QFontEngine::DesignMetrics) : 0); // ###
 
-            const hb_feature_t features[1] = {
-                { HB_TAG('k','e','r','n'), !!kerningEnabled, 0, uint(-1) }
-            };
-            const int num_features = 1;
+            // Ligatures are incompatible with custom letter spacing, so when a letter spacing is set,
+            // we disable them for writing systems where they are purely cosmetic.
+            bool scriptRequiresOpenType = ((script >= QChar::Script_Syriac && script <= QChar::Script_Sinhala)
+                                         || script == QChar::Script_Khmer || script == QChar::Script_Nko);
 
-            bool shapedOk = hb_shape_full(hb_font, buffer, features, num_features, 0);
+            bool dontLigate = hasLetterSpacing && !scriptRequiresOpenType;
+            const hb_feature_t features[5] = {
+                { HB_TAG('k','e','r','n'), !!kerningEnabled, 0, uint(-1) },
+                { HB_TAG('l','i','g','a'), !dontLigate, 0, uint(-1) },
+                { HB_TAG('c','l','i','g'), !dontLigate, 0, uint(-1) },
+                { HB_TAG('d','l','i','g'), !dontLigate, 0, uint(-1) },
+                { HB_TAG('h','l','i','g'), !dontLigate, 0, uint(-1) } };
+            const int num_features = dontLigate ? 5 : 1;
+
+            const char *const *shaper_list = Q_NULLPTR;
+#if defined(Q_OS_DARWIN)
+            // What's behind QFontEngine::FaceData::user_data isn't compatible between different font engines
+            // - specifically functions in hb-coretext.cc would run into undefined behavior with data
+            // from non-CoreText engine. The other shapers works with that engine just fine.
+            if (actualFontEngine->type() != QFontEngine::Mac) {
+                static const char *s_shaper_list_without_coretext[] = {
+                    "graphite2",
+                    "ot",
+                    "fallback",
+                    Q_NULLPTR
+                };
+                shaper_list = s_shaper_list_without_coretext;
+            }
+#endif
+
+            bool shapedOk = hb_shape_full(hb_font, buffer, features, num_features, shaper_list);
             if (Q_UNLIKELY(!shapedOk)) {
                 hb_buffer_destroy(buffer);
                 return 0;
@@ -1251,21 +1284,22 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *st
                 g.glyphs[i] |= (engineIdx << 24);
         }
 
-#ifdef Q_OS_MAC
-        // CTRunGetPosition has a bug which applies matrix on 10.6, so we disable
-        // scaling the advances for this particular version
-        if (actualFontEngine->fontDef.stretch != 100
-                && QSysInfo::MacintoshVersion != QSysInfo::MV_10_6) {
-            QFixed stretch = QFixed(int(actualFontEngine->fontDef.stretch)) / QFixed(100);
-            for (uint i = 0; i < num_glyphs; ++i)
-                g.advances[i] *= stretch;
+#ifdef Q_OS_DARWIN
+        if (actualFontEngine->type() == QFontEngine::Mac) {
+            // CTRunGetPosition has a bug which applies matrix on 10.6, so we disable
+            // scaling the advances for this particular version
+            if (QSysInfo::MacintoshVersion != QSysInfo::MV_10_6 && actualFontEngine->fontDef.stretch != 100) {
+                QFixed stretch = QFixed(int(actualFontEngine->fontDef.stretch)) / QFixed(100);
+                for (uint i = 0; i < num_glyphs; ++i)
+                    g.advances[i] *= stretch;
+            }
         }
+#endif
 
-        if (actualFontEngine->fontDef.styleStrategy & QFont::ForceIntegerMetrics) {
+        if (!actualFontEngine->supportsSubPixelPositions() || (actualFontEngine->fontDef.styleStrategy & QFont::ForceIntegerMetrics)) {
             for (uint i = 0; i < num_glyphs; ++i)
                 g.advances[i] = g.advances[i].round();
         }
-#endif
 
         glyphs_shaped += num_glyphs;
     }
@@ -1601,8 +1635,14 @@ void QTextEngine::itemize() const
             if (analysis->bidiLevel % 2)
                 --analysis->bidiLevel;
             analysis->flags = QScriptAnalysis::LineOrParagraphSeparator;
-            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
+            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+                const int offset = uc - string;
+                layoutData->string.detach();
+                string = reinterpret_cast<const ushort *>(layoutData->string.unicode());
+                uc = string + offset;
+                e = uc + length;
                 *const_cast<ushort*>(uc) = 0x21B5; // visual line separator
+            }
             break;
         case QChar::Tabulation:
             analysis->flags = QScriptAnalysis::Tab;
@@ -1730,13 +1770,13 @@ bool QTextEngine::isRightToLeft() const
 }
 
 
-int QTextEngine::findItem(int strPos) const
+int QTextEngine::findItem(int strPos, int firstItem) const
 {
     itemize();
-    if (strPos < 0 || strPos >= layoutData->string.size())
+    if (strPos < 0 || strPos >= layoutData->string.size() || firstItem < 0)
         return -1;
 
-    int left = 1;
+    int left = firstItem + 1;
     int right = layoutData->items.size()-1;
     while(left <= right) {
         int middle = ((right-left)/2)+left;
@@ -2155,7 +2195,7 @@ void QTextEngine::justify(const QScriptLine &line)
         return;
 
     int firstItem = findItem(line.from);
-    int lastItem = findItem(line.from + line_length - 1);
+    int lastItem = findItem(line.from + line_length - 1, firstItem);
     int nItems = (firstItem >= 0 && lastItem >= firstItem)? (lastItem-firstItem+1) : 0;
 
     QVarLengthArray<QJustificationPoint> justificationPoints;
@@ -2571,7 +2611,7 @@ void QTextEngine::setPreeditArea(int position, const QString &preeditText)
     clearLineData();
 }
 
-void QTextEngine::setFormats(const QList<QTextLayout::FormatRange> &formats)
+void QTextEngine::setFormats(const QVector<QTextLayout::FormatRange> &formats)
 {
     if (formats.isEmpty()) {
         if (!specialData)
@@ -2713,8 +2753,7 @@ QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int
     QFixed ellipsisWidth;
     QString ellipsisText;
     {
-        QFontEngine *fe = fnt.d->engineForScript(QChar::Script_Common);
-        QFontEngine *engine = fe->type() == QFontEngine::Multi ? static_cast<QFontEngineMulti *>(fe)->engine(0) : fe;
+        QFontEngine *engine = fnt.d->engineForScript(QChar::Script_Common);
 
         QChar ellipsisChar(0x2026);
 
@@ -2863,6 +2902,7 @@ QFixed QTextEngine::calculateTabWidth(int item, QFixed x) const
     if (!tabArray.isEmpty()) {
         if (isRightToLeft()) { // rebase the tabArray positions.
             QList<QTextOption::Tab> newTabs;
+            newTabs.reserve(tabArray.count());
             QList<QTextOption::Tab>::Iterator iter = tabArray.begin();
             while(iter != tabArray.end()) {
                 QTextOption::Tab tab = *iter;
@@ -2946,17 +2986,17 @@ QFixed QTextEngine::calculateTabWidth(int item, QFixed x) const
 
 namespace {
 class FormatRangeComparatorByStart {
-    const QList<QTextLayout::FormatRange> &list;
+    const QVector<QTextLayout::FormatRange> &list;
 public:
-    FormatRangeComparatorByStart(const QList<QTextLayout::FormatRange> &list) : list(list) { }
+    FormatRangeComparatorByStart(const QVector<QTextLayout::FormatRange> &list) : list(list) { }
     bool operator()(int a, int b) {
         return list.at(a).start < list.at(b).start;
     }
 };
 class FormatRangeComparatorByEnd {
-    const QList<QTextLayout::FormatRange> &list;
+    const QVector<QTextLayout::FormatRange> &list;
 public:
-    FormatRangeComparatorByEnd(const QList<QTextLayout::FormatRange> &list) : list(list) { }
+    FormatRangeComparatorByEnd(const QVector<QTextLayout::FormatRange> &list) : list(list) { }
     bool operator()(int a, int b) {
         return list.at(a).start + list.at(a).length < list.at(b).start + list.at(b).length;
     }
@@ -3511,7 +3551,7 @@ QTextLineItemIterator::QTextLineItemIterator(QTextEngine *_eng, int _lineNum, co
       lineNum(_lineNum),
       lineEnd(line.from + line.length),
       firstItem(eng->findItem(line.from)),
-      lastItem(eng->findItem(lineEnd - 1)),
+      lastItem(eng->findItem(lineEnd - 1, firstItem)),
       nItems((firstItem >= 0 && lastItem >= firstItem)? (lastItem-firstItem+1) : 0),
       logicalItem(-1),
       item(-1),

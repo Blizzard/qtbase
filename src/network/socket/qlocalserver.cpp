@@ -141,7 +141,7 @@ QLocalServer::~QLocalServer()
     and are created based on the umask. Setting the access flags will
     overide this and will restrict or permit access as specified.
 
-    Other Unix-based operating systems, such as OS X, do not
+    Other Unix-based operating systems, such as \macos, do not
     honor file permissions for Unix domain sockets and by default
     have WorldAccess and these permission flags will have no effect.
 
@@ -178,7 +178,7 @@ QLocalServer::SocketOptions QLocalServer::socketOptions() const
 
 /*!
     Stop listening for incoming connections.  Existing connections are not
-    effected, but any new connections will be refused.
+    affected, but any new connections will be refused.
 
     \sa isListening(), listen()
  */

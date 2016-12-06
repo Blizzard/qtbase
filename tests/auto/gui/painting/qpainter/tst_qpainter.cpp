@@ -53,6 +53,7 @@
 #endif
 #include <qpixmap.h>
 
+#include <private/qdrawhelper_p.h>
 #include <qpainter.h>
 
 #ifndef QT_NO_WIDGETS
@@ -125,7 +126,11 @@ private slots:
     void fillRect3();
     void fillRect4_data() { fillRect2_data(); }
     void fillRect4();
+    void fillRectNonPremul_data();
     void fillRectNonPremul();
+
+    void fillRectRGB30_data();
+    void fillRectRGB30();
 
     void drawEllipse_data();
     void drawEllipse();
@@ -197,6 +202,11 @@ private slots:
 
     void gradientPixelFormat_data();
     void gradientPixelFormat();
+
+    void linearGradientRgb30_data();
+    void linearGradientRgb30();
+    void radialGradientRgb30_data();
+    void radialGradientRgb30();
 
     void fpe_pixmapTransform();
     void fpe_zeroLengthLines();
@@ -294,6 +304,8 @@ private slots:
 
     void drawPolyline_data();
     void drawPolyline();
+
+    void QTBUG50153_drawImage_assert();
 
 private:
     void fillData();
@@ -789,7 +801,7 @@ void tst_QPainter::drawPixmapFragments()
     QImage origImage = origPixmap.toImage().convertToFormat(QImage::Format_ARGB32);
     QImage resImage = resPixmap.toImage().convertToFormat(QImage::Format_ARGB32);
 
-    QVERIFY(resImage.size() == resPixmap.size());
+    QCOMPARE(resImage.size(), resPixmap.size());
     QVERIFY(resImage.pixel(5, 5) == origImage.pixel(15, 15));
     QVERIFY(resImage.pixel(5, 15) == origImage.pixel(15, 5));
     QVERIFY(resImage.pixel(15, 5) == origImage.pixel(5, 15));
@@ -797,16 +809,16 @@ void tst_QPainter::drawPixmapFragments()
 
 
     QPainter::PixmapFragment fragment = QPainter::PixmapFragment::create(QPointF(20, 20), QRectF(30, 30, 2, 2));
-    QVERIFY(fragment.x == 20);
-    QVERIFY(fragment.y == 20);
-    QVERIFY(fragment.sourceLeft == 30);
-    QVERIFY(fragment.sourceTop == 30);
-    QVERIFY(fragment.width == 2);
-    QVERIFY(fragment.height == 2);
-    QVERIFY(fragment.scaleX == 1);
-    QVERIFY(fragment.scaleY == 1);
-    QVERIFY(fragment.rotation == 0);
-    QVERIFY(fragment.opacity == 1);
+    QCOMPARE(fragment.x, qreal(20));
+    QCOMPARE(fragment.y, qreal(20));
+    QCOMPARE(fragment.sourceLeft, qreal(30));
+    QCOMPARE(fragment.sourceTop, qreal(30));
+    QCOMPARE(fragment.width, qreal(2));
+    QCOMPARE(fragment.height, qreal(2));
+    QCOMPARE(fragment.scaleX, qreal(1));
+    QCOMPARE(fragment.scaleY, qreal(1));
+    QCOMPARE(fragment.rotation, qreal(0));
+    QCOMPARE(fragment.opacity, qreal(1));
 }
 
 void tst_QPainter::drawPixmapNegativeScale()
@@ -1245,22 +1257,87 @@ void tst_QPainter::fillRect4()
     QCOMPARE(image, expected);
 }
 
+void tst_QPainter::fillRectNonPremul_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+    QTest::addColumn<uint>("color");
+
+    QTest::newRow("argb32 7f1f3f7f") << QImage::Format_ARGB32 << qRgba(31, 63, 127, 127);
+    QTest::newRow("rgba8888 7f1f3f7f") << QImage::Format_RGBA8888 << qRgba(31, 63, 127, 127);
+
+    QTest::newRow("argb32 3f1f3f7f") << QImage::Format_ARGB32 << qRgba(31, 63, 127, 63);
+    QTest::newRow("rgba8888 3f1f3f7f") << QImage::Format_RGBA8888 << qRgba(31, 63, 127, 63);
+
+    QTest::newRow("argb32 070375f4") << QImage::Format_ARGB32 << qRgba(3, 117, 244, 7);
+    QTest::newRow("rgba8888 070375f4") << QImage::Format_RGBA8888 << qRgba(3, 117, 244, 7);
+
+    QTest::newRow("argb32 0301fe0c") << QImage::Format_ARGB32 << qRgba(1, 254, 12, 3);
+    QTest::newRow("rgba8888 0301fe0c") << QImage::Format_RGBA8888 << qRgba(1, 254, 12, 3);
+
+    QTest::newRow("argb32 01804010") << QImage::Format_ARGB32 << qRgba(128, 64, 32, 1);
+    QTest::newRow("rgba8888 01804010") << QImage::Format_RGBA8888 << qRgba(128, 64, 32, 1);
+}
+
 void tst_QPainter::fillRectNonPremul()
 {
-    QImage img1(1, 1, QImage::Format_ARGB32);
-    QImage img2(1, 1, QImage::Format_RGBA8888);
+    QFETCH(QImage::Format, format);
+    QFETCH(uint, color);
 
-    QPainter p1(&img1);
-    QPainter p2(&img2);
-
+    QImage image(1, 1, format);
     QRectF rect(0, 0, 1, 1);
-    p1.fillRect(rect, qRgba(31, 63, 127, 127));
-    p2.fillRect(rect, qRgba(31, 63, 127, 127));
 
-    p1.end();
-    p2.end();
+    // Fill with CompositionMode_SourceOver tests blend_color
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.fillRect(rect, QColor::fromRgba(color));
+    painter.end();
 
-    QCOMPARE(img1.pixel(0, 0), img2.pixel(0,0));
+    // Fill with CompositionMode_Source tests rectfill.
+    painter.begin(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(rect, QColor::fromRgba(color));
+    painter.end();
+
+    QRgb p = image.pixel(0, 0);
+    QCOMPARE(qAlpha(p), qAlpha(color));
+    QVERIFY(qAbs(qRed(p)-qRed(color)) <= 1);
+    QVERIFY(qAbs(qGreen(p)-qGreen(color)) <= 1);
+    QVERIFY(qAbs(qBlue(p)-qBlue(color)) <= 1);
+}
+
+void tst_QPainter::fillRectRGB30_data()
+{
+    QTest::addColumn<uint>("color");
+
+    QTest::newRow("17|43|259") << (0xc0000000 | (17 << 20) | (43 << 10) | 259);
+    QTest::newRow("2|33|444") << (0xc0000000 | (2 << 20) | (33 << 10) | 444);
+    QTest::newRow("1000|1000|1000") << (0xc0000000 | (1000 << 20) | (1000 << 10) | 1000);
+}
+
+void tst_QPainter::fillRectRGB30()
+{
+    QFETCH(uint, color);
+    QRectF rect(0, 0, 1, 1);
+
+    // Fill with CompositionMode_SourceOver tests blend_color
+    QImage image1(1, 1, QImage::Format_A2BGR30_Premultiplied);
+    image1.fill(Qt::transparent);
+    QPainter painter(&image1);
+    painter.fillRect(rect, QColor::fromRgba64(qConvertA2rgb30ToRgb64<PixelOrderBGR>(color)));
+    painter.end();
+
+    uint pixel1 = ((const uint*)(image1.bits()))[0];
+    QCOMPARE(pixel1, color);
+
+    // Fill with CompositionMode_Source tests rectfill.
+    QImage image2(1, 1, QImage::Format_RGB30);
+    painter.begin(&image2);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(rect, QColor::fromRgba64(qConvertA2rgb30ToRgb64<PixelOrderRGB>(color)));
+    painter.end();
+
+    uint pixel2 = ((const uint*)(image2.bits()))[0];
+    QCOMPARE(pixel2, color);
 }
 
 void tst_QPainter::drawPath_data()
@@ -1406,7 +1483,7 @@ void tst_QPainter::drawPath3()
     p.drawPath(path);
     p.end();
 
-    QVERIFY(imgA == imgB);
+    QCOMPARE(imgA, imgB);
 
     imgA.invertPixels();
     imgB.fill(0xffffff);
@@ -1420,7 +1497,7 @@ void tst_QPainter::drawPath3()
     p.drawPath(path);
     p.end();
 
-    QVERIFY(imgA == imgB);
+    QCOMPARE(imgA, imgB);
 
     path.setFillRule(Qt::WindingFill);
     imgB.fill(0xffffff);
@@ -2381,36 +2458,50 @@ void tst_QPainter::setOpacity_data()
     QTest::newRow("RGBx8888 on RGBx8888") << QImage::Format_RGBX8888
                                           << QImage::Format_RGBX8888;
 
-    QTest::newRow("RGBA8888P on ARGB32P") << QImage::Format_RGBA8888_Premultiplied
-                                          << QImage::Format_ARGB32_Premultiplied;
-
-    QTest::newRow("RGBx8888 on ARGB32P") << QImage::Format_RGBX8888
-                                         << QImage::Format_ARGB32_Premultiplied;
-
-    QTest::newRow("ARGB32P on RGBA8888P") << QImage::Format_ARGB32_Premultiplied
+    QTest::newRow("RGBA8888P on ARGB32P") << QImage::Format_ARGB32_Premultiplied
                                           << QImage::Format_RGBA8888_Premultiplied;
 
-    QTest::newRow("RGB32 on RGBx8888") << QImage::Format_RGB32
-                                       << QImage::Format_RGBX8888;
+    QTest::newRow("RGBx8888 on ARGB32P") << QImage::Format_ARGB32_Premultiplied
+                                         << QImage::Format_RGBX8888;
+
+    QTest::newRow("ARGB32P on RGBA8888P") << QImage::Format_RGBA8888_Premultiplied
+                                          << QImage::Format_ARGB32_Premultiplied;
+
+    QTest::newRow("RGB32 on RGBx8888") << QImage::Format_RGBX8888
+                                       << QImage::Format_RGB32;
+
+    QTest::newRow("RGB30 on RGB32") << QImage::Format_RGB32
+                                    << QImage::Format_BGR30;
+
+    QTest::newRow("BGR30 on ARGB32P") << QImage::Format_ARGB32_Premultiplied
+                                      << QImage::Format_BGR30;
+
+    QTest::newRow("A2RGB30P on ARGB32P") << QImage::Format_ARGB32_Premultiplied
+                                         << QImage::Format_A2BGR30_Premultiplied;
 
     QTest::newRow("A2RGB30P on A2RGB30P") << QImage::Format_A2RGB30_Premultiplied
                                           << QImage::Format_A2RGB30_Premultiplied;
 
-    QTest::newRow("ARGB32P on A2RGB30P") << QImage::Format_ARGB32_Premultiplied
-                                         << QImage::Format_A2RGB30_Premultiplied;
+    QTest::newRow("ARGB32P on A2RGB30P") << QImage::Format_A2RGB30_Premultiplied
+                                         << QImage::Format_ARGB32_Premultiplied;
 
+    QTest::newRow("RGB32 on A2BGR30P") << QImage::Format_A2BGR30_Premultiplied
+                                       << QImage::Format_RGB32;
 
-    QTest::newRow("RGB32 on A2BGR30P") << QImage::Format_ARGB32_Premultiplied
-                                       << QImage::Format_A2BGR30_Premultiplied;
+    QTest::newRow("RGB30 on A2BGR30P") << QImage::Format_A2BGR30_Premultiplied
+                                       << QImage::Format_RGB30;
 
-    QTest::newRow("A2RGB30P on A2BGR30P") << QImage::Format_A2RGB30_Premultiplied
-                                          << QImage::Format_A2BGR30_Premultiplied;
+    QTest::newRow("A2RGB30P on A2BGR30P") << QImage::Format_A2BGR30_Premultiplied
+                                          << QImage::Format_A2RGB30_Premultiplied;
 
-    QTest::newRow("ARGB32P on BGR30") << QImage::Format_ARGB32_Premultiplied
-                                      << QImage::Format_BGR30;
+    QTest::newRow("ARGB32P on BGR30") << QImage::Format_BGR30
+                                      << QImage::Format_ARGB32_Premultiplied;
 
-    QTest::newRow("ARGB32P on RGB30") << QImage::Format_A2RGB30_Premultiplied
-                                      << QImage::Format_RGB30;
+    QTest::newRow("ARGB32P on RGB30") << QImage::Format_RGB30
+                                      << QImage::Format_ARGB32_Premultiplied;
+
+    QTest::newRow("A2RGB30P on RGB30") << QImage::Format_RGB30
+                                       << QImage::Format_A2RGB30_Premultiplied;
 
 }
 
@@ -2492,7 +2583,7 @@ void tst_QPainter::drawhelper_blend_untransformed()
         QImage expected(size - 2, size, destFormat);
         p.begin(&expected);
         p.fillRect(0, 0, expected.width(), expected.height(),
-                   QColor(dest.pixel(1, 0)));
+                   dest.pixelColor(1, 0));
         p.end();
 
         const QImage subDest(dest.bits() + dest.depth() / 8,
@@ -2500,9 +2591,7 @@ void tst_QPainter::drawhelper_blend_untransformed()
                              dest.bytesPerLine(), dest.format());
 
         if (dest.format() == QImage::Format_ARGB8565_Premultiplied ||
-            dest.format() == QImage::Format_ARGB8555_Premultiplied ||
-            dest.format() == QImage::Format_A2BGR30_Premultiplied ||
-            dest.format() == QImage::Format_A2RGB30_Premultiplied ) {
+            dest.format() == QImage::Format_ARGB8555_Premultiplied) {
             // Test skipped due to rounding errors...
             continue;
         }
@@ -2551,7 +2640,7 @@ void tst_QPainter::drawhelper_blend_tiled_untransformed()
         QImage expected(size - 2, size, destFormat);
         p.begin(&expected);
         p.fillRect(0, 0, expected.width(), expected.height(),
-                   QColor(dest.pixel(1, 0)));
+                   dest.pixelColor(1, 0));
         p.end();
 
         const QImage subDest(dest.bits() + dest.depth() / 8,
@@ -2618,28 +2707,6 @@ void tst_QPainter::porterDuff_warning()
 
     QVERIFY(qInstallMessageHandler(old) == porterDuff_warningChecker);
 }
-
-class quint24
-{
-public:
-    inline quint24(quint32 v)
-    {
-        data[0] = qBlue(v);
-        data[1] = qGreen(v);
-        data[2] = qRed(v);
-    }
-
-    inline operator quint32 ()
-    {
-        return qRgb(data[2], data[1], data[0]);
-    }
-
-    inline bool operator==(const quint24 &v) const {
-        return (data[0] == v.data[0] && data[1] == v.data[1] && data[2] == v.data[2]);
-    }
-
-    uchar data[3];
-};
 
 void tst_QPainter::drawhelper_blend_color()
 {
@@ -3889,6 +3956,65 @@ void tst_QPainter::gradientInterpolation()
     }
 }
 
+void tst_QPainter::linearGradientRgb30_data()
+{
+    QTest::addColumn<QColor>("stop0");
+    QTest::addColumn<QColor>("stop1");
+
+    QTest::newRow("white->black") << QColor(Qt::white) << QColor(Qt::black);
+    QTest::newRow("blue->black") << QColor(Qt::blue) << QColor(Qt::black);
+    QTest::newRow("white->red") << QColor(Qt::white) << QColor(Qt::red);
+}
+
+void tst_QPainter::linearGradientRgb30()
+{
+    QFETCH(QColor, stop0);
+    QFETCH(QColor, stop1);
+
+    QLinearGradient gradient(0, 0, 1000, 1);
+    gradient.setColorAt(0.0, stop0);
+    gradient.setColorAt(1.0, stop1);
+
+    QImage image(1000, 1, QImage::Format_RGB30);
+    QPainter painter(&image);
+    painter.fillRect(image.rect(), gradient);
+    painter.end();
+
+    for (int i = 1; i < 1000; ++i) {
+        QColor p1 = image.pixelColor(i - 1, 0);
+        QColor p2 = image.pixelColor(i, 0);
+        QVERIFY(p1 != p2);
+        QVERIFY(qGray(p1.rgb()) >= qGray(p2.rgb()));
+    }
+}
+
+void tst_QPainter::radialGradientRgb30_data()
+{
+    linearGradientRgb30_data();
+}
+
+void tst_QPainter::radialGradientRgb30()
+{
+    QFETCH(QColor, stop0);
+    QFETCH(QColor, stop1);
+
+    QRadialGradient gradient(0, 0, 1000);
+    gradient.setColorAt(0.0, stop0);
+    gradient.setColorAt(1.0, stop1);
+
+    QImage image(1000, 1, QImage::Format_A2BGR30_Premultiplied);
+    QPainter painter(&image);
+    painter.fillRect(image.rect(), gradient);
+    painter.end();
+
+    for (int i = 1; i < 1000; ++i) {
+        QColor p1 = image.pixelColor(i - 1, 0);
+        QColor p2 = image.pixelColor(i, 0);
+        QVERIFY(p1 != p2);
+        QVERIFY(qGray(p1.rgb()) >= qGray(p2.rgb()));
+    }
+}
+
 void tst_QPainter::drawPolygon()
 {
     QImage img(128, 128, QImage::Format_ARGB32_Premultiplied);
@@ -4064,10 +4190,10 @@ void tst_QPainter::extendedBlendModes()
 
     QVERIFY(testCompositionMode(255, 255, 255, QPainter::CompositionMode_Plus, 0.3));
     QVERIFY(testCompositionMode(  0,   0,   0, QPainter::CompositionMode_Plus, 0.3));
-    QVERIFY(testCompositionMode(127, 128, 165, QPainter::CompositionMode_Plus, 0.3));
-    QVERIFY(testCompositionMode(127,   0,  37, QPainter::CompositionMode_Plus, 0.3));
+    QVERIFY(testCompositionMode(126, 128, 165, QPainter::CompositionMode_Plus, 0.3));
+    QVERIFY(testCompositionMode(127,   0,  38, QPainter::CompositionMode_Plus, 0.3));
     QVERIFY(testCompositionMode(  0, 127, 127, QPainter::CompositionMode_Plus, 0.3));
-    QVERIFY(testCompositionMode(255,   0,  75, QPainter::CompositionMode_Plus, 0.3));
+    QVERIFY(testCompositionMode(255,   0,  76, QPainter::CompositionMode_Plus, 0.3));
     QVERIFY(testCompositionMode(  0, 255, 255, QPainter::CompositionMode_Plus, 0.3));
     QVERIFY(testCompositionMode(128, 128, 166, QPainter::CompositionMode_Plus, 0.3));
     QVERIFY(testCompositionMode(186, 200, 255, QPainter::CompositionMode_Plus, 0.3));
@@ -4752,6 +4878,22 @@ void tst_QPainter::blendARGBonRGB_data()
                                            << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 127) << 125;
     QTest::newRow("ARGB_PM source-in RGB666") << QImage::Format_RGB666 << QImage::Format_ARGB32_Premultiplied
                                               << QPainter::CompositionMode_SourceIn << qRgba(127, 0, 0, 127) << 125;
+    QTest::newRow("ARGB over RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32
+                                     << QPainter::CompositionMode_SourceOver << qRgba(255, 0, 0, 85) << 85;
+    QTest::newRow("ARGB_PM over RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32_Premultiplied
+                                        << QPainter::CompositionMode_SourceOver << qRgba(85, 0, 0, 85) << 85;
+    QTest::newRow("ARGB source RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32
+                                       << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 85) << 85;
+    QTest::newRow("ARGB source RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32
+                                       << QPainter::CompositionMode_Source << qRgba(255, 0, 0, 120) << 85;
+    QTest::newRow("ARGB_PM source RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32_Premultiplied
+                                          << QPainter::CompositionMode_Source << qRgba(85, 0, 0, 85) << 85;
+    QTest::newRow("ARGB_PM source RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32_Premultiplied
+                                          << QPainter::CompositionMode_Source << qRgba(180, 0, 0, 180) << 170;
+    QTest::newRow("ARGB source-in RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32
+                                          << QPainter::CompositionMode_SourceIn << qRgba(255, 0, 0, 85) << 85;
+    QTest::newRow("ARGB_PM source-in RGB30") << QImage::Format_RGB30 << QImage::Format_ARGB32_Premultiplied
+                                             << QPainter::CompositionMode_SourceIn << qRgba(85, 0, 0, 85) << 85;
 }
 
 void tst_QPainter::blendARGBonRGB()
@@ -4910,6 +5052,30 @@ void tst_QPainter::drawPolyline()
     }
 
     QCOMPARE(images[0], images[1]);
+}
+
+void tst_QPainter::QTBUG50153_drawImage_assert()
+{
+    QImage::Format formats[] = {
+        QImage::Format_RGB32,  // fetchTransformedBilinearARGB32PM
+        QImage::Format_ARGB32  // fetchTransformedBilinear
+    };
+
+    for (unsigned i = 0; i < sizeof(formats) / sizeof(formats[0]); i++) {
+        QImage image(3027, 2999, formats[i]);
+
+        QImage backingStore(image.size(), QImage::Format_ARGB32);
+        QPainter backingStorePainter(&backingStore);
+
+        QTransform transform;
+        transform.scale( 0.999987, 0.999987 );
+
+        backingStorePainter.setTransform(transform);
+        backingStorePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        backingStorePainter.drawImage(0, 0, image);
+
+        // No crash, all fine
+    }
 }
 
 QTEST_MAIN(tst_QPainter)

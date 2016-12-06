@@ -1091,8 +1091,8 @@ void QMdiSubWindowPrivate::updateDirtyRegions()
     if (!parent)
         return;
 
-    foreach (Operation operation, operationMap.keys())
-        operationMap.find(operation).value().region = getRegion(operation);
+    for (OperationInfoMap::iterator it = operationMap.begin(), end = operationMap.end(); it != end; ++it)
+        it.value().region = getRegion(it.key());
 }
 
 /*!
@@ -2689,7 +2689,10 @@ bool QMdiSubWindow::eventFilter(QObject *object, QEvent *event)
     // System menu events.
     if (d->systemMenu && d->systemMenu == object) {
         if (event->type() == QEvent::MouseButtonDblClick) {
-            close();
+            const QMouseEvent *mouseEvent = static_cast<const QMouseEvent *>(event);
+            const QAction *action = d->systemMenu->actionAt(mouseEvent->pos());
+            if (!action || action->isEnabled())
+                close();
         } else if (event->type() == QEvent::MouseMove) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
             d->hoveredSubControl = d->getSubControl(mapFromGlobal(mouseEvent->globalPos()));

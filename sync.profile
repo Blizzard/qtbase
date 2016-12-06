@@ -16,7 +16,7 @@
     "QtANGLE/GLES2" => "!$basedir/src/3rdparty/angle/include/GLES2",
     "QtANGLE/GLES3" => "!$basedir/src/3rdparty/angle/include/GLES3",
     "QtANGLE/EGL" => "!$basedir/src/3rdparty/angle/include/EGL",
-    "QtZlib" => "!$basedir/src/3rdparty/zlib",
+    "QtZlib" => "!>$basedir/src/corelib;$basedir/src/3rdparty/zlib",
     "QtOpenGLExtensions" => "$basedir/src/openglextensions",
 );
 %moduleheaders = ( # restrict the module headers to those found in relative path
@@ -50,7 +50,7 @@
     }
 );
 
-@qpa_headers = ( qr/^qplatform/, qr/^qwindowsystem/ );
+@qpa_headers = ( qr/^(?!qplatformheaderhelper)qplatform/, qr/^qwindowsystem/ );
 my @angle_headers = ('egl.h', 'eglext.h', 'eglplatform.h', 'gl2.h', 'gl2ext.h', 'gl2platform.h', 'ShaderLang.h', 'khrplatform.h');
 my @internal_zlib_headers = ( "crc32.h", "deflate.h", "gzguts.h", "inffast.h", "inffixed.h", "inflate.h", "inftrees.h", "trees.h", "zutil.h" );
 my @zlib_headers = ( "zconf.h", "zlib.h" );

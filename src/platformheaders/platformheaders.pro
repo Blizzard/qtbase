@@ -7,6 +7,8 @@ include(nativecontexts/nativecontexts.pri)
 include(xcbfunctions/xcbfunctions.pri)
 include(eglfsfunctions/eglfsfunctions.pri)
 include(windowsfunctions/windowsfunctions.pri)
+include(helper/helper.pri)
+include(cocoafunctions/cocoafunctions.pri)
 
 QMAKE_DOCS = $$PWD/doc/qtplatformheaders.qdocconf
 

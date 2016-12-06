@@ -56,8 +56,8 @@ public:
     QIcon(const QIcon &other);
 #ifdef Q_COMPILER_RVALUE_REFS
     QIcon(QIcon &&other) Q_DECL_NOEXCEPT
-        : d(0)
-    { qSwap(d, other.d); }
+        : d(other.d)
+    { other.d = Q_NULLPTR; }
 #endif
     explicit QIcon(const QString &fileName); // file or resource name
     explicit QIcon(QIconEngine *engine);
@@ -65,7 +65,7 @@ public:
     QIcon &operator=(const QIcon &other);
 #ifdef Q_COMPILER_RVALUE_REFS
     inline QIcon &operator=(QIcon &&other) Q_DECL_NOEXCEPT
-    { qSwap(d, other.d); return *this; }
+    { swap(other); return *this; }
 #endif
     inline void swap(QIcon &other) Q_DECL_NOEXCEPT
     { qSwap(d, other.d); }
@@ -102,6 +102,9 @@ public:
 
     QList<QSize> availableSizes(Mode mode = Normal, State state = Off) const;
 
+    void setIsMask(bool isMask);
+    bool isMask() const;
+
     static QIcon fromTheme(const QString &name, const QIcon &fallback = QIcon());
     static bool hasThemeIcon(const QString &name);
 
@@ -135,6 +138,9 @@ Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QIcon &);
 #ifndef QT_NO_DEBUG_STREAM
 Q_GUI_EXPORT QDebug operator<<(QDebug dbg, const QIcon &);
 #endif
+
+Q_GUI_EXPORT QString qt_findAtNxFile(const QString &baseFileName, qreal targetDevicePixelRatio,
+                                     qreal *sourceDevicePixelRatio = Q_NULLPTR);
 
 QT_END_NAMESPACE
 

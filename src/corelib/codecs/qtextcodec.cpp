@@ -993,7 +993,7 @@ QString QTextDecoder::toUnicode(const char *chars, int len)
 }
 
 // in qstring.cpp:
-void qt_from_latin1(ushort *dst, const char *str, size_t size);
+void qt_from_latin1(ushort *dst, const char *str, size_t size) Q_DECL_NOTHROW;
 
 /*! \overload
 
@@ -1154,7 +1154,6 @@ QTextCodec *QTextCodec::codecForUtfText(const QByteArray &ba)
     Returns the codec used by QObject::tr() on its argument. If this
     function returns 0 (the default), tr() assumes Latin-1.
 */
-
 
 /*!
     \internal

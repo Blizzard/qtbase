@@ -154,6 +154,7 @@ private slots:
 #ifndef QT_NO_CONTEXTMENU
     void contextMenu();
 #endif
+    void inputMethodCursorRect();
 
 private:
     void createSelection();
@@ -333,7 +334,7 @@ void tst_QPlainTextEdit::selectAllSetsNotSelection()
         QSKIP("Test only relevant for systems with selection");
 
     QApplication::clipboard()->setText(QString("foobar"), QClipboard::Selection);
-    QVERIFY(QApplication::clipboard()->text(QClipboard::Selection) == QString("foobar"));
+    QCOMPARE(QApplication::clipboard()->text(QClipboard::Selection), QString("foobar"));
 
     ed->insertPlainText("Hello World");
     ed->selectAll();
@@ -905,13 +906,13 @@ void tst_QPlainTextEdit::mouseCursorShape()
 {
     // always show an IBeamCursor, see change 170146
     QVERIFY(!ed->isReadOnly());
-    QVERIFY(ed->viewport()->cursor().shape() == Qt::IBeamCursor);
+    QCOMPARE(ed->viewport()->cursor().shape(), Qt::IBeamCursor);
 
     ed->setReadOnly(true);
-    QVERIFY(ed->viewport()->cursor().shape() == Qt::IBeamCursor);
+    QCOMPARE(ed->viewport()->cursor().shape(), Qt::IBeamCursor);
 
     ed->setPlainText("Foo");
-    QVERIFY(ed->viewport()->cursor().shape() == Qt::IBeamCursor);
+    QCOMPARE(ed->viewport()->cursor().shape(), Qt::IBeamCursor);
 }
 #endif
 
@@ -1183,12 +1184,19 @@ void tst_QPlainTextEdit::selectWordsFromStringsContainingSeparators_data()
     QTest::addColumn<QString>("testString");
     QTest::addColumn<QString>("selectedWord");
 
-    QStringList wordSeparators;
-    wordSeparators << "." << "," << "?" << "!" << ":" << ";" << "-" << "<" << ">" << "["
-                   << "]" << "(" << ")" << "{" << "}" << "=" << "\t"<< QString(QChar::Nbsp);
+    const ushort wordSeparators[] =
+        {'.', ',', '?', '!', ':', ';', '-', '<', '>', '[', ']', '(', ')', '{', '}',
+         '=', '\t', ushort(QChar::Nbsp)};
 
-    foreach (QString s, wordSeparators)
-        QTest::newRow(QString("separator: " + s).toLocal8Bit()) << QString("foo") + s + QString("bar") << QString("foo");
+    for (size_t i = 0, count = sizeof(wordSeparators) / sizeof(wordSeparators[0]); i < count; ++i) {
+        const ushort u = wordSeparators[i];
+        QByteArray rowName = QByteArrayLiteral("separator: ");
+        if (u >= 32 && u < 128)
+            rowName += char(u);
+        else
+            rowName += QByteArrayLiteral("0x") + QByteArray::number(u, 16);
+        QTest::newRow(rowName.constData()) << QString("foo") + QChar(u) + QString("bar") << QString("foo");
+    }
 }
 
 void tst_QPlainTextEdit::selectWordsFromStringsContainingSeparators()
@@ -1324,7 +1332,7 @@ void tst_QPlainTextEdit::preserveCharFormatAfterSetPlainText()
     QTextBlock block = ed->document()->begin();
     block = block.next();
     QCOMPARE(block.text(), QString("This should still be blue"));
-    QVERIFY(block.begin().fragment().charFormat().foreground().color() == QColor(Qt::blue));
+    QCOMPARE(block.begin().fragment().charFormat().foreground().color(), QColor(Qt::blue));
 }
 
 void tst_QPlainTextEdit::extraSelections()
@@ -1444,7 +1452,7 @@ void tst_QPlainTextEdit::wordWrapProperty()
         doc->setDocumentLayout(new QPlainTextDocumentLayout(doc));
         edit.setDocument(doc);
         edit.setWordWrapMode(QTextOption::NoWrap);
-        QVERIFY(doc->defaultTextOption().wrapMode() == QTextOption::NoWrap);
+        QCOMPARE(doc->defaultTextOption().wrapMode(), QTextOption::NoWrap);
     }
     {
         QPlainTextEdit edit;
@@ -1452,18 +1460,18 @@ void tst_QPlainTextEdit::wordWrapProperty()
         doc->setDocumentLayout(new QPlainTextDocumentLayout(doc));
         edit.setWordWrapMode(QTextOption::NoWrap);
         edit.setDocument(doc);
-        QVERIFY(doc->defaultTextOption().wrapMode() == QTextOption::NoWrap);
+        QCOMPARE(doc->defaultTextOption().wrapMode(), QTextOption::NoWrap);
     }
 }
 
 void tst_QPlainTextEdit::lineWrapProperty()
 {
-    QVERIFY(ed->wordWrapMode() == QTextOption::WrapAtWordBoundaryOrAnywhere);
-    QVERIFY(ed->lineWrapMode() == QPlainTextEdit::WidgetWidth);
+    QCOMPARE(ed->wordWrapMode(), QTextOption::WrapAtWordBoundaryOrAnywhere);
+    QCOMPARE(ed->lineWrapMode(), QPlainTextEdit::WidgetWidth);
     ed->setLineWrapMode(QPlainTextEdit::NoWrap);
-    QVERIFY(ed->lineWrapMode() == QPlainTextEdit::NoWrap);
-    QVERIFY(ed->wordWrapMode() == QTextOption::WrapAtWordBoundaryOrAnywhere);
-    QVERIFY(ed->document()->defaultTextOption().wrapMode() == QTextOption::NoWrap);
+    QCOMPARE(ed->lineWrapMode(), QPlainTextEdit::NoWrap);
+    QCOMPARE(ed->wordWrapMode(), QTextOption::WrapAtWordBoundaryOrAnywhere);
+    QCOMPARE(ed->document()->defaultTextOption().wrapMode(), QTextOption::NoWrap);
 }
 
 void tst_QPlainTextEdit::selectionChanged()
@@ -1560,7 +1568,7 @@ void tst_QPlainTextEdit::findWithRegExp()
 
     bool found = ed->find(rx);
 
-    QVERIFY(found == true);
+    QVERIFY(found);
     QCOMPARE(ed->textCursor().selectedText(), QStringLiteral("text"));
 }
 
@@ -1574,7 +1582,7 @@ void tst_QPlainTextEdit::findBackwardWithRegExp()
 
     bool found = ed->find(rx, QTextDocument::FindBackward);
 
-    QVERIFY(found == true);
+    QVERIFY(found);
     QCOMPARE(ed->textCursor().selectedText(), QStringLiteral("arbit"));
 }
 
@@ -1586,7 +1594,7 @@ void tst_QPlainTextEdit::findWithRegExpReturnsFalseIfNoMoreResults()
 
     bool found = ed->find(rx);
 
-    QVERIFY(found == false);
+    QVERIFY(!found);
     QCOMPARE(ed->textCursor().selectedText(), QStringLiteral("text"));
 }
 #endif
@@ -1726,6 +1734,18 @@ void tst_QPlainTextEdit::contextMenu()
     QVERIFY(!ed->findChild<QAction *>(QStringLiteral("link-copy")));
 }
 #endif // QT_NO_CONTEXTMENU
+
+// QTBUG-51923: Verify that the cursor rectangle returned by the input
+// method query correctly reflects the viewport offset.
+void tst_QPlainTextEdit::inputMethodCursorRect()
+{
+    ed->setPlainText("Line1\nLine2Line3\nLine3");
+    ed->moveCursor(QTextCursor::End);
+    const QRectF cursorRect = ed->cursorRect();
+    const QVariant cursorRectV = ed->inputMethodQuery(Qt::ImCursorRectangle);
+    QCOMPARE(cursorRectV.type(), QVariant::RectF);
+    QCOMPARE(cursorRectV.toRect(), cursorRect.toRect());
+}
 
 QTEST_MAIN(tst_QPlainTextEdit)
 #include "tst_qplaintextedit.moc"

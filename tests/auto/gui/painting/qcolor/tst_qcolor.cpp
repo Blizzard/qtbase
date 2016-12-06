@@ -39,6 +39,7 @@
 #include <qcolor.h>
 #include <qdebug.h>
 #include <private/qdrawingprimitive_sse2_p.h>
+#include <qrgba64.h>
 
 class tst_QColor : public QObject
 {
@@ -105,6 +106,10 @@ private slots:
 
     void premultiply();
     void unpremultiply_sse4();
+    void qrgba64();
+    void qrgba64MemoryLayout();
+    void qrgba64Premultiply();
+    void qrgba64Equivalence();
 
 #ifdef Q_DEAD_CODE_FROM_QT4_X11
     void setallowX11ColorNames();
@@ -249,7 +254,7 @@ void tst_QColor::isValid()
 {
     QFETCH(QColor, color);
     QFETCH(bool, isValid);
-    QVERIFY(color.isValid() == isValid);
+    QCOMPARE(color.isValid(), isValid);
 }
 
 Q_DECLARE_METATYPE(QColor::NameFormat);
@@ -279,6 +284,8 @@ void tst_QColor::name_data()
     QTest::newRow("global color darkMagenta") << QColor(Qt::darkMagenta) << "#800080" << QColor::HexRgb;
     QTest::newRow("global color darkYellow") << QColor(Qt::darkYellow) << "#808000" << QColor::HexRgb;
     QTest::newRow("transparent red") << QColor(255, 0, 0, 102) << "#66ff0000" << QColor::HexArgb;
+    QTest::newRow("fully_transparent_green_rgb") << QColor(0, 0, 255, 0) << "#0000ff" << QColor::HexRgb;
+    QTest::newRow("fully_transparent_green_argb") << QColor(0, 0, 255, 0) << "#000000ff" << QColor::HexArgb;
 }
 
 void tst_QColor::name()
@@ -1321,19 +1328,19 @@ void tst_QColor::convertTo()
     QColor color(Qt::black);
 
     QColor rgb = color.convertTo(QColor::Rgb);
-    QVERIFY(rgb.spec() == QColor::Rgb);
+    QCOMPARE(rgb.spec(), QColor::Rgb);
 
     QColor hsv = color.convertTo(QColor::Hsv);
-    QVERIFY(hsv.spec() == QColor::Hsv);
+    QCOMPARE(hsv.spec(), QColor::Hsv);
 
     QColor cmyk = color.convertTo(QColor::Cmyk);
-    QVERIFY(cmyk.spec() == QColor::Cmyk);
+    QCOMPARE(cmyk.spec(), QColor::Cmyk);
 
     QColor hsl = color.convertTo(QColor::Hsl);
-    QVERIFY(hsl.spec() == QColor::Hsl);
+    QCOMPARE(hsl.spec(), QColor::Hsl);
 
     QColor invalid = color.convertTo(QColor::Invalid);
-    QVERIFY(invalid.spec() == QColor::Invalid);
+    QCOMPARE(invalid.spec(), QColor::Invalid);
 }
 
 void tst_QColor::light()
@@ -1462,6 +1469,103 @@ void tst_QColor::unpremultiply_sse4()
     }
 #endif
     QSKIP("SSE4 not supported on this CPU.");
+}
+
+void tst_QColor::qrgba64()
+{
+    QRgba64 rgb64 = QRgba64::fromRgba(0x22, 0x33, 0x44, 0xff);
+    QCOMPARE(rgb64.red(), quint16(0x2222));
+    QCOMPARE(rgb64.green(), quint16(0x3333));
+    QCOMPARE(rgb64.blue(), quint16(0x4444));
+    QCOMPARE(rgb64.alpha(), quint16(0xffff));
+
+    QColor c(rgb64);
+    QCOMPARE(c.red(), 0x22);
+    QCOMPARE(c.green(), 0x33);
+    QCOMPARE(c.blue(), 0x44);
+
+    QCOMPARE(c.rgba64(), rgb64);
+
+    QColor c2 = QColor::fromRgb(0x22, 0x33, 0x44, 0xff);
+    QCOMPARE(c, c2);
+    QCOMPARE(c2.rgba64(), rgb64);
+
+    rgb64.setAlpha(0x8000);
+    rgb64.setGreen(0x8844);
+    rgb64 = rgb64.premultiplied();
+    QCOMPARE(rgb64.red(), quint16(0x1111));
+    QCOMPARE(rgb64.blue(), quint16(0x2222));
+    QCOMPARE(rgb64.green(), quint16(0x4422));
+}
+
+void tst_QColor::qrgba64MemoryLayout()
+{
+    QRgba64 rgb64 = QRgba64::fromRgba64(0x0123, 0x4567, 0x89ab, 0xcdef);
+    QCOMPARE(rgb64.red(), quint16(0x0123));
+    QCOMPARE(rgb64.green(), quint16(0x4567));
+    QCOMPARE(rgb64.blue(), quint16(0x89ab));
+    QCOMPARE(rgb64.alpha(), quint16(0xcdef));
+
+    // Check in-memory order, so it can be used by things like SSE
+    Q_STATIC_ASSERT(sizeof(QRgba64) == sizeof(quint64));
+    quint16 memory[4];
+    memcpy(memory, &rgb64, sizeof(QRgba64));
+    QCOMPARE(memory[0], quint16(0x0123));
+    QCOMPARE(memory[1], quint16(0x4567));
+    QCOMPARE(memory[2], quint16(0x89ab));
+    QCOMPARE(memory[3], quint16(0xcdef));
+}
+
+void tst_QColor::qrgba64Premultiply()
+{
+    // Tests that qPremultiply(qUnpremultiply(rgba64)) returns rgba64.
+    for (uint a = 0; a < 0x10000; a+=7) {
+        const uint step = std::max(a/1024, 1u);
+        for (uint c = 0; c <= a; c+=step) {
+            QRgba64 p = qRgba64(c, a-c, a-c/2, a);
+            QRgba64 pp = qPremultiply(qUnpremultiply(p));
+            QCOMPARE(pp, p);
+        }
+    }
+}
+
+void tst_QColor::qrgba64Equivalence()
+{
+    // Any ARGB32 converted back and forth.
+    for (uint a = 0; a < 256; a++) {
+        for (uint c = 0; c < 256; c++) {
+            QRgb p1 = qRgba(c, 255-c, 255-c, a);
+            QRgba64 p64 = QRgba64::fromArgb32(p1);
+            QCOMPARE(p64.toArgb32(), p1);
+        }
+    }
+    // Any unpremultiplied ARGB32 value premultipled in RGB64 (except alpha 0).
+    for (uint a = 1; a < 256; a++) {
+        for (uint c = 0; c < 256; c++) {
+            QRgb p1 = qRgba(c, 255-c, 255-c, a);
+            QRgb pp1 = qPremultiply(p1);
+            QRgba64 pp64 = qPremultiply(QRgba64::fromArgb32(p1));
+            QRgb pp2 = pp64.toArgb32();
+            // 64bit premultiplied is more accurate than 32bit, so allow slight difference.
+            QCOMPARE(qAlpha(pp2), qAlpha(pp1));
+            QVERIFY(qAbs(qRed(pp2)-qRed(pp1)) <= 1);
+            QVERIFY(qAbs(qGreen(pp2)-qGreen(pp1)) <= 1);
+            QVERIFY(qAbs(qBlue(pp2)-qBlue(pp1)) <= 1);
+            // But verify the added accuracy means we can return to accurate unpremultiplied ARGB32.
+            QRgba64 pu64 = qUnpremultiply(pp64);
+            QRgb p2 = pu64.toArgb32();
+            QCOMPARE(p2, p1);
+        }
+    }
+    // Any premultiplied ARGB32 value unpremultipled in RGB64.
+    for (uint a = 0; a < 256; a++) {
+        for (uint c = 0; c <= a; c++) {
+            QRgb pp = qRgba(c, a-c, a-c, a);
+            QRgb pu = qUnpremultiply(pp);
+            QRgba64 pu64 = qUnpremultiply(QRgba64::fromArgb32(pp));
+            QCOMPARE(pu64.toArgb32(), pu);
+        }
+    }
 }
 
 QTEST_MAIN(tst_QColor)

@@ -53,7 +53,6 @@
 #include <qvarlengtharray.h>
 #include <stdlib.h>
 #include <qabstracteventdispatcher.h>
-#include "qcocoaautoreleasepool.h"
 #include <QDir>
 
 #include <qpa/qplatformnativeinterface.h>
@@ -127,7 +126,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSOpenSavePanelDelegate);
 
     if ([mSavePanel respondsToSelector:@selector(setLevel:)])
         [mSavePanel setLevel:NSModalPanelWindowLevel];
-    [mSavePanel setDelegate:self];
+
     mReturnCode = -1;
     mHelper = helper;
     mNameFilterDropDownList = new QStringList(mOptions->nameFilters());
@@ -148,7 +147,10 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSOpenSavePanelDelegate);
     [self createTextField];
     [self createAccessory];
     [mSavePanel setAccessoryView:mNameFilterDropDownList->size() > 1 ? mAccessoryView : nil];
-
+    // -setAccessoryView: can result in -panel:directoryDidChange:
+    // resetting our mCurrentDir, set the delegate
+    // here to make sure it gets the correct value.
+    [mSavePanel setDelegate:self];
 
     if (mOptions->isLabelExplicitlySet(QFileDialogOptions::Accept))
         [mSavePanel setPrompt:[self strip:options->labelText(QFileDialogOptions::Accept)]];
@@ -557,7 +559,7 @@ QCocoaFileDialogHelper::~QCocoaFileDialogHelper()
 {
     if (!mDelegate)
         return;
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
     [mDelegate release];
     mDelegate = 0;
 }
@@ -588,9 +590,6 @@ void QCocoaFileDialogHelper::QNSOpenSavePanelDelegate_filterSelected(int menuInd
     const QStringList filters = options()->nameFilters();
     emit filterSelected(menuIndex >= 0 && menuIndex < filters.size() ? filters.at(menuIndex) : QString());
 }
-
-extern OSErr qt_mac_create_fsref(const QString &, FSRef *); // qglobal.cpp
-extern void qt_mac_to_pascal_string(QString s, Str255 str, TextEncoding encoding=0, int len=-1); // qglobal.cpp
 
 void QCocoaFileDialogHelper::setDirectory(const QUrl &directory)
 {
@@ -687,7 +686,7 @@ bool QCocoaFileDialogHelper::show(Qt::WindowFlags windowFlags, Qt::WindowModalit
 
 void QCocoaFileDialogHelper::createNSOpenSavePanelDelegate()
 {
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
 
     const SharedPointerFileDialogOptions &opts = options();
     const QList<QUrl> selectedFiles = opts->initiallySelectedFiles();
@@ -737,7 +736,7 @@ void QCocoaFileDialogHelper::exec()
     // QEventLoop has been interrupted, and the second-most event loop has not
     // yet been reactivated (regardless if [NSApp run] is still on the stack)),
     // showing a native modal dialog will fail.
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
     if ([mDelegate runApplicationModalPanel])
         emit accept();
     else

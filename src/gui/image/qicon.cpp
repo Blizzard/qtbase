@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -45,11 +46,7 @@
 #include "qcache.h"
 #include "qdebug.h"
 #include "qpalette.h"
-
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
-#include <private/qt_mac_p.h>
-#include <private/qt_cocoa_helpers_mac_p.h>
-#endif
+#include "qmath.h"
 
 #include "private/qhexstring_p.h"
 #include "private/qguiapplication_p.h"
@@ -134,7 +131,8 @@ static qreal qt_effective_device_pixel_ratio(QWindow *window = 0)
 QIconPrivate::QIconPrivate()
     : engine(0), ref(1),
     serialNum(serialNumCounter.fetchAndAddRelaxed(1)),
-    detach_no(0)
+    detach_no(0),
+    is_mask(false)
 {
 }
 
@@ -362,7 +360,7 @@ static inline int origIcoDepth(const QImage &image)
     return s.isEmpty() ? 32 : s.toInt();
 }
 
-static inline int findBySize(const QList<QImage> &images, const QSize &size)
+static inline int findBySize(const QVector<QImage> &images, const QSize &size)
 {
     for (int i = 0; i < images.size(); ++i) {
         if (images.at(i).size() == size)
@@ -426,7 +424,7 @@ void QPixmapIconEngine::addFile(const QString &fileName, const QSize &size, QIco
     // these files may contain low-resolution images. As this information is lost,
     // ICOReader sets the original format as an image text key value. Read all matching
     // images into a list trying to find the highest quality per size.
-    QList<QImage> icoImages;
+    QVector<QImage> icoImages;
     while (imageReader.read(&image)) {
         if (ignoreSize || image.size() == size) {
             const int position = findBySize(icoImages, image.size());
@@ -598,6 +596,8 @@ QFactoryLoader *qt_iconEngineFactoryLoader()
   used to draw a different icon.
 
   \image icon.png QIcon
+
+  \note QIcon needs a QGuiApplication instance before the icon is created.
 
   \sa {fowler}{GUI Design Handbook: Iconic Label}, {Icons Example}
 */
@@ -835,8 +835,11 @@ QPixmap QIcon::pixmap(QWindow *window, const QSize &size, Mode mode, State state
     qreal devicePixelRatio = qt_effective_device_pixel_ratio(window);
 
     // Handle the simple normal-dpi case:
-    if (!(devicePixelRatio > 1.0))
-        return d->engine->pixmap(size, mode, state);
+    if (!(devicePixelRatio > 1.0)) {
+        QPixmap pixmap = d->engine->pixmap(size, mode, state);
+        pixmap.setDevicePixelRatio(1.0);
+        return pixmap;
+    }
 
     // Try get a pixmap that is big enough to be displayed at device pixel resolution.
     QPixmap pixmap = d->engine->pixmap(size * devicePixelRatio, mode, state);
@@ -1028,19 +1031,13 @@ void QIcon::addFile(const QString &fileName, const QSize &size, Mode mode, State
     } else {
         detach();
     }
+
     d->engine->addFile(fileName, size, mode, state);
 
-    // Check if a "@2x" file exists and add it.
-    static bool disable2xImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
-    if (!disable2xImageLoading && qApp->devicePixelRatio() > 1.0) {
-        QString at2xfileName = fileName;
-        int dotIndex = fileName.lastIndexOf(QLatin1Char('.'));
-        if (dotIndex == -1) /* no dot */
-            dotIndex = fileName.size(); /* append */
-        at2xfileName.insert(dotIndex, QStringLiteral("@2x"));
-        if (QFile::exists(at2xfileName))
-            d->engine->addFile(at2xfileName, size, mode, state);
-    }
+    // Check if a "@Nx" file exists and add it.
+    QString atNxFileName = qt_findAtNxFile(fileName, qApp->devicePixelRatio());
+    if (atNxFileName != fileName)
+        d->engine->addFile(atNxFileName, size, mode, state);
 }
 
 /*!
@@ -1185,8 +1182,6 @@ QIcon QIcon::fromTheme(const QString &name, const QIcon &fallback)
         qtIconCache()->insert(name, cachedIcon);
     }
 
-    // Note the qapp check is to allow lazy loading of static icons
-    // Supporting fallbacks will not work for this case.
     if (qApp && icon.availableSizes().isEmpty())
         return fallback;
 
@@ -1208,6 +1203,39 @@ bool QIcon::hasThemeIcon(const QString &name)
     return icon.name() == name;
 }
 
+/*!
+    \since 5.6
+
+    Indicate that this icon is a mask image, and hence can potentially
+    be modified based on where it's displayed.
+    \sa isMask()
+*/
+void QIcon::setIsMask(bool isMask)
+{
+    if (!d) {
+        d = new QIconPrivate;
+        d->engine = new QPixmapIconEngine;
+    } else {
+        detach();
+    }
+    d->is_mask = isMask;
+}
+
+/*!
+    \since 5.6
+
+    Returns \c true if this icon has been marked as a mask image.
+    Certain platforms render mask icons differently (for example,
+    menu icons on \macos).
+
+    \sa setIsMask()
+*/
+bool QIcon::isMask() const
+{
+    if (!d)
+        return false;
+    return d->is_mask;
+}
 
 /*****************************************************************************
   QIcon stream functions
@@ -1353,6 +1381,47 @@ QDebug operator<<(QDebug dbg, const QIcon &i)
     \typedef QIcon::DataPtr
     \internal
 */
+
+/*!
+    \internal
+    \since 5.6
+    Attempts to find a suitable @Nx file for the given \a targetDevicePixelRatio
+    Returns the the \a baseFileName if no such file was found.
+
+    Given base foo.png and a target dpr of 2.5, this function will look for
+    foo@3x.png, then foo@2x, then fall back to foo.png if not found.
+
+    \a sourceDevicePixelRatio will be set to the value of N if the argument is
+    a non-null pointer
+*/
+QString qt_findAtNxFile(const QString &baseFileName, qreal targetDevicePixelRatio,
+                        qreal *sourceDevicePixelRatio)
+{
+    if (targetDevicePixelRatio <= 1.0)
+        return baseFileName;
+
+    static bool disableNxImageLoading = !qEnvironmentVariableIsEmpty("QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING");
+    if (disableNxImageLoading)
+        return baseFileName;
+
+    int dotIndex = baseFileName.lastIndexOf(QLatin1Char('.'));
+    if (dotIndex == -1) /* no dot */
+        dotIndex = baseFileName.size(); /* append */
+
+    QString atNxfileName = baseFileName;
+    atNxfileName.insert(dotIndex, QLatin1String("@2x"));
+    // Check for @Nx, ..., @3x, @2x file versions,
+    for (int n = qMin(qCeil(targetDevicePixelRatio), 9); n > 1; --n) {
+        atNxfileName[dotIndex + 1] = QLatin1Char('0' + n);
+        if (QFile::exists(atNxfileName)) {
+            if (sourceDevicePixelRatio)
+                *sourceDevicePixelRatio = n;
+            return atNxfileName;
+        }
+    }
+
+    return baseFileName;
+}
 
 QT_END_NAMESPACE
 #endif //QT_NO_ICON

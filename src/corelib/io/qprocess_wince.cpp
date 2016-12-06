@@ -33,7 +33,6 @@
 
 #include "qprocess.h"
 #include "qprocess_p.h"
-#include "qwindowspipewriter_p.h"
 
 #include <qdir.h>
 #include <qfileinfo.h>
@@ -138,8 +137,7 @@ void QProcessPrivate::startProcess()
 
     if (!success) {
         cleanup();
-        processError = QProcess::FailedToStart;
-        emit q->error(processError);
+        setErrorAndEmit(QProcess::FailedToStart);
         q->setProcessState(QProcess::NotRunning);
         return;
     }
@@ -157,11 +155,11 @@ void QProcessPrivate::startProcess()
     }
 
     // give the process a chance to start ...
-    Sleep(SLEEPMIN * 2);
+    Sleep(20);
     _q_startupNotification();
 }
 
-bool QProcessPrivate::processStarted()
+bool QProcessPrivate::processStarted(QString * /*errorMessage*/)
 {
     return processState == QProcess::Running;
 }
@@ -210,8 +208,7 @@ bool QProcessPrivate::waitForStarted(int)
     if (processError == QProcess::FailedToStart)
         return false;
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
 }
 
@@ -237,22 +234,15 @@ bool QProcessPrivate::waitForFinished(int msecs)
     qDebug("QProcessPrivate::waitForFinished(%d)", msecs);
 #endif
 
-    QIncrementalSleepTimer timer(msecs);
+    if (!pid)
+        return true;
 
-    forever {
-        if (!pid)
-            return true;
-
-        if (WaitForSingleObject(pid->hProcess, timer.nextSleepTime()) == WAIT_OBJECT_0) {
-            _q_processDied();
-            return true;
-        }
-
-        if (timer.hasTimedOut())
-            break;
+    if (WaitForSingleObject(pid->hProcess, msecs == -1 ? INFINITE : msecs) == WAIT_OBJECT_0) {
+        _q_processDied();
+        return true;
     }
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+
+    setError(QProcess::Timedout);
     return false;
 }
 
@@ -275,11 +265,9 @@ qint64 QProcessPrivate::pipeWriterBytesToWrite() const
     return 0;
 }
 
-qint64 QProcessPrivate::writeToStdin(const char *data, qint64 maxlen)
+bool QProcessPrivate::writeToStdin()
 {
-    Q_UNUSED(data);
-    Q_UNUSED(maxlen);
-    return -1;
+    return false;
 }
 
 bool QProcessPrivate::waitForWrite(int msecs)

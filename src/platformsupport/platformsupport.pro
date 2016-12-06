@@ -7,7 +7,6 @@ mac:LIBS_PRIVATE += -lz
 DEFINES += QT_NO_CAST_FROM_ASCII
 PRECOMPILED_HEADER = ../corelib/global/qt_pch.h
 
-include(cfsocketnotifier/cfsocketnotifier.pri)
 include(cglconvenience/cglconvenience.pri)
 include(eglconvenience/eglconvenience.pri)
 include(eventdispatchers/eventdispatchers.pri)
@@ -22,7 +21,11 @@ include(accessibility/accessibility.pri)
 include(linuxaccessibility/linuxaccessibility.pri)
 include(clipboard/clipboard.pri)
 include(platformcompositor/platformcompositor.pri)
-contains(QT_CONFIG, dbus) {
+
+# dbus convenience, but not for darwin: the platform
+# plugins for these platforms do not use dbus and we
+# don't want to create a false dependency.
+!darwin: contains(QT_CONFIG, dbus) {
     include(dbusmenu/dbusmenu.pri)
     include(dbustray/dbustray.pri)
 }

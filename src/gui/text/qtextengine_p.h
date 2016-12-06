@@ -107,6 +107,22 @@ struct Q_GUI_EXPORT glyph_metrics_t
 
     glyph_metrics_t transformed(const QTransform &xform) const;
     inline bool isValid() const {return x != 100000 && y != 100000;}
+
+    inline QFixed leftBearing() const
+    {
+        if (!isValid())
+            return QFixed();
+
+        return x;
+    }
+
+    inline QFixed rightBearing() const
+    {
+        if (!isValid())
+            return QFixed();
+
+        return xoff - x - width;
+    }
 };
 Q_DECLARE_TYPEINFO(glyph_metrics_t, Q_PRIMITIVE_TYPE);
 
@@ -351,8 +367,7 @@ struct Q_AUTOTEST_EXPORT QScriptLine
     uint leadingIncluded : 1;
     QFixed height() const { return ascent + descent
                             + (leadingIncluded?  qMax(QFixed(),leading) : QFixed()); }
-    QFixed base() const { return ascent
-                          + (leadingIncluded ? qMax(QFixed(),leading) : QFixed()); }
+    QFixed base() const { return ascent; }
     void setDefaultHeight(QTextEngine *eng);
     void operator+=(const QScriptLine &other);
 };
@@ -400,6 +415,7 @@ public:
     };
 
     struct ItemDecoration {
+        ItemDecoration() {} // for QVector, don't use
         ItemDecoration(qreal x1, qreal x2, qreal y, const QPen &pen):
             x1(x1), x2(x2), y(y), pen(pen) {}
 
@@ -409,7 +425,7 @@ public:
         QPen pen;
     };
 
-    typedef QList<ItemDecoration> ItemDecorationList;
+    typedef QVector<ItemDecoration> ItemDecorationList;
 
     QTextEngine();
     QTextEngine(const QString &str, const QFont &f);
@@ -496,7 +512,7 @@ public:
 
     void freeMemory();
 
-    int findItem(int strPos) const;
+    int findItem(int strPos, int firstItem = 0) const;
     inline QTextFormatCollection *formatCollection() const {
         if (block.docHandle())
             return block.docHandle()->formatCollection();
@@ -570,9 +586,9 @@ public:
 
     inline bool hasFormats() const
     { return block.docHandle() || (specialData && !specialData->formats.isEmpty()); }
-    inline QList<QTextLayout::FormatRange> formats() const
-    { return specialData ? specialData->formats : QList<QTextLayout::FormatRange>(); }
-    void setFormats(const QList<QTextLayout::FormatRange> &formats);
+    inline QVector<QTextLayout::FormatRange> formats() const
+    { return specialData ? specialData->formats : QVector<QTextLayout::FormatRange>(); }
+    void setFormats(const QVector<QTextLayout::FormatRange> &formats);
 
 private:
     static void init(QTextEngine *e);
@@ -580,7 +596,7 @@ private:
     struct SpecialData {
         int preeditPosition;
         QString preeditText;
-        QList<QTextLayout::FormatRange> formats;
+        QVector<QTextLayout::FormatRange> formats;
         QVector<QTextCharFormat> resolvedFormats;
         // only used when no docHandle is available
         QScopedPointer<QTextFormatCollection> formatCollection;
@@ -627,7 +643,13 @@ private:
     void addRequiredBoundaries() const;
     void shapeText(int item) const;
 #ifdef QT_ENABLE_HARFBUZZ_NG
-    int shapeTextWithHarfbuzzNG(const QScriptItem &si, const ushort *string, int itemLength, QFontEngine *fontEngine, const QVector<uint> &itemBoundaries, bool kerningEnabled) const;
+    int shapeTextWithHarfbuzzNG(const QScriptItem &si,
+                                const ushort *string,
+                                int itemLength,
+                                QFontEngine *fontEngine,
+                                const QVector<uint> &itemBoundaries,
+                                bool kerningEnabled,
+                                bool hasLetterSpacing) const;
 #endif
     int shapeTextWithHarfbuzz(const QScriptItem &si, const ushort *string, int itemLength, QFontEngine *fontEngine, const QVector<uint> &itemBoundaries, bool kerningEnabled) const;
 
@@ -643,6 +665,7 @@ public:
     LayoutData _layoutData;
     void *_memory[MemSize];
 };
+Q_DECLARE_TYPEINFO(QTextEngine::ItemDecoration, Q_MOVABLE_TYPE);
 
 struct QTextLineItemIterator
 {

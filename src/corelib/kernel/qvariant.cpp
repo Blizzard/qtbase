@@ -413,7 +413,7 @@ static bool convert(const QVariant::Private *d, int t, void *result, bool *ok)
         QString *str = static_cast<QString *>(result);
         switch (d->type) {
         case QVariant::Char:
-            *str = QString(*v_cast<QChar>(d));
+            *str = *v_cast<QChar>(d);
             break;
         case QMetaType::Char:
         case QMetaType::SChar:
@@ -945,6 +945,26 @@ static bool convert(const QVariant::Private *d, int t, void *result, bool *ok)
             }
         }
 #endif
+        if (QMetaType::typeFlags(t) & QMetaType::IsEnumeration) {
+            qlonglong value = qConvertToNumber(d, ok);
+            if (*ok) {
+                switch (QMetaType::sizeOf(t)) {
+                case 1:
+                    *static_cast<signed char *>(result) = value;
+                    return true;
+                case 2:
+                    *static_cast<qint16 *>(result) = value;
+                    return true;
+                case 4:
+                    *static_cast<qint32 *>(result) = value;
+                    return true;
+                case 8:
+                    *static_cast<qint64 *>(result) = value;
+                    return true;
+                }
+            }
+            return *ok;
+        }
         return false;
     }
     return true;
@@ -2702,7 +2722,7 @@ qlonglong QVariant::toLongLong(bool *ok) const
 }
 
 /*!
-    Returns the variant as as an unsigned long long int if the
+    Returns the variant as an unsigned long long int if the
     variant has type() \l QMetaType::ULongLong, \l QMetaType::Bool,
     \l QMetaType::QByteArray, \l QMetaType::QChar, \l QMetaType::Double,
     \l QMetaType::Int, \l QMetaType::LongLong, \l QMetaType::QString, or
@@ -2819,7 +2839,7 @@ static const quint32 qCanConvertMatrix[QVariant::LastCoreType + 1] =
 
 /*Int*/           1 << QVariant::UInt       | 1 << QVariant::String     | 1 << QVariant::Double
                 | 1 << QVariant::Bool       | 1 << QVariant::LongLong   | 1 << QVariant::ULongLong
-                | 1 << QVariant::Char       | 1 << QVariant::ByteArray,
+                | 1 << QVariant::Char       | 1 << QVariant::ByteArray  | 1 << QVariant::Int,
 
 /*UInt*/          1 << QVariant::Int        | 1 << QVariant::String     | 1 << QVariant::Double
                 | 1 << QVariant::Bool       | 1 << QVariant::LongLong   | 1 << QVariant::ULongLong
@@ -2891,6 +2911,7 @@ static const quint32 qCanConvertMatrix[QVariant::LastCoreType + 1] =
 
 /*QUuid*/         1 << QVariant::String
 };
+static const size_t qCanConvertMatrixMaximumTargetType = 8 * sizeof(*qCanConvertMatrix);
 
 #ifndef QT_BOOTSTRAPPED
 /*!
@@ -3140,8 +3161,9 @@ bool QVariant::canConvert(int targetTypeId) const
         case QMetaType::ULong:
         case QMetaType::Short:
         case QMetaType::UShort:
-            return qCanConvertMatrix[QVariant::Int] & (1 << currentType)
-                || currentType == QVariant::Int
+            return currentType == QVariant::Int
+                || (currentType < qCanConvertMatrixMaximumTargetType
+                    && qCanConvertMatrix[QVariant::Int] & (1U << currentType))
                 || QMetaType::typeFlags(currentType) & QMetaType::IsEnumeration;
         case QMetaType::QObjectStar:
             return canConvertMetaObject(currentType, targetTypeId, d.data.o);
@@ -3152,7 +3174,8 @@ bool QVariant::canConvert(int targetTypeId) const
 
     if (targetTypeId == String && currentType == StringList)
         return v_cast<QStringList>(&d)->count() == 1;
-    return qCanConvertMatrix[targetTypeId] & (1 << currentType);
+    return currentType < qCanConvertMatrixMaximumTargetType
+        && qCanConvertMatrix[targetTypeId] & (1U << currentType);
 }
 
 /*!
@@ -3448,7 +3471,7 @@ static int numericCompare(const QVariant::Private *d1, const QVariant::Private *
     Q_ASSERT(ok);
     qreal r2 = qConvertToRealNumber(d2, &ok);
     Q_ASSERT(ok);
-    if (qFuzzyCompare(r1, r2))
+    if (r1 == r2 || qFuzzyCompare(r1, r2))
         return 0;
     return r1 < r2 ? -1 : 1;
 }
@@ -3537,6 +3560,8 @@ int QVariant::compare(const QVariant &v) const
         return v1.toTime() < v2.toTime() ? -1 : 1;
     case QVariant::DateTime:
         return v1.toDateTime() < v2.toDateTime() ? -1 : 1;
+    case QVariant::StringList:
+        return v1.toStringList() < v2.toStringList() ? -1 : 1;
     }
     int r = v1.toString().compare(v2.toString(), Qt::CaseInsensitive);
     if (r == 0) {
@@ -3832,7 +3857,11 @@ QDebug operator<<(QDebug dbg, const QVariant::Type p)
 /*!
     \internal
 */
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 QSequentialIterable::QSequentialIterable(QtMetaTypePrivate::QSequentialIterableImpl impl)
+#else
+QSequentialIterable::QSequentialIterable(const QtMetaTypePrivate::QSequentialIterableImpl &impl)
+#endif
   : m_impl(impl)
 {
 }
@@ -4140,7 +4169,11 @@ QSequentialIterable::const_iterator QSequentialIterable::const_iterator::operato
 /*!
     \internal
 */
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 QAssociativeIterable::QAssociativeIterable(QtMetaTypePrivate::QAssociativeIterableImpl impl)
+#else
+QAssociativeIterable::QAssociativeIterable(const QtMetaTypePrivate::QAssociativeIterableImpl &impl)
+#endif
   : m_impl(impl)
 {
 }

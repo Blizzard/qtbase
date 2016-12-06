@@ -257,9 +257,9 @@ public:
 
     EGLDisplay display() const { return m_display; }
 
-    QWindowsOpenGLContext *createContext(QOpenGLContext *context);
-    void *moduleHandle() const { return libGLESv2.moduleHandle(); }
-    QOpenGLContext::OpenGLModuleType moduleType() const { return QOpenGLContext::LibGLES; }
+    QWindowsOpenGLContext *createContext(QOpenGLContext *context) Q_DECL_OVERRIDE;
+    void *moduleHandle() const Q_DECL_OVERRIDE { return libGLESv2.moduleHandle(); }
+    QOpenGLContext::OpenGLModuleType moduleType() const Q_DECL_OVERRIDE { return QOpenGLContext::LibGLES; }
 
     void *createWindowSurface(void *nativeWindow, void *nativeConfig, int *err) Q_DECL_OVERRIDE;
     void destroyWindowSurface(void *nativeSurface) Q_DECL_OVERRIDE;
@@ -270,10 +270,11 @@ public:
     static QWindowsLibGLESv2 libGLESv2;
 
 private:
-    QWindowsEGLStaticContext(EGLDisplay display, int version);
+    explicit QWindowsEGLStaticContext(EGLDisplay display);
+    static bool initializeAngle(QWindowsOpenGLTester::Renderers preferredType, HDC dc,
+                                EGLDisplay *display, EGLint *major, EGLint *minor);
 
     const EGLDisplay m_display;
-    const int m_version; //! majorVersion<<8 + minorVersion
 };
 
 class QWindowsEGLContext : public QWindowsOpenGLContext

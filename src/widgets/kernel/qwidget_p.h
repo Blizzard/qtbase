@@ -68,13 +68,13 @@ QT_BEGIN_NAMESPACE
 // Extra QWidget data
 //  - to minimize memory usage for members that are seldom used.
 //  - top-level widgets have extra extra data to reduce cost further
-class QWidgetWindow;
 class QPaintEngine;
 class QPixmap;
 class QWidgetBackingStore;
 class QGraphicsProxyWidget;
 class QWidgetItemV2;
 class QOpenGLContext;
+class QPlatformTextureList;
 
 class QStyle;
 
@@ -153,6 +153,8 @@ struct QTLWExtra {
     QWidgetBackingStoreTracker backingStoreTracker;
     QBackingStore *backingStore;
     QPainter *sharedPainter;
+    QWindow *window;
+    QOpenGLContext *shareContext;
 
     // Implicit pointers (shared_null).
     QString caption; // widget caption
@@ -167,6 +169,9 @@ struct QTLWExtra {
     QRect frameStrut;
     QRect normalGeometry; // used by showMin/maximized/FullScreen
     Qt::WindowFlags savedFlags; // Save widget flags while showing fullscreen
+    int initialScreenIndex; // Screen number when passing a QDesktop[Screen]Widget as parent.
+
+    QVector<QPlatformTextureList *> widgetTextures;
 
     // *************************** Cross-platform bit fields ****************************
     uint opacity : 8;
@@ -210,9 +215,6 @@ struct QTLWExtra {
     // starting position as 0,0 instead of the normal starting position.
     bool wasMaximized;
 #endif
-    QWidgetWindow *window;
-    QOpenGLContext *shareContext;
-    int initialScreenIndex; // Screen number when passing a QDesktop[Screen]Widget as parent.
 };
 
 struct QWExtra {
@@ -331,7 +333,7 @@ public:
     void init(QWidget *desktopWidget, Qt::WindowFlags f);
     void create_sys(WId window, bool initializeWindow, bool destroyOldWindow);
     void createRecursively();
-    void createWinId(WId id = 0);
+    void createWinId();
 
     void createTLExtra();
     void createExtra();
@@ -740,6 +742,10 @@ public:
 #ifndef QT_NO_IM
     uint inheritsInputMethodHints : 1;
 #endif
+#ifndef QT_NO_OPENGL
+    uint renderToTextureReallyDirty : 1;
+    uint renderToTextureComposeActive : 1;
+#endif
 
     // *************************** Platform specific ************************************
 #if defined(Q_OS_WIN)
@@ -752,7 +758,6 @@ public:
 
     void setWindowRole();
     void sendStartupMessage(const char *message) const;
-    void setNetWmWindowTypes();
     void x11UpdateIsOpaque();
     bool isBackgroundInherited() const;
     void updateX11AcceptFocus();
@@ -849,6 +854,8 @@ public:
     static bool qt_widget_rgn(QWidget *, short, RgnHandle, bool);
     void registerTouchWindow(bool enable = true);
 #endif
+    void setNetWmWindowTypes(bool skipIfMissing = false);
+
     bool stealKeyboardGrab(bool grab);
     bool stealMouseGrab(bool grab);
 };

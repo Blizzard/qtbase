@@ -69,6 +69,8 @@ private slots:
     void resolving();
     void toString_data();
     void toString();
+    void toString_PreferLocalFile_data();
+    void toString_PreferLocalFile();
     void toString_constructed_data();
     void toString_constructed();
     void toAndFromStringList_data();
@@ -79,6 +81,8 @@ private slots:
     void toLocalFile();
     void fromLocalFile_data();
     void fromLocalFile();
+    void fromLocalFileNormalize_data();
+    void fromLocalFileNormalize();
     void macTypes();
     void relative();
     void compat_legacy();
@@ -121,7 +125,8 @@ private slots:
     void isValid();
     void schemeValidator_data();
     void schemeValidator();
-    void invalidSchemeValidator();
+    void setScheme_data();
+    void setScheme();
     void strictParser_data();
     void strictParser();
     void tolerantParser();
@@ -144,6 +149,8 @@ private slots:
     void hostFlags_data();
     void hostFlags();
     void setPort();
+    void port_data();
+    void port();
     void toEncoded_data();
     void toEncoded();
     void setAuthority_data();
@@ -896,13 +903,11 @@ void tst_QUrl::resolving_data()
 
     // Some parsers allow the scheme name to be present in a relative URI
     // reference if it is the same as the base URI scheme.  This is
-    // considered to be a loophole in prior specifications of partial URI
-    // [RFC1630]. Its use should be avoided, but is allowed for backward
-    // compatibility.
-    // For strict parsers :
-//    QTest::newRow("http:g [for strict parsers]")         << QString::fromLatin1("http://a/b/c/d;p?q") << QString::fromLatin1("http:g") << QString::fromLatin1("http:g");
-    // For backward compatibility :
-    QTest::newRow("http:g [for backward compatibility]") << QString::fromLatin1("http://a/b/c/d;p?q") << QString::fromLatin1("http:g") << QString::fromLatin1("http://a/b/c/g");
+    // considered to be a loophole in prior specifications of partial URI [RFC1630],
+    //QTest::newRow("http:g [for backward compatibility]") << QString::fromLatin1("http://a/b/c/d;p?q") << QString::fromLatin1("http:g") << QString::fromLatin1("http://a/b/c/g");
+    // However we don't do that anymore, as per RFC3986, in order for the data:subpage testcase below to work.
+    QTest::newRow("http:g")       << QString::fromLatin1("http://a/b/c/d;p?q") << QString::fromLatin1("http:g") << QString::fromLatin1("http:g");
+    QTest::newRow("data:subpage") << QString::fromLatin1("data:text/plain, main page") << QString::fromLatin1("data:text/plain, subpage") << QString::fromLatin1("data:text/plain, subpage");
 
     // Resolve relative with relative
     QTest::newRow("../a (1)")  << QString::fromLatin1("b") << QString::fromLatin1("../a")  << QString::fromLatin1("a");
@@ -914,6 +919,10 @@ void tst_QUrl::resolving_data()
     QTest::newRow("../a (6)")  << QString::fromLatin1("/b/a") << QString::fromLatin1("../a")  << QString::fromLatin1("/a");
     QTest::newRow("../a (7)")  << QString::fromLatin1("/b/c/a") << QString::fromLatin1("../a")  << QString::fromLatin1("/b/a");
     QTest::newRow("../a (8)")  << QString::fromLatin1("/b") << QString::fromLatin1("/a")  << QString::fromLatin1("/a");
+
+    // More tests from KDE
+    QTest::newRow("brackets")  << QString::fromLatin1("http://www.calorieking.com/personal/diary/") << QString::fromLatin1("/personal/diary/rpc.php?C=jsrs1&F=getDiaryDay&P0=[2006-3-8]&U=1141858921458") << QString::fromLatin1("http://www.calorieking.com/personal/diary/rpc.php?C=jsrs1&F=getDiaryDay&P0=[2006-3-8]&U=1141858921458");
+    QTest::newRow("javascript")<< QString::fromLatin1("http://www.youtube.com/?v=JvOSnRD5aNk") << QString::fromLatin1("javascript:window.location+\"__flashplugin_unique__\"")  << QString::fromLatin1("javascript:window.location+%22__flashplugin_unique__%22");
 }
 
 void tst_QUrl::resolving()
@@ -1047,6 +1056,29 @@ void tst_QUrl::toString()
     QCOMPARE(url.toString(opt), string);
 
     QCOMPARE(url.adjusted(opt).toString(), string);
+}
+void tst_QUrl::toString_PreferLocalFile_data()
+{
+    QTest::addColumn<QUrl>("url");
+    QTest::addColumn<QString>("string");
+
+#ifdef Q_OS_WIN
+    QTest::newRow("win-drive") << QUrl(QString::fromLatin1("file:///c:/windows/regedit.exe"))
+                               << QString::fromLatin1("c:/windows/regedit.exe");
+    QTest::newRow("win-share") << QUrl(QString::fromLatin1("//Anarki/homes"))
+                               << QString::fromLatin1("//anarki/homes");
+#else
+    QTest::newRow("unix-path") << QUrl(QString::fromLatin1("file:///tmp"))
+                               << QString::fromLatin1("/tmp");
+#endif
+}
+
+void tst_QUrl::toString_PreferLocalFile()
+{
+    QFETCH(QUrl, url);
+    QFETCH(QString, string);
+
+    QCOMPARE(url.toString(QUrl::PreferLocalFile), string);
 }
 
 void tst_QUrl::toAndFromStringList_data()
@@ -1242,16 +1274,6 @@ void tst_QUrl::fromLocalFile_data()
                         << QString::fromLatin1("/");
     QTest::newRow("data7") << QString::fromLatin1("/Mambo <#5>.mp3") << QString::fromLatin1("file:///Mambo <%235>.mp3")
                            << QString::fromLatin1("/Mambo <#5>.mp3");
-    QTest::newRow("data8") << QString::fromLatin1("/a%.txt") << QString::fromLatin1("file:///a%25.txt")
-                           << QString::fromLatin1("/a%.txt");
-    QTest::newRow("data9") << QString::fromLatin1("/a%25.txt") << QString::fromLatin1("file:///a%2525.txt")
-                           << QString::fromLatin1("/a%25.txt");
-    QTest::newRow("data10") << QString::fromLatin1("/%80.txt") << QString::fromLatin1("file:///%2580.txt")
-                            << QString::fromLatin1("/%80.txt");
-    QTest::newRow("data11") << QString::fromLatin1("./a.txt") << QString::fromLatin1("file:a.txt") << QString::fromLatin1("a.txt");
-    QTest::newRow("data12") << QString::fromLatin1("././a.txt") << QString::fromLatin1("file:a.txt") << QString::fromLatin1("a.txt");
-    QTest::newRow("data13") << QString::fromLatin1("b/../a.txt") << QString::fromLatin1("file:a.txt") << QString::fromLatin1("a.txt");
-    QTest::newRow("data14") << QString::fromLatin1("/b/../a.txt") << QString::fromLatin1("file:///a.txt") << QString::fromLatin1("/a.txt");
 }
 
 void tst_QUrl::fromLocalFile()
@@ -1264,6 +1286,41 @@ void tst_QUrl::fromLocalFile()
 
     QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
     QCOMPARE(url.path(), thePath);
+}
+
+void tst_QUrl::fromLocalFileNormalize_data()
+{
+    QTest::addColumn<QString>("theFile"); // should support the fromLocalFile/toLocalFile roundtrip (so no //host or windows path)
+    QTest::addColumn<QString>("theUrl");
+    QTest::addColumn<QString>("urlWithNormalizedPath");
+
+    QTest::newRow("data0") << QString::fromLatin1("/a.txt") << QString::fromLatin1("file:///a.txt") << QString::fromLatin1("file:///a.txt");
+    QTest::newRow("data1") << QString::fromLatin1("a.txt") << QString::fromLatin1("file:a.txt") << QString::fromLatin1("file:a.txt");
+    QTest::newRow("data8") << QString::fromLatin1("/a%.txt") << QString::fromLatin1("file:///a%25.txt")
+                           << QString::fromLatin1("file:///a%25.txt");
+    QTest::newRow("data9") << QString::fromLatin1("/a%25.txt") << QString::fromLatin1("file:///a%2525.txt")
+                           << QString::fromLatin1("file:///a%2525.txt");
+    QTest::newRow("data10") << QString::fromLatin1("/%80.txt") << QString::fromLatin1("file:///%2580.txt")
+                            << QString::fromLatin1("file:///%2580.txt");
+    QTest::newRow("data11") << QString::fromLatin1("./a.txt") << QString::fromLatin1("file:./a.txt") << QString::fromLatin1("file:a.txt");
+    QTest::newRow("data12") << QString::fromLatin1("././a.txt") << QString::fromLatin1("file:././a.txt") << QString::fromLatin1("file:a.txt");
+    QTest::newRow("data13") << QString::fromLatin1("b/../a.txt") << QString::fromLatin1("file:b/../a.txt") << QString::fromLatin1("file:a.txt");
+    QTest::newRow("data14") << QString::fromLatin1("/b/../a.txt") << QString::fromLatin1("file:///b/../a.txt") << QString::fromLatin1("file:///a.txt");
+    QTest::newRow("data15") << QString::fromLatin1("/b/.") << QString::fromLatin1("file:///b/.") << QString::fromLatin1("file:///b");
+}
+
+void tst_QUrl::fromLocalFileNormalize()
+{
+    QFETCH(QString, theFile);
+    QFETCH(QString, theUrl);
+    QFETCH(QString, urlWithNormalizedPath);
+
+    QUrl url = QUrl::fromLocalFile(theFile);
+
+    QCOMPARE(url.toString(QUrl::DecodeReserved), theUrl);
+    QCOMPARE(url.toLocalFile(), theFile); // roundtrip
+    QCOMPARE(url.path(), theFile); // works as well as long as we don't test windows paths
+    QCOMPARE(url.toString(QUrl::NormalizePathSegments), urlWithNormalizedPath);
 }
 
 void tst_QUrl::macTypes()
@@ -1695,6 +1752,9 @@ void tst_QUrl::symmetry()
     QUrl url(QString::fromUtf8("http://www.räksmörgås.se/pub?a=b&a=dø&a=f#vræl"));
     QCOMPARE(url.scheme(), QString::fromLatin1("http"));
     QCOMPARE(url.host(), QString::fromUtf8("www.räksmörgås.se"));
+    QCOMPARE(url.host(QUrl::EncodeSpaces), QString::fromUtf8("www.räksmörgås.se"));
+    QCOMPARE(url.host(QUrl::EncodeUnicode), QString::fromUtf8("www.xn--rksmrgs-5wao1o.se"));
+    QCOMPARE(url.host(QUrl::EncodeUnicode | QUrl::EncodeSpaces), QString::fromUtf8("www.xn--rksmrgs-5wao1o.se"));
     QCOMPARE(url.path(), QString::fromLatin1("/pub"));
     // this will be encoded ...
     QCOMPARE(url.encodedQuery().constData(), QString::fromLatin1("a=b&a=d%C3%B8&a=f").toLatin1().constData());
@@ -2025,85 +2085,112 @@ void tst_QUrl::isValid()
 
 void tst_QUrl::schemeValidator_data()
 {
-    QTest::addColumn<QByteArray>("encodedUrl");
+    QTest::addColumn<QString>("input");
     QTest::addColumn<bool>("result");
-    QTest::addColumn<QString>("toString");
+    QTest::addColumn<QString>("scheme");
 
-    QTest::newRow("empty") << QByteArray() << false << QString();
+    //    scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
 
-    // ftp
-    QTest::newRow("ftp:") << QByteArray("ftp:") << true << QString("ftp:");
-    QTest::newRow("ftp://ftp.qt-project.org")
-        << QByteArray("ftp://ftp.qt-project.org")
-        << true << QString("ftp://ftp.qt-project.org");
-    QTest::newRow("ftp://ftp.qt-project.org/")
-        << QByteArray("ftp://ftp.qt-project.org/")
-        << true << QString("ftp://ftp.qt-project.org/");
-    QTest::newRow("ftp:/index.html")
-        << QByteArray("ftp:/index.html")
-        << false << QString();
+    QTest::newRow("empty") << QString() << false << QString();
 
-    // mailto
-    QTest::newRow("mailto:") << QByteArray("mailto:") << true << QString("mailto:");
-    QTest::newRow("mailto://smtp.trolltech.com/ole@bull.name")
-        << QByteArray("mailto://smtp.trolltech.com/ole@bull.name") << false << QString();
-    QTest::newRow("mailto:") << QByteArray("mailto:") << true << QString("mailto:");
-    QTest::newRow("mailto:ole@bull.name")
-        << QByteArray("mailto:ole@bull.name") << true << QString("mailto:ole@bull.name");
+    // uncontroversial ones
+    QTest::newRow("ftp") << "ftp://ftp.example.com/" << true << "ftp";
+    QTest::newRow("http") << "http://www.example.com/" << true << "http";
+    QTest::newRow("mailto") << "mailto:smith@example.com" << true << "mailto";
+    QTest::newRow("file-1slash") << "file:/etc/passwd" << true << "file";
+    QTest::newRow("file-2slashes") << "file://server/etc/passwd" << true << "file";
+    QTest::newRow("file-3slashes") << "file:///etc/passwd" << true << "file";
 
-    // file
-    QTest::newRow("file:") << QByteArray("file:/etc/passwd") << true << QString("file:///etc/passwd");
+    QTest::newRow("mailto+subject") << "mailto:smith@example.com?subject=Hello%20World" << true << "mailto";
+    QTest::newRow("mailto+host") << "mailto://smtp.example.com/smith@example.com" << true << "mailto";
+
+    // valid, but unexpected
+    QTest::newRow("ftp-nohost") << "ftp:/etc/passwd" << true << "ftp";
+    QTest::newRow("http-nohost") << "http:/etc/passwd" << true << "http";
+    QTest::newRow("mailto-nomail") << "mailto://smtp.example.com" << true << "mailto";
+
+    // schemes with numbers
+    QTest::newRow("digits") << "proto2://" << true << "proto2";
+
+    // schemes with dots, dashes, and pluses
+    QTest::newRow("svn+ssh") << "svn+ssh://svn.example.com" << true << "svn+ssh";
+    QTest::newRow("withdash") << "svn-ssh://svn.example.com" << true << "svn-ssh";
+    QTest::newRow("withdots") << "org.qt-project://qt-project.org" << true << "org.qt-project";
+
+    // lowercasing
+    QTest::newRow("FTP") << "FTP://ftp.example.com/" << true << "ftp";
+    QTest::newRow("HTTP") << "HTTP://www.example.com/" << true << "http";
+    QTest::newRow("MAILTO") << "MAILTO:smith@example.com" << true << "mailto";
+    QTest::newRow("FILE") << "FILE:/etc/passwd" << true << "file";
+    QTest::newRow("SVN+SSH") << "SVN+SSH://svn.example.com" << true << "svn+ssh";
+    QTest::newRow("WITHDASH") << "SVN-SSH://svn.example.com" << true << "svn-ssh";
+    QTest::newRow("WITHDOTS") << "ORG.QT-PROJECT://qt-project.org" << true << "org.qt-project";
+
+    // invalid entries
+    QTest::newRow("start-digit") << "1http://example.com" << false << "1http";
+    QTest::newRow("start-plus") << "+ssh://user@example.com" << false << "+ssh";
+    QTest::newRow("start-dot") << ".org.example:///" << false << ".org.example";
+    QTest::newRow("with-space") << "a b://" << false << "a b";
+    QTest::newRow("with-non-ascii") << "\304\245\305\243\305\245\321\200://example.com" << false << "\304\245\305\243\305\245\321\200";
+    QTest::newRow("with-control1") << "http\1://example.com" << false << "http\1";
+    QTest::newRow("with-control127") << "http\177://example.com" << false << "http\177";
+    QTest::newRow("with-null") << QString::fromLatin1("http\0://example.com", 19) << false << QString::fromLatin1("http\0", 5);
+
+    QTest::newRow("percent-encoded") << "%68%74%%74%70://example.com" << false << "%68%74%%74%70";
+
+    static const char controls[] = "!\"$&'()*,;<=>[\\]^_`{|}~";
+    for (size_t i = 0; i < sizeof(controls) - 1; ++i)
+        QTest::newRow(("with-" + QByteArray(1, controls[i])).constData())
+                << QString("pre%1post://example.com/").arg(QLatin1Char(controls[i]))
+                << false << QString("pre%1post").arg(QLatin1Char(controls[i]));
 }
 
 void tst_QUrl::schemeValidator()
 {
-    QFETCH(QByteArray, encodedUrl);
+    QFETCH(QString, input);
     QFETCH(bool, result);
-    QFETCH(QString, toString);
 
-    QUrl url = QUrl::fromEncoded(encodedUrl);
-    QEXPECT_FAIL("ftp:/index.html", "high-level URL validation not reimplemented yet", Abort);
-    QEXPECT_FAIL("mailto://smtp.trolltech.com/ole@bull.name", "high-level URL validation not reimplemented yet", Abort);
+    QUrl url(input);
     QCOMPARE(url.isValid(), result);
-    if (!result)
+    if (result) {
+        QFETCH(QString, scheme);
+        QCOMPARE(url.scheme(), scheme);
+
+        // reconstruct with just the scheme:
+        url.setUrl(scheme + ':');
+        QVERIFY(url.isValid());
+        QCOMPARE(url.scheme(), scheme);
+    } else {
         QVERIFY(url.toString().isEmpty());
+    }
 }
 
-void tst_QUrl::invalidSchemeValidator()
+void tst_QUrl::setScheme_data()
 {
-    // test that if scheme does not start with an ALPHA, QUrl::isValid() returns false
-    {
-        QUrl url("1http://qt-project.org");
-        QVERIFY(url.scheme().isEmpty());
-        QVERIFY(url.path().startsWith("1http"));
-    }
-    {
-        QUrl url("http://qt-project.org");
-        url.setScheme("111http://qt-project.org");
-        QCOMPARE(url.isValid(), false);
-        QVERIFY(url.toString().isEmpty());
-    }
-    // non-ALPHA character at other positions in the scheme are ok
-    {
-        QUrl url("ht111tp://qt-project.org", QUrl::StrictMode);
-        QVERIFY(url.isValid());
-        QCOMPARE(url.scheme(), QString("ht111tp"));
-        QVERIFY(!url.toString().isEmpty());
-    }
-    {
-        QUrl url("http://qt-project.org");
-        url.setScheme("ht123tp://qt-project.org");
-        QVERIFY(!url.isValid());
-        QVERIFY(url.toString().isEmpty());
-        url.setScheme("http");
-        QVERIFY(url.isValid());
-        QVERIFY(!url.toString().isEmpty());
-    }
-    {
-        QUrl url = QUrl::fromEncoded("ht321tp://qt-project.org", QUrl::StrictMode);
-        QVERIFY(url.isValid());
-        QVERIFY(!url.toString().isEmpty());
-    }
+    schemeValidator_data();
+
+    // a couple more which wouldn't work in parsing a full URL
+    QTest::newRow("with-slash") << QString() << false << "http/";
+    QTest::newRow("with-question") << QString() << false << "http?";
+    QTest::newRow("with-hash") << QString() << false << "http#";
+}
+
+void tst_QUrl::setScheme()
+{
+    QFETCH(QString, scheme);
+    QFETCH(bool, result);
+    QString expectedScheme;
+    if (result)
+        expectedScheme = scheme;
+
+    QUrl url;
+    url.setScheme(scheme);
+    QCOMPARE(url.isValid(), result);
+    QCOMPARE(url.scheme(), expectedScheme);
+
+    url.setScheme(scheme.toUpper());
+    QCOMPARE(url.isValid(), result);
+    QCOMPARE(url.scheme(), expectedScheme);
 }
 
 void tst_QUrl::strictParser_data()
@@ -2153,8 +2240,6 @@ void tst_QUrl::strictParser_data()
     // FIXME: add some tests for prohibited BiDi (RFC 3454 section 6)
 
     // port errors happen in TolerantMode too
-    QTest::newRow("empty-port-1") << "http://example.com:" << "Port field was empty";
-    QTest::newRow("empty-port-2") << "http://example.com:/" << "Port field was empty";
     QTest::newRow("invalid-port-1") << "http://example.com:-1" << "Invalid port";
     QTest::newRow("invalid-port-2") << "http://example.com:abc" << "Invalid port";
     QTest::newRow("invalid-port-3") << "http://example.com:9a" << "Invalid port";
@@ -2731,6 +2816,31 @@ void tst_QUrl::setPort()
     }
 }
 
+void tst_QUrl::port_data()
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<int>("port");
+
+    QTest::newRow("no-port-1")    << "http://example.com" << -1;
+    QTest::newRow("no-port-2")    << "http://example.com/" << -1;
+    QTest::newRow("empty-port-1") << "http://example.com:" << -1;
+    QTest::newRow("empty-port-2") << "http://example.com:/" << -1;
+    QTest::newRow("zero-port-1") << "http://example.com:0" << 0;
+    QTest::newRow("zero-port-2") << "http://example.com:0/" << 0;
+    QTest::newRow("set-port-1")   << "http://example.com:80" << 80;
+    QTest::newRow("set-port-2")   << "http://example.com:80/" << 80;
+}
+
+void tst_QUrl::port()
+{
+    QFETCH(QString, input);
+    QFETCH(int, port);
+
+    QUrl url(input);
+    QVERIFY(url.isValid());
+    QCOMPARE(url.port(), port);
+}
+
 void tst_QUrl::toEncoded_data()
 {
     QTest::addColumn<QByteArray>("url");
@@ -2960,12 +3070,21 @@ void tst_QUrl::fromUserInputWithCwd_data()
     while (it.hasNext()) {
         it.next();
         QUrl url = QUrl::fromLocalFile(it.filePath());
+        if (it.fileName() == QLatin1String(".")) {
+            url = QUrl::fromLocalFile(QDir::currentPath()
+#ifdef Q_OS_WINRT
+                                      + QLatin1Char('/')
+#endif
+                                      ); // fromUserInput cleans the path
+        }
         QTest::newRow(QString("file-%1").arg(c++).toLatin1()) << it.fileName() << QDir::currentPath() << url << url;
     }
+#ifndef Q_OS_WINRT // WinRT cannot cd outside current / sandbox
     QDir parent = QDir::current();
     QVERIFY(parent.cdUp());
     QUrl parentUrl = QUrl::fromLocalFile(parent.path());
     QTest::newRow("dotdot") << ".." << QDir::currentPath() << parentUrl << parentUrl;
+#endif
 
     QTest::newRow("nonexisting") << "nonexisting" << QDir::currentPath() << QUrl("http://nonexisting") << QUrl::fromLocalFile(QDir::currentPath() + "/nonexisting");
     QTest::newRow("short-url") << "example.org" << QDir::currentPath() << QUrl("http://example.org") << QUrl::fromLocalFile(QDir::currentPath() + "/example.org");
@@ -3021,6 +3140,8 @@ void tst_QUrl::fileName_data()
                               << QString() << "tmp.txt" << "tmp.txt";
     QTest::newRow("encoded") << "print:/specials/Print%20To%20File%20(PDF%252FAcrobat)"
                               << "/specials/" << "Print To File (PDF%252FAcrobat)" << "Print To File (PDF%2FAcrobat)";
+    QTest::newRow("endsWithDot") << "file:///temp/."
+                              << "/temp/" << "." << ".";
 }
 
 void tst_QUrl::fileName()
@@ -3513,7 +3634,7 @@ void tst_QUrl::setComponents_data()
                                       << PrettyDecoded << "/path" << "trash:/path";
     QTest::newRow("path-withdotdot") << QUrl("file:///tmp")
                                       << int(Path) << "//tmp/..///root/." << Tolerant << true
-                                      << PrettyDecoded << "/root" << "file:///root";
+                                      << PrettyDecoded << "/tmp/..///root/." << "file:///tmp/..///root/.";
 
     // the other fields can be present and be empty
     // that is, their delimiters would be present, but there would be nothing to one side

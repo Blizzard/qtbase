@@ -299,7 +299,10 @@ void QListModel::sort(int column, Qt::SortOrder order)
     std::sort(sorting.begin(), sorting.end(), compare);
     QModelIndexList fromIndexes;
     QModelIndexList toIndexes;
-    for (int r = 0; r < sorting.count(); ++r) {
+    const int sortingCount = sorting.count();
+    fromIndexes.reserve(sortingCount);
+    toIndexes.reserve(sortingCount);
+    for (int r = 0; r < sortingCount; ++r) {
         QListWidgetItem *item = sorting.at(r).first;
         toIndexes.append(createIndex(r, 0, item));
         fromIndexes.append(createIndex(sorting.at(r).second, 0, sorting.at(r).first));
@@ -423,7 +426,9 @@ QMimeData *QListModel::internalMimeData()  const
 QMimeData *QListModel::mimeData(const QModelIndexList &indexes) const
 {
     QList<QListWidgetItem*> itemlist;
-    for (int i = 0; i < indexes.count(); ++i)
+    const int indexesCount = indexes.count();
+    itemlist.reserve(indexesCount);
+    for (int i = 0; i < indexesCount; ++i)
         itemlist << at(indexes.at(i).row());
     const QListWidget *view = qobject_cast<const QListWidget*>(QObject::parent());
 
@@ -1257,7 +1262,7 @@ void QListWidgetPrivate::_q_dataChanged(const QModelIndex &topLeft,
     activated when the user clicks or double clicks on it, depending on the
     system configuration. It is also activated when the user presses the
     activation key (on Windows and X11 this is the \uicontrol Return key, on Mac OS
-    X it is \uicontrol{Ctrl+0}).
+    X it is \uicontrol{Command+O}).
 */
 
 /*!
@@ -1694,7 +1699,9 @@ QList<QListWidgetItem*> QListWidget::selectedItems() const
     Q_D(const QListWidget);
     QModelIndexList indexes = selectionModel()->selectedIndexes();
     QList<QListWidgetItem*> items;
-    for (int i = 0; i < indexes.count(); ++i)
+    const int numIndexes = indexes.count();
+    items.reserve(numIndexes);
+    for (int i = 0; i < numIndexes; ++i)
         items.append(d->listModel()->at(indexes.at(i).row()));
     return items;
 }
@@ -1710,7 +1717,9 @@ QList<QListWidgetItem*> QListWidget::findItems(const QString &text, Qt::MatchFla
     QModelIndexList indexes = d->listModel()->match(model()->index(0, 0, QModelIndex()),
                                                 Qt::DisplayRole, text, -1, flags);
     QList<QListWidgetItem*> items;
-    for (int i = 0; i < indexes.size(); ++i)
+    const int indexesSize = indexes.size();
+    items.reserve(indexesSize);
+    for (int i = 0; i < indexesSize; ++i)
         items.append(d->listModel()->at(indexes.at(i).row()));
     return items;
 }
@@ -1795,6 +1804,7 @@ QMimeData *QListWidget::mimeData(const QList<QListWidgetItem*> items) const
 
     // if non empty, it's called from the model's own mimeData
     if (cachedIndexes.isEmpty()) {
+        cachedIndexes.reserve(items.count());
         foreach (QListWidgetItem *item, items)
             cachedIndexes << indexFromItem(item);
 
@@ -1845,7 +1855,9 @@ void QListWidget::dropEvent(QDropEvent *event) {
         if (d->dropOn(event, &row, &col, &topIndex)) {
             QList<QModelIndex> selIndexes = selectedIndexes();
             QList<QPersistentModelIndex> persIndexes;
-            for (int i = 0; i < selIndexes.count(); i++)
+            const int selIndexesCount = selIndexes.count();
+            persIndexes.reserve(selIndexesCount);
+            for (int i = 0; i < selIndexesCount; i++)
                 persIndexes.append(selIndexes.at(i));
 
             if (persIndexes.contains(topIndex))
@@ -1936,5 +1948,6 @@ bool QListWidget::event(QEvent *e)
 QT_END_NAMESPACE
 
 #include "moc_qlistwidget.cpp"
+#include "moc_qlistwidget_p.cpp"
 
 #endif // QT_NO_LISTWIDGET

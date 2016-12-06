@@ -494,7 +494,7 @@ QVariant QSqlTableModel::headerData(int section, Qt::Orientation orientation, in
     \since 5.0
 
     Returns \c true if the model contains modified values that have not been
-    committed to the datase, otherwise false.
+    committed to the database, otherwise false.
 */
 bool QSqlTableModel::isDirty() const
 {
@@ -1262,8 +1262,10 @@ void QSqlTableModel::setFilter(const QString &filter)
 void QSqlTableModel::clear()
 {
     Q_D(QSqlTableModel);
+    beginResetModel();
     d->clear();
     QSqlQueryModel::clear();
+    endResetModel();
 }
 
 /*! \reimp

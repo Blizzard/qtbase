@@ -156,10 +156,9 @@ for (i = list.begin(); i != list.end(); ++i)
 QList<QString> list;
 list << "A" << "B" << "C" << "D";
 
-QList<QString>::iterator i = list.end();
-while (i != list.begin()) {
-    --i;
-    *i = (*i).toLower();
+QList<QString>::reverse_iterator i;
+for (i = list.rbegin(); i != list.rend(); ++i)
+    *i = i->toLower();
 }
 //! [11]
 
@@ -176,7 +175,7 @@ QMap<int, int> map;
 ...
 QMap<int, int>::const_iterator i;
 for (i = map.constBegin(); i != map.constEnd(); ++i)
-    qDebug() << i.key() << ":" << i.value();
+    qDebug() << i.key() << ':' << i.value();
 //! [13]
 
 
@@ -236,7 +235,7 @@ foreach (const QString &str, list) {
 QMap<QString, int> map;
 ...
 foreach (const QString &str, map.keys())
-    qDebug() << str << ":" << map.value(str);
+    qDebug() << str << ':' << map.value(str);
 //! [19]
 
 
@@ -245,7 +244,7 @@ QMultiMap<QString, int> map;
 ...
 foreach (const QString &str, map.uniqueKeys()) {
     foreach (int i, map.values(str))
-        qDebug() << str << ":" << i;
+        qDebug() << str << ':' << i;
 }
 //! [20]
 

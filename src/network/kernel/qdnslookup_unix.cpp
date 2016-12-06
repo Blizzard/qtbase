@@ -36,12 +36,13 @@
 #include <qlibrary.h>
 #include <qscopedpointer.h>
 #include <qurl.h>
-#include <private/qmutexpool_p.h>
 
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/nameser.h>
-#include <arpa/nameser_compat.h>
+#if !defined(Q_OS_OPENBSD)
+#  include <arpa/nameser_compat.h>
+#endif
 #include <resolv.h>
 
 #if defined(__GNU_LIBRARY__) && !defined(__UCLIBC__)
@@ -52,6 +53,9 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_LIBRARY
 
+#if defined(Q_OS_OPENBSD)
+typedef struct __res_state* res_state;
+#endif
 typedef int (*dn_expand_proto)(const unsigned char *, const unsigned char *, const unsigned char *, char *, int);
 static dn_expand_proto local_dn_expand = 0;
 typedef void (*res_nclose_proto)(res_state);
@@ -71,7 +75,7 @@ struct QDnsLookupStateDeleter
     }
 };
 
-static void resolveLibrary()
+static bool resolveLibraryInternal()
 {
     QLibrary lib;
 #ifdef LIBRESOLV_SO
@@ -81,7 +85,7 @@ static void resolveLibrary()
     {
         lib.setFileName(QLatin1String("resolv"));
         if (!lib.load())
-            return;
+            return false;
     }
 
     local_dn_expand = dn_expand_proto(lib.resolve("__dn_expand"));
@@ -105,19 +109,15 @@ static void resolveLibrary()
         local_res_nquery = res_nquery_proto(lib.resolve("res_9_nquery"));
     if (!local_res_nquery)
         local_res_nquery = res_nquery_proto(lib.resolve("res_nquery"));
+
+    return true;
 }
+Q_GLOBAL_STATIC_WITH_ARGS(bool, resolveLibrary, (resolveLibraryInternal()))
 
 void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestName, const QHostAddress &nameserver, QDnsLookupReply *reply)
 {
     // Load dn_expand, res_ninit and res_nquery on demand.
-    static QBasicAtomicInt triedResolve = Q_BASIC_ATOMIC_INITIALIZER(false);
-    if (!triedResolve.loadAcquire()) {
-        QMutexLocker locker(QMutexPool::globalInstanceGet(&local_res_ninit));
-        if (!triedResolve.load()) {
-            resolveLibrary();
-            triedResolve.storeRelease(true);
-        }
-    }
+    resolveLibrary();
 
     // If dn_expand, res_ninit or res_nquery is missing, fail.
     if (!local_dn_expand || !local_res_nclose || !local_res_ninit || !local_res_nquery) {
@@ -166,9 +166,9 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
                 ns->sin6_addr.s6_addr[i] = ipv6Address[i];
             }
 #else
-            qWarning() << Q_FUNC_INFO << "IPv6 addresses for nameservers is currently not supported";
+            qWarning("%s", QDnsLookupPrivate::msgNoIpV6NameServerAdresses);
             reply->error = QDnsLookup::ResolverError;
-            reply->errorString = tr("IPv6 addresses for nameservers is currently not supported");
+            reply->errorString = tr(QDnsLookupPrivate::msgNoIpV6NameServerAdresses);
             return;
 #endif
         }

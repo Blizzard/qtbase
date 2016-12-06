@@ -13,5 +13,9 @@ qtHaveModule(widgets) {
     !wince: SUBDIRS += \
                 qopenglwidget \
                 cube \
-                textures
+                textures \
+                hellogles3
 }
+
+EXAMPLE_FILES += \
+    legacy

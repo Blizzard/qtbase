@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
@@ -50,7 +51,6 @@
 
 #include "qcoreevent.h"
 #include "qeventloop.h"
-#include "qhash.h"
 #include "qobject.h"
 #include "private/qobject_p.h"
 #include "qlist.h"
@@ -66,6 +66,7 @@
 QT_BEGIN_NAMESPACE
 
 class QDBusConnectionPrivate;
+class QDBusMessage;
 
 // Really private structs used by qdbusintegrator.cpp
 // Things that aren't used by any other file
@@ -77,10 +78,21 @@ struct QDBusSlotCache
         int flags;
         int slotIdx;
         QVector<int> metaTypes;
+
+        void swap(Data &other) Q_DECL_NOTHROW
+        {
+            qSwap(flags,     other.flags);
+            qSwap(slotIdx,   other.slotIdx);
+            qSwap(metaTypes, other.metaTypes);
+        }
     };
     typedef QMultiHash<QString, Data> Hash;
     Hash hash;
+
+    void swap(QDBusSlotCache &other) Q_DECL_NOTHROW { qSwap(hash, other.hash); }
 };
+Q_DECLARE_SHARED(QDBusSlotCache::Data)
+Q_DECLARE_SHARED(QDBusSlotCache)
 
 class QDBusCallDeliveryEvent: public QMetaCallEvent
 {
@@ -123,27 +135,22 @@ private:
     bool handled;
 };
 
-class QDBusConnectionCallbackEvent : public QEvent
+class QDBusSpyCallEvent : public QMetaCallEvent
 {
 public:
-    QDBusConnectionCallbackEvent()
-        : QEvent(User), subtype(Subtype(0))
-    { }
+    typedef void (*Hook)(const QDBusMessage&);
+    QDBusSpyCallEvent(QDBusConnectionPrivate *cp, const QDBusConnection &c, const QDBusMessage &msg,
+                      const Hook *hooks, int count)
+        : QMetaCallEvent(0, 0, Q_NULLPTR, cp, 0), conn(c), msg(msg), hooks(hooks), hookCount(count)
+    {}
+    ~QDBusSpyCallEvent();
+    void placeMetaCall(QObject *) Q_DECL_OVERRIDE;
+    static inline void invokeSpyHooks(const QDBusMessage &msg, const Hook *hooks, int hookCount);
 
-    DBusWatch *watch;
-    union {
-        int timerId;
-        int fd;
-    };
-    int extra;
-
-    enum Subtype {
-        AddTimeout = 0,
-        KillTimer,
-        AddWatch,
-        //RemoveWatch,
-        ToggleWatch
-    } subtype;
+    QDBusConnection conn;   // keeps the refcount in QDBusConnectionPrivate up
+    QDBusMessage msg;
+    const Hook *hooks;
+    int hookCount;
 };
 
 QT_END_NAMESPACE

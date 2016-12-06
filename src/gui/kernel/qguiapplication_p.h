@@ -75,6 +75,8 @@ public:
     QGuiApplicationPrivate(int &argc, char **argv, int flags);
     ~QGuiApplicationPrivate();
 
+    void init();
+
     void createPlatformIntegration();
     void createEventDispatcher() Q_DECL_OVERRIDE;
     void eventDispatcherReady() Q_DECL_OVERRIDE;
@@ -202,6 +204,7 @@ public:
     static QWindow *currentMouseWindow;
     static QWindow *currentMousePressWindow;
     static Qt::ApplicationState applicationState;
+    static bool highDpiScalingUpdated;
 
 #ifndef QT_NO_CLIPBOARD
     static QClipboard *qt_clipboard;
@@ -219,6 +222,7 @@ public:
 
     static QFont *app_font;
 
+    static QString styleOverride;
     static QStyleHints *styleHints;
     static bool obey_desktop_settings;
     QInputMethod *inputMethod;
@@ -232,6 +236,7 @@ public:
 #endif
 
 #ifndef QT_NO_SESSIONMANAGER
+    static bool is_fallback_session_management_enabled;
     QSessionManager *session_manager;
     bool is_session_restored;
     bool is_saving_session;
@@ -283,6 +288,9 @@ public:
 
     static void setApplicationState(Qt::ApplicationState state, bool forcePropagate = false);
 
+    // enable the fix for QTBUG-50199; TODO remove this check in 5.7
+    static bool scrollNoPhaseAllowed;
+
 protected:
     virtual void notifyThemeChanged();
     bool tryCloseRemainingWindows(QWindowList processedWindows);
@@ -292,8 +300,6 @@ protected:
 
 private:
     friend class QDragManager;
-
-    void init();
 
     static QGuiApplicationPrivate *self;
     static QTouchDevice *m_fakeTouchDevice;

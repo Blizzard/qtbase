@@ -599,6 +599,23 @@ void tst_qmakelib::addControlStructs()
             << ""
             << true;
 
+    QTest::newRow("function arguments")
+            << "defineTest(func) {\n"
+                   "defined(1, var) {\nd1 = 1\nexport(d1)\n}\n"
+                   "defined(3, var) {\nd3 = 1\nexport(d3)\n}\n"
+                   "x1 = $$1\nexport(x1)\n"
+                   "2 += foo\nx2 = $$2\nexport(x2)\n"
+                   "x3 = $$3\nexport(x3)\n"
+                   "4 += foo\nx4 = $$4\nexport(x4)\n"
+                   "x5 = $$5\nexport(x5)\n"
+                   "6 += foo\nx6 = $$6\nexport(x6)\n"
+               "}\n"
+               "1 = first\n2 = second\n3 = third\n4 = fourth\nfunc(one, two)"
+            << "1 = first\n2 = second\n3 = third\n4 = fourth\n5 = UNDEF\n6 = UNDEF\n"
+               "d1 = 1\nd3 = UNDEF\nx1 = one\nx2 = two foo\nx3 =\nx4 = foo\nx5 =\nx6 = foo"
+            << ""
+            << true;
+
     QTest::newRow("ARGC and ARGS")
             << "defineTest(func) {\n"
                    "export(ARGC)\n"
@@ -641,6 +658,86 @@ void tst_qmakelib::addControlStructs()
             << "VAR = final"
             << ""
             << true;
+
+    QTest::newRow("error() from replace function (assignment)")
+            << "defineReplace(func) {\nerror(error)\n}\n"
+               "VAR = $$func()\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (replacement)")
+            << "defineReplace(func) {\nerror(error)\n}\n"
+               "VAR = $$func()\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (LHS)")
+            << "defineReplace(func) {\nerror(error)\nreturn(VAR)\n}\n"
+               "$$func() = 1\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (loop variable)")
+            << "defineReplace(func) {\nerror(error)\nreturn(BLAH)\n}\n"
+               "for($$func()) {\nVAR = $$BLAH\nbreak()\n}\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (built-in test arguments)")
+            << "defineReplace(func) {\nerror(error)\n}\n"
+               "message($$func()): VAR = 1\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (built-in replace arguments)")
+            << "defineReplace(func) {\nerror(error)\n}\n"
+               "VAR = $$upper($$func())\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (custom test arguments)")
+            << "defineReplace(func) {\nerror(error)\n}\n"
+               "defineTest(custom) {\n}\n"
+               "custom($$func()): VAR = 1\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("error() from replace function (custom replace arguments)")
+            << "defineReplace(func) {\nerror(error)\nreturn(1)\n}\n"
+               "defineReplace(custom) {\nreturn($$1)\n}\n"
+               "VAR = $$custom($$func(1))\n"
+               "OKE = 1"
+            << "VAR = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("REQUIRES = error()")
+            << "REQUIRES = error(error)\n"
+               "OKE = 1"
+            << "OKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
+
+    QTest::newRow("requires(error())")
+            << "requires(error(error))\n"
+               "OKE = 1"
+            << "OKE = UNDEF"
+            << "Project ERROR: error"
+            << false;
 }
 
 void tst_qmakelib::addReplaceFunctions(const QString &qindir)
@@ -2103,6 +2200,12 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
             << "Project ERROR: World, you FAIL!"
             << false;
 
+    QTest::newRow("if(error())")
+            << "if(error(\\'World, you FAIL!\\')): OK = 1\nOKE = 1"
+            << "OK = UNDEF\nOKE = UNDEF"
+            << "Project ERROR: World, you FAIL!"
+            << false;
+
     QTest::newRow("system()")
             << "system('"
 #ifdef Q_OS_WIN
@@ -2205,9 +2308,10 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
             << ""
             << true;
 
+    // FIXME: This also tests that 'exe' is accepted, but does not test whether it actually works.
     QTest::newRow("write_file(): append")
             << "VAR = 'one more line'\n"
-               "write_file(" + wpath + ", VAR, append): OK = 1\n"
+               "write_file(" + wpath + ", VAR, append exe): OK = 1\n"
                "OUT = $$cat(" + wpath + ", lines)"
             << "OK = 1\nOUT = 'other content' 'one more line'"
             << ""
@@ -2227,7 +2331,13 @@ void tst_qmakelib::addTestFunctions(const QString &qindir)
     QTest::newRow("write_file(): bad number of arguments")
             << "write_file(1, 2, 3, 4): OK = 1"
             << "OK = UNDEF"
-            << "##:1: write_file(name, [content var, [append]]) requires one to three arguments."
+            << "##:1: write_file(name, [content var, [append] [exe]]) requires one to three arguments."
+            << true;
+
+    QTest::newRow("write_file(): invalid flag")
+            << "write_file(file, VAR, fail): OK = 1"
+            << "OK = UNDEF"
+            << "##:1: write_file(): invalid flag fail."
             << true;
 
     // FIXME: This doesn't test whether it actually works.
@@ -2371,6 +2481,14 @@ void tst_qmakelib::proEval_data()
                "Project MESSAGE: assign split separate: word this is a test done\n"
                "Project MESSAGE: assign split joined: word: this is a test:done\n"
                "Project MESSAGE: assign split quoted: word   this   is a     test done"
+            << true;
+
+    // Raw data leak with empty file name. Verify with Valgrind or asan.
+    QTest::newRow("QTBUG-54550")
+            << "FULL = /there/is\n"
+               "VAR = $$absolute_path(, $$FULL/nothing/here/really)"
+            << "VAR = /there/is/nothing/here/really"
+            << ""
             << true;
 }
 

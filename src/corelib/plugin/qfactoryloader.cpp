@@ -58,7 +58,9 @@ namespace {
 
 // avoid duplicate QStringLiteral data:
 inline QString iidKeyLiteral() { return QStringLiteral("IID"); }
+#ifdef QT_SHARED
 inline QString versionKeyLiteral() { return QStringLiteral("version"); }
+#endif
 inline QString metaDataKeyLiteral() { return QStringLiteral("MetaData"); }
 inline QString keysKeyLiteral() { return QStringLiteral("Keys"); }
 
@@ -77,8 +79,6 @@ public:
     QString suffix;
     Qt::CaseSensitivity cs;
     QStringList loadedPaths;
-
-    void unloadPath(const QString &path);
 };
 
 QFactoryLoaderPrivate::~QFactoryLoaderPrivate()
@@ -162,8 +162,8 @@ void QFactoryLoader::update()
             library = QLibraryPrivate::findOrCreate(QFileInfo(fileName).canonicalFilePath());
             if (!library->isPlugin()) {
                 if (qt_debug_component()) {
-                    qDebug() << library->errorString;
-                    qDebug() << "         not a plugin";
+                    qDebug() << library->errorString << endl
+                             << "         not a plugin";
                 }
                 library->release();
                 continue;

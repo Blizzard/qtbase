@@ -97,8 +97,8 @@ private slots:
     void paint_2();
     void setWidget_data();
     void setWidget();
-    void eventFilter_data();
-    void eventFilter();
+    void testEventFilter_data();
+    void testEventFilter();
     void focusInEvent_data();
     void focusInEvent();
     void focusInEventNoWidget();
@@ -179,6 +179,7 @@ private slots:
     void mapToGlobal();
     void mapToGlobalWithoutScene();
     void QTBUG_43780_visibility();
+    void forwardTouchEvent();
 };
 
 // Subclass that exposes the protected functions.
@@ -314,7 +315,7 @@ void tst_QGraphicsProxyWidget::qgraphicsproxywidget()
     SubQGraphicsProxyWidget proxy;
     proxy.paint(0, 0, 0);
     proxy.setWidget(0);
-    QVERIFY(proxy.type() == QGraphicsProxyWidget::Type);
+    QCOMPARE(proxy.type(), int(QGraphicsProxyWidget::Type));
     QVERIFY(!proxy.widget());
     QEvent event(QEvent::None);
     proxy.call_eventFilter(0, &event);
@@ -414,6 +415,7 @@ void tst_QGraphicsProxyWidget::setWidget()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
+    QScopedPointer<QStyle> style(QStyleFactory::create(QLatin1String("Fusion")));
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QPointer<SubQGraphicsProxyWidget> proxy = new SubQGraphicsProxyWidget;
     SubQGraphicsProxyWidget parentProxy;
@@ -436,7 +438,7 @@ void tst_QGraphicsProxyWidget::setWidget()
 #endif
     widget->setPalette(QPalette(Qt::magenta));
     widget->setLayoutDirection(Qt::RightToLeft);
-    widget->setStyle(QStyleFactory::create(QLatin1String("Fusion")));
+    widget->setStyle(style.data());
     widget->setFont(QFont("Times"));
     widget->setVisible(true);
     QApplication::setActiveWindow(widget);
@@ -533,7 +535,7 @@ void tst_QGraphicsProxyWidget::setWidget()
 }
 
 Q_DECLARE_METATYPE(QEvent::Type)
-void tst_QGraphicsProxyWidget::eventFilter_data()
+void tst_QGraphicsProxyWidget::testEventFilter_data()
 {
     QTest::addColumn<QEvent::Type>("eventType");
     QTest::addColumn<bool>("fromObject"); // big grin evil
@@ -552,7 +554,7 @@ void tst_QGraphicsProxyWidget::eventFilter_data()
 }
 
 // protected bool eventFilter(QObject* object, QEvent* event)
-void tst_QGraphicsProxyWidget::eventFilter()
+void tst_QGraphicsProxyWidget::testEventFilter()
 {
     QFETCH(QEvent::Type, eventType);
     QFETCH(bool, fromObject);
@@ -1223,6 +1225,7 @@ void tst_QGraphicsProxyWidget::mousePressReleaseEvent()
 
     QGraphicsScene scene;
     QGraphicsView view(&scene);
+    view.resize(500, 500);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
@@ -1231,7 +1234,6 @@ void tst_QGraphicsProxyWidget::mousePressReleaseEvent()
     QPushButton *widget = new QPushButton;
     QSignalSpy spy(widget, SIGNAL(clicked()));
     widget->resize(50, 50);
-    view.resize(100, 100);
     if (hasWidget) {
         proxy->setWidget(widget);
         proxy->show();
@@ -3017,36 +3019,36 @@ void tst_QGraphicsProxyWidget::createProxyForChildWidget()
     layout->addWidget(rightDial);
     window.setLayout(layout);
 
-    QVERIFY(window.graphicsProxyWidget() == 0);
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
+    QVERIFY(!window.graphicsProxyWidget());
+    QVERIFY(!checkbox->graphicsProxyWidget());
 
     QGraphicsProxyWidget *windowProxy = scene.addWidget(&window);
     QGraphicsView view(&scene);
     view.show();
     view.resize(500,500);
 
-    QVERIFY(window.graphicsProxyWidget() == windowProxy);
-    QVERIFY(box->graphicsProxyWidget() == 0);
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
+    QCOMPARE(window.graphicsProxyWidget(), windowProxy);
+    QVERIFY(!box->graphicsProxyWidget());
+    QVERIFY(!checkbox->graphicsProxyWidget());
 
     QPointer<QGraphicsProxyWidget> checkboxProxy = windowProxy->createProxyForChildWidget(checkbox);
 
     QGraphicsProxyWidget *boxProxy = box->graphicsProxyWidget();
 
     QVERIFY(boxProxy);
-    QVERIFY(checkbox->graphicsProxyWidget() == checkboxProxy);
-    QVERIFY(checkboxProxy->parentItem() == boxProxy);
-    QVERIFY(boxProxy->parentItem() == windowProxy);
+    QCOMPARE(checkbox->graphicsProxyWidget(), checkboxProxy.data());
+    QCOMPARE(checkboxProxy->parentItem(), boxProxy);
+    QCOMPARE(boxProxy->parentItem(), windowProxy);
 
     QVERIFY(checkboxProxy->mapToScene(QPointF()) == checkbox->mapTo(&window, QPoint()));
-    QVERIFY(checkboxProxy->size() == checkbox->size());
-    QVERIFY(boxProxy->size() == box->size());
+    QCOMPARE(checkboxProxy->size().toSize(), checkbox->size());
+    QCOMPARE(boxProxy->size().toSize(), box->size());
 
     window.resize(500,500);
-    QVERIFY(windowProxy->size() == QSize(500,500));
+    QCOMPARE(windowProxy->size().toSize(), QSize(500,500));
     QVERIFY(checkboxProxy->mapToScene(QPointF()) == checkbox->mapTo(&window, QPoint()));
-    QVERIFY(checkboxProxy->size() == checkbox->size());
-    QVERIFY(boxProxy->size() == box->size());
+    QCOMPARE(checkboxProxy->size().toSize(), checkbox->size());
+    QCOMPARE(boxProxy->size().toSize(), box->size());
 
     QTest::qWait(10);
 
@@ -3064,9 +3066,9 @@ void tst_QGraphicsProxyWidget::createProxyForChildWidget()
 
     boxProxy->setWidget(0);
 
-    QVERIFY(checkbox->graphicsProxyWidget() == 0);
-    QVERIFY(box->graphicsProxyWidget() == 0);
-    QVERIFY(checkboxProxy == 0);
+    QVERIFY(!checkbox->graphicsProxyWidget());
+    QVERIFY(!box->graphicsProxyWidget());
+    QVERIFY(checkboxProxy.isNull());
 
     delete boxProxy;
 }
@@ -3681,15 +3683,19 @@ static QByteArray msgPointMismatch(const QPoint &actual, const QPoint &expected)
 void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
 {
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
-    const QSize size = availableGeometry.size() / 5;
+    const QSize size = availableGeometry.size() / 4;
     QGraphicsScene scene;
     QGraphicsView view(&scene);
+    view.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    view.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    view.setTransform(QTransform::fromScale(2, 2));  // QTBUG-50136, use transform.
     view.setWindowTitle(QTest::currentTestFunction());
     view.resize(size);
     view.move(availableGeometry.bottomRight() - QPoint(size.width(), size.height()) - QPoint(100, 100));
-    QWidget *embeddedWidget = new QWidget;
-    embeddedWidget->setFixedSize(size / 2);
-    QWidget *childWidget = new QWidget(embeddedWidget);
+    QWidget *embeddedWidget = new QGroupBox(QLatin1String("Embedded"));
+    embeddedWidget->setStyleSheet(QLatin1String("background-color: \"yellow\"; "));
+    embeddedWidget->setFixedSize((size - QSize(10, 10)) / 2);
+    QWidget *childWidget = new QGroupBox(QLatin1String("Child"), embeddedWidget);
     childWidget->setStyleSheet(QLatin1String("background-color: \"red\"; "));
     childWidget->resize(embeddedWidget->size() / 2);
     childWidget->move(embeddedWidget->width() / 4, embeddedWidget->height() / 4); // center in embeddedWidget
@@ -3703,10 +3709,13 @@ void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
     // This should be equivalent to the view center give or take rounding
     // errors due to odd window margins
     const QPoint viewCenter = view.geometry().center();
-    QVERIFY2((viewCenter - embeddedCenterGlobal).manhattanLength() <= 2,
+    QVERIFY2((viewCenter - embeddedCenterGlobal).manhattanLength() <= 3,
              msgPointMismatch(embeddedCenterGlobal, viewCenter).constData());
 
-    // Same test with child centered on embeddedWidget
+    // Same test with child centered on embeddedWidget. Also make sure
+    // the roundtrip maptoGlobal()/mapFromGlobal() returns the same
+    // point since that is important for mouse event handling (QTBUG-50030,
+    // QTBUG-50136).
     const QPoint childCenter = childWidget->rect().center();
     const QPoint childCenterGlobal = childWidget->mapToGlobal(childCenter);
     QCOMPARE(childWidget->mapFromGlobal(childCenterGlobal), childCenter);
@@ -3758,6 +3767,74 @@ void tst_QGraphicsProxyWidget::QTBUG_43780_visibility()
     label->show();
     QTRY_VERIFY(label->isVisible());
     QVERIFY(comboPopup->isVisible());
+}
+
+class TouchWidget : public QWidget
+{
+public:
+    TouchWidget(QWidget *parent = 0) : QWidget(parent) {}
+
+    bool event(QEvent *event)
+    {
+        switch (event->type()) {
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+        case QEvent::TouchEnd:
+            event->accept();
+            return true;
+            break;
+        default:
+            break;
+        }
+
+        return QWidget::event(event);
+    }
+};
+
+// QTBUG_45737
+void tst_QGraphicsProxyWidget::forwardTouchEvent()
+{
+    QGraphicsScene *scene = new QGraphicsScene;
+
+    TouchWidget *widget = new TouchWidget;
+
+    widget->setAttribute(Qt::WA_AcceptTouchEvents);
+
+    QGraphicsProxyWidget *proxy = new QGraphicsProxyWidget;
+
+    proxy->setAcceptTouchEvents(true);
+    proxy->setWidget(widget);
+
+    scene->addItem(proxy);
+
+    QGraphicsView *view = new QGraphicsView(scene);
+
+    view->show();
+
+    EventSpy eventSpy(widget);
+
+    QTouchDevice *device = new QTouchDevice;
+    device->setType(QTouchDevice::TouchScreen);
+    QWindowSystemInterface::registerTouchDevice(device);
+
+    QCOMPARE(eventSpy.counts[QEvent::TouchBegin], 0);
+    QCOMPARE(eventSpy.counts[QEvent::TouchUpdate], 0);
+    QCOMPARE(eventSpy.counts[QEvent::TouchEnd], 0);
+
+    QTest::touchEvent(view, device).press(0, QPoint(10, 10), view);
+    QTest::touchEvent(view, device).move(0, QPoint(15, 15), view);
+    QTest::touchEvent(view, device).move(0, QPoint(16, 16), view);
+    QTest::touchEvent(view, device).release(0, QPoint(15, 15), view);
+
+    QApplication::processEvents();
+
+    QCOMPARE(eventSpy.counts[QEvent::TouchBegin], 1);
+    QCOMPARE(eventSpy.counts[QEvent::TouchUpdate], 2);
+    QCOMPARE(eventSpy.counts[QEvent::TouchEnd], 1);
+
+    delete view;
+    delete proxy;
+    delete scene;
 }
 
 QTEST_MAIN(tst_QGraphicsProxyWidget)

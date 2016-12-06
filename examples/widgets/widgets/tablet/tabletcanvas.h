@@ -61,27 +61,26 @@ class TabletCanvas : public QWidget
     Q_OBJECT
 
 public:
-    enum AlphaChannelType { AlphaPressure, AlphaTilt, NoAlpha };
-    enum ColorSaturationType { SaturationVTilt, SaturationHTilt,
-                               SaturationPressure, NoSaturation };
-    enum LineWidthType { LineWidthPressure, LineWidthTilt, NoLineWidth };
+    enum Valuator { PressureValuator, TangentialPressureValuator,
+                    TiltValuator, VTiltValuator, HTiltValuator, NoValuator };
+    Q_ENUM(Valuator)
 
     TabletCanvas();
 
     bool saveImage(const QString &file);
     bool loadImage(const QString &file);
-    void setAlphaChannelType(AlphaChannelType type)
-        { alphaChannelType = type; }
-    void setColorSaturationType(ColorSaturationType type)
-        { colorSaturationType = type; }
-    void setLineWidthType(LineWidthType type)
-        { lineWidthType = type; }
-    void setColor(const QColor &color)
-        { myColor = color; }
+    void setAlphaChannelValuator(Valuator type)
+        { m_alphaChannelValuator = type; }
+    void setColorSaturationValuator(Valuator type)
+        { m_colorSaturationValuator = type; }
+    void setLineWidthType(Valuator type)
+        { m_lineWidthValuator = type; }
+    void setColor(const QColor &c)
+        { if (c.isValid()) m_color = c; }
     QColor color() const
-        { return myColor; }
-    void setTabletDevice(QTabletEvent::TabletDevice device)
-        { myTabletDevice = device; }
+        { return m_color; }
+    void setTabletDevice(QTabletEvent *event)
+        { updateCursor(event); }
     int maximum(int a, int b)
         { return a > b ? a : b; }
 
@@ -94,20 +93,22 @@ private:
     void initPixmap();
     void paintPixmap(QPainter &painter, QTabletEvent *event);
     Qt::BrushStyle brushPattern(qreal value);
-    void updateBrush(QTabletEvent *event);
+    void updateBrush(const QTabletEvent *event);
+    void updateCursor(const QTabletEvent *event);
 
-    AlphaChannelType alphaChannelType;
-    ColorSaturationType colorSaturationType;
-    LineWidthType lineWidthType;
-    QTabletEvent::PointerType pointerType;
-    QTabletEvent::TabletDevice myTabletDevice;
-    QColor myColor;
+    Valuator m_alphaChannelValuator;
+    Valuator m_colorSaturationValuator;
+    Valuator m_lineWidthValuator;
+    QColor m_color;
+    QPixmap m_pixmap;
+    QBrush m_brush;
+    QPen m_pen;
+    bool m_deviceDown;
 
-    QPixmap pixmap;
-    QBrush myBrush;
-    QPen myPen;
-    bool deviceDown;
-    QPoint polyLine[3];
+    struct Point {
+        QPointF pos;
+        qreal rotation;
+    } lastPoint;
 };
 //! [0]
 

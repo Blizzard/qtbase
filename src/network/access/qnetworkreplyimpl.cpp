@@ -65,8 +65,6 @@ inline QNetworkReplyImplPrivate::QNetworkReplyImplPrivate()
 
 void QNetworkReplyImplPrivate::_q_startOperation()
 {
-    Q_Q(QNetworkReplyImpl);
-
     // ensure this function is only being called once
     if (state == Working || state == Finished) {
         qDebug("QNetworkReplyImpl::_q_startOperation was called more than once");
@@ -85,6 +83,7 @@ void QNetworkReplyImplPrivate::_q_startOperation()
     }
 
 #ifndef QT_NO_BEARERMANAGEMENT
+    Q_Q(QNetworkReplyImpl);
     // Do not start background requests if they are not allowed by session policy
     QSharedPointer<QNetworkSession> session(manager->d_func()->getNetworkSession());
     QVariant isBackground = backend->request().attribute(QNetworkRequest::BackgroundRequestAttribute, QVariant::fromValue(false));
@@ -128,8 +127,10 @@ void QNetworkReplyImplPrivate::_q_startOperation()
         return;
     } else {
 #ifndef QT_NO_BEARERMANAGEMENT
-        QObject::connect(session.data(), SIGNAL(stateChanged(QNetworkSession::State)),
-                         q, SLOT(_q_networkSessionStateChanged(QNetworkSession::State)), Qt::QueuedConnection);
+        if (session) {
+            QObject::connect(session.data(), SIGNAL(stateChanged(QNetworkSession::State)),
+                             q, SLOT(_q_networkSessionStateChanged(QNetworkSession::State)), Qt::QueuedConnection);
+        }
 #endif
     }
 
@@ -318,7 +319,7 @@ void QNetworkReplyImplPrivate::_q_networkSessionConnected()
 void QNetworkReplyImplPrivate::_q_networkSessionStateChanged(QNetworkSession::State sessionState)
 {
     if (sessionState == QNetworkSession::Disconnected
-            && (state != Idle || state != Reconnecting)) {
+        && state != Idle && state != Reconnecting) {
         error(QNetworkReplyImpl::NetworkSessionFailedError,
               QCoreApplication::translate("QNetworkReply", "Network session error."));
         finished();
@@ -930,13 +931,11 @@ void QNetworkReplyImpl::abort()
 
     QNetworkReply::close();
 
-    if (d->state != QNetworkReplyPrivate::Finished) {
-        // call finished which will emit signals
-        d->error(OperationCanceledError, tr("Operation canceled"));
-        if (d->state == QNetworkReplyPrivate::WaitingForSession)
-            d->state = QNetworkReplyPrivate::Working;
-        d->finished();
-    }
+    // call finished which will emit signals
+    d->error(OperationCanceledError, tr("Operation canceled"));
+    if (d->state == QNetworkReplyPrivate::WaitingForSession)
+        d->state = QNetworkReplyPrivate::Working;
+    d->finished();
     d->state = QNetworkReplyPrivate::Aborted;
 
     // finished may access the backend
@@ -1101,21 +1100,17 @@ bool QNetworkReplyImplPrivate::migrateBackend()
         return true;
 
     // Backend does not support resuming download.
-    if (!backend->canResume())
+    if (backend && !backend->canResume())
         return false;
 
     state = QNetworkReplyPrivate::Reconnecting;
-
-    if (backend) {
-        delete backend;
-        backend = 0;
-    }
 
     cookedHeaders.clear();
     rawHeaders.clear();
 
     preMigrationDownloaded = bytesDownloaded;
 
+    delete backend;
     backend = manager->d_func()->findBackend(operation, request);
 
     if (backend) {

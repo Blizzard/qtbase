@@ -34,6 +34,8 @@
 #include <QString>
 #ifdef QT_NETWORK_LIB
 #include <QtNetwork/QHostInfo>
+#include <QtNetwork/QHostAddress>
+#include <QtNetwork/QAbstractSocket>
 #endif
 
 #ifdef Q_OS_UNIX
@@ -71,7 +73,12 @@ public:
 #ifdef QT_NETWORK_LIB
     static QHostAddress serverIP()
     {
-        return QHostInfo::fromName(serverName()).addresses().first();
+        const QHostInfo info = QHostInfo::fromName(serverName());
+        if (info.error()) {
+            QTest::qFail(qPrintable(info.errorString()), __FILE__, __LINE__);
+            return QHostAddress();
+        }
+        return info.addresses().constFirst();
     }
 #endif
 
@@ -134,5 +141,21 @@ public:
         }
         return true;
     }
-#endif
+
+    // Helper function for usage with QVERIFY2 on sockets.
+    static QByteArray msgSocketError(const QAbstractSocket &s)
+    {
+        QString result;
+        QDebug debug(&result);
+        debug.nospace();
+        debug.noquote();
+        if (!s.localAddress().isNull())
+            debug << "local=" << s.localAddress().toString() << ':' << s.localPort();
+        if (!s.peerAddress().isNull())
+            debug << ", peer=" << s.peerAddress().toString() << ':' << s.peerPort();
+        debug << ", type=" << s.socketType() << ", state=" << s.state()
+            << ", error=" << s.error() << ": " << s.errorString();
+       return result.toLocal8Bit();
+    }
+#endif // QT_NETWORK_LIB
 };

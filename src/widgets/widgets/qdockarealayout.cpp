@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
@@ -1017,7 +1018,7 @@ QLayoutItem *QDockAreaLayoutInfo::plug(const QList<int> &path)
         index = -index - 1;
 
     if (path.count() > 1) {
-        const QDockAreaLayoutItem &item = item_list.at(index);
+        QDockAreaLayoutItem &item = item_list[index];
         Q_ASSERT(item.subinfo != 0);
         return item.subinfo->plug(path.mid(1));
     }
@@ -1063,7 +1064,7 @@ QLayoutItem *QDockAreaLayoutInfo::unplug(const QList<int> &path)
 
     const int index = path.first();
     if (path.count() > 1) {
-        const QDockAreaLayoutItem &item = item_list.at(index);
+        QDockAreaLayoutItem &item = item_list[index];
         Q_ASSERT(item.subinfo != 0);
         return item.subinfo->unplug(path.mid(1));
     }
@@ -1815,7 +1816,8 @@ void QDockAreaLayoutInfo::saveState(QDataStream &stream) const
             stream << flags;
 
             if (w->isWindow()) {
-                stream << w->x() << w->y() << w->width() << w->height();
+                const QRect geometry = w->geometry();
+                stream << geometry.x() << geometry.y() << geometry.width() << geometry.height();
             } else {
                 stream << item.pos << item.size << pick(o, item.minimumSize())
                         << pick(o, item.maximumSize());
@@ -1852,20 +1854,6 @@ static Qt::DockWidgetArea toDockWidgetArea(QInternal::DockPosition pos)
         default: break;
     }
     return Qt::NoDockWidgetArea;
-}
-
-static QRect constrainedRect(QRect rect, const QRect &desktop)
-{
-    if (desktop.isValid()) {
-        rect.setWidth(qMin(rect.width(), desktop.width()));
-        rect.setHeight(qMin(rect.height(), desktop.height()));
-        rect.moveLeft(qMax(rect.left(), desktop.left()));
-        rect.moveTop(qMax(rect.top(), desktop.top()));
-        rect.moveRight(qMin(rect.right(), desktop.right()));
-        rect.moveBottom(qMin(rect.bottom(), desktop.bottom()));
-    }
-
-    return rect;
 }
 
 bool QDockAreaLayoutInfo::restoreState(QDataStream &stream, QList<QDockWidget*> &widgets, bool testing)
@@ -1956,16 +1944,8 @@ bool QDockAreaLayoutInfo::restoreState(QDataStream &stream, QList<QDockWidget*> 
                         qt_mac_set_drawer_preferred_edge(widget, toDockWidgetArea(dockPos));
                     } else
 #endif
-                    if (!testing) {
-                        QRect r(x, y, w, h);
-                        QDesktopWidget *desktop = QApplication::desktop();
-                        if (desktop->isVirtualDesktop())
-                            r = constrainedRect(r, desktop->screenGeometry(desktop->screenNumber(r.topLeft())));
-                        else
-                            r = constrainedRect(r, desktop->screenGeometry(widget));
-                        widget->move(r.topLeft());
-                        widget->resize(r.size());
-                    }
+                    if (!testing)
+                        widget->setGeometry(QDockAreaLayout::constrainedRect(QRect(x, y, w, h), widget));
 
                     if (!testing) {
                         widget->setVisible(flags & StateFlagVisible);
@@ -2075,6 +2055,36 @@ void QDockAreaLayoutInfo::updateSeparatorWidgets() const
 #endif //QT_NO_TABBAR
 
 #ifndef QT_NO_TABBAR
+/*! \internal
+    reparent all the widgets contained in this layout portion to the
+    specified parent. This is used to reparent dock widgets and tabbars
+    to the floating window or the main window
+ */
+void QDockAreaLayoutInfo::reparentWidgets(QWidget *parent)
+{
+    if (tabBar)
+        tabBar->setParent(parent);
+
+    for (int i = 0; i < item_list.count(); ++i) {
+        const QDockAreaLayoutItem &item = item_list.at(i);
+        if (item.flags & QDockAreaLayoutItem::GapItem)
+            continue;
+        if (item.skip())
+            continue;
+        if (item.subinfo)
+            item.subinfo->reparentWidgets(parent);
+        if (item.widgetItem) {
+            QWidget *w = item.widgetItem->widget();
+            if (w->parent() != parent) {
+                bool hidden = w->isHidden();
+                w->setParent(parent);
+                if (!hidden)
+                    w->show();
+            }
+        }
+    }
+}
+
 //returns whether the tabbar is visible or not
 bool QDockAreaLayoutInfo::updateTabBar() const
 {
@@ -2091,6 +2101,8 @@ bool QDockAreaLayoutInfo::updateTabBar() const
 
     const QSignalBlocker blocker(tabBar);
     bool gap = false;
+
+    const quintptr oldCurrentId = currentTabId();
 
     int tab_idx = 0;
     for (int i = 0; i < item_list.count(); ++i) {
@@ -2139,6 +2151,12 @@ bool QDockAreaLayoutInfo::updateTabBar() const
     while (tab_idx < tabBar->count()) {
         tabBar->removeTab(tab_idx);
     }
+
+    if (oldCurrentId > 0 && currentTabId() != oldCurrentId)
+        that->setCurrentTabId(oldCurrentId);
+
+    if (QDockWidgetGroupWindow *dwgw = qobject_cast<QDockWidgetGroupWindow *>(tabBar->parent()))
+        dwgw->adjustFlags();
 
     //returns if the tabbar is visible or not
     return ( (gap ? 1 : 0) + tabBar->count()) > 1;
@@ -2198,8 +2216,10 @@ QSet<QTabBar*> QDockAreaLayoutInfo::usedTabBars() const
 QSet<QWidget*> QDockAreaLayoutInfo::usedSeparatorWidgets() const
 {
     QSet<QWidget*> result;
+    const int numSeparatorWidgets = separatorWidgets.count();
+    result.reserve(numSeparatorWidgets);
 
-    for (int i = 0; i < separatorWidgets.count(); ++i)
+    for (int i = 0; i < numSeparatorWidgets; ++i)
         result << separatorWidgets.at(i);
 
     for (int i = 0; i < item_list.count(); ++i) {
@@ -2243,6 +2263,22 @@ QRect QDockAreaLayoutInfo::tabContentRect() const
     }
 
     return result;
+}
+
+int QDockAreaLayoutInfo::tabIndexToListIndex(int tabIndex) const
+{
+    Q_ASSERT(tabbed && tabBar);
+    quintptr data = qvariant_cast<quintptr>(tabBar->tabData(tabIndex));
+    for (int i = 0; i < item_list.count(); ++i) {
+        if (tabId(item_list.at(i)) == data)
+            return i;
+    }
+    return -1;
+}
+
+void QDockAreaLayoutInfo::moveTab(int from, int to)
+{
+    item_list.move(tabIndexToListIndex(from), tabIndexToListIndex(to));
 }
 #endif // QT_NO_TABBAR
 
@@ -2566,6 +2602,21 @@ void QDockAreaLayout::remove(const QList<int> &path)
     const int index = path.first();
     Q_ASSERT(index >= 0 && index < QInternal::DockCount);
     docks[index].remove(path.mid(1));
+}
+
+void QDockAreaLayout::removePlaceHolder(const QString &name)
+{
+    QList<int> index = indexOfPlaceHolder(name);
+    if (!index.isEmpty())
+        remove(index);
+    foreach (QDockWidgetGroupWindow *dwgw, mainWindow->findChildren<QDockWidgetGroupWindow *>(
+                                               QString(), Qt::FindDirectChildrenOnly)) {
+        index = dwgw->layoutInfo()->indexOfPlaceHolder(name);
+        if (!index.isEmpty()) {
+            dwgw->layoutInfo()->remove(index);
+            dwgw->destroyOrHideIfEmpty();
+        }
+    }
 }
 
 static inline int qMax(int i1, int i2, int i3) { return qMax(i1, qMax(i2, i3)); }
@@ -2965,22 +3016,59 @@ QSize QDockAreaLayout::minimumSize() const
     return QSize(qMax(row1, row2, row3), qMax(col1, col2, col3));
 }
 
+/*! \internal
+    Try to fit the given rectangle \a rect on the screen which contains
+    the window \a widget.
+    Used to compute the geometry of a dragged a dock widget that should
+    be shown with \a rect, but needs to be visible on the screen
+ */
+QRect QDockAreaLayout::constrainedRect(QRect rect, QWidget* widget)
+{
+    QRect desktop;
+    QDesktopWidget *desktopW = QApplication::desktop();
+    if (desktopW->isVirtualDesktop())
+        desktop = desktopW->screenGeometry(rect.topLeft());
+    else
+        desktop = desktopW->screenGeometry(widget);
+
+    if (desktop.isValid()) {
+        rect.setWidth(qMin(rect.width(), desktop.width()));
+        rect.setHeight(qMin(rect.height(), desktop.height()));
+        rect.moveLeft(qMax(rect.left(), desktop.left()));
+        rect.moveTop(qMax(rect.top(), desktop.top()));
+        rect.moveRight(qMin(rect.right(), desktop.right()));
+        rect.moveBottom(qMin(rect.bottom(), desktop.bottom()));
+    }
+
+    return rect;
+}
+
 bool QDockAreaLayout::restoreDockWidget(QDockWidget *dockWidget)
 {
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (index.isEmpty())
-        return false;
+    QDockAreaLayoutItem *item = 0;
+    foreach (QDockWidgetGroupWindow *dwgw, mainWindow->findChildren<QDockWidgetGroupWindow *>(
+                                               QString(), Qt::FindDirectChildrenOnly)) {
+        QList<int> index = dwgw->layoutInfo()->indexOfPlaceHolder(dockWidget->objectName());
+        if (!index.isEmpty()) {
+            dockWidget->setParent(dwgw);
+            item = const_cast<QDockAreaLayoutItem *>(&dwgw->layoutInfo()->item(index));
+            break;
+        }
+    }
+    if (!item) {
+        QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
+        if (index.isEmpty())
+            return false;
+        item = const_cast<QDockAreaLayoutItem *>(&this->item(index));
+    }
 
-    QDockAreaLayoutItem &item = this->item(index);
-    QPlaceHolderItem *placeHolder = item.placeHolderItem;
+    QPlaceHolderItem *placeHolder = item->placeHolderItem;
     Q_ASSERT(placeHolder != 0);
 
-    item.widgetItem = new QDockWidgetItem(dockWidget);
+    item->widgetItem = new QDockWidgetItem(dockWidget);
 
     if (placeHolder->window) {
-        const QRect screenGeometry =
-            QApplication::desktop()->screenGeometry(placeHolder->topLevelRect.center());
-        const QRect r = constrainedRect(placeHolder->topLevelRect, screenGeometry);
+        const QRect r = constrainedRect(placeHolder->topLevelRect, dockWidget);
         dockWidget->d_func()->setWindowState(true, true, r);
     }
     dockWidget->setVisible(!placeHolder->hidden);
@@ -2989,7 +3077,7 @@ bool QDockAreaLayout::restoreDockWidget(QDockWidget *dockWidget)
         dockWidget->d_func()->setWindowState(true);
 #endif
 
-    item.placeHolderItem = 0;
+    item->placeHolderItem = 0;
     delete placeHolder;
 
     return true;
@@ -3025,9 +3113,7 @@ void QDockAreaLayout::addDockWidget(QInternal::DockPosition pos, QDockWidget *do
         info = new_info;
     }
 
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(dockWidget->objectName());
 }
 
 void QDockAreaLayout::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
@@ -3040,9 +3126,54 @@ void QDockAreaLayout::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
     Q_ASSERT(info != 0);
     info->tab(path.last(), new QDockWidgetItem(second));
 
-    QList<int> index = indexOfPlaceHolder(second->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(second->objectName());
+}
+
+void QDockAreaLayout::resizeDocks(const QList<QDockWidget *> &docks,
+                                  const QList<int> &sizes, Qt::Orientation o)
+{
+    if (docks.count() != sizes.count()) {
+        qWarning("QMainWidget::resizeDocks: size of the lists are not the same");
+        return;
+    }
+    int count = docks.count();
+    fallbackToSizeHints = false;
+    for (int i = 0; i < count; ++i) {
+        QList<int> path = indexOf(docks[i]);
+        if (path.isEmpty()) {
+            qWarning("QMainWidget::resizeDocks: one QDockWidget is not part of the layout");
+            continue;
+        }
+        int size = sizes[i];
+        if (size <= 0) {
+            qWarning("QMainWidget::resizeDocks: all sizes need to be larger than 0");
+            size = 1;
+        }
+
+        while (path.size() > 1) {
+            QDockAreaLayoutInfo *info = this->info(path);
+            if (!info->tabbed && info->o == o) {
+                info->item_list[path.last()].size = size;
+                int totalSize = 0;
+                foreach (const QDockAreaLayoutItem &item, info->item_list) {
+                    if (!item.skip()) {
+                        if (totalSize != 0)
+                            totalSize += sep;
+                        totalSize += item.size == -1 ? pick(o, item.sizeHint()) : item.size;
+                    }
+                }
+                size = totalSize;
+            }
+            path.removeLast();
+        }
+
+        const int dockNum = path.first();
+        Q_ASSERT(dockNum < QInternal::DockCount);
+        QRect &r = this->docks[dockNum].rect;
+        QSize s = r.size();
+        rpick(o, s) = size;
+        r.setSize(s);
+    }
 }
 
 void QDockAreaLayout::splitDockWidget(QDockWidget *after,
@@ -3057,9 +3188,7 @@ void QDockAreaLayout::splitDockWidget(QDockWidget *after,
     Q_ASSERT(info != 0);
     info->split(path.last(), orientation, new QDockWidgetItem(dockWidget));
 
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(dockWidget->objectName());
 }
 
 void QDockAreaLayout::apply(bool animate)
@@ -3245,8 +3374,9 @@ QSet<QTabBar*> QDockAreaLayout::usedTabBars() const
 QSet<QWidget*> QDockAreaLayout::usedSeparatorWidgets() const
 {
     QSet<QWidget*> result;
-
-    for (int i = 0; i < separatorWidgets.count(); ++i)
+    const int numSeparators = separatorWidgets.count();
+    result.reserve(numSeparators);
+    for (int i = 0; i < numSeparators; ++i)
         result << separatorWidgets.at(i);
     for (int i = 0; i < QInternal::DockCount; ++i) {
         const QDockAreaLayoutInfo &dock = docks[i];

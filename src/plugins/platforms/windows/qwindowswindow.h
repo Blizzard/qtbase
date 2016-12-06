@@ -38,7 +38,6 @@
 #ifdef Q_OS_WINCE
 #  include "qplatformfunctions_wince.h"
 #endif
-#include "qwindowsscaling.h"
 #include "qwindowscursor.h"
 
 #include <qpa/qplatformwindow.h>
@@ -144,35 +143,28 @@ public:
         WithinMaximize = 0x40000,
         MaximizeToFullScreen = 0x80000,
         InputMethodDisabled = 0x100000,
-        Compositing = 0x200000
+        Compositing = 0x200000,
+        HasBorderInFullScreen = 0x400000
     };
 
     QWindowsWindow(QWindow *window, const QWindowsWindowData &data);
     ~QWindowsWindow();
 
+    using QPlatformWindow::screenForGeometry;
+
     QSurfaceFormat format() const Q_DECL_OVERRIDE { return m_format; }
-    void setGeometryDp(const QRect &rectIn);
-    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE
-        { setGeometryDp(QWindowsScaling::mapToNative(rect)); }
-    QRect geometryDp() const { return m_data.geometry; }
-    QRect geometry() const Q_DECL_OVERRIDE
-        { return QWindowsScaling::mapFromNative(geometryDp()); }
-    QRect normalGeometryDp() const;
-    QRect normalGeometry() const Q_DECL_OVERRIDE
-        { return QWindowsScaling::mapFromNative(normalGeometryDp()); }
-    qreal devicePixelRatio() const Q_DECL_OVERRIDE
-        { return qreal(QWindowsScaling::factor()); }
+    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE;
+    QRect geometry() const Q_DECL_OVERRIDE { return m_data.geometry; }
+    QRect normalGeometry() const Q_DECL_OVERRIDE;
+
     void setVisible(bool visible) Q_DECL_OVERRIDE;
     bool isVisible() const;
     bool isExposed() const Q_DECL_OVERRIDE { return testFlag(Exposed); }
     bool isActive() const Q_DECL_OVERRIDE;
-    bool isEmbedded(const QPlatformWindow *parentWindow) const Q_DECL_OVERRIDE;
-    QPoint mapToGlobalDp(const QPoint &pos) const;
-    QPoint mapToGlobal(const QPoint &pos) const Q_DECL_OVERRIDE
-        { return mapToGlobalDp(pos * QWindowsScaling::factor()) / QWindowsScaling::factor(); }
-    QPoint mapFromGlobalDp(const QPoint &pos) const;
-    QPoint mapFromGlobal(const QPoint &pos) const Q_DECL_OVERRIDE
-        { return mapFromGlobalDp(pos * QWindowsScaling::factor()) / QWindowsScaling::factor(); }
+    bool isEmbedded(const QPlatformWindow *parentWindow = 0) const Q_DECL_OVERRIDE;
+    QPoint mapToGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
+    QPoint mapFromGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
+
     void setWindowFlags(Qt::WindowFlags flags) Q_DECL_OVERRIDE;
     void setWindowState(Qt::WindowState state) Q_DECL_OVERRIDE;
 
@@ -185,13 +177,12 @@ public:
     void raise() Q_DECL_OVERRIDE;
     void lower() Q_DECL_OVERRIDE;
 
-    void windowEvent(QEvent *event);
+    void windowEvent(QEvent *event) Q_DECL_OVERRIDE;
 
     void propagateSizeHints() Q_DECL_OVERRIDE;
     static bool handleGeometryChangingMessage(MSG *message, const QWindow *qWindow, const QMargins &marginsDp);
     bool handleGeometryChanging(MSG *message) const;
-    QMargins frameMarginsDp() const;
-    QMargins frameMargins() const Q_DECL_OVERRIDE { return frameMarginsDp() / QWindowsScaling::factor(); }
+    QMargins frameMargins() const Q_DECL_OVERRIDE;
 
     void setOpacity(qreal level) Q_DECL_OVERRIDE;
     void setMask(const QRegion &region) Q_DECL_OVERRIDE;
@@ -202,10 +193,10 @@ public:
     bool setMouseGrabEnabled(bool grab) Q_DECL_OVERRIDE;
     inline bool hasMouseCapture() const { return GetCapture() == m_data.hwnd; }
 
-    bool startSystemResize(const QPoint &, Qt::Corner corner) Q_DECL_OVERRIDE;
+    bool startSystemResize(const QPoint &pos, Qt::Corner corner) Q_DECL_OVERRIDE;
 
-    void setFrameStrutEventsEnabled(bool enabled);
-    bool frameStrutEventsEnabled() const { return testFlag(FrameStrutEventsEnabled); }
+    void setFrameStrutEventsEnabled(bool enabled) Q_DECL_OVERRIDE;
+    bool frameStrutEventsEnabled() const Q_DECL_OVERRIDE { return testFlag(FrameStrutEventsEnabled); }
 
     QMargins customMargins() const { return m_data.customMargins; }
     void setCustomMargins(const QMargins &m);
@@ -244,9 +235,9 @@ public:
 #endif // !Q_OS_WINCE
 
 #ifndef QT_NO_CURSOR
-    QWindowsWindowCursor cursor() const { return m_cursor; }
+    CursorHandlePtr cursor() const { return m_cursor; }
 #endif
-    void setCursor(const QWindowsWindowCursor &c);
+    void setCursor(const CursorHandlePtr &c);
     void applyCursor();
 
     inline bool testFlag(unsigned f) const  { return (m_flags & f) != 0; }
@@ -255,22 +246,23 @@ public:
 
     void setEnabled(bool enabled);
     bool isEnabled() const;
-    void setWindowIcon(const QIcon &icon);
+    void setWindowIcon(const QIcon &icon) Q_DECL_OVERRIDE;
 
     void *surface(void *nativeConfig, int *err);
     void invalidateSurface() Q_DECL_OVERRIDE;
     void aboutToMakeCurrent();
 
 #ifndef Q_OS_WINCE
-    void setAlertState(bool enabled);
-    bool isAlertState() const { return testFlag(AlertState); }
+    void setAlertState(bool enabled) Q_DECL_OVERRIDE;
+    bool isAlertState() const Q_DECL_OVERRIDE { return testFlag(AlertState); }
     void alertWindow(int durationMs = 0);
     void stopAlertWindow();
 #endif
 
     static void setTouchWindowTouchTypeStatic(QWindow *window, QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes);
     void registerTouchWindow(QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes = QWindowsWindowFunctions::NormalTouch);
-
+    static void setHasBorderInFullScreenStatic(QWindow *window, bool border);
+    void setHasBorderInFullScreen(bool border);
 private:
     inline void show_sys() const;
     inline void hide_sys() const;
@@ -297,7 +289,7 @@ private:
     Qt::WindowState m_windowState;
     qreal m_opacity;
 #ifndef QT_NO_CURSOR
-    QWindowsWindowCursor m_cursor;
+    CursorHandlePtr m_cursor;
 #endif
     QWindowsOleDropTarget *m_dropTarget;
     unsigned m_savedStyle;
@@ -311,12 +303,15 @@ private:
     void *m_surface;
 };
 
-// Debug
+#ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug d, const RECT &r);
-#ifndef Q_OS_WINCE // maybe available on some SDKs revisit WM_GETMINMAXINFO/WM_NCCALCSIZE
+QDebug operator<<(QDebug d, const POINT &);
+#  ifndef Q_OS_WINCE
 QDebug operator<<(QDebug d, const MINMAXINFO &i);
 QDebug operator<<(QDebug d, const NCCALCSIZE_PARAMS &p);
-#endif
+QDebug operator<<(QDebug d, const WINDOWPLACEMENT &);
+#  endif // !Q_OS_WINCE
+#endif // !QT_NO_DEBUG_STREAM
 
 // ---------- QWindowsGeometryHint inline functions.
 QPoint QWindowsGeometryHint::mapToGlobal(HWND hwnd, const QPoint &qp)

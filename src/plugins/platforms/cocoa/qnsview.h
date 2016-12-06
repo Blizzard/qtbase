@@ -75,7 +75,10 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
     QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper) *m_mouseMoveHelper;
     bool m_resendKeyEvent;
     bool m_scrolling;
+    bool m_updatingDrag;
     bool m_exposedOnMoveToWindow;
+    NSEvent *m_currentlyInterpretedKeyEvent;
+    bool m_isMenuView;
 }
 
 - (id)init;
@@ -93,8 +96,10 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)notifyWindowStateChanged:(Qt::WindowState)newState;
 - (void)windowNotification : (NSNotification *) windowNotification;
 - (void)notifyWindowWillZoom:(BOOL)willZoom;
+- (void)textInputContextKeyboardSelectionDidChangeNotification : (NSNotification *) textInputContextKeyboardSelectionDidChangeNotification;
 - (void)viewDidHide;
 - (void)viewDidUnhide;
+- (void)removeFromSuperview;
 
 - (BOOL)isFlipped;
 - (BOOL)acceptsFirstResponder;
@@ -122,7 +127,7 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)otherMouseUp:(NSEvent *)theEvent;
 - (void)handleFrameStrutMouseEvent:(NSEvent *)theEvent;
 
-- (void)handleTabletEvent: (NSEvent *)theEvent;
+- (bool)handleTabletEvent: (NSEvent *)theEvent;
 - (void)tabletPoint: (NSEvent *)theEvent;
 - (void)tabletProximity: (NSEvent *)theEvent;
 
@@ -131,7 +136,6 @@ Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper));
 - (void)handleKeyEvent:(NSEvent *)theEvent eventType:(int)eventType;
 - (void)keyDown:(NSEvent *)theEvent;
 - (void)keyUp:(NSEvent *)theEvent;
-- (BOOL)performKeyEquivalent:(NSEvent *)theEvent;
 
 - (void)registerDragTypes;
 - (NSDragOperation)handleDrag:(id <NSDraggingInfo>)sender;

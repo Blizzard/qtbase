@@ -74,7 +74,7 @@ static const int xpmRgbTblSize = 657;
 
 static const struct XPMRGBData {
     uint  value;
-    const char *name;
+    const char name[21];
 } xpmRgbTbl[] = {
   { QRGB(240,248,255),  "aliceblue" },
   { QRGB(250,235,215),  "antiquewhite" },
@@ -1098,7 +1098,7 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
 
     // build color table
     for(y=0; y<h; y++) {
-        QRgb * yp = (QRgb *)image.scanLine(y);
+        const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
         for(x=0; x<w; x++) {
             QRgb color = *(yp + x);
             if (!colorMap.contains(color))
@@ -1144,7 +1144,7 @@ static bool write_xpm_image(const QImage &sourceImage, QIODevice *device, const 
     // write pixels, limit to 4 characters per pixel
     line.truncate(cpp*w);
     for(y=0; y<h; y++) {
-        QRgb * yp = (QRgb *) image.scanLine(y);
+        const QRgb *yp = reinterpret_cast<const QRgb *>(image.constScanLine(y));
         int cc = 0;
         for(x=0; x<w; x++) {
             int color = (int)(*(yp + x));

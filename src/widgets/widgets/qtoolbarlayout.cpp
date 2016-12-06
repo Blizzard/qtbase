@@ -153,7 +153,7 @@ void QToolBarLayout::checkUsePopupMenu()
 
 void QToolBarLayout::addItem(QLayoutItem*)
 {
-    qWarning() << "QToolBarLayout::addItem(): please use addAction() instead";
+    qWarning("QToolBarLayout::addItem(): please use addAction() instead");
     return;
 }
 
@@ -741,5 +741,7 @@ QToolBarItem *QToolBarLayout::createItem(QAction *action)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qtoolbarlayout_p.cpp"
 
 #endif // QT_NO_TOOLBAR

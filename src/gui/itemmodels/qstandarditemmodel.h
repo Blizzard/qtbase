@@ -158,10 +158,20 @@ public:
     }
     void setCheckable(bool checkable);
 
-    inline bool isTristate() const {
-        return (flags() & Qt::ItemIsTristate) != 0;
+    inline bool isAutoTristate() const {
+        return (flags() & Qt::ItemIsAutoTristate) != 0;
     }
-    void setTristate(bool tristate);
+    void setAutoTristate(bool tristate);
+
+    inline bool isUserTristate() const {
+        return (flags() & Qt::ItemIsUserTristate) != 0;
+    }
+    void setUserTristate(bool tristate);
+
+#if QT_DEPRECATED_SINCE(5, 6)
+    QT_DEPRECATED bool isTristate() const { return isAutoTristate(); }
+    QT_DEPRECATED void setTristate(bool tristate);
+#endif
 
 #ifndef QT_NO_DRAGANDDROP
     inline bool isDragEnabled() const {
@@ -310,8 +320,8 @@ class Q_GUI_EXPORT QStandardItemModel : public QAbstractItemModel
     Q_PROPERTY(int sortRole READ sortRole WRITE setSortRole)
 
 public:
-    explicit QStandardItemModel(QObject *parent = 0);
-    QStandardItemModel(int rows, int columns, QObject *parent = 0);
+    explicit QStandardItemModel(QObject *parent = Q_NULLPTR);
+    QStandardItemModel(int rows, int columns, QObject *parent = Q_NULLPTR);
     ~QStandardItemModel();
 
     void setItemRoleNames(const QHash<int,QByteArray> &roleNames);
@@ -405,7 +415,7 @@ Q_SIGNALS:
     void itemChanged(QStandardItem *item);
 
 protected:
-    QStandardItemModel(QStandardItemModelPrivate &dd, QObject *parent = 0);
+    QStandardItemModel(QStandardItemModelPrivate &dd, QObject *parent = Q_NULLPTR);
 
 private:
     friend class QStandardItemPrivate;

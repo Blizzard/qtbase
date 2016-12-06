@@ -46,13 +46,21 @@ QT_BEGIN_NAMESPACE
   PBM/PGM/PPM (ASCII and RAW) image read/write functions
  *****************************************************************************/
 
+static void discard_pbm_line(QIODevice *d)
+{
+    const int buflen = 100;
+    char buf[buflen];
+    int res = 0;
+    do {
+        res = d->readLine(buf, buflen);
+    } while (res > 0 && buf[res-1] != '\n');
+}
+
 static int read_pbm_int(QIODevice *d)
 {
     char c;
     int          val = -1;
     bool  digit;
-    const int buflen = 100;
-    char  buf[buflen];
     for (;;) {
         if (!d->getChar(&c))                // end of file
             break;
@@ -63,7 +71,7 @@ static int read_pbm_int(QIODevice *d)
                 continue;
             } else {
                 if (c == '#')                        // comment
-                    d->readLine(buf, buflen);
+                    discard_pbm_line(d);
                 break;
             }
         }
@@ -72,7 +80,7 @@ static int read_pbm_int(QIODevice *d)
         else if (isspace((uchar) c))
             continue;
         else if (c == '#')
-            (void)d->readLine(buf, buflen);
+            discard_pbm_line(d);
         else
             break;
     }
@@ -321,7 +329,7 @@ static bool write_pbm_image(QIODevice *out, const QImage &sourceImage, const QBy
             if (image.format() == QImage::Format_Indexed8) {
                 QVector<QRgb> color = image.colorTable();
                 for (uint y=0; y<h; y++) {
-                    uchar *b = image.scanLine(y);
+                    const uchar *b = image.constScanLine(y);
                     uchar *p = buf;
                     uchar *end = buf+bpl;
                     if (gray) {
@@ -342,7 +350,7 @@ static bool write_pbm_image(QIODevice *out, const QImage &sourceImage, const QBy
                 }
             } else {
                 for (uint y=0; y<h; y++) {
-                    uchar *b = image.scanLine(y);
+                    const uchar *b = image.constScanLine(y);
                     uchar *p = buf;
                     uchar *end = buf + bpl;
                     if (gray) {
@@ -372,7 +380,7 @@ static bool write_pbm_image(QIODevice *out, const QImage &sourceImage, const QBy
             uint bpl = w * 3;
             uchar *buf = new uchar[bpl];
             for (uint y=0; y<h; y++) {
-                QRgb  *b = (QRgb*)image.scanLine(y);
+                const QRgb  *b = reinterpret_cast<const QRgb *>(image.constScanLine(y));
                 uchar *p = buf;
                 uchar *end = buf+bpl;
                 while (p < end) {

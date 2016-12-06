@@ -50,10 +50,12 @@
 #include <QtGui/qguiapplication.h>
 
 #include "qwindowsaccessibility.h"
-#ifdef Q_CC_MINGW
-# include "qwindowsmsaaaccessible.h"
-#else
-# include "iaccessible2.h"
+#if !defined(Q_OS_WINCE)
+# ifdef Q_CC_MINGW
+#  include "qwindowsmsaaaccessible.h"
+# else
+#  include "iaccessible2.h"
+# endif
 #endif
 #include "comutils.h"
 
@@ -68,8 +70,9 @@
 #if !defined(WINABLEAPI)
 #  if defined(Q_OS_WINCE)
 #    include <bldver.h>
+#  else
+#    include <winable.h>
 #  endif
-#  include <winable.h>
 #endif
 
 #include <servprov.h>
@@ -151,7 +154,7 @@ void QWindowsAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event)
     // An event has to be associated with a window,
     // so find the first parent that is a widget and that has a WId
     QAccessibleInterface *iface = event->accessibleInterface();
-    if (!iface || !iface->isValid())
+    if (!isActive() || !iface || !iface->isValid())
         return;
     QWindow *window = QWindowsAccessibility::windowHelper(iface);
 
@@ -164,7 +167,7 @@ void QWindowsAccessibility::notifyAccessibilityUpdate(QAccessibleEvent *event)
     QPlatformNativeInterface *platform = QGuiApplication::platformNativeInterface();
     if (!window->handle()) // Called before show(), no native window yet.
         return;
-    HWND hWnd = (HWND)platform->nativeResourceForWindow("handle", window);
+    const HWND hWnd = reinterpret_cast<HWND>(platform->nativeResourceForWindow("handle", window));
 
     if (event->type() != QAccessible::MenuCommand && // MenuCommand is faked
         event->type() != QAccessible::ObjectDestroyed) {
@@ -193,6 +196,11 @@ QWindow *QWindowsAccessibility::windowHelper(const QAccessibleInterface *iface)
 */
 IAccessible *QWindowsAccessibility::wrap(QAccessibleInterface *acc)
 {
+#if defined(Q_OS_WINCE)
+    Q_UNUSED(acc);
+
+    return 0;
+#else
     if (!acc)
         return 0;
 
@@ -200,47 +208,29 @@ IAccessible *QWindowsAccessibility::wrap(QAccessibleInterface *acc)
     if (!QAccessible::uniqueId(acc))
         QAccessible::registerAccessibleInterface(acc);
 
-#ifdef Q_CC_MINGW
+# ifdef Q_CC_MINGW
     QWindowsMsaaAccessible *wacc = new QWindowsMsaaAccessible(acc);
-#else
+# else
     QWindowsIA2Accessible *wacc = new QWindowsIA2Accessible(acc);
-#endif
+# endif
     IAccessible *iacc = 0;
-    wacc->QueryInterface(IID_IAccessible, (void**)&iacc);
+    wacc->QueryInterface(IID_IAccessible, reinterpret_cast<void **>(&iacc));
     return iacc;
+#endif // defined(Q_OS_WINCE)
 }
-
-/*
-void QWindowsAccessibility::setRootObject(QObject *o)
-{
-
-}
-
-void QWindowsAccessibility::initialize()
-{
-
-}
-
-void QWindowsAccessibility::cleanup()
-{
-
-}
-
-*/
 
 bool QWindowsAccessibility::handleAccessibleObjectFromWindowRequest(HWND hwnd, WPARAM wParam, LPARAM lParam, LRESULT *lResult)
 {
+#if !defined(Q_OS_WINCE)
     if (static_cast<long>(lParam) == static_cast<long>(UiaRootObjectId)) {
         /* For UI Automation */
-    } else if ((DWORD)lParam == DWORD(OBJID_CLIENT)) {
+    } else if (DWORD(lParam) == DWORD(OBJID_CLIENT)) {
         // Start handling accessibility internally
         QGuiApplicationPrivate::platformIntegration()->accessibility()->setActive(true);
-#if 1
         // Ignoring all requests while starting up
         // ### Maybe QPA takes care of this???
         if (QCoreApplication::startingUp() || QCoreApplication::closingDown())
             return false;
-#endif
 
         typedef LRESULT (WINAPI *PtrLresultFromObject)(REFIID, WPARAM, LPUNKNOWN);
         static PtrLresultFromObject ptrLresultFromObject = 0;
@@ -248,9 +238,7 @@ bool QWindowsAccessibility::handleAccessibleObjectFromWindowRequest(HWND hwnd, W
 
         if (!oleaccChecked) {
             oleaccChecked = true;
-#if !defined(Q_OS_WINCE)
-            ptrLresultFromObject = (PtrLresultFromObject)QSystemLibrary::resolve(QLatin1String("oleacc"), "LresultFromObject");
-#endif
+            ptrLresultFromObject = reinterpret_cast<PtrLresultFromObject>(QSystemLibrary::resolve(QLatin1String("oleacc"), "LresultFromObject"));
         }
 
         if (ptrLresultFromObject) {
@@ -269,6 +257,12 @@ bool QWindowsAccessibility::handleAccessibleObjectFromWindowRequest(HWND hwnd, W
             }
         }
     }
+#else
+    Q_UNUSED(hwnd);
+    Q_UNUSED(wParam);
+    Q_UNUSED(lParam);
+    Q_UNUSED(lResult);
+#endif // !defined(Q_OS_WINCE)
     return false;
 }
 

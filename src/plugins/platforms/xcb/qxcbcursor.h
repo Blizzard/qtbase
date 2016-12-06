@@ -75,7 +75,7 @@ public:
     QPoint pos() const Q_DECL_OVERRIDE;
     void setPos(const QPoint &pos) Q_DECL_OVERRIDE;
 
-    static void queryPointer(QXcbConnection *c, xcb_window_t *rootWin, QPoint *pos, int *keybMask = 0);
+    static void queryPointer(QXcbConnection *c, QXcbVirtualDesktop **virtualDesktop, QPoint *pos, int *keybMask = 0);
 
 private:
 #ifndef QT_NO_CURSOR
@@ -90,7 +90,7 @@ private:
 #ifndef QT_NO_CURSOR
     CursorHash m_cursorHash;
 #endif
-#ifdef XCB_USE_XLIB
+#if defined(XCB_USE_XLIB) && !defined(QT_NO_LIBRARY)
     static void cursorThemePropertyChanged(QXcbVirtualDesktop *screen,
                                            const QByteArray &name,
                                            const QVariant &property,

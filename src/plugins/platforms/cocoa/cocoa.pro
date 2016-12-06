@@ -1,10 +1,5 @@
 TARGET = qcocoa
 
-PLUGIN_TYPE = platforms
-PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin
-!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
-load(qt_plugin)
-
 OBJECTIVE_SOURCES += main.mm \
     qcocoaintegration.mm \
     qcocoatheme.mm \
@@ -12,7 +7,6 @@ OBJECTIVE_SOURCES += main.mm \
     qcocoawindow.mm \
     qnsview.mm \
     qnsviewaccessibility.mm \
-    qcocoaautoreleasepool.mm \
     qnswindowdelegate.mm \
     qcocoanativeinterface.mm \
     qcocoaeventdispatcher.mm \
@@ -48,7 +42,6 @@ HEADERS += qcocoaintegration.h \
     qcocoabackingstore.h \
     qcocoawindow.h \
     qnsview.h \
-    qcocoaautoreleasepool.h \
     qnswindowdelegate.h \
     qcocoanativeinterface.h \
     qcocoaeventdispatcher.h \
@@ -114,3 +107,8 @@ OTHER_FILES += cocoa.json
 
 # Window debug support
 #DEFINES += QT_COCOA_ENABLE_WINDOW_DEBUG
+
+PLUGIN_TYPE = platforms
+PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin
+!equals(TARGET, $$QT_DEFAULT_QPA_PLUGIN): PLUGIN_EXTENDS = -
+load(qt_plugin)

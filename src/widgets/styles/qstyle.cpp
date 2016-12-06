@@ -98,7 +98,7 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     The style gets all the information it needs to render the
     graphical element from the QStyleOption class. The widget is
     passed as the last argument in case the style needs it to perform
-    special effects (such as animated default buttons on OS X),
+    special effects (such as animated default buttons on \macos),
     but it isn't mandatory. In fact, QStyle can be used to draw on any
     paint device (not just widgets), in which case the widget argument
     is a zero pointer.
@@ -151,10 +151,10 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
 
     Qt's built-in widgets use QStyle to perform nearly all of their
     drawing, ensuring that they look exactly like the equivalent
-    native widgets. The diagram below shows a QComboBox in eight
+    native widgets. The diagram below shows a QComboBox in nine
     different styles.
 
-    \image qstyle-comboboxes.png Eight combo boxes
+    \image qstyle-comboboxes.png Nine combo boxes
 
     Topics:
 
@@ -197,7 +197,7 @@ static int unpackControlTypes(QSizePolicy::ControlTypes controls, QSizePolicy::C
     QStyle gets all the information it needs to render the graphical
     element from QStyleOption. The widget is passed as the last
     argument in case the style needs it to perform special effects
-    (such as animated default buttons on OS X), but it isn't
+    (such as animated default buttons on \macos), but it isn't
     mandatory. In fact, you can use QStyle to draw on any paint
     device, not just widgets, by setting the QPainter properly.
 
@@ -725,7 +725,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
 
     \value State_None Indicates that the widget does not have a state.
     \value State_Active Indicates that the widget is active.
-    \value State_AutoRaise Used to indicate if auto-raise appearance should be usd on a tool button.
+    \value State_AutoRaise Used to indicate if auto-raise appearance should be used on a tool button.
     \value State_Children Used to indicate if an item view branch has children.
     \value State_DownArrow Used to indicate if a down arrow should be visible on the widget.
     \value State_Editing Used to indicate if an editor is opened on the widget.
@@ -896,7 +896,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \value CE_ToolBoxTabLabel  The toolbox's tab label.
     \value CE_HeaderEmptyArea  The area of a header view where there are no header sections.
 
-    \value CE_ShapedFrame The frame with the shape specified in the QStyleOptionFrameV3; see QFrame.
+    \value CE_ShapedFrame The frame with the shape specified in the QStyleOptionFrame; see QFrame.
 
     \omitvalue CE_ColumnViewGrip
 
@@ -1034,7 +1034,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
     \omitvalue SE_ViewItemCheckIndicator
 
     \value SE_FrameContents  Area for a frame's contents.
-    \value SE_ShapedFrameContents Area for a frame's contents using the shape in QStyleOptionFrameV3; see QFrame
+    \value SE_ShapedFrameContents Area for a frame's contents using the shape in QStyleOptionFrame; see QFrame
     \value SE_FrameLayoutItem  Area that counts for the parent layout.
 
     \value SE_HeaderArrow Area for the sort indicator for a header.
@@ -1718,7 +1718,7 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
         desktop platforms.
 
     \value SH_Menu_SubMenuUniDirection Since Qt 5.5. If the cursor has
-        to move towards the submenu (like it is on OS X), or if the
+        to move towards the submenu (like it is on \macos), or if the
         cursor can move in any direction as long as it reaches the
         submenu before the sloppy timeout.
 
@@ -2407,3 +2407,5 @@ void QStyle::setProxy(QStyle *style)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qstyle.cpp"

@@ -41,7 +41,6 @@
 #include "qmakeparser.h"
 #include "ioutils.h"
 
-#include <qiodevice.h>
 #include <qlist.h>
 #include <qlinkedlist.h>
 #include <qmap.h>
@@ -52,6 +51,8 @@
 #include <qshareddata.h>
 #ifndef QT_BOOTSTRAPPED
 # include <qprocess.h>
+#else
+# include <qiodevice.h>
 #endif
 #ifdef PROEVALUATOR_THREAD_SAFE
 # include <qmutex.h>
@@ -67,6 +68,8 @@ public:
     enum {
         SourceEvaluator = 0x10,
 
+        CumulativeEvalMessage = 0x1000,
+
         EvalWarnLanguage = SourceEvaluator |  WarningMessage | WarnLanguage,
         EvalWarnDeprecated = SourceEvaluator | WarningMessage | WarnDeprecated,
 
@@ -74,7 +77,7 @@ public:
     };
 
     // error(), warning() and message() from .pro file
-    virtual void fileMessage(const QString &msg) = 0;
+    virtual void fileMessage(int type, const QString &msg) = 0;
 
     enum EvalFileType { EvalProjectFile, EvalIncludeFile, EvalConfigFile, EvalFeatureFile, EvalAuxFile };
     virtual void aboutToEval(ProFile *parent, ProFile *proFile, EvalFileType type) = 0;
@@ -150,7 +153,7 @@ public:
         { return b ? ReturnTrue : ReturnFalse; }
 
     static ALWAYS_INLINE uint getBlockLen(const ushort *&tokPtr);
-    void evaluateExpression(const ushort *&tokPtr, ProStringList *ret, bool joined);
+    VisitReturn evaluateExpression(const ushort *&tokPtr, ProStringList *ret, bool joined);
     static ALWAYS_INLINE void skipStr(const ushort *&tokPtr);
     static ALWAYS_INLINE void skipHashStr(const ushort *&tokPtr);
     void skipExpression(const ushort *&tokPtr);
@@ -170,7 +173,7 @@ public:
     VisitReturn visitProLoop(const ProKey &variable, const ushort *exprPtr,
                              const ushort *tokPtr);
     void visitProFunctionDef(ushort tok, const ProKey &name, const ushort *tokPtr);
-    void visitProVariable(ushort tok, const ProStringList &curr, const ushort *&tokPtr);
+    VisitReturn visitProVariable(ushort tok, const ProStringList &curr, const ushort *&tokPtr);
 
     ALWAYS_INLINE const ProKey &map(const ProString &var) { return map(var.toKey()); }
     const ProKey &map(const ProKey &var);
@@ -179,8 +182,7 @@ public:
     void setTemplate();
 
     ProStringList split_value_list(const QString &vals, const ProFile *source = 0);
-    ProStringList expandVariableReferences(const ProString &value, int *pos = 0, bool joined = false);
-    ProStringList expandVariableReferences(const ushort *&tokPtr, int sizeHint = 0, bool joined = false);
+    VisitReturn expandVariableReferences(const ushort *&tokPtr, int sizeHint, ProStringList *ret, bool joined);
 
     QString currentFileName() const;
     QString currentDirectory() const;
@@ -205,22 +207,22 @@ public:
     void deprecationWarning(const QString &msg) const
             { message(QMakeHandler::EvalWarnDeprecated, msg); }
 
-    QList<ProStringList> prepareFunctionArgs(const ushort *&tokPtr);
-    ProStringList evaluateFunction(const ProFunctionDef &func,
-                                   const QList<ProStringList> &argumentsList, VisitReturn *ok);
+    VisitReturn prepareFunctionArgs(const ushort *&tokPtr, QList<ProStringList> *ret);
+    VisitReturn evaluateFunction(const ProFunctionDef &func,
+                                 const QList<ProStringList> &argumentsList, ProStringList *ret);
     VisitReturn evaluateBoolFunction(const ProFunctionDef &func,
                                      const QList<ProStringList> &argumentsList,
                                      const ProString &function);
 
-    ProStringList evaluateExpandFunction(const ProKey &function, const ushort *&tokPtr);
+    VisitReturn evaluateExpandFunction(const ProKey &function, const ushort *&tokPtr, ProStringList *ret);
     VisitReturn evaluateConditionalFunction(const ProKey &function, const ushort *&tokPtr);
 
     ProStringList evaluateBuiltinExpand(int func_t, const ProKey &function, const ProStringList &args);
     VisitReturn evaluateBuiltinConditional(int func_t, const ProKey &function, const ProStringList &args);
 
-    bool evaluateConditional(const QString &cond, const QString &where, int line = -1);
+    VisitReturn evaluateConditional(const QString &cond, const QString &where, int line = -1);
 #ifdef PROEVALUATOR_FULL
-    void checkRequirements(const ProStringList &deps);
+    VisitReturn checkRequirements(const ProStringList &deps);
 #endif
 
     void updateMkspecPaths();
@@ -235,7 +237,7 @@ public:
             QMultiMap<int, ProString> &rootSet) const;
 
     VisitReturn writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
-                          const QString &contents);
+                          bool exe, const QString &contents);
 #ifndef QT_BOOTSTRAPPED
     void runProcess(QProcess *proc, const QString &command) const;
 #endif
@@ -310,6 +312,7 @@ public:
     QMakeHandler *m_handler;
     QMakeVfs *m_vfs;
 };
+Q_DECLARE_TYPEINFO(QMakeEvaluator::Location, Q_PRIMITIVE_TYPE);
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QMakeEvaluator::LoadFlags)
 

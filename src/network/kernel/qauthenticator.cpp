@@ -193,6 +193,8 @@ bool QAuthenticator::operator==(const QAuthenticator &other) const
 {
     if (d == other.d)
         return true;
+    if (!d || !other.d)
+        return false;
     return d->user == other.d->user
         && d->password == other.d->password
         && d->realm == other.d->realm
@@ -693,13 +695,13 @@ QByteArray QAuthenticatorPrivate::digestMd5Response(const QByteArray &challenge,
     credentials += "uri=\"" + path + "\", ";
     if (!opaque.isEmpty())
         credentials += "opaque=\"" + opaque + "\", ";
-    credentials += "response=\"" + response + '\"';
+    credentials += "response=\"" + response + '"';
     if (!options.value("algorithm").isEmpty())
         credentials += ", algorithm=" + options.value("algorithm");
     if (!options.value("qop").isEmpty()) {
         credentials += ", qop=" + qop + ", ";
         credentials += "nc=" + nonceCountString + ", ";
-        credentials += "cnonce=\"" + cnonce + '\"';
+        credentials += "cnonce=\"" + cnonce + '"';
     }
 
     return credentials;
@@ -1270,10 +1272,10 @@ static QByteArray qEncodeNtlmv2Response(const QAuthenticatorPrivate *ctx,
         // 369 years, 89 leap years
         // ((369 * 365) + 89) * 24 * 3600 = 11644473600
 
-        time = Q_UINT64_C(currentTime.toTime_t() + 11644473600);
+        time = currentTime.toTime_t() + Q_UINT64_C(11644473600);
 
         // represented as 100 nano seconds
-        time = Q_UINT64_C(time * 10000000);
+        time = time * Q_UINT64_C(10000000);
         ds << time;
     }
 

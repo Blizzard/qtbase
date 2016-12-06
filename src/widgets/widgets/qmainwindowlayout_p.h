@@ -77,6 +77,37 @@ QT_BEGIN_NAMESPACE
 class QToolBar;
 class QRubberBand;
 
+#ifndef QT_NO_DOCKWIDGET
+class QDockWidgetGroupWindow : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit QDockWidgetGroupWindow(QWidget* parent = 0, Qt::WindowFlags f = 0)
+        : QWidget(parent, f) {}
+    QDockAreaLayoutInfo *layoutInfo() const;
+    QDockWidget *topDockWidget() const;
+    void destroyOrHideIfEmpty();
+    void adjustFlags();
+protected:
+    bool event(QEvent *) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
+};
+
+// This item will be used in the layout for the gap item. We cannot use QWidgetItem directly
+// because QWidgetItem functions return an empty size for widgets that are are floating.
+class QDockWidgetGroupWindowItem : public QWidgetItem
+{
+public:
+    explicit QDockWidgetGroupWindowItem(QDockWidgetGroupWindow *parent) : QWidgetItem(parent) {}
+    QSize minimumSize() const Q_DECL_OVERRIDE { return lay()->minimumSize(); }
+    QSize maximumSize() const Q_DECL_OVERRIDE { return lay()->maximumSize(); }
+    QSize sizeHint() const Q_DECL_OVERRIDE { return lay()->sizeHint(); }
+
+private:
+    QLayout *lay() const { return const_cast<QDockWidgetGroupWindowItem *>(this)->widget()->layout(); }
+};
+#endif
+
 /* This data structure represents the state of all the tool-bars and dock-widgets. It's value based
    so it can be easilly copied into a temporary variable. All operations are performed without moving
    any widgets. Only when we are sure we have the desired state, we call apply(), which moves the
@@ -196,10 +227,11 @@ public:
                          QDockWidget *dockwidget,
                          Qt::Orientation orientation);
     void tabifyDockWidget(QDockWidget *first, QDockWidget *second);
-    Qt::DockWidgetArea dockWidgetArea(QDockWidget *dockwidget) const;
+    Qt::DockWidgetArea dockWidgetArea(QWidget* widget) const;
     void raise(QDockWidget *widget);
     void setVerticalTabsEnabled(bool enabled);
     bool restoreDockWidget(QDockWidget *dockwidget);
+    QDockAreaLayoutInfo *dockInfo(QWidget *w);
 
 #ifndef QT_NO_TABBAR
     bool _documentMode;
@@ -224,6 +256,8 @@ public:
     void setTabShape(QTabWidget::TabShape tabShape);
     QTabWidget::TabPosition tabPosition(Qt::DockWidgetArea area) const;
     void setTabPosition(Qt::DockWidgetAreas areas, QTabWidget::TabPosition tabPosition);
+
+    QDockWidgetGroupWindow *createTabbedDockWindow();
 #endif // QT_NO_TABWIDGET
 #endif // QT_NO_TABBAR
 
@@ -268,12 +302,15 @@ public:
     QRect currentGapRect;
     QWidget *pluggingWidget;
 #ifndef QT_NO_RUBBERBAND
-    QRubberBand *gapIndicator;
+    QPointer<QRubberBand> gapIndicator;
+#endif
+#ifndef QT_NO_DOCKWIDGET
+    QPointer<QWidget> currentHoveredFloat; // set when dragging over a floating dock widget
 #endif
 
-    QList<int> hover(QLayoutItem *widgetItem, const QPoint &mousePos);
+    void hover(QLayoutItem *widgetItem, const QPoint &mousePos);
     bool plug(QLayoutItem *widgetItem);
-    QLayoutItem *unplug(QWidget *widget);
+    QLayoutItem *unplug(QWidget *widget, bool group = false);
     void revert(QLayoutItem *widgetItem);
     void updateGapIndicator();
     void paintDropIndicator(QPainter *p, QWidget *widget, const QRegion &clip);
@@ -286,6 +323,7 @@ private Q_SLOTS:
 #ifndef QT_NO_DOCKWIDGET
 #ifndef QT_NO_TABBAR
     void tabChanged();
+    void tabMoved(int from, int to);
 #endif
 #endif
 private:

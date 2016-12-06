@@ -42,6 +42,7 @@
 #include <qfileinfo.h>
 #include <qregexp.h>
 #include <qwineventnotifier.h>
+#include <private/qsystemlibrary_p.h>
 #include <private/qthread_p.h>
 #include <qdebug.h>
 
@@ -217,7 +218,8 @@ bool QProcessPrivate::openChannel(Channel &channel)
             if (channel.pipe[0] != INVALID_Q_PIPE)
                 return true;
 
-            q->setErrorString(QProcess::tr("Could not open input redirection for reading"));
+            setErrorAndEmit(QProcess::FailedToStart,
+                            QProcess::tr("Could not open input redirection for reading"));
         } else {
             // open in write mode
             channel.pipe[0] = INVALID_Q_PIPE;
@@ -237,12 +239,9 @@ bool QProcessPrivate::openChannel(Channel &channel)
                 return true;
             }
 
-            q->setErrorString(QProcess::tr("Could not open output redirection for writing"));
+            setErrorAndEmit(QProcess::FailedToStart,
+                            QProcess::tr("Could not open output redirection for writing"));
         }
-
-        // could not open file
-        processError = QProcess::FailedToStart;
-        emit q->error(processError);
         cleanup();
         return false;
     } else {
@@ -504,9 +503,10 @@ void QProcessPrivate::startProcess()
                             environment.isEmpty() ? 0 : envlist.data(),
                             workingDirectory.isEmpty() ? 0 : (wchar_t*)QDir::toNativeSeparators(workingDirectory).utf16(),
                             &startupInfo, pid);
+    QString errorString;
     if (!success) {
         // Capture the error string before we do CloseHandle below
-        q->setErrorString(QProcess::tr("Process failed to start: %1").arg(qt_error_string()));
+        errorString = QProcess::tr("Process failed to start: %1").arg(qt_error_string());
     }
 
     if (stdinChannel.pipe[0] != INVALID_Q_PIPE) {
@@ -524,8 +524,7 @@ void QProcessPrivate::startProcess()
 
     if (!success) {
         cleanup();
-        processError = QProcess::FailedToStart;
-        emit q->error(processError);
+        setErrorAndEmit(QProcess::FailedToStart, errorString);
         q->setProcessState(QProcess::NotRunning);
         return;
     }
@@ -545,7 +544,7 @@ void QProcessPrivate::startProcess()
     _q_startupNotification();
 }
 
-bool QProcessPrivate::processStarted()
+bool QProcessPrivate::processStarted(QString * /*errorMessage*/)
 {
     return processState == QProcess::Running;
 }
@@ -595,16 +594,13 @@ void QProcessPrivate::killProcess()
 
 bool QProcessPrivate::waitForStarted(int)
 {
-    Q_Q(QProcess);
-
     if (processStarted())
         return true;
 
     if (processError == QProcess::FailedToStart)
         return false;
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
 }
 
@@ -636,8 +632,6 @@ bool QProcessPrivate::drainOutputPipes()
 
 bool QProcessPrivate::waitForReadyRead(int msecs)
 {
-    Q_Q(QProcess);
-
     QIncrementalSleepTimer timer(msecs);
 
     forever {
@@ -652,9 +646,10 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
 
         if (!pid)
             return false;
-        if (WaitForSingleObject(pid->hProcess, 0) == WAIT_OBJECT_0) {
+        if (WaitForSingleObjectEx(pid->hProcess, 0, false) == WAIT_OBJECT_0) {
             bool readyReadEmitted = drainOutputPipes();
-            _q_processDied();
+            if (pid)
+                _q_processDied();
             return readyReadEmitted;
         }
 
@@ -663,22 +658,16 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
             break;
     }
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
 }
 
 bool QProcessPrivate::waitForBytesWritten(int msecs)
 {
-    Q_Q(QProcess);
-
     QIncrementalSleepTimer timer(msecs);
 
     forever {
-        // Check if we have any data pending: the pipe writer has
-        // bytes waiting to written, or it has written data since the
-        // last time we called stdinChannel.writer->waitForWrite().
-        bool pendingDataInPipe = stdinChannel.writer && (stdinChannel.writer->bytesToWrite() || stdinChannel.writer->hadWritten());
+        bool pendingDataInPipe = stdinChannel.writer && stdinChannel.writer->bytesToWrite();
 
         // If we don't have pending data, and our write buffer is
         // empty, we fail.
@@ -723,7 +712,7 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
 
         // Wait for the process to signal any change in its state,
         // such as incoming data, or if the process died.
-        if (WaitForSingleObject(pid->hProcess, 0) == WAIT_OBJECT_0) {
+        if (WaitForSingleObjectEx(pid->hProcess, 0, false) == WAIT_OBJECT_0) {
             _q_processDied();
             return false;
         }
@@ -733,14 +722,12 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
             break;
     }
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
 }
 
 bool QProcessPrivate::waitForFinished(int msecs)
 {
-    Q_Q(QProcess);
 #if defined QPROCESS_DEBUG
     qDebug("QProcessPrivate::waitForFinished(%d)", msecs);
 #endif
@@ -764,7 +751,8 @@ bool QProcessPrivate::waitForFinished(int msecs)
 
         if (WaitForSingleObject(pid->hProcess, timer.nextSleepTime()) == WAIT_OBJECT_0) {
             drainOutputPipes();
-            _q_processDied();
+            if (pid)
+                _q_processDied();
             return true;
         }
 
@@ -772,8 +760,7 @@ bool QProcessPrivate::waitForFinished(int msecs)
             break;
     }
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
 }
 
@@ -800,34 +787,73 @@ qint64 QProcessPrivate::pipeWriterBytesToWrite() const
     return stdinChannel.writer ? stdinChannel.writer->bytesToWrite() : qint64(0);
 }
 
-qint64 QProcessPrivate::writeToStdin(const char *data, qint64 maxlen)
+bool QProcessPrivate::writeToStdin()
 {
     Q_Q(QProcess);
 
     if (!stdinChannel.writer) {
         stdinChannel.writer = new QWindowsPipeWriter(stdinChannel.pipe[1], q);
+        QObject::connect(stdinChannel.writer, &QWindowsPipeWriter::bytesWritten,
+                         q, &QProcess::bytesWritten);
         QObjectPrivate::connect(stdinChannel.writer, &QWindowsPipeWriter::canWrite,
                                 this, &QProcessPrivate::_q_canWrite);
-        stdinChannel.writer->start();
+    } else {
+        if (stdinChannel.writer->isWriteOperationActive())
+            return true;
     }
 
-    return stdinChannel.writer->write(data, maxlen);
+    stdinChannel.writer->write(stdinChannel.buffer.read());
+    return true;
 }
 
 bool QProcessPrivate::waitForWrite(int msecs)
 {
-    Q_Q(QProcess);
-
     if (!stdinChannel.writer || stdinChannel.writer->waitForWrite(msecs))
         return true;
 
-    processError = QProcess::Timedout;
-    q->setErrorString(QProcess::tr("Process operation timed out"));
+    setError(QProcess::Timedout);
     return false;
+}
+
+// Use ShellExecuteEx() to trigger an UAC prompt when CreateProcess()fails
+// with ERROR_ELEVATION_REQUIRED.
+static bool startDetachedUacPrompt(const QString &programIn, const QStringList &arguments,
+                                   const QString &workingDir, qint64 *pid)
+{
+    typedef BOOL (WINAPI *ShellExecuteExType)(SHELLEXECUTEINFOW *);
+
+    static const ShellExecuteExType shellExecuteEx = // XP ServicePack 1 onwards.
+        reinterpret_cast<ShellExecuteExType>(QSystemLibrary::resolve(QLatin1String("shell32"),
+                                                                     "ShellExecuteExW"));
+    if (!shellExecuteEx)
+        return false;
+
+    const QString args = qt_create_commandline(QString(), arguments); // needs arguments only
+    SHELLEXECUTEINFOW shellExecuteExInfo;
+    memset(&shellExecuteExInfo, 0, sizeof(SHELLEXECUTEINFOW));
+    shellExecuteExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
+    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI;
+    shellExecuteExInfo.lpVerb = L"runas";
+    const QString program = QDir::toNativeSeparators(programIn);
+    shellExecuteExInfo.lpFile = reinterpret_cast<LPCWSTR>(program.utf16());
+    if (!args.isEmpty())
+        shellExecuteExInfo.lpParameters = reinterpret_cast<LPCWSTR>(args.utf16());
+    if (!workingDir.isEmpty())
+        shellExecuteExInfo.lpDirectory = reinterpret_cast<LPCWSTR>(workingDir.utf16());
+    shellExecuteExInfo.nShow = SW_SHOWNORMAL;
+
+    if (!shellExecuteEx(&shellExecuteExInfo))
+        return false;
+    if (pid)
+        *pid = qint64(GetProcessId(shellExecuteExInfo.hProcess));
+    CloseHandle(shellExecuteExInfo.hProcess);
+    return true;
 }
 
 bool QProcessPrivate::startDetached(const QString &program, const QStringList &arguments, const QString &workingDir, qint64 *pid)
 {
+    static const DWORD errorElevationRequired = 740;
+
     QString args = qt_create_commandline(program, arguments);
     bool success = false;
     PROCESS_INFORMATION pinfo;
@@ -847,6 +873,8 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
         CloseHandle(pinfo.hProcess);
         if (pid)
             *pid = pinfo.dwProcessId;
+    } else if (GetLastError() == errorElevationRequired) {
+        success = startDetachedUacPrompt(program, arguments, workingDir, pid);
     }
 
     return success;

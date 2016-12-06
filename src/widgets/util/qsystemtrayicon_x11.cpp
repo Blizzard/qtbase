@@ -52,6 +52,8 @@
 #include <private/qguiapplication_p.h>
 #include <qdebug.h>
 
+#include <QtPlatformHeaders/qxcbwindowfunctions.h>
+#include <QtPlatformHeaders/qxcbintegrationfunctions.h>
 #ifndef QT_NO_SYSTEMTRAYICON
 QT_BEGIN_NAMESPACE
 
@@ -112,17 +114,11 @@ QSystemTrayIconSys::QSystemTrayIconSys(QSystemTrayIcon *qIn)
     // window to ParentRelative (so that it inherits the background of its X11 parent window), call
     // xcb_clear_region before painting (so that the inherited background is visible) and then grab
     // the just-drawn background from the X11 server.
-    bool hasAlphaChannel = false;
-    QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
-                              "systrayVisualHasAlphaChannel", Qt::DirectConnection,
-                              Q_RETURN_ARG(bool, hasAlphaChannel));
+    bool hasAlphaChannel = QXcbIntegrationFunctions::xEmbedSystemTrayVisualHasAlphaChannel();
     setAttribute(Qt::WA_TranslucentBackground, hasAlphaChannel);
     if (!hasAlphaChannel) {
         createWinId();
-        QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
-                                    "setParentRelativeBackPixmap", Qt::DirectConnection,
-                                    Q_ARG(const QWindow *, windowHandle())
-                                 );
+        QXcbWindowFunctions::setParentRelativeBackPixmap(windowHandle());
 
         // XXX: This is actually required, but breaks things ("QWidget::paintEngine: Should no
         // longer be called"). Why is this needed? When the widget is drawn, we use tricks to grab
@@ -143,15 +139,9 @@ bool QSystemTrayIconSys::addToTray()
     createWinId();
     setMouseTracking(true);
 
-    bool requestResult = false;
-    if (!QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
-                                   "requestSystemTrayWindowDock", Qt::DirectConnection,
-                                   Q_RETURN_ARG(bool, requestResult),
-                                   Q_ARG(const QWindow *, windowHandle()))
-            || !requestResult) {
-        qWarning("requestSystemTrayWindowDock failed.");
+    if (!QXcbWindowFunctions::requestSystemTrayWindowDock(windowHandle()))
         return false;
-    }
+
     if (!background.isNull())
         background = QPixmap();
     show();
@@ -171,15 +161,7 @@ void QSystemTrayIconSys::systemTrayWindowChanged(QScreen *)
 
 QRect QSystemTrayIconSys::globalGeometry() const
 {
-    QRect result;
-    if (!QMetaObject::invokeMethod(QGuiApplication::platformNativeInterface(),
-                                   "systemTrayWindowGlobalGeometry", Qt::DirectConnection,
-                                   Q_RETURN_ARG(QRect, result),
-                                   Q_ARG(const QWindow *, windowHandle()))
-        || !result.isValid()) {
-        qWarning("systemTrayWindowGlobalGeometry failed.");
-    }
-    return result;
+    return QXcbWindowFunctions::systemTrayWindowGlobalGeometry(windowHandle());
 }
 
 void QSystemTrayIconSys::mousePressEvent(QMouseEvent *ev)
@@ -212,6 +194,9 @@ void QSystemTrayIconSys::mouseDoubleClickEvent(QMouseEvent *ev)
 bool QSystemTrayIconSys::event(QEvent *e)
 {
     switch (e->type()) {
+    case QEvent::ToolTip:
+        QApplication::sendEvent(q, e);
+        break;
 #ifndef QT_NO_WHEELEVENT
     case QEvent::Wheel:
         return QApplication::sendEvent(q, e);

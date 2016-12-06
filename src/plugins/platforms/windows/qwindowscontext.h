@@ -94,6 +94,8 @@ struct QWindowsUser32DLL
     typedef BOOL (WINAPI *SetProcessDPIAware)();
     typedef BOOL (WINAPI *AddClipboardFormatListener)(HWND);
     typedef BOOL (WINAPI *RemoveClipboardFormatListener)(HWND);
+    typedef BOOL (WINAPI *GetDisplayAutoRotationPreferences)(DWORD *);
+    typedef BOOL (WINAPI *SetDisplayAutoRotationPreferences)(DWORD);
 
     // Functions missing in Q_CC_GNU stub libraries.
     SetLayeredWindowAttributes setLayeredWindowAttributes;
@@ -116,6 +118,10 @@ struct QWindowsUser32DLL
     // Clipboard listeners, Windows Vista onwards
     AddClipboardFormatListener addClipboardFormatListener;
     RemoveClipboardFormatListener removeClipboardFormatListener;
+
+    // Rotation API
+    GetDisplayAutoRotationPreferences getDisplayAutoRotationPreferences;
+    SetDisplayAutoRotationPreferences setDisplayAutoRotationPreferences;
 };
 
 struct QWindowsShell32DLL
@@ -142,7 +148,7 @@ struct QWindowsShcoreDLL {
     void init();
     inline bool isValid() const { return getProcessDpiAwareness && setProcessDpiAwareness && getDpiForMonitor; }
 
-    typedef HRESULT (WINAPI *GetProcessDpiAwareness)(HANDLE,int);
+    typedef HRESULT (WINAPI *GetProcessDpiAwareness)(HANDLE,int *);
     typedef HRESULT (WINAPI *SetProcessDpiAwareness)(int);
     typedef HRESULT (WINAPI *GetDpiForMonitor)(HMONITOR,int,UINT *,UINT *);
 
@@ -179,6 +185,9 @@ public:
 
     explicit QWindowsContext();
     ~QWindowsContext();
+
+    bool initTouch();
+    bool initTouch(unsigned integrationOptions); // For calls from QWindowsIntegration::QWindowsIntegration() only.
 
     int defaultDPI() const;
 
@@ -221,6 +230,7 @@ public:
 
     void setTabletAbsoluteRange(int a);
     void setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiAwareness);
+    static int processDpiAwareness();
 
     // Returns a combination of SystemInfoFlags
     unsigned systemInfo() const;

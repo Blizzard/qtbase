@@ -39,11 +39,34 @@
 
 #include <qpa/qplatformintegration.h>
 
+namespace ABI {
+    namespace Windows {
+        namespace ApplicationModel {
+            struct ISuspendingEventArgs;
+        }
+        namespace Foundation {
+            struct IAsyncAction;
+        }
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_PHONE_APP)
+        namespace Phone {
+            namespace UI {
+                namespace Input {
+                    struct IBackPressedEventArgs;
+                    struct ICameraEventArgs;
+                }
+            }
+        }
+#endif
+    }
+}
+struct IAsyncInfo;
+struct IInspectable;
+
 QT_BEGIN_NAMESPACE
 
 class QAbstractEventDispatcher;
-class QWinRTScreen;
 
+class QWinRTIntegrationPrivate;
 class QWinRTIntegration : public QPlatformIntegration
 {
 private:
@@ -53,29 +76,46 @@ public:
 
     static QWinRTIntegration *create()
     {
-        QWinRTIntegration *integration = new QWinRTIntegration;
-        return integration->m_success ? integration : 0;
+        QScopedPointer<QWinRTIntegration> integration(new QWinRTIntegration);
+        return integration->succeeded() ? integration.take() : nullptr;
     }
 
-    bool hasCapability(QPlatformIntegration::Capability cap) const;
-    QVariant styleHint(StyleHint hint) const;
+    bool succeeded() const;
 
-    QPlatformWindow *createPlatformWindow(QWindow *window) const;
-    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const;
-    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const;
-    QAbstractEventDispatcher *createEventDispatcher() const;
-    QPlatformFontDatabase *fontDatabase() const;
-    QPlatformInputContext *inputContext() const;
-    QPlatformServices *services() const;
-    Qt::KeyboardModifiers queryKeyboardModifiers() const;
+    bool hasCapability(QPlatformIntegration::Capability cap) const Q_DECL_OVERRIDE;
+    QVariant styleHint(StyleHint hint) const Q_DECL_OVERRIDE;
 
-    QStringList themeNames() const;
-    QPlatformTheme *createPlatformTheme(const QString &name) const;
+    QPlatformWindow *createPlatformWindow(QWindow *window) const Q_DECL_OVERRIDE;
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const Q_DECL_OVERRIDE;
+    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const Q_DECL_OVERRIDE;
+    QAbstractEventDispatcher *createEventDispatcher() const Q_DECL_OVERRIDE;
+    void initialize() Q_DECL_OVERRIDE;
+    QPlatformFontDatabase *fontDatabase() const Q_DECL_OVERRIDE;
+    QPlatformInputContext *inputContext() const Q_DECL_OVERRIDE;
+    QPlatformServices *services() const Q_DECL_OVERRIDE;
+    QPlatformClipboard *clipboard() const Q_DECL_OVERRIDE;
+#ifndef QT_NO_DRAGANDDROP
+    QPlatformDrag *drag() const Q_DECL_OVERRIDE;
+#endif
+
+    Qt::KeyboardModifiers queryKeyboardModifiers() const Q_DECL_OVERRIDE;
+
+    QStringList themeNames() const Q_DECL_OVERRIDE;
+    QPlatformTheme *createPlatformTheme(const QString &name) const Q_DECL_OVERRIDE;
+
+    QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *surface) const Q_DECL_OVERRIDE;
 private:
-    bool m_success;
-    QWinRTScreen *m_screen;
-    QPlatformFontDatabase *m_fontDatabase;
-    QPlatformServices *m_services;
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_PHONE_APP)
+    HRESULT onBackButtonPressed(IInspectable *, ABI::Windows::Phone::UI::Input::IBackPressedEventArgs *args);
+    HRESULT onCameraPressed(IInspectable *, ABI::Windows::Phone::UI::Input::ICameraEventArgs *);
+    HRESULT onCameraHalfPressed(IInspectable *, ABI::Windows::Phone::UI::Input::ICameraEventArgs *);
+    HRESULT onCameraReleased(IInspectable *, ABI::Windows::Phone::UI::Input::ICameraEventArgs *);
+#endif
+    HRESULT onSuspended(IInspectable *, ABI::Windows::ApplicationModel::ISuspendingEventArgs *);
+    HRESULT onResume(IInspectable *, IInspectable *);
+
+    QScopedPointer<QWinRTIntegrationPrivate> d_ptr;
+    Q_DECLARE_PRIVATE(QWinRTIntegration)
 };
 
 QT_END_NAMESPACE

@@ -102,9 +102,8 @@ QEventTransitionPrivate::QEventTransitionPrivate()
     registered = false;
 }
 
-QEventTransitionPrivate *QEventTransitionPrivate::get(QEventTransition *q)
+QEventTransitionPrivate::~QEventTransitionPrivate()
 {
-    return q->d_func();
 }
 
 void QEventTransitionPrivate::unregister()

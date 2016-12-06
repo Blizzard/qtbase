@@ -767,16 +767,22 @@ void tst_QTimeZone::tzTest()
     // Warning: This could vary depending on age of TZ file!
 
     // Test low date uses first rule found
+    // Note: Depending on the OS in question, the database may be carrying the
+    // Local Mean Time. which for Berlin is 0:53:28
     QTimeZonePrivate::Data dat = tzp.data(-9999999999999);
     QCOMPARE(dat.atMSecsSinceEpoch, (qint64)-9999999999999);
-    QCOMPARE(dat.standardTimeOffset, 3600);
     QCOMPARE(dat.daylightTimeOffset, 0);
+    if (dat.abbreviation == "LMT") {
+        QCOMPARE(dat.standardTimeOffset, 3208);
+    } else {
+        QCOMPARE(dat.standardTimeOffset, 3600);
 
-    // Test previous to low value is invalid
-    dat = tzp.previousTransition(-9999999999999);
-    QCOMPARE(dat.atMSecsSinceEpoch, std::numeric_limits<qint64>::min());
-    QCOMPARE(dat.standardTimeOffset, std::numeric_limits<int>::min());
-    QCOMPARE(dat.daylightTimeOffset, std::numeric_limits<int>::min());
+        // Test previous to low value is invalid
+        dat = tzp.previousTransition(-9999999999999);
+        QCOMPARE(dat.atMSecsSinceEpoch, std::numeric_limits<qint64>::min());
+        QCOMPARE(dat.standardTimeOffset, std::numeric_limits<int>::min());
+        QCOMPARE(dat.daylightTimeOffset, std::numeric_limits<int>::min());
+    }
 
     dat = tzp.nextTransition(-9999999999999);
     QCOMPARE(dat.atMSecsSinceEpoch, (qint64)-2422054408000);
@@ -841,6 +847,16 @@ void tst_QTimeZone::tzTest()
     QTzTimeZonePrivate::Data datatz2 = tztz2.data(std);
     QTzTimeZonePrivate::Data datautc2 = tzutc2.data(std);
     QCOMPARE(datatz2.offsetFromUtc, datautc2.offsetFromUtc);
+
+    // Test a timezone with a name that isn't all letters
+    QTzTimeZonePrivate tzBarnaul("Asia/Barnaul");
+    if (tzBarnaul.isValid()) {
+        QCOMPARE(tzBarnaul.data(std).abbreviation, QString("+07"));
+
+        // first full day of the new rule (tzdata2016b)
+        QDateTime dt(QDate(2016, 3, 28), QTime(0, 0, 0), Qt::UTC);
+        QCOMPARE(tzBarnaul.data(dt.toMSecsSinceEpoch()).abbreviation, QString("+07"));
+    }
 #endif // Q_OS_UNIX
 }
 
@@ -898,7 +914,7 @@ void tst_QTimeZone::macTest()
 
 void tst_QTimeZone::winTest()
 {
-#if defined(QT_BUILD_INTERNAL) && defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
+#if defined(QT_BUILD_INTERNAL) && defined(Q_OS_WIN)
     // Known datetimes
     qint64 std = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();
     qint64 dst = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC).toMSecsSinceEpoch();

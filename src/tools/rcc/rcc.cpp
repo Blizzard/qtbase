@@ -366,6 +366,7 @@ enum RCCXmlTag {
     ResourceTag,
     FileTag
 };
+Q_DECLARE_TYPEINFO(RCCXmlTag, Q_PRIMITIVE_TYPE);
 
 bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
     const QString &fname, QString currentPath, bool ignoreErrors)
@@ -938,10 +939,14 @@ bool RCCResourceLibrary::writeDataNames()
     return true;
 }
 
-static bool qt_rcc_compare_hash(const RCCFileInfo *left, const RCCFileInfo *right)
+struct qt_rcc_compare_hash
 {
-    return qt_hash(left->m_name) < qt_hash(right->m_name);
-}
+    typedef bool result_type;
+    result_type operator()(const RCCFileInfo *left, const RCCFileInfo *right) const
+    {
+        return qt_hash(left->m_name) < qt_hash(right->m_name);
+    }
+};
 
 bool RCCResourceLibrary::writeDataStructure()
 {
@@ -963,7 +968,7 @@ bool RCCResourceLibrary::writeDataStructure()
 
         //sort by hash value for binary lookup
         QList<RCCFileInfo*> m_children = file->m_children.values();
-        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash);
+        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash());
 
         //write out the actual data now
         for (int i = 0; i < m_children.size(); ++i) {
@@ -982,7 +987,7 @@ bool RCCResourceLibrary::writeDataStructure()
 
         //sort by hash value for binary lookup
         QList<RCCFileInfo*> m_children = file->m_children.values();
-        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash);
+        std::sort(m_children.begin(), m_children.end(), qt_rcc_compare_hash());
 
         //write out the actual data now
         for (int i = 0; i < m_children.size(); ++i) {

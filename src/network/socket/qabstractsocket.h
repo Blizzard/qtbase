@@ -149,7 +149,7 @@ public:
     qint64 bytesAvailable() const Q_DECL_OVERRIDE;
     qint64 bytesToWrite() const Q_DECL_OVERRIDE;
 
-    bool canReadLine() const Q_DECL_OVERRIDE;
+    bool canReadLine() const Q_DECL_OVERRIDE; // ### Qt6: remove me
 
     quint16 localPort() const;
     QHostAddress localAddress() const;
@@ -213,7 +213,7 @@ protected:
     void setPeerAddress(const QHostAddress &address);
     void setPeerName(const QString &name);
 
-    QAbstractSocket(SocketType socketType, QAbstractSocketPrivate &dd, QObject *parent = 0);
+    QAbstractSocket(SocketType socketType, QAbstractSocketPrivate &dd, QObject *parent = Q_NULLPTR);
 
 private:
     Q_DECLARE_PRIVATE(QAbstractSocket)

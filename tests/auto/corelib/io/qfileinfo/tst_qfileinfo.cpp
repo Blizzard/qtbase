@@ -66,7 +66,7 @@
 #include <private/qfileinfo_p.h>
 #include "../../../../shared/filesystem.h"
 
-#if defined(Q_OS_VXWORKS)
+#if defined(Q_OS_VXWORKS) || defined(Q_OS_WINRT)
 #define Q_NO_SYMLINKS
 #endif
 
@@ -149,6 +149,25 @@ static QString seedAndTemplate()
     qsrand(QDateTime::currentDateTimeUtc().toTime_t());
     return QDir::tempPath() + "/tst_qfileinfo-XXXXXX";
 }
+
+static QByteArray msgDoesNotExist(const QString &name)
+{
+    return (QLatin1Char('"') + QDir::toNativeSeparators(name)
+        + QLatin1String("\" does not exist.")).toLocal8Bit();
+}
+
+static QByteArray msgIsNoDirectory(const QString &name)
+{
+    return (QLatin1Char('"') + QDir::toNativeSeparators(name)
+        + QLatin1String("\" is not a directory.")).toLocal8Bit();
+}
+
+static QByteArray msgIsNotRoot(const QString &name)
+{
+    return (QLatin1Char('"') + QDir::toNativeSeparators(name)
+        + QLatin1String("\" is no root directory.")).toLocal8Bit();
+}
+
 class tst_QFileInfo : public QObject
 {
 Q_OBJECT
@@ -287,7 +306,8 @@ void tst_QFileInfo::initTestCase()
     m_resourcesDir = dataPath + QLatin1String("/resources");
     m_proFile = dataPath + QLatin1String("/tst_qfileinfo.pro");
 
-    QVERIFY(m_dir.isValid());
+    QVERIFY2(m_dir.isValid(),
+             ("Failed to create temporary dir: " + m_dir.errorString()).toUtf8());
     QVERIFY(QDir::setCurrent(m_dir.path()));
 }
 
@@ -316,7 +336,7 @@ static QFileInfoPrivate* getPrivate(QFileInfo &info)
 void tst_QFileInfo::copy()
 {
     QTemporaryFile t;
-    t.open();
+    QVERIFY2(t.open(), qPrintable(t.errorString()));
     QFileInfo info(t.fileName());
     QVERIFY(info.exists());
 
@@ -407,19 +427,20 @@ void tst_QFileInfo::isDir_data()
 
     QTest::newRow("broken link") << "brokenlink.lnk" << false;
 
-#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE))
+#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT))
     QTest::newRow("drive 1") << "c:" << true;
     QTest::newRow("drive 2") << "c:/" << true;
     //QTest::newRow("drive 2") << "t:s" << false;
 #endif
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
-    QTest::newRow("unc 1") << "//"  + QtNetworkSettings::winServerName() << true;
-    QTest::newRow("unc 2") << "//"  + QtNetworkSettings::winServerName() + "/" << true;
-    QTest::newRow("unc 3") << "//"  + QtNetworkSettings::winServerName() + "/testshare" << true;
-    QTest::newRow("unc 4") << "//"  + QtNetworkSettings::winServerName() + "/testshare/" << true;
-    QTest::newRow("unc 5") << "//"  + QtNetworkSettings::winServerName() + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << "//"  + QtNetworkSettings::winServerName() + "/testshare/tmp/" << true;
-    QTest::newRow("unc 7") << "//"  + QtNetworkSettings::winServerName() + "/testshare/adirthatshouldnotexist" << false;
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    QTest::newRow("unc 1") << uncRoot << true;
+    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
+    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
+    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
 #endif
 }
 
@@ -428,8 +449,11 @@ void tst_QFileInfo::isDir()
     QFETCH(QString, path);
     QFETCH(bool, expected);
 
-    QFileInfo fi(path);
-    QCOMPARE(fi.isDir(), expected);
+    const bool isDir = QFileInfo(path).isDir();
+    if (expected)
+        QVERIFY2(isDir, msgIsNoDirectory(path).constData());
+    else
+        QVERIFY(!isDir);
 }
 
 void tst_QFileInfo::isRoot_data()
@@ -445,17 +469,18 @@ void tst_QFileInfo::isRoot_data()
 
     QTest::newRow("simple dir") << m_resourcesDir << false;
     QTest::newRow("simple dir with slash") << (m_resourcesDir + QLatin1Char('/')) << false;
-#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE))
+#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT))
     QTest::newRow("drive 1") << "c:" << false;
     QTest::newRow("drive 2") << "c:/" << true;
     QTest::newRow("drive 3") << "p:/" << false;
 #endif
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
-    QTest::newRow("unc 1") << "//"  + QtNetworkSettings::winServerName() << true;
-    QTest::newRow("unc 2") << "//"  + QtNetworkSettings::winServerName() + "/" << true;
-    QTest::newRow("unc 3") << "//"  + QtNetworkSettings::winServerName() + "/testshare" << false;
-    QTest::newRow("unc 4") << "//"  + QtNetworkSettings::winServerName() + "/testshare/" << false;
+    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    QTest::newRow("unc 1") << uncRoot << true;
+    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << false;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << false;
     QTest::newRow("unc 7") << "//ahostthatshouldnotexist" << false;
 #endif
 }
@@ -465,8 +490,11 @@ void tst_QFileInfo::isRoot()
     QFETCH(QString, path);
     QFETCH(bool, expected);
 
-    QFileInfo fi(path);
-    QCOMPARE(fi.isRoot(), expected);
+    const bool isRoot = QFileInfo(path).isRoot();
+    if (expected)
+        QVERIFY2(isRoot, msgIsNotRoot(path).constData());
+    else
+        QVERIFY(!isRoot);
 }
 
 void tst_QFileInfo::exists_data()
@@ -485,21 +513,27 @@ void tst_QFileInfo::exists_data()
     QTest::newRow("data8") << (m_resourcesDir + "/*.ext1") << false;
     QTest::newRow("data9") << (m_resourcesDir + "/file?.ext1") << false;
     QTest::newRow("data10") << "." << true;
+
+    // Skip for the WinRT case, as GetFileAttributesEx removes _any_
+    // trailing whitespace and "." is a valid entry as seen in data10
+#ifndef Q_OS_WINRT
     QTest::newRow("data11") << ". " << false;
+#endif
     QTest::newRow("empty") << "" << false;
 
     QTest::newRow("simple dir") << m_resourcesDir << true;
     QTest::newRow("simple dir with slash") << (m_resourcesDir + QLatin1Char('/')) << true;
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
-    QTest::newRow("unc 1") << "//"  + QtNetworkSettings::winServerName() << true;
-    QTest::newRow("unc 2") << "//"  + QtNetworkSettings::winServerName() + "/" << true;
-    QTest::newRow("unc 3") << "//"  + QtNetworkSettings::winServerName() + "/testshare" << true;
-    QTest::newRow("unc 4") << "//"  + QtNetworkSettings::winServerName() + "/testshare/" << true;
-    QTest::newRow("unc 5") << "//"  + QtNetworkSettings::winServerName() + "/testshare/tmp" << true;
-    QTest::newRow("unc 6") << "//"  + QtNetworkSettings::winServerName() + "/testshare/tmp/" << true;
-    QTest::newRow("unc 7") << "//"  + QtNetworkSettings::winServerName() + "/testshare/adirthatshouldnotexist" << false;
-    QTest::newRow("unc 8") << "//"  + QtNetworkSettings::winServerName() + "/asharethatshouldnotexist" << false;
+    const QString uncRoot = QStringLiteral("//") + QtNetworkSettings::winServerName();
+    QTest::newRow("unc 1") << uncRoot << true;
+    QTest::newRow("unc 2") << uncRoot + QLatin1Char('/') << true;
+    QTest::newRow("unc 3") << uncRoot + "/testshare" << true;
+    QTest::newRow("unc 4") << uncRoot + "/testshare/" << true;
+    QTest::newRow("unc 5") << uncRoot + "/testshare/tmp" << true;
+    QTest::newRow("unc 6") << uncRoot + "/testshare/tmp/" << true;
+    QTest::newRow("unc 7") << uncRoot + "/testshare/adirthatshouldnotexist" << false;
+    QTest::newRow("unc 8") << uncRoot + "/asharethatshouldnotexist" << false;
     QTest::newRow("unc 9") << "//ahostthatshouldnotexist" << false;
 #endif
 }
@@ -510,8 +544,12 @@ void tst_QFileInfo::exists()
     QFETCH(bool, expected);
 
     QFileInfo fi(path);
-    QCOMPARE(fi.exists(), expected);
-    QCOMPARE(QFileInfo::exists(path), expected);
+    const bool exists = fi.exists();
+    QCOMPARE(exists, QFileInfo::exists(path));
+    if (expected)
+        QVERIFY2(exists, msgDoesNotExist(path).constData());
+    else
+        QVERIFY(!exists);
 }
 
 void tst_QFileInfo::absolutePath_data()
@@ -521,7 +559,7 @@ void tst_QFileInfo::absolutePath_data()
     QTest::addColumn<QString>("filename");
 
     QString drivePrefix;
-#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE))
+#if (defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT))
     drivePrefix = QDir::currentPath().left(2);
     QString nonCurrentDrivePrefix =
         drivePrefix.left(1).compare("X", Qt::CaseInsensitive) == 0 ? QString("Y:") : QString("X:");
@@ -531,6 +569,8 @@ void tst_QFileInfo::absolutePath_data()
     QTest::newRow("<not current drive>:my.dll") << nonCurrentDrivePrefix + "my.dll"
                                                 << nonCurrentDrivePrefix + "/"
                                                 << "my.dll";
+#elif defined(Q_OS_WINRT)
+    drivePrefix = QDir::currentPath().left(2);
 #endif
     QTest::newRow("0") << "/machine/share/dir1/" << drivePrefix + "/machine/share/dir1" << "";
     QTest::newRow("1") << "/machine/share/dir1" << drivePrefix + "/machine/share" << "dir1";
@@ -538,7 +578,7 @@ void tst_QFileInfo::absolutePath_data()
     QTest::newRow("3") << "/usr/local/bin/" << drivePrefix + "/usr/local/bin" << "";
     QTest::newRow("/test") << "/test" << drivePrefix + "/" << "test";
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
     QTest::newRow("c:\\autoexec.bat") << "c:\\autoexec.bat" << "C:/"
                                       << "autoexec.bat";
     QTest::newRow("c:autoexec.bat") << QDir::currentPath().left(2) + "autoexec.bat" << QDir::currentPath()
@@ -611,7 +651,7 @@ void tst_QFileInfo::canonicalPath()
 {
     QTemporaryFile tempFile;
     tempFile.setAutoRemove(true);
-    tempFile.open();
+    QVERIFY2(tempFile.open(), qPrintable(tempFile.errorString()));
     QFileInfo fi(tempFile.fileName());
     QCOMPARE(fi.canonicalPath(), QFileInfo(QDir::tempPath()).canonicalFilePath());
 }
@@ -702,7 +742,7 @@ void tst_QFileInfo::canonicalFilePath()
     }
 #endif
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     typedef BOOL (WINAPI *PtrCreateSymbolicLink)(LPTSTR, LPTSTR, DWORD);
     PtrCreateSymbolicLink ptrCreateSymbolicLink =
             (PtrCreateSymbolicLink)QLibrary::resolve(QLatin1String("kernel32"), "CreateSymbolicLinkW");
@@ -798,7 +838,7 @@ void tst_QFileInfo::dir_data()
     QTest::newRow("absFilePath") << QDir::currentPath() + "/tmp.txt" << false << QDir::currentPath();
     QTest::newRow("absFilePathAbsPath") << QDir::currentPath() + "/tmp.txt" << true << QDir::currentPath();
     QTest::newRow("resource1") << ":/tst_qfileinfo/resources/file1.ext1" << true << ":/tst_qfileinfo/resources";
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
     QTest::newRow("driveWithSlash") << "C:/file1.ext1.ext2" << true << "C:/";
     QTest::newRow("driveWithoutSlash") << QDir::currentPath().left(2) + "file1.ext1.ext2" << false << QDir::currentPath().left(2);
 #endif
@@ -989,11 +1029,11 @@ void tst_QFileInfo::size()
 
 void tst_QFileInfo::systemFiles()
 {
-#if !defined(Q_OS_WIN) || defined(Q_OS_WINCE)
+#if !defined(Q_OS_WIN) || defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
     QSKIP("This is a Windows only test");
 #endif
     QFileInfo fi("c:\\pagefile.sys");
-    QVERIFY(fi.exists());
+    QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(fi.size() > 0);
     QVERIFY(fi.lastModified().isValid());
 }
@@ -1160,6 +1200,8 @@ void tst_QFileInfo::fileTimes()
 #endif
 #if defined(Q_OS_WINCE)
     QEXPECT_FAIL("simple", "WinCE only stores date of access data, not the time", Continue);
+#elif defined(Q_OS_WINRT)
+    QEXPECT_FAIL("", "WinRT does not allow timestamp handling change in the filesystem due to sandboxing", Continue);
 #elif defined(Q_OS_QNX)
     QEXPECT_FAIL("", "QNX uses the noatime filesystem option", Continue);
 #elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
@@ -1478,7 +1520,7 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
             QTest::newRow("dummy") << target.path() << false << "" << target.canonicalPath();
             QSKIP("link not supported by FS or insufficient privilege");
         }
-        QVERIFY(file.exists());
+        QVERIFY2(file.exists(), msgDoesNotExist(file.fileName()).constData());
 
         QTest::newRow("absolute dir symlink") << absSymlink << true << QDir::fromNativeSeparators(absTarget) << target.canonicalPath();
         QTest::newRow("relative dir symlink") << relSymlink << true << QDir::fromNativeSeparators(relTarget) << target.canonicalPath();
@@ -1509,7 +1551,7 @@ void tst_QFileInfo::ntfsJunctionPointsAndSymlinks_data()
     QFile file(fileInJunction.absoluteFilePath());
     file.open(QIODevice::ReadWrite);
     file.close();
-    QVERIFY(file.exists());
+    QVERIFY2(file.exists(), msgDoesNotExist(file.fileName()).constData());
     QTest::newRow("file in junction") << fileInJunction.absoluteFilePath() << false << "" << fileInJunction.canonicalFilePath();
 
     target = QDir::rootPath();
@@ -1595,13 +1637,13 @@ void tst_QFileInfo::isWritable()
     QVERIFY(QFileInfo("tempfile.txt").isWritable());
     tempfile.remove();
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
 #ifdef Q_OS_WINCE
     QFileInfo fi("\\Windows\\wince.nls");
 #else
     QFileInfo fi("c:\\pagefile.sys");
 #endif
-    QVERIFY(fi.exists());
+    QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QVERIFY(!fi.isWritable());
 #endif
 #if defined (Q_OS_QNX) // On QNX /etc is usually on a read-only filesystem
@@ -1859,7 +1901,7 @@ void tst_QFileInfo::owner()
         QVERIFY(testFile.write(testData) != -1);
     }
     QFileInfo fi(fileName);
-    QVERIFY(fi.exists());
+    QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
     QCOMPARE(fi.owner(), userName);
 
     QFile::remove(fileName);
@@ -1894,7 +1936,7 @@ void tst_QFileInfo::group()
     QVERIFY(testFile.write(testData) != -1);
     testFile.close();
     QFileInfo fi(fileName);
-    QVERIFY(fi.exists());
+    QVERIFY2(fi.exists(), msgDoesNotExist(fi.absoluteFilePath()).constData());
 
     QCOMPARE(fi.group(), expected);
 }

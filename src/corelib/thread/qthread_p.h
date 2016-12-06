@@ -135,6 +135,13 @@ private:
 
 #ifndef QT_NO_THREAD
 
+class Q_CORE_EXPORT QDaemonThread : public QThread
+{
+public:
+    QDaemonThread(QObject *parent = 0);
+    ~QDaemonThread();
+};
+
 class QThreadPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QThread)
@@ -162,7 +169,6 @@ public:
     static QThread *threadForId(int id);
 
 #ifdef Q_OS_UNIX
-    pthread_t thread_id;
     QWaitCondition thread_done;
 
     static void *start(void *arg);
@@ -224,7 +230,7 @@ public:
     QThreadData(int initialRefCount = 1);
     ~QThreadData();
 
-    static QThreadData *current(bool createIfNecessary = true);
+    static Q_AUTOTEST_EXPORT QThreadData *current(bool createIfNecessary = true);
     static void clearCurrentThreadData();
     static QThreadData *get2(QThread *thread)
     { Q_ASSERT_X(thread != 0, "QThread", "internal error"); return thread->d_func()->data; }
@@ -269,7 +275,7 @@ public:
 
     QStack<QEventLoop *> eventLoops;
     QPostEventList postEventList;
-    QThread *thread;
+    QAtomicPointer<QThread> thread;
     Qt::HANDLE threadId;
     QAtomicPointer<QAbstractEventDispatcher> eventDispatcher;
     QVector<void *> tls;
@@ -278,6 +284,7 @@ public:
     bool quitNow;
     bool canWait;
     bool isAdopted;
+    bool requiresCoreApplication;
 };
 
 class QScopedLoopLevelCounter

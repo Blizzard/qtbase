@@ -47,10 +47,10 @@ protected:
     QString escapeDependencyPath(const QString &path) const;
     ProString escapeDependencyPath(const ProString &path) const { return MakefileGenerator::escapeDependencyPath(path); }
     virtual ProString fixLibFlag(const ProString &lib);
-    QString getLibTarget();
     virtual QString getManifestFileForRcFile() const;
     bool writeMakefile(QTextStream &);
     void init();
+    virtual QString installRoot() const;
 private:
     void writeMingwParts(QTextStream &);
     void writeIncPart(QTextStream &t);
@@ -63,7 +63,7 @@ private:
 
     QString preCompHeaderOut;
 
-    virtual bool findLibraries();
+    virtual LibFlagType parseLibFlag(const ProString &flag, ProString *arg);
 
     QString objectsLinkLine;
 };

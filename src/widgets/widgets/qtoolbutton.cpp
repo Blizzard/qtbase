@@ -62,6 +62,7 @@ public:
     void init();
 #ifndef QT_NO_MENU
     void _q_buttonPressed();
+    void _q_buttonReleased();
     void popupTimerDone();
     void _q_updateButtonDown();
     void _q_menuTriggered(QAction *);
@@ -120,7 +121,7 @@ bool QToolButtonPrivate::hasMenu() const
 
     One classic use of a tool button is to select tools; for example,
     the "pen" tool in a drawing program. This would be implemented
-    by using a QToolButton as a toggle button (see setToggleButton()).
+    by using a QToolButton as a toggle button (see setCheckable()).
 
     QToolButton supports auto-raising. In auto-raise mode, the button
     draws a 3D frame only when the mouse points at it. The feature is
@@ -147,8 +148,8 @@ bool QToolButtonPrivate::hasMenu() const
     menu set. The default mode is DelayedPopupMode which is sometimes
     used with the "Back" button in a web browser.  After pressing and
     holding the button down for a while, a menu pops up showing a list
-    of possible pages to jump to. The default delay is 600 ms; you can
-    adjust it with setPopupDelay().
+    of possible pages to jump to. The timeout is style dependent,
+    see QStyle::SH_ToolButton_PopupDelay.
 
     \table 100%
     \row \li \inlineimage assistant-toolbar.png Qt Assistant's toolbar with tool buttons
@@ -211,6 +212,7 @@ void QToolButtonPrivate::init()
 
 #ifndef QT_NO_MENU
     QObject::connect(q, SIGNAL(pressed()), q, SLOT(_q_buttonPressed()));
+    QObject::connect(q, SIGNAL(released()), q, SLOT(_q_buttonReleased()));
 #endif
 
     setLayoutItemMargins(QStyle::SE_ToolButtonLayoutItem);
@@ -698,10 +700,15 @@ void QToolButtonPrivate::_q_buttonPressed()
         return; // no menu to show
     if (popupMode == QToolButton::MenuButtonPopup)
         return;
-    else if (delay > 0 && !popupTimer.isActive() && popupMode == QToolButton::DelayedPopup)
+    else if (delay > 0 && popupMode == QToolButton::DelayedPopup)
         popupTimer.start(delay, q);
     else if (delay == 0 || popupMode == QToolButton::InstantPopup)
         q->showMenu();
+}
+
+void QToolButtonPrivate::_q_buttonReleased()
+{
+    popupTimer.stop();
 }
 
 void QToolButtonPrivate::popupTimerDone()
@@ -820,7 +827,7 @@ void QToolButtonPrivate::_q_menuTriggered(QAction *action)
     a menu set or contains a list of actions.
 
     \value DelayedPopup After pressing and holding the tool button
-    down for a certain amount of time (the timeout is style dependant,
+    down for a certain amount of time (the timeout is style dependent,
     see QStyle::SH_ToolButton_PopupDelay), the menu is displayed.  A
     typical application example is the "back" button in some web
     browsers's tool bars. If the user clicks it, the browser simply
@@ -863,7 +870,7 @@ QToolButton::ToolButtonPopupMode QToolButton::popupMode() const
 
     The default is disabled (i.e. false).
 
-    This property is currently ignored on OS X when using QMacStyle.
+    This property is currently ignored on \macos when using QMacStyle.
 */
 void QToolButton::setAutoRaise(bool enable)
 {
@@ -961,8 +968,8 @@ bool QToolButton::event(QEvent *event)
     case QEvent::HoverEnter:
     case QEvent::HoverLeave:
     case QEvent::HoverMove:
-    if (const QHoverEvent *he = static_cast<const QHoverEvent *>(event))
-        d_func()->updateHoverControl(he->pos());
+        if (const QHoverEvent *he = static_cast<const QHoverEvent *>(event))
+            d_func()->updateHoverControl(he->pos());
         break;
     default:
         break;

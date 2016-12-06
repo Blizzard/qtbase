@@ -9,6 +9,7 @@ HEADERS +=  \
         tools/qarraydatapointer.h \
         tools/qbitarray.h \
         tools/qbytearray.h \
+        tools/qbytearray_p.h \
         tools/qbytearraylist.h \
         tools/qbytearraymatcher.h \
         tools/qbytedata_p.h \
@@ -26,6 +27,7 @@ HEADERS +=  \
         tools/qeasingcurve.h \
         tools/qfreelist_p.h \
         tools/qhash.h \
+        tools/qhashfunctions.h \
         tools/qiterator.h \
         tools/qline.h \
         tools/qlinkedlist.h \
@@ -73,7 +75,7 @@ HEADERS +=  \
         tools/qunicodetools_p.h \
         tools/qvarlengtharray.h \
         tools/qvector.h \
-        tools/qversionnumber_p.h
+        tools/qversionnumber.h
 
 
 SOURCES += \
@@ -105,6 +107,7 @@ SOURCES += \
         tools/qrect.cpp \
         tools/qregexp.cpp \
         tools/qrefcount.cpp \
+        tools/qringbuffer.cpp \
         tools/qshareddata.cpp \
         tools/qsharedpointer.cpp \
         tools/qsimd.cpp \
@@ -144,19 +147,18 @@ else:unix {
     SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp tools/qtimezoneprivate_tz.cpp
 }
 else:win32 {
-    SOURCES += tools/qelapsedtimer_win.cpp tools/qlocale_win.cpp
-    !winrt: SOURCES += tools/qtimezoneprivate_win.cpp
+    SOURCES += tools/qelapsedtimer_win.cpp \
+               tools/qlocale_win.cpp \
+               tools/qtimezoneprivate_win.cpp
     winphone: LIBS_PRIVATE += -lWindowsPhoneGlobalizationUtil
+    winrt-*-msvc2013: LIBS += advapi32.lib
 } else:integrity:SOURCES += tools/qelapsedtimer_unix.cpp tools/qlocale_unix.cpp
 else:SOURCES += tools/qelapsedtimer_generic.cpp
 
 contains(QT_CONFIG, zlib) {
     include($$PWD/../../3rdparty/zlib.pri)
-    corelib_zlib_headers.files = $$PWD/../../3rdparty/zlib/zconf.h\
-                                 $$PWD/../../3rdparty/zlib/zlib.h
-    corelib_zlib_headers.path = $$[QT_INSTALL_HEADERS]/QtZlib
-    INSTALLS += corelib_zlib_headers
 } else {
+    CONFIG += no_core_dep
     include($$PWD/../../3rdparty/zlib_dependency.pri)
 }
 

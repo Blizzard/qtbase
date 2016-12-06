@@ -107,7 +107,7 @@ public:
         typedef QJsonValueRef reference;
         typedef QJsonValueRefPtr pointer;
 
-        inline iterator() : a(0), i(0) { }
+        inline iterator() : a(Q_NULLPTR), i(0) { }
         explicit inline iterator(QJsonArray *array, int index) : a(array), i(index) { }
 
         inline QJsonValueRef operator*() const { return QJsonValueRef(a, i); }
@@ -152,9 +152,11 @@ public:
         typedef QJsonValue reference;
         typedef QJsonValuePtr pointer;
 
-        inline const_iterator() : a(0), i(0) { }
+        inline const_iterator() : a(Q_NULLPTR), i(0) { }
         explicit inline const_iterator(const QJsonArray *array, int index) : a(array), i(index) { }
-        inline const_iterator(const const_iterator &o) : a(o.a), i(o.i) {}
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        inline const_iterator(const const_iterator &o) : a(o.a), i(o.i) {} // ### Qt 6: Removed so class can be trivially-copyable
+#endif
         inline const_iterator(const iterator &o) : a(o.a), i(o.i) {}
 
         inline QJsonValue operator*() const { return a->at(i); }
@@ -183,10 +185,10 @@ public:
     friend class const_iterator;
 
     // stl style
-    inline iterator begin() { detach(); return iterator(this, 0); }
+    inline iterator begin() { detach2(); return iterator(this, 0); }
     inline const_iterator begin() const { return const_iterator(this, 0); }
     inline const_iterator constBegin() const { return const_iterator(this, 0); }
-    inline iterator end() { detach(); return iterator(this, size()); }
+    inline iterator end() { detach2(); return iterator(this, size()); }
     inline const_iterator end() const { return const_iterator(this, size()); }
     inline const_iterator constEnd() const { return const_iterator(this, size()); }
     iterator insert(iterator before, const QJsonValue &value) { insert(before.i, value); return before; }
@@ -227,7 +229,9 @@ private:
     QJsonArray(QJsonPrivate::Data *data, QJsonPrivate::Array *array);
     void initialize();
     void compact();
+    // ### Qt 6: remove me and merge with detach2
     void detach(uint reserve = 0);
+    bool detach2(uint reserve = 0);
 
     QJsonPrivate::Data *d;
     QJsonPrivate::Array *a;

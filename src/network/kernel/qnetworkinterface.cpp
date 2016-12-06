@@ -86,9 +86,16 @@ QSharedDataPointer<QNetworkInterfacePrivate> QNetworkInterfaceManager::interface
 {
     QList<QSharedDataPointer<QNetworkInterfacePrivate> > interfaceList = allInterfaces();
     QList<QSharedDataPointer<QNetworkInterfacePrivate> >::ConstIterator it = interfaceList.constBegin();
-    for ( ; it != interfaceList.constEnd(); ++it)
-        if ((*it)->name == name)
+
+    bool ok;
+    uint index = name.toUInt(&ok);
+
+    for ( ; it != interfaceList.constEnd(); ++it) {
+        if (ok && (*it)->index == int(index))
             return *it;
+        else if ((*it)->name == name)
+            return *it;
+    }
 
     return empty;
 }
@@ -108,6 +115,7 @@ QList<QSharedDataPointer<QNetworkInterfacePrivate> > QNetworkInterfaceManager::a
 {
     QList<QNetworkInterfacePrivate *> list = postProcess(scan());
     QList<QSharedDataPointer<QNetworkInterfacePrivate> > result;
+    result.reserve(list.size());
 
     foreach (QNetworkInterfacePrivate *ptr, list)
         result << QSharedDataPointer<QNetworkInterfacePrivate>(ptr);
@@ -350,7 +358,7 @@ void QNetworkAddressEntry::setBroadcast(const QHostAddress &newBroadcast)
     Not all operating systems support reporting all features. Only the
     IPv4 addresses are guaranteed to be listed by this class in all
     platforms. In particular, IPv6 address listing is only supported
-    on Windows, Linux, OS X and the BSDs.
+    on Windows, Linux, \macos and the BSDs.
 
     \sa QNetworkAddressEntry
 */
@@ -515,6 +523,9 @@ QList<QNetworkAddressEntry> QNetworkInterface::addressEntries() const
     name. If no such interface exists, this function returns an
     invalid QNetworkInterface object.
 
+    The string \a name may be either an actual interface name (such as "eth0"
+    or "en1") or an interface index in string form ("1", "2", etc.).
+
     \sa name(), isValid()
 */
 QNetworkInterface QNetworkInterface::interfaceFromName(const QString &name)
@@ -549,6 +560,7 @@ QList<QNetworkInterface> QNetworkInterface::allInterfaces()
 {
     QList<QSharedDataPointer<QNetworkInterfacePrivate> > privs = manager()->allInterfaces();
     QList<QNetworkInterface> result;
+    result.reserve(privs.size());
     foreach (const QSharedDataPointer<QNetworkInterfacePrivate> &p, privs) {
         QNetworkInterface item;
         item.d = p;

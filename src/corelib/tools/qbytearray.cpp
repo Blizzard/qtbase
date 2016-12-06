@@ -41,6 +41,7 @@
 #include "qlocale_p.h"
 #include "qstringalgorithms_p.h"
 #include "qscopedpointer.h"
+#include "qbytearray_p.h"
 #include <qdatastream.h>
 #include <qmath.h>
 
@@ -123,7 +124,7 @@ int qFindByteArray(
 
 int qAllocMore(int alloc, int extra) Q_DECL_NOTHROW
 {
-    Q_ASSERT(alloc >= 0 && extra >= 0);
+    Q_ASSERT(alloc >= 0 && extra >= 0 && extra <= MaxAllocSize);
     Q_ASSERT_X(alloc <= MaxAllocSize - extra, "qAllocMore", "Requested size is too large!");
 
     unsigned nalloc = qNextPowerOfTwo(alloc + extra);
@@ -488,8 +489,8 @@ quint16 qChecksum(const char *data, uint len)
 
     \overload
 
-    Compresses the first \a nbytes of \a data and returns the
-    compressed data in a new byte array.
+    Compresses the first \a nbytes of \a data at compression level
+    \a compressionLevel and returns the compressed data in a new byte array.
 */
 
 #ifndef QT_NO_COMPRESS
@@ -577,8 +578,8 @@ QByteArray qUncompress(const uchar* data, int nbytes)
             qWarning("qUncompress: Input data is corrupted");
         return QByteArray();
     }
-    ulong expectedSize = (data[0] << 24) | (data[1] << 16) |
-                       (data[2] <<  8) | (data[3]      );
+    ulong expectedSize = uint((data[0] << 24) | (data[1] << 16) |
+                              (data[2] <<  8) | (data[3]      ));
     ulong len = qMax(expectedSize, 1ul);
     QScopedPointer<QByteArray::Data, QScopedPointerPodDeleter> d;
 
@@ -838,15 +839,6 @@ static inline char qToLower(char c)
 */
 
 /*!
-    \variable QByteArray::MaxSize
-    \internal
-    \since 5.4
-
-    The maximum size of a QByteArray, in bytes. Also applies to a the maximum
-    storage size of QString and QVector, though not the number of elements.
-*/
-
-/*!
     \enum QByteArray::Base64Option
     \since 5.2
 
@@ -925,6 +917,52 @@ static inline char qToLower(char c)
     character after the last character in the list.
 
     \sa constBegin(), end()
+*/
+
+/*! \fn QByteArray::reverse_iterator QByteArray::rbegin()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    character in the byte-array, in reverse order.
+
+    \sa begin(), crbegin(), rend()
+*/
+
+/*! \fn QByteArray::const_reverse_iterator QByteArray::rbegin() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QByteArray::const_reverse_iterator QByteArray::crbegin() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to the first
+    character in the byte-array, in reverse order.
+
+    \sa begin(), rbegin(), rend()
+*/
+
+/*! \fn QByteArray::reverse_iterator QByteArray::rend()
+    \since 5.6
+
+    Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing to one past
+    the last character in the byte-array, in reverse order.
+
+    \sa end(), crend(), rbegin()
+*/
+
+/*! \fn QByteArray::const_reverse_iterator QByteArray::rend() const
+    \since 5.6
+    \overload
+*/
+
+/*! \fn QByteArray::const_reverse_iterator QByteArray::crend() const
+    \since 5.6
+
+    Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing to one
+    past the last character in the byte-array, in reverse order.
+
+    \sa end(), rend(), rbegin()
 */
 
 /*! \fn void QByteArray::push_back(const QByteArray &other)
@@ -1574,7 +1612,7 @@ void QByteArray::reallocData(uint alloc, Data::AllocationOptions options)
         d = x;
     } else {
         if (options & Data::Grow) {
-            if (alloc > uint(MaxAllocSize) - uint(sizeof(Data)))
+            if (alloc > MaxByteArraySize)
                 qBadAlloc();
             alloc = qAllocMore(alloc, sizeof(Data));
         }
@@ -2845,9 +2883,9 @@ QByteArray QByteArray::toUpper_helper(QByteArray &a)
 
 /*! \fn void QByteArray::clear()
 
-    Clears the contents of the byte array and makes it empty.
+    Clears the contents of the byte array and makes it null.
 
-    \sa resize(), isEmpty()
+    \sa resize(), isNull()
 */
 
 void QByteArray::clear()
@@ -4489,11 +4527,33 @@ QByteArray QByteArray::toPercentEncoding(const QByteArray &exclude, const QByteA
 */
 
 /*! \typedef QByteArray::const_iterator
-    \internal
+
+    This typedef provides an STL-style const iterator for QByteArray.
+
+    \sa QByteArray::const_reverse_iterator, QByteArray::iterator
 */
 
 /*! \typedef QByteArray::iterator
-    \internal
+
+    This typedef provides an STL-style non-const iterator for QByteArray.
+
+    \sa QByteArray::reverse_iterator, QByteArray::const_iterator
+*/
+
+/*! \typedef QByteArray::const_reverse_iterator
+    \since 5.6
+
+    This typedef provides an STL-style const reverse iterator for QByteArray.
+
+    \sa QByteArray::reverse_iterator, QByteArray::const_iterator
+*/
+
+/*! \typedef QByteArray::reverse_iterator
+    \since 5.6
+
+    This typedef provides an STL-style non-const reverse iterator for QByteArray.
+
+    \sa QByteArray::const_reverse_iterator, QByteArray::iterator
 */
 
 /*! \typedef QByteArray::size_type

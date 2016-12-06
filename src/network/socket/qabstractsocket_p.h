@@ -130,16 +130,19 @@ public:
     bool flush();
 
     bool initSocketLayer(QAbstractSocket::NetworkLayerProtocol protocol);
+    virtual void configureCreatedSocket();
     void startConnectingByName(const QString &host);
     void fetchConnectionParameters();
     void setupSocketNotifiers();
     bool readFromSocket();
 
+    void setError(QAbstractSocket::SocketError errorCode, const QString &errorString);
+    void setErrorAndEmit(QAbstractSocket::SocketError errorCode, const QString &errorString);
+
     qint64 readBufferMaxSize;
     QRingBuffer writeBuffer;
 
     bool isBuffered;
-    int blockingTimeout;
 
     QTimer *connectTimer;
     QTimer *disconnectTimer;

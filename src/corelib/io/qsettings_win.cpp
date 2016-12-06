@@ -319,11 +319,11 @@ private:
 };
 
 RegistryKey::RegistryKey(HKEY parent_handle, const QString &key, bool read_only)
+    : m_parent_handle(parent_handle),
+      m_handle(0),
+      m_key(key),
+      m_read_only(read_only)
 {
-    m_parent_handle = parent_handle;
-    m_handle = 0;
-    m_read_only = read_only;
-    m_key = key;
 }
 
 QString RegistryKey::key() const
@@ -483,6 +483,12 @@ bool QWinSettingsPrivate::readKey(HKEY parentHandle, const QString &rSubKey, QVa
         RegCloseKey(handle);
         return false;
     }
+
+    // workaround for rare cases where trailing '\0' are missing in registry
+    if (dataType == REG_SZ || dataType == REG_EXPAND_SZ)
+        dataSize += 2;
+    else if (dataType == REG_MULTI_SZ)
+        dataSize += 4;
 
     // get the value
     QByteArray data(dataSize, 0);

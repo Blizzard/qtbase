@@ -69,7 +69,7 @@ QT_BEGIN_NAMESPACE
     for a specified area in the text layout's content.
     \inmodule QtGui
 
-    \sa QTextLayout::setAdditionalFormats(), QTextLayout::draw()
+    \sa QTextLayout::setFormats(), QTextLayout::draw()
 */
 
 /*!
@@ -86,6 +86,20 @@ QT_BEGIN_NAMESPACE
     \variable QTextLayout::FormatRange::format
     Specifies the format to apply.
 */
+
+/*! \fn bool operator==(const FormatRange &lhs, const FormatRange &rhs)
+  \relates QTextLayout::FormatRange
+
+  Returns true if the \c {start}, \c {length}, and \c {format} fields
+  in \a lhs and \a rhs contain the same values respectively.
+ */
+
+/*! \fn bool operator!=(const FormatRange &lhs, const FormatRange &rhs)
+  \relates QTextLayout::FormatRange
+
+  Returns true if any of the \c {start}, \c {length}, or \c {format} fields
+  in \a lhs and \a rhs contain different values respectively.
+ */
 
 /*!
     \class QTextInlineObject
@@ -485,39 +499,76 @@ QString QTextLayout::preeditAreaText() const
     return d->preeditAreaText();
 }
 
-
+#if QT_DEPRECATED_SINCE(5, 6)
 /*!
-    Sets the additional formats supported by the text layout to \a formatList.
-    The formats are applied with preedit area text in place.
-
-    \sa additionalFormats(), clearAdditionalFormats()
+    \obsolete Use setFormats() instead.
 */
 void QTextLayout::setAdditionalFormats(const QList<FormatRange> &formatList)
 {
-    d->setFormats(formatList);
+    setFormats(formatList.toVector());
+}
+#endif // deprecated since 5.6
+
+/*!
+    \since 5.6
+
+    Sets the additional formats supported by the text layout to \a formats.
+    The formats are applied with preedit area text in place.
+
+    \sa formats(), clearFormats()
+*/
+void QTextLayout::setFormats(const QVector<FormatRange> &formats)
+{
+    d->setFormats(formats);
 
     if (d->block.docHandle())
         d->block.docHandle()->documentChange(d->block.position(), d->block.length());
 }
 
+#if QT_DEPRECATED_SINCE(5, 6)
 /*!
-    Returns the list of additional formats supported by the text layout.
+    \obsolete Use formats() instead.
 
     \sa setAdditionalFormats(), clearAdditionalFormats()
 */
 QList<QTextLayout::FormatRange> QTextLayout::additionalFormats() const
 {
+    return formats().toList();
+}
+#endif // deprecated since 5.6
+
+/*!
+    \since 5.6
+
+    Returns the list of additional formats supported by the text layout.
+
+    \sa setFormats(), clearFormats()
+*/
+QVector<QTextLayout::FormatRange> QTextLayout::formats() const
+{
     return d->formats();
 }
 
+#if QT_DEPRECATED_SINCE(5, 6)
 /*!
-    Clears the list of additional formats supported by the text layout.
-
-    \sa additionalFormats(), setAdditionalFormats()
+    \obsolete Use clearFormats() instead.
 */
 void QTextLayout::clearAdditionalFormats()
 {
-    setAdditionalFormats(QList<FormatRange>());
+    clearFormats();
+}
+#endif // deprecated since 5.6
+
+/*!
+    \since 5.6
+
+    Clears the list of additional formats supported by the text layout.
+
+    \sa formats(), setFormats()
+*/
+void QTextLayout::clearFormats()
+{
+    setFormats(QVector<FormatRange>());
 }
 
 /*!
@@ -1007,12 +1058,15 @@ QList<QGlyphRun> QTextLayout::glyphRuns(int from, int length) const
 
                     QVector<quint32> indexes = oldGlyphRun.glyphIndexes();
                     QVector<QPointF> positions = oldGlyphRun.positions();
+                    QRectF boundingRect = oldGlyphRun.boundingRect();
 
                     indexes += glyphRun.glyphIndexes();
                     positions += glyphRun.positions();
+                    boundingRect = boundingRect.united(glyphRun.boundingRect());
 
                     oldGlyphRun.setGlyphIndexes(indexes);
                     oldGlyphRun.setPositions(positions);
+                    oldGlyphRun.setBoundingRect(boundingRect);
                 } else {
                     glyphRunHash[key] = glyphRun;
                 }
@@ -1915,9 +1969,16 @@ void QTextLine::layout_helper(int maxGlyphs)
                 // end up breaking due to the current glyph being too wide.
                 QFixed previousRightBearing = lbh.rightBearing;
 
-                // We ignore the right bearing if the minimum negative bearing is too little to
-                // expand the text beyond the edge.
-                if (lbh.calculateNewWidth(line) - lbh.minimumRightBearing > line.width)
+                // We skip calculating the right bearing if the minimum negative bearing is too
+                // small to possibly expand the text beyond the edge. Note that this optimization
+                // will in some cases fail, as the minimum right bearing reported by the font
+                // engine may not cover all the glyphs in the font. The result is that we think
+                // we don't need to break at the current glyph (because the right bearing is 0),
+                // and when we then end up breaking on the next glyph we compute the right bearing
+                // and end up with a line width that is slightly larger width than what was requested.
+                // Unfortunately we can't remove this optimization as it will slow down text
+                // layouting significantly, so we accept the slight correctnes issue.
+                if ((lbh.calculateNewWidth(line) + qAbs(lbh.minimumRightBearing)) > line.width)
                     lbh.calculateRightBearing();
 
                 if (lbh.checkFullOtherwiseExtend(line)) {
@@ -2264,16 +2325,16 @@ QList<QGlyphRun> QTextLine::glyphRuns(int from, int length) const
 
             if (mainFontEngine->type() == QFontEngine::Multi) {
                 QFontEngineMulti *multiFontEngine = static_cast<QFontEngineMulti *>(mainFontEngine);
-                int end = rtl ? glyphLayout.numGlyphs : 0;
-                int start = rtl ? end : 0;
-                int which = glyphLayout.glyphs[rtl ? start - 1 : end] >> 24;
-                for (; (rtl && start > 0) || (!rtl && end < glyphLayout.numGlyphs);
+                int start = rtl ? glyphLayout.numGlyphs : 0;
+                int end = start - 1;
+                int which = glyphLayout.glyphs[rtl ? start - 1 : end + 1] >> 24;
+                for (; (rtl && start > 0) || (!rtl && end < glyphLayout.numGlyphs - 1);
                      rtl ? --start : ++end) {
-                    const int e = glyphLayout.glyphs[rtl ? start - 1 : end] >> 24;
+                    const int e = glyphLayout.glyphs[rtl ? start - 1 : end + 1] >> 24;
                     if (e == which)
                         continue;
 
-                    QGlyphLayout subLayout = glyphLayout.mid(start, end - start);
+                    QGlyphLayout subLayout = glyphLayout.mid(start, end - start + 1);
                     multiFontEngine->ensureEngineAt(which);
 
                     QGlyphRun::GlyphRunFlags subFlags = flags;
@@ -2288,22 +2349,22 @@ QList<QGlyphRun> QTextLine::glyphRuns(int from, int length) const
                                                       width,
                                                       glyphsStart + start,
                                                       glyphsStart + end,
-                                                      logClusters,
-                                                      iterator.itemStart,
-                                                      iterator.itemLength));
+                                                      logClusters + relativeFrom,
+                                                      relativeFrom + si.position,
+                                                      relativeTo - relativeFrom + 1));
                     for (int i = 0; i < subLayout.numGlyphs; ++i) {
                         QFixed justification = QFixed::fromFixed(subLayout.justifications[i].space_18d6);
                         pos.rx() += (subLayout.advances[i] + justification).toReal();
                     }
 
                     if (rtl)
-                        end = start;
+                        end = start - 1;
                     else
-                        start = end;
+                        start = end + 1;
                     which = e;
                 }
 
-                QGlyphLayout subLayout = glyphLayout.mid(start, end - start);
+                QGlyphLayout subLayout = glyphLayout.mid(start, end - start + 1);
                 multiFontEngine->ensureEngineAt(which);
 
                 QGlyphRun::GlyphRunFlags subFlags = flags;
@@ -2318,9 +2379,9 @@ QList<QGlyphRun> QTextLine::glyphRuns(int from, int length) const
                                                       width,
                                                       glyphsStart + start,
                                                       glyphsStart + end,
-                                                      logClusters,
-                                                      iterator.itemStart,
-                                                      iterator.itemLength);
+                                                      logClusters + relativeFrom,
+                                                      relativeFrom + si.position,
+                                                      relativeTo - relativeFrom + 1);
                 if (!glyphRun.isEmpty())
                     glyphRuns.append(glyphRun);
             } else {
@@ -2334,9 +2395,9 @@ QList<QGlyphRun> QTextLine::glyphRuns(int from, int length) const
                                                       width,
                                                       glyphsStart,
                                                       glyphsEnd,
-                                                      logClusters,
-                                                      iterator.itemStart,
-                                                      iterator.itemLength);
+                                                      logClusters + relativeFrom,
+                                                      relativeFrom + si.position,
+                                                      relativeTo - relativeFrom + 1);
                 if (!glyphRun.isEmpty())
                     glyphRuns.append(glyphRun);
             }
@@ -2559,33 +2620,31 @@ void QTextLine::draw(QPainter *p, const QPointF &pos, const QTextLayout::FormatR
     inside the line, taking account of the \a edge.
 
     If \a cursorPos is not a valid cursor position, the nearest valid
-    cursor position will be used instead, and cpos will be modified to
+    cursor position will be used instead, and \a cursorPos will be modified to
     point to this valid cursor position.
 
     \sa xToCursor()
 */
 qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
 {
-    if (!eng->layoutData)
-        eng->itemize();
-
     const QScriptLine &line = eng->lines[index];
     bool lastLine = index >= eng->lines.size() - 1;
 
-    QFixed x = line.x;
-    x += eng->alignLine(line) - eng->leadingSpaceWidth(line);
+    QFixed x = line.x + eng->alignLine(line) - eng->leadingSpaceWidth(line);
 
-    if (!index && !eng->layoutData->items.size()) {
-        *cursorPos = 0;
+    if (!eng->layoutData)
+        eng->itemize();
+    if (!eng->layoutData->items.size()) {
+        *cursorPos = line.from;
         return x.toReal();
     }
 
     int lineEnd = line.from + line.length + line.trailingSpaces;
-    int pos = qBound(0, *cursorPos, lineEnd);
+    int pos = qBound(line.from, *cursorPos, lineEnd);
     int itm;
     const QCharAttributes *attributes = eng->attributes();
     if (!attributes) {
-        *cursorPos = 0;
+        *cursorPos = line.from;
         return x.toReal();
     }
     while (pos < lineEnd && !attributes[pos].graphemeBoundary)
@@ -2597,7 +2656,7 @@ qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
     else
         itm = eng->findItem(pos);
     if (itm < 0) {
-        *cursorPos = 0;
+        *cursorPos = line.from;
         return x.toReal();
     }
     eng->shapeLine(line);
@@ -2605,17 +2664,13 @@ qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
     const QScriptItem *si = &eng->layoutData->items[itm];
     if (!si->num_glyphs)
         eng->shape(itm);
-    pos -= si->position;
+
+    const int l = eng->length(itm);
+    pos = qBound(0, pos - si->position, l);
 
     QGlyphLayout glyphs = eng->shapedGlyphs(si);
     unsigned short *logClusters = eng->logClusters(si);
     Q_ASSERT(logClusters);
-
-    int l = eng->length(itm);
-    if (pos > l)
-        pos = l;
-    if (pos < 0)
-        pos = 0;
 
     int glyph_pos = pos == l ? si->num_glyphs : logClusters[pos];
     if (edge == Trailing && glyph_pos < si->num_glyphs) {
@@ -2625,13 +2680,13 @@ qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
             glyph_pos++;
     }
 
-    bool reverse = eng->layoutData->items[itm].analysis.bidiLevel % 2;
+    bool reverse = si->analysis.bidiLevel % 2;
 
 
     // add the items left of the cursor
 
     int firstItem = eng->findItem(line.from);
-    int lastItem = eng->findItem(lineEnd - 1);
+    int lastItem = eng->findItem(lineEnd - 1, itm);
     int nItems = (firstItem >= 0 && lastItem >= firstItem)? (lastItem-firstItem+1) : 0;
 
     QVarLengthArray<int> visualOrder(nItems);
@@ -2652,13 +2707,15 @@ qreal QTextLine::cursorToX(int *cursorPos, Edge edge) const
             x += si.width;
             continue;
         }
+
+        const int itemLength = eng->length(item);
         int start = qMax(line.from, si.position);
-        int end = qMin(lineEnd, si.position + eng->length(item));
+        int end = qMin(lineEnd, si.position + itemLength);
 
         logClusters = eng->logClusters(&si);
 
         int gs = logClusters[start-si.position];
-        int ge = (end == si.position + eng->length(item)) ? si.num_glyphs-1 : logClusters[end-si.position-1];
+        int ge = (end == si.position + itemLength) ? si.num_glyphs-1 : logClusters[end-si.position-1];
 
         QGlyphLayout glyphs = eng->shapedGlyphs(&si);
 
@@ -2730,7 +2787,7 @@ int QTextLine::xToCursor(qreal _x, CursorPosition cpos) const
         return line.from;
 
     int firstItem = eng->findItem(line.from);
-    int lastItem = eng->findItem(line.from + line_length - 1);
+    int lastItem = eng->findItem(line.from + line_length - 1, firstItem);
     int nItems = (firstItem >= 0 && lastItem >= firstItem)? (lastItem-firstItem+1) : 0;
 
     if (!nItems)

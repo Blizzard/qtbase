@@ -47,10 +47,12 @@
 
 #include "qkeysequence.h"
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_SHORTCUT
-struct Q_AUTOTEST_EXPORT QKeyBinding
+struct QKeyBinding
 {
     QKeySequence::StandardKey standardKey;
     uchar priority;
@@ -58,24 +60,24 @@ struct Q_AUTOTEST_EXPORT QKeyBinding
     uint platform;
 };
 
-class Q_AUTOTEST_EXPORT QKeySequencePrivate
+class QKeySequencePrivate
 {
 public:
-    enum { MaxKeyCount = 4 }; // used in QKeySequenceEdit
+    enum { MaxKeyCount = 4 }; // also used in QKeySequenceEdit
     inline QKeySequencePrivate() : ref(1)
     {
-        key[0] = key[1] = key[2] = key[3] =  0;
+        std::fill_n(key, uint(MaxKeyCount), 0);
     }
     inline QKeySequencePrivate(const QKeySequencePrivate &copy) : ref(1)
     {
-        key[0] = copy.key[0];
-        key[1] = copy.key[1];
-        key[2] = copy.key[2];
-        key[3] = copy.key[3];
+        std::copy(copy.key, copy.key + MaxKeyCount,
+                  QT_MAKE_CHECKED_ARRAY_ITERATOR(key, MaxKeyCount));
     }
     QAtomicInt ref;
-    int key[4];
+    int key[MaxKeyCount];
     static QString encodeString(int key, QKeySequence::SequenceFormat format);
+    // used in dbusmenu
+    Q_GUI_EXPORT static QString keyName(int key, QKeySequence::SequenceFormat format);
     static int decodeString(const QString &keyStr, QKeySequence::SequenceFormat format);
 };
 #endif // QT_NO_SHORTCUT

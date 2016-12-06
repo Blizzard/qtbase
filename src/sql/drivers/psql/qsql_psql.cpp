@@ -449,7 +449,7 @@ QVariant QPSQLResult::data(int i)
     case QVariant::ByteArray: {
         size_t len;
         unsigned char *data = PQunescapeBytea((const unsigned char*)val, &len);
-        QByteArray ba((const char*)data, len);
+        QByteArray ba(reinterpret_cast<const char *>(data), int(len));
         qPQfreemem(data);
         return QVariant(ba);
     }
@@ -757,6 +757,7 @@ QPSQLDriver::Protocol QPSQLDriverPrivate::getPSQLVersion()
                     //Client version before QPSQLDriver::Version9 only supports escape mode for bytea type,
                     //but bytea format is set to hex by default in PSQL 9 and above. So need to force the
                     //server use the old escape mode when connects to the new server with old client library.
+                    PQclear(result);
                     result = exec("SET bytea_output=escape; ");
                     status = PQresultStatus(result);
                 } else if (serverVersion == QPSQLDriver::VersionUnknown) {
@@ -1389,8 +1390,10 @@ bool QPSQLDriver::subscribeToNotification(const QString &name)
         PGresult *result = d->exec(query);
         if (PQresultStatus(result) != PGRES_COMMAND_OK) {
             setLastError(qMakeError(tr("Unable to subscribe"), QSqlError::StatementError, d, result));
+            PQclear(result);
             return false;
         }
+        PQclear(result);
 
         if (!d->sn) {
             d->sn = new QSocketNotifier(socket, QSocketNotifier::Read);
@@ -1422,8 +1425,10 @@ bool QPSQLDriver::unsubscribeFromNotification(const QString &name)
     PGresult *result = d->exec(query);
     if (PQresultStatus(result) != PGRES_COMMAND_OK) {
         setLastError(qMakeError(tr("Unable to unsubscribe"), QSqlError::StatementError, d, result));
+        PQclear(result);
         return false;
     }
+    PQclear(result);
 
     d->seid.removeAll(name);
 

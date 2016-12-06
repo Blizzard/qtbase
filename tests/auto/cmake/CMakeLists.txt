@@ -50,7 +50,9 @@ include("${_Qt5CTestMacros}")
 if(NOT ${CMAKE_VERSION} VERSION_LESS 2.8.9)
     # Requires INCLUDE_DIRECTORIES target property in CMake 2.8.8
     # and POSITION_INDEPENDENT_CODE target property in 2.8.9
-    expect_pass(test_use_modules_function)
+    if (NOT NO_GUI)
+        expect_pass(test_use_modules_function)
+    endif()
     expect_pass(test_umbrella_config)
 else()
     message("CMake version older than 2.8.9 (Found ${CMAKE_VERSION}). Not running test \"test_use_modules_function\" or \"test_umbrella_config\"")
@@ -65,6 +67,24 @@ expect_fail(test_add_resource_options)
 expect_fail(test_wrap_cpp_options)
 expect_pass(test_platform_defs_include)
 expect_pass(test_qtmainwin_library)
+
+if (HAVE_NINJA)
+    make_directory("${CMAKE_CURRENT_SOURCE_DIR}/test_QFINDTESTDATA/build")
+    add_test(test_QFINDTESTDATA ${CMAKE_CTEST_COMMAND}
+      --build-and-test
+      "${CMAKE_CURRENT_SOURCE_DIR}/test_QFINDTESTDATA"
+      # Build in a subdir of the source dir.
+      # This causes Ninja to use relative paths.
+      "${CMAKE_CURRENT_SOURCE_DIR}/test_QFINDTESTDATA/build"
+      --build-generator Ninja
+      --build-options "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+    )
+    add_test(NAME run_test_QFINDTESTDATA COMMAND sh -c "cd \"${CMAKE_SOURCE_DIR}/test_QFINDTESTDATA/build/tests\" && ./test_QFINDTESTDATA -v2")
+
+    set_property(TEST run_test_QFINDTESTDATA
+        PROPERTY DEPENDS test_QFINDTESTDATA
+    )
+endif()
 
 if (NOT NO_DBUS)
     expect_pass(test_dbus_module)
@@ -96,12 +116,17 @@ endif()
 
 set(qt_module_includes
   Core QObject
-  Gui QImage
   Network QHostInfo
   Sql QSqlError
   Test QTestEventList
   Xml QDomDocument
 )
+
+if (NOT NO_GUI)
+  list(APPEND qt_module_includes
+    Gui QImage
+  )
+endif()
 
 if (NOT NO_WIDGETS)
   list(APPEND qt_module_includes
@@ -127,7 +152,7 @@ if (QT_WITH_ANGLE OR (NOT WIN32 AND NOT APPLE AND NOT NO_EGL))
 endif()
 expect_pass(test_opengl_lib)
 
-if (NOT CMAKE_VERSION VERSION_LESS 2.8.11)
+if (NOT CMAKE_VERSION VERSION_LESS 2.8.11 AND NOT NO_WIDGETS)
     expect_pass(test_interface)
 endif()
 

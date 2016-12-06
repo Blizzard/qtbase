@@ -2,6 +2,9 @@ TEMPLATE = subdirs
 
 load(qfeatures)
 
+src_qtzlib.file = $$PWD/corelib/qtzlib.pro
+src_qtzlib.target = sub-zlib
+
 src_tools_bootstrap.subdir = tools/bootstrap
 src_tools_bootstrap.target = sub-bootstrap
 src_tools_bootstrap.CONFIG = host_build
@@ -27,12 +30,6 @@ src_tools_uic.target = sub-uic
 src_tools_uic.CONFIG = host_build
 force_bootstrap: src_tools_uic.depends = src_tools_bootstrap
 else: src_tools_uic.depends = src_corelib
-
-src_tools_qdoc.subdir = tools/qdoc
-src_tools_qdoc.target = sub-qdoc
-src_tools_qdoc.CONFIG = host_build
-force_bootstrap: src_tools_qdoc.depends = src_tools_bootstrap
-else: src_tools_qdoc.depends = src_corelib src_xml
 
 src_tools_bootstrap_dbus.subdir = tools/bootstrap-dbus
 src_tools_bootstrap_dbus.target = sub-bootstrap_dbus
@@ -66,6 +63,7 @@ src_xml.depends = src_corelib
 src_dbus.subdir = $$PWD/dbus
 src_dbus.target = sub-dbus
 src_dbus.depends = src_corelib
+force_bootstrap: src_dbus.depends += src_tools_bootstrap_dbus  # avoid syncqt race
 
 src_concurrent.subdir = $$PWD/concurrent
 src_concurrent.target = sub-concurrent
@@ -110,7 +108,7 @@ src_platformsupport.depends = src_corelib src_gui src_platformheaders
 
 src_widgets.subdir = $$PWD/widgets
 src_widgets.target = sub-widgets
-src_widgets.depends = src_corelib src_gui src_tools_uic
+src_widgets.depends = src_corelib src_gui src_tools_uic src_platformheaders
 
 src_opengl.subdir = $$PWD/opengl
 src_opengl.target = sub-opengl
@@ -131,6 +129,12 @@ src_plugins.depends = src_sql src_xml src_network
 src_android.subdir = $$PWD/android
 
 # this order is important
+contains(QT_CONFIG, zlib)|cross_compile {
+    SUBDIRS += src_qtzlib
+    contains(QT_CONFIG, zlib) {
+        src_3rdparty_freetype.depends += src_corelib
+    }
+}
 SUBDIRS += src_tools_bootstrap src_tools_moc src_tools_rcc
 !contains(QT_DISABLED_FEATURES, regularexpression):pcre {
     SUBDIRS += src_3rdparty_pcre
@@ -141,9 +145,9 @@ TOOLS = src_tools_moc src_tools_rcc src_tools_qlalr
 win32:SUBDIRS += src_winmain
 SUBDIRS += src_network src_sql src_xml src_testlib
 contains(QT_CONFIG, dbus) {
-    SUBDIRS += src_dbus
-    force_bootstrap: SUBDIRS += src_tools_bootstrap_dbus
-    SUBDIRS += src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml
+    force_bootstrap|contains(QT_CONFIG, private_tests): \
+        SUBDIRS += src_tools_bootstrap_dbus
+    SUBDIRS += src_dbus src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml
     TOOLS += src_tools_qdbusxml2cpp src_tools_qdbuscpp2xml
     contains(QT_CONFIG, accessibility-atspi-bridge): \
         src_platformsupport.depends += src_dbus src_tools_qdbusxml2cpp
@@ -182,7 +186,7 @@ contains(QT_CONFIG, concurrent):SUBDIRS += src_concurrent
         }
     }
 }
-SUBDIRS += src_plugins src_tools_qdoc
+SUBDIRS += src_plugins
 
 nacl: SUBDIRS -= src_network src_testlib
 

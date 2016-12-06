@@ -479,6 +479,11 @@ public:
 
 Q_GLOBAL_STATIC(QEmptyItemModel, qEmptyModel)
 
+
+QAbstractItemModelPrivate::~QAbstractItemModelPrivate()
+{
+}
+
 QAbstractItemModel *QAbstractItemModelPrivate::staticEmptyModel()
 {
     return qEmptyModel();
@@ -3217,6 +3222,7 @@ QModelIndexList QAbstractItemModel::persistentIndexList() const
 {
     Q_D(const QAbstractItemModel);
     QModelIndexList result;
+    result.reserve(d->persistent.indexes.count());
     for (QHash<QModelIndex, QPersistentModelIndexData *>::const_iterator it = d->persistent.indexes.constBegin();
          it != d->persistent.indexes.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
@@ -3647,7 +3653,7 @@ bool QAbstractListModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
     \fn QAbstractItemModel::modelAboutToBeReset()
     \since 4.2
 
-    This signal is emitted when reset() is called, before the model's internal
+    This signal is emitted when beginResetModel() is called, before the model's internal
     state (e.g. persistent model indexes) has been invalidated.
 
     \sa beginResetModel(), modelReset()
@@ -3657,7 +3663,7 @@ bool QAbstractListModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
     \fn QAbstractItemModel::modelReset()
     \since 4.1
 
-    This signal is emitted when reset() or endResetModel() is called, after the
+    This signal is emitted when endResetModel() is called, after the
     model's internal state (e.g. persistent model indexes) has been invalidated.
 
     Note that if a model is reset it should be considered that all information

@@ -35,6 +35,17 @@
 #ifndef QDBUSTRAYTYPES_P_H
 #define QDBUSTRAYTYPES_P_H
 
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists for the convenience
+// of other Qt classes.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
 #ifndef QT_NO_SYSTEMTRAYICON
 
 #include <QObject>
@@ -56,6 +67,7 @@ struct QXdgDBusImageStruct
     int height;
     QByteArray data;
 };
+Q_DECLARE_TYPEINFO(QXdgDBusImageStruct, Q_MOVABLE_TYPE);
 
 typedef QVector<QXdgDBusImageStruct> QXdgDBusImageVector;
 
@@ -69,6 +81,7 @@ struct QXdgDBusToolTipStruct
     QString title;
     QString subTitle;
 };
+Q_DECLARE_TYPEINFO(QXdgDBusToolTipStruct, Q_MOVABLE_TYPE);
 
 const QDBusArgument &operator<<(QDBusArgument &argument, const QXdgDBusImageStruct &icon);
 const QDBusArgument &operator>>(const QDBusArgument &argument, QXdgDBusImageStruct &icon);

@@ -34,6 +34,17 @@
 #ifndef QDBUSMENUTYPES_H
 #define QDBUSMENUTYPES_H
 
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists for the convenience
+// of other Qt classes.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
 #include <QObject>
 #include <QString>
 #include <QDBusArgument>
@@ -46,7 +57,8 @@ QT_BEGIN_NAMESPACE
 class QDBusPlatformMenu;
 class QDBusPlatformMenuItem;
 class QDBusMenuItem;
-typedef QList<QDBusMenuItem> QDBusMenuItemList;
+typedef QVector<QDBusMenuItem> QDBusMenuItemList;
+typedef QVector<QStringList> QDBusMenuShortcut;
 
 class QDBusMenuItem
 {
@@ -56,11 +68,13 @@ public:
 
     static QDBusMenuItemList items(const QList<int> &ids, const QStringList &propertyNames);
     static QString convertMnemonic(const QString &label);
+    static QDBusMenuShortcut convertKeySequence(const QKeySequence &sequence);
     static void registerDBusTypes();
 
     int m_id;
     QVariantMap m_properties;
 };
+Q_DECLARE_TYPEINFO(QDBusMenuItem, Q_MOVABLE_TYPE);
 
 const QDBusArgument &operator<<(QDBusArgument &arg, const QDBusMenuItem &item);
 const QDBusArgument &operator>>(const QDBusArgument &arg, QDBusMenuItem &item);
@@ -72,28 +86,30 @@ public:
     int id;
     QStringList properties;
 };
+Q_DECLARE_TYPEINFO(QDBusMenuItemKeys, Q_MOVABLE_TYPE);
 
 const QDBusArgument &operator<<(QDBusArgument &arg, const QDBusMenuItemKeys &keys);
 const QDBusArgument &operator>>(const QDBusArgument &arg, QDBusMenuItemKeys &keys);
 
-typedef QList<QDBusMenuItemKeys> QDBusMenuItemKeysList;
+typedef QVector<QDBusMenuItemKeys> QDBusMenuItemKeysList;
 
 class QDBusMenuLayoutItem
 {
 public:
-    uint populate(int id, int depth, const QStringList &propertyNames);
+    uint populate(int id, int depth, const QStringList &propertyNames, const QDBusPlatformMenu *topLevelMenu);
     void populate(const QDBusPlatformMenu *menu, int depth, const QStringList &propertyNames);
     void populate(const QDBusPlatformMenuItem *item, int depth, const QStringList &propertyNames);
 
     int m_id;
     QVariantMap m_properties;
-    QList<QDBusMenuLayoutItem> m_children;
+    QVector<QDBusMenuLayoutItem> m_children;
 };
+Q_DECLARE_TYPEINFO(QDBusMenuLayoutItem, Q_MOVABLE_TYPE);
 
 const QDBusArgument &operator<<(QDBusArgument &arg, const QDBusMenuLayoutItem &);
 const QDBusArgument &operator>>(const QDBusArgument &arg, QDBusMenuLayoutItem &item);
 
-typedef QList<QDBusMenuLayoutItem> QDBusMenuLayoutItemList;
+typedef QVector<QDBusMenuLayoutItem> QDBusMenuLayoutItemList;
 
 class QDBusMenuEvent
 {
@@ -103,11 +119,13 @@ public:
     QDBusVariant m_data;
     uint m_timestamp;
 };
+Q_DECLARE_TYPEINFO(QDBusMenuEvent, Q_MOVABLE_TYPE); // QDBusVariant is movable, even though it cannot
+                                                    // be marked as such until Qt 6.
 
 const QDBusArgument &operator<<(QDBusArgument &arg, const QDBusMenuEvent &ev);
 const QDBusArgument &operator>>(const QDBusArgument &arg, QDBusMenuEvent &ev);
 
-typedef QList<QDBusMenuEvent> QDBusMenuEventList;
+typedef QVector<QDBusMenuEvent> QDBusMenuEventList;
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug d, const QDBusMenuItem &item);
@@ -124,5 +142,6 @@ Q_DECLARE_METATYPE(QDBusMenuLayoutItem)
 Q_DECLARE_METATYPE(QDBusMenuLayoutItemList)
 Q_DECLARE_METATYPE(QDBusMenuEvent)
 Q_DECLARE_METATYPE(QDBusMenuEventList)
+Q_DECLARE_METATYPE(QDBusMenuShortcut)
 
 #endif

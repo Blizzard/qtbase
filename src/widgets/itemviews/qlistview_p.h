@@ -93,6 +93,7 @@ private:
     mutable int indexHint;
     uint visited;
 };
+Q_DECLARE_TYPEINFO(QListViewItem, Q_PRIMITIVE_TYPE);
 
 struct QListViewLayoutInfo
 {
@@ -105,6 +106,7 @@ struct QListViewLayoutInfo
     QListView::Flow flow;
     int max;
 };
+Q_DECLARE_TYPEINFO(QListViewLayoutInfo, Q_PRIMITIVE_TYPE);
 
 class QListView;
 class QListViewPrivate;
@@ -191,7 +193,7 @@ public:
 class QListModeViewBase : public QCommonListViewBase
 {
 public:
-    QListModeViewBase(QListView *q, QListViewPrivate *d) : QCommonListViewBase(q, d) {}
+    QListModeViewBase(QListView *q, QListViewPrivate *d);
 
     QVector<int> flowPositions;
     QVector<int> segmentPositions;
@@ -291,7 +293,7 @@ private:
 
 };
 
-class QListViewPrivate: public QAbstractItemViewPrivate
+class Q_AUTOTEST_EXPORT QListViewPrivate: public QAbstractItemViewPrivate
 {
     Q_DECLARE_PUBLIC(QListView)
 public:

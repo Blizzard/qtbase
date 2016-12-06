@@ -76,24 +76,6 @@ void QBasicFontDatabase::populateFontDatabase()
     }
 }
 
-inline static void setHintingPreference(QFontEngine *engine, QFont::HintingPreference hintingPreference)
-{
-    switch (hintingPreference) {
-    case QFont::PreferNoHinting:
-        engine->setDefaultHintStyle(QFontEngineFT::HintNone);
-        break;
-    case QFont::PreferFullHinting:
-        engine->setDefaultHintStyle(QFontEngineFT::HintFull);
-        break;
-    case QFont::PreferVerticalHinting:
-        engine->setDefaultHintStyle(QFontEngineFT::HintLight);
-        break;
-    case QFont::PreferDefaultHinting:
-        // Leave it as it is
-        break;
-    }
-}
-
 QFontEngine *QBasicFontDatabase::fontEngine(const QFontDef &fontDef, void *usrPtr)
 {
     FontFile *fontfile = static_cast<FontFile *> (usrPtr);
@@ -119,7 +101,7 @@ QFontEngine *QBasicFontDatabase::fontEngine(const QFontDef &fontDef, void *usrPt
         delete engine;
         engine = 0;
     } else {
-        setHintingPreference(engine, static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
+        engine->setQtDefaultHintStyle(static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
     }
 
     return engine;
@@ -172,7 +154,7 @@ QFontEngine *QBasicFontDatabase::fontEngine(const QByteArray &fontData, qreal pi
     }
 
     fe->updateFamilyNameAndStyle();
-    setHintingPreference(fe, hintingPreference);
+    fe->setQtDefaultHintStyle(static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
 
     return fe;
 }
@@ -206,7 +188,7 @@ QStringList QBasicFontDatabase::addTTFile(const QByteArray &fontData, const QByt
             error = FT_New_Face(library, file.constData(), index, &face);
         }
         if (error != FT_Err_Ok) {
-            qDebug() << "FT_New_Face failed with index" << index << ":" << hex << error;
+            qDebug() << "FT_New_Face failed with index" << index << ':' << hex << error;
             break;
         }
         numFaces = face->num_faces;

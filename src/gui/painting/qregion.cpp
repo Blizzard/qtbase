@@ -41,7 +41,7 @@
 #include "qimage.h"
 #include "qbitmap.h"
 
-#include <qdebug.h>
+#include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -422,11 +422,32 @@ QDataStream &operator>>(QDataStream &s, QRegion &r)
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug s, const QRegion &r)
 {
-    QVector<QRect> rects = r.rects();
-    s.nospace() << "QRegion(size=" << rects.size() << "), "
-                << "bounds = " << r.boundingRect() << '\n';
-    for (int i=0; i<rects.size(); ++i)
-        s << "- " << i << rects.at(i) << '\n';
+    QDebugStateSaver saver(s);
+    s.nospace();
+    s << "QRegion(";
+    if (r.isNull()) {
+        s << "null";
+    } else if (r.isEmpty()) {
+        s << "empty";
+    } else {
+        const QVector<QRect> rects = r.rects();
+        const int count = rects.size();
+        if (count > 1)
+            s << "size=" << count << ", bounds=(";
+        QtDebugUtils::formatQRect(s, r.boundingRect());
+        if (count > 1) {
+            s << ") - [";
+            for (int i = 0; i < count; ++i) {
+                if (i)
+                    s << ", ";
+                s << '(';
+                QtDebugUtils::formatQRect(s, rects.at(i));
+                s << ')';
+            }
+            s << ']';
+        }
+    }
+    s << ')';
     return s;
 }
 #endif
@@ -906,7 +927,7 @@ QRegion QRegion::intersect(const QRect &r) const
        sort key and X as the minor sort key.
     \endlist
     \omit
-    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and OS X).
+    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and \macos).
     \endomit
 */
 
@@ -3714,7 +3735,7 @@ static QRegionPrivate *PolygonRegion(const QPoint *Pts, int Count, int rule)
 
 QRegionPrivate *qt_bitmapToRegion(const QBitmap& bitmap)
 {
-    QImage image = bitmap.toImage();
+    const QImage image = bitmap.toImage();
 
     QRegionPrivate *region = new QRegionPrivate;
 
@@ -3732,7 +3753,7 @@ QRegionPrivate *qt_bitmapToRegion(const QBitmap& bitmap)
     int x,
         y;
     for (y = 0; y < image.height(); ++y) {
-        uchar *line = image.scanLine(y);
+        const uchar *line = image.constScanLine(y);
         int w = image.width();
         uchar all = zero;
         int prev1 = -1;

@@ -50,7 +50,7 @@
     return [CAEAGLLayer class];
 }
 
--(id)initWithQIOSWindow:(QIOSWindow *)window
+- (id)initWithQIOSWindow:(QIOSWindow *)window
 {
     if (self = [self initWithFrame:toCGRect(window->geometry())])
         m_qioswindow = window;
@@ -280,6 +280,23 @@
 
 // -------------------------------------------------------------------------
 
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
+{
+    [super traitCollectionDidChange: previousTraitCollection];
+
+    QTouchDevice *touchDevice = QIOSIntegration::instance()->touchDevice();
+    QTouchDevice::Capabilities touchCapabilities = touchDevice->capabilities();
+
+    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_9_0) {
+        if (self.traitCollection.forceTouchCapability == UIForceTouchCapabilityAvailable)
+            touchCapabilities |= QTouchDevice::Pressure;
+        else
+            touchCapabilities &= ~QTouchDevice::Pressure;
+    }
+
+    touchDevice->setCapabilities(touchCapabilities);
+}
+
 -(BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
 {
     if (m_qioswindow->window()->flags() & Qt::WindowTransparentForInput)
@@ -289,6 +306,8 @@
 
 - (void)updateTouchList:(NSSet *)touches withState:(Qt::TouchPointState)state
 {
+    bool supportsPressure = QIOSIntegration::instance()->touchDevice()->capabilities() & QTouchDevice::Pressure;
+
     foreach (UITouch *uiTouch, m_activeTouches.keys()) {
         QWindowSystemInterface::TouchPoint &touchPoint = m_activeTouches[uiTouch];
         if (![touches containsObject:uiTouch]) {
@@ -309,14 +328,22 @@
             touchPoint.normalPosition = QPointF(globalScreenPosition.x() / screenSize.width(),
                                                 globalScreenPosition.y() / screenSize.height());
 
-            // We don't claim that our touch device supports QTouchDevice::Pressure,
-            // but fill in a meaningfull value in case clients use it anyways.
-            touchPoint.pressure = (state == Qt::TouchPointReleased) ? 0.0 : 1.0;
+            if (supportsPressure) {
+                // Note: iOS  will deliver touchesBegan with a touch force of 0, which
+                // we will reflect/propagate as a 0 pressure, but there is no clear
+                // alternative, as we don't want to wait for a touchedMoved before
+                // sending a touch press event to Qt, just to have a valid pressure.
+                touchPoint.pressure = uiTouch.force / uiTouch.maximumPossibleForce;
+            } else {
+                // We don't claim that our touch device supports QTouchDevice::Pressure,
+                // but fill in a meaningfull value in case clients use it anyways.
+                touchPoint.pressure = (state == Qt::TouchPointReleased) ? 0.0 : 1.0;
+            }
         }
     }
 }
 
-- (void) sendTouchEventWithTimestamp:(ulong)timeStamp
+- (void)sendTouchEventWithTimestamp:(ulong)timeStamp
 {
     // Send touch event synchronously
     QIOSIntegration *iosIntegration = QIOSIntegration::instance();

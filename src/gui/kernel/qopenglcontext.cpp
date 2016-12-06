@@ -226,7 +226,7 @@ public:
     QOpenGLContext *context;
 };
 
-static QThreadStorage<QGuiGLThreadContext *> qwindow_context_storage;
+Q_GLOBAL_STATIC(QThreadStorage<QGuiGLThreadContext *>, qwindow_context_storage);
 static QOpenGLContext *global_share_context = 0;
 
 #ifndef QT_NO_DEBUG
@@ -336,14 +336,14 @@ QOpenGLContext *qt_gl_global_share_context()
 */
 QOpenGLContext *QOpenGLContextPrivate::setCurrentContext(QOpenGLContext *context)
 {
-    QGuiGLThreadContext *threadContext = qwindow_context_storage.localData();
+    QGuiGLThreadContext *threadContext = qwindow_context_storage()->localData();
     if (!threadContext) {
         if (!QThread::currentThread()) {
             qWarning("No QTLS available. currentContext won't work");
             return 0;
         }
         threadContext = new QGuiGLThreadContext;
-        qwindow_context_storage.setLocalData(threadContext);
+        qwindow_context_storage()->setLocalData(threadContext);
     }
     QOpenGLContext *previous = threadContext->context;
     threadContext->context = context;
@@ -412,8 +412,8 @@ int QOpenGLContextPrivate::maxTextureSize()
 */
 QOpenGLContext* QOpenGLContext::currentContext()
 {
-    QGuiGLThreadContext *threadContext = qwindow_context_storage.localData();
-    if(threadContext) {
+    QGuiGLThreadContext *threadContext = qwindow_context_storage()->localData();
+    if (threadContext) {
         return threadContext->context;
     }
     return 0;
@@ -462,8 +462,7 @@ QPlatformOpenGLContext *QOpenGLContext::shareHandle() const
 QOpenGLContext::QOpenGLContext(QObject *parent)
     : QObject(*new QOpenGLContextPrivate(), parent)
 {
-    Q_D(QOpenGLContext);
-    d->screen = QGuiApplication::primaryScreen();
+    setScreen(QGuiApplication::primaryScreen());
 }
 
 /*!
@@ -499,9 +498,22 @@ void QOpenGLContext::setShareContext(QOpenGLContext *shareContext)
 void QOpenGLContext::setScreen(QScreen *screen)
 {
     Q_D(QOpenGLContext);
+    if (d->screen)
+        disconnect(d->screen, SIGNAL(destroyed(QObject*)), this, SLOT(_q_screenDestroyed(QObject*)));
     d->screen = screen;
     if (!d->screen)
         d->screen = QGuiApplication::primaryScreen();
+    if (d->screen)
+        connect(d->screen, SIGNAL(destroyed(QObject*)), this, SLOT(_q_screenDestroyed(QObject*)));
+}
+
+void QOpenGLContextPrivate::_q_screenDestroyed(QObject *object)
+{
+    Q_Q(QOpenGLContext);
+    if (object == static_cast<QObject *>(screen)) {
+        screen = 0;
+        q->setScreen(0);
+    }
 }
 
 /*!
@@ -716,6 +728,28 @@ QOpenGLFunctions *QOpenGLContext::functions() const
     if (!d->functions)
         const_cast<QOpenGLFunctions *&>(d->functions) = new QOpenGLExtensions(QOpenGLContext::currentContext());
     return d->functions;
+}
+
+/*!
+    Get the QOpenGLExtraFunctions instance for this context.
+
+    QOpenGLContext offers this as a convenient way to access QOpenGLExtraFunctions
+    without having to manage it manually.
+
+    The context or a sharing context must be current.
+
+    The returned QOpenGLExtraFunctions instance is ready to be used and it
+    does not need initializeOpenGLFunctions() to be called.
+
+    \note QOpenGLExtraFunctions contains functionality that is not guaranteed to
+    be available at runtime. Runtime availability depends on the platform,
+    graphics driver, and the OpenGL version requested by the application.
+
+    \sa QOpenGLFunctions, QOpenGLExtraFunctions
+*/
+QOpenGLExtraFunctions *QOpenGLContext::extraFunctions() const
+{
+    return static_cast<QOpenGLExtraFunctions *>(functions());
 }
 
 /*!
@@ -1427,11 +1461,11 @@ void QOpenGLContextGroupPrivate::deletePendingResources(QOpenGLContext *ctx)
 {
     QMutexLocker locker(&m_mutex);
 
-    QList<QOpenGLSharedResource *> pending = m_pendingDeletion;
+    const QList<QOpenGLSharedResource *> pending = m_pendingDeletion;
     m_pendingDeletion.clear();
 
-    QList<QOpenGLSharedResource *>::iterator it = pending.begin();
-    QList<QOpenGLSharedResource *>::iterator end = pending.end();
+    QList<QOpenGLSharedResource *>::const_iterator it = pending.begin();
+    QList<QOpenGLSharedResource *>::const_iterator end = pending.end();
     while (it != end) {
         (*it)->freeResource(ctx);
         delete *it;
@@ -1603,5 +1637,7 @@ void QOpenGLMultiGroupSharedResource::cleanup(QOpenGLContextGroup *group, QOpenG
     Q_ASSERT(m_groups.contains(group));
     m_groups.removeOne(group);
 }
+
+#include "moc_qopenglcontext.cpp"
 
 QT_END_NAMESPACE

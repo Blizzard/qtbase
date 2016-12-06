@@ -38,9 +38,12 @@
 #include <qpa/qplatformintegration.h>
 #include <qscreen.h>
 #include <qdebug.h>
+#include <qscopedpointer.h>
 
 #include <private/qguiapplication_p.h>
 #include <private/qwindow_p.h>
+
+#include <private/qhighdpiscaling_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -54,6 +57,7 @@ public:
 
     QWindow *window;
     QPlatformBackingStore *platformBackingStore;
+    QScopedPointer<QImage> highDpiBackingstore;
     QRegion staticContents;
     QSize size;
 };
@@ -102,7 +106,8 @@ void QBackingStore::flush(const QRegion &region, QWindow *win, const QPoint &off
     }
 #endif
 
-    d_ptr->platformBackingStore->flush(win, region, offset);
+    d_ptr->platformBackingStore->flush(win, QHighDpi::toNativeLocalRegion(region, win),
+                                            QHighDpi::toNativeLocalPosition(offset, win));
 }
 
 /*!
@@ -112,7 +117,12 @@ void QBackingStore::flush(const QRegion &region, QWindow *win, const QPoint &off
 */
 QPaintDevice *QBackingStore::paintDevice()
 {
-    return d_ptr->platformBackingStore->paintDevice();
+    QPaintDevice *device = d_ptr->platformBackingStore->paintDevice();
+
+    if (QHighDpiScaling::isActive() && device->devType() == QInternal::Image)
+        return d_ptr->highDpiBackingstore.data();
+
+    return device;
 }
 
 /*!
@@ -150,7 +160,37 @@ QWindow* QBackingStore::window() const
 
 void QBackingStore::beginPaint(const QRegion &region)
 {
-    d_ptr->platformBackingStore->beginPaint(region);
+    if (d_ptr->highDpiBackingstore &&
+        d_ptr->highDpiBackingstore->devicePixelRatio() != d_ptr->window->devicePixelRatio())
+        resize(size());
+
+    d_ptr->platformBackingStore->beginPaint(QHighDpi::toNativeLocalRegion(region, d_ptr->window));
+
+    // When QtGui is applying a high-dpi scale factor the backing store
+    // creates a "large" backing store image. This image needs to be
+    // painted on as a high-dpi image, which is done by setting
+    // devicePixelRatio. Do this on a separate image instance that shares
+    // the image data to avoid having the new devicePixelRatio be propagated
+    // back to the platform plugin.
+    QPaintDevice *device = d_ptr->platformBackingStore->paintDevice();
+    if (QHighDpiScaling::isActive() && device->devType() == QInternal::Image) {
+        QImage *source = static_cast<QImage *>(device);
+        const bool needsNewImage = d_ptr->highDpiBackingstore.isNull()
+            || source->data_ptr() != d_ptr->highDpiBackingstore->data_ptr()
+            || source->size() != d_ptr->highDpiBackingstore->size()
+            || source->devicePixelRatio() != d_ptr->highDpiBackingstore->devicePixelRatio();
+        if (needsNewImage) {
+            qCDebug(lcScaling) << "QBackingStore::beginPaint new backingstore for" << d_ptr->window;
+            qCDebug(lcScaling) << "  source size" << source->size() << "dpr" << source->devicePixelRatio();
+            d_ptr->highDpiBackingstore.reset(
+                new QImage(source->bits(), source->width(), source->height(), source->bytesPerLine(), source->format()));
+
+            qreal targetDevicePixelRatio = d_ptr->window->devicePixelRatio();
+            d_ptr->highDpiBackingstore->setDevicePixelRatio(targetDevicePixelRatio);
+            qCDebug(lcScaling) <<"  destination size" << d_ptr->highDpiBackingstore->size()
+                               << "dpr" << targetDevicePixelRatio;
+        }
+    }
 }
 
 /*!
@@ -171,7 +211,7 @@ void QBackingStore::endPaint()
 void QBackingStore::resize(const QSize &size)
 {
     d_ptr->size = size;
-    d_ptr->platformBackingStore->resize(size, d_ptr->staticContents);
+    d_ptr->platformBackingStore->resize(QHighDpi::toNativePixels(size, d_ptr->window), d_ptr->staticContents);
 }
 
 /*!
@@ -190,11 +230,16 @@ QSize QBackingStore::size() const
 */
 bool QBackingStore::scroll(const QRegion &area, int dx, int dy)
 {
-    Q_UNUSED(area);
-    Q_UNUSED(dx);
-    Q_UNUSED(dy);
+    // Disable scrolling for non-integer scroll deltas. For this case
+    // the the existing rendered pixels can't be re-used, and we return
+    // false to signal that a repaint is needed.
+    const qreal nativeDx = QHighDpi::toNativePixels(qreal(dx), d_ptr->window);
+    const qreal nativeDy = QHighDpi::toNativePixels(qreal(dy), d_ptr->window);
+    if (qFloor(nativeDx) != nativeDx || qFloor(nativeDy) != nativeDy)
+        return false;
 
-    return d_ptr->platformBackingStore->scroll(area, dx, dy);
+    return d_ptr->platformBackingStore->scroll(QHighDpi::toNativeLocalRegion(area, d_ptr->window),
+                                               nativeDx, nativeDy);
 }
 
 /*!

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -41,6 +41,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QLoggingCategory>
 #include <QtGui/QPainter>
+#include <QtGui/private/qguiapplication_p.h>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -62,8 +63,14 @@ QEglFSKmsCursor::QEglFSKmsCursor(QEglFSKmsScreen *screen)
     , m_cursorSize(64, 64) // 64x64 is the old standard size, we now try to query the real size below
     , m_bo(Q_NULLPTR)
     , m_cursorImage(0, 0, 0, 0, 0, 0)
-    , m_visible(true)
+    , m_state(CursorPendingVisible)
 {
+    QByteArray hideCursorVal = qgetenv("QT_QPA_EGLFS_HIDECURSOR");
+    if (!hideCursorVal.isEmpty() && hideCursorVal.toInt()) {
+        m_state = CursorDisabled;
+        return;
+    }
+
     uint64_t width, height;
     if ((drmGetCap(m_screen->device()->fd(), DRM_CAP_CURSOR_WIDTH, &width) == 0)
         && (drmGetCap(m_screen->device()->fd(), DRM_CAP_CURSOR_HEIGHT, &height) == 0)) {
@@ -79,6 +86,12 @@ QEglFSKmsCursor::QEglFSKmsCursor(QEglFSKmsScreen *screen)
         initCursorAtlas();
     }
 
+    m_deviceListener = new QEglFSKmsCursorDeviceListener(this);
+    connect(QGuiApplicationPrivate::inputDeviceManager(), &QInputDeviceManager::deviceListChanged,
+            m_deviceListener, &QEglFSKmsCursorDeviceListener::onDeviceListChanged);
+    if (!m_deviceListener->hasMouse())
+        m_state = CursorPendingHidden;
+
 #ifndef QT_NO_CURSOR
     QCursor cursor(Qt::ArrowCursor);
     changeCursor(&cursor, 0);
@@ -88,14 +101,43 @@ QEglFSKmsCursor::QEglFSKmsCursor(QEglFSKmsScreen *screen)
 
 QEglFSKmsCursor::~QEglFSKmsCursor()
 {
+    delete m_deviceListener;
+
     Q_FOREACH (QPlatformScreen *screen, m_screen->virtualSiblings()) {
         QEglFSKmsScreen *kmsScreen = static_cast<QEglFSKmsScreen *>(screen);
         drmModeSetCursor(kmsScreen->device()->fd(), kmsScreen->output().crtc_id, 0, 0, 0);
         drmModeMoveCursor(kmsScreen->device()->fd(), kmsScreen->output().crtc_id, 0, 0);
     }
 
-    gbm_bo_destroy(m_bo);
-    m_bo = Q_NULLPTR;
+    if (m_bo) {
+        gbm_bo_destroy(m_bo);
+        m_bo = Q_NULLPTR;
+    }
+}
+
+void QEglFSKmsCursor::updateMouseStatus()
+{
+    const bool wasVisible = m_state == CursorVisible;
+    const bool visible = m_deviceListener->hasMouse();
+    if (visible == wasVisible)
+        return;
+
+    m_state = visible ? CursorPendingVisible : CursorPendingHidden;
+
+#ifndef QT_NO_CURSOR
+    changeCursor(Q_NULLPTR, m_screen->topLevelAt(pos()));
+#endif
+}
+
+bool QEglFSKmsCursorDeviceListener::hasMouse() const
+{
+    return QGuiApplicationPrivate::inputDeviceManager()->deviceCount(QInputDeviceManager::DeviceTypePointer) > 0;
+}
+
+void QEglFSKmsCursorDeviceListener::onDeviceListChanged(QInputDeviceManager::DeviceType type)
+{
+  if (type == QInputDeviceManager::DeviceTypePointer)
+        m_cursor->updateMouseStatus();
 }
 
 void QEglFSKmsCursor::pointerEvent(const QMouseEvent &event)
@@ -108,7 +150,18 @@ void QEglFSKmsCursor::changeCursor(QCursor *windowCursor, QWindow *window)
 {
     Q_UNUSED(window);
 
-    if (!m_visible)
+    if (!m_bo)
+        return;
+
+    if (m_state == CursorPendingHidden) {
+        m_state = CursorHidden;
+        Q_FOREACH (QPlatformScreen *screen, m_screen->virtualSiblings()) {
+            QEglFSKmsScreen *kmsScreen = static_cast<QEglFSKmsScreen *>(screen);
+            drmModeSetCursor(kmsScreen->device()->fd(), kmsScreen->output().crtc_id, 0, 0, 0);
+        }
+    }
+
+    if (m_state == CursorHidden || m_state == CursorDisabled)
         return;
 
     const Qt::CursorShape newShape = windowCursor ? windowCursor->shape() : Qt::ArrowCursor;
@@ -147,6 +200,9 @@ void QEglFSKmsCursor::changeCursor(QCursor *windowCursor, QWindow *window)
     gbm_bo_write(m_bo, cursorImage.constBits(), cursorImage.byteCount());
 
     uint32_t handle = gbm_bo_get_handle(m_bo).u32;
+
+    if (m_state == CursorPendingVisible)
+        m_state = CursorVisible;
 
     Q_FOREACH (QPlatformScreen *screen, m_screen->virtualSiblings()) {
         QEglFSKmsScreen *kmsScreen = static_cast<QEglFSKmsScreen *>(screen);
@@ -195,7 +251,7 @@ void QEglFSKmsCursor::initCursorAtlas()
             drmModeSetCursor(kmsScreen->device()->fd(), kmsScreen->output().crtc_id, 0, 0, 0);
             drmModeMoveCursor(kmsScreen->device()->fd(), kmsScreen->output().crtc_id, 0, 0);
         }
-        m_visible = false;
+        m_state = CursorDisabled;
         return;
     }
 

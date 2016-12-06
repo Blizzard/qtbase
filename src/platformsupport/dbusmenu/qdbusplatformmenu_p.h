@@ -33,6 +33,17 @@
 
 #ifndef QDBUSPLATFORMMENU_H
 #define QDBUSPLATFORMMENU_H
+
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
 //
 //  W A R N I N G
 //  -------------
@@ -119,6 +130,7 @@ public:
     ~QDBusPlatformMenu();
     void insertMenuItem(QPlatformMenuItem *menuItem, QPlatformMenuItem *before) Q_DECL_OVERRIDE;
     void removeMenuItem(QPlatformMenuItem *menuItem) Q_DECL_OVERRIDE;
+    void syncSubMenu(const QDBusPlatformMenu *menu);
     void syncMenuItem(QPlatformMenuItem *menuItem) Q_DECL_OVERRIDE;
     void syncSeparatorsCollapsible(bool enable) Q_DECL_OVERRIDE { Q_UNUSED(enable); }
 
@@ -127,14 +139,16 @@ public:
 
     const QString text() const { return m_text; }
     void setText(const QString &text) Q_DECL_OVERRIDE;
+    QIcon icon() const { return m_icon; }
     void setIcon(const QIcon &icon) Q_DECL_OVERRIDE;
+    bool isEnabled() const Q_DECL_OVERRIDE { return m_isEnabled; }
     void setEnabled(bool enabled) Q_DECL_OVERRIDE;
+    bool isVisible() const { return m_isVisible; }
     void setVisible(bool visible) Q_DECL_OVERRIDE;
     void setMinimumWidth(int width) Q_DECL_OVERRIDE { Q_UNUSED(width); }
     void setFont(const QFont &font) Q_DECL_OVERRIDE { Q_UNUSED(font); }
     void setMenuType(MenuType type) Q_DECL_OVERRIDE { Q_UNUSED(type); }
-
-    int dbusID() const { return m_dbusID; }
+    void setContainingMenuItem(QDBusPlatformMenuItem *item);
 
     void showPopup(const QWindow *parentWindow, const QRect &targetRect, const QPlatformMenuItem *item) Q_DECL_OVERRIDE
     {
@@ -155,9 +169,6 @@ public:
 
     bool operator==(const QDBusPlatformMenu& other) { return m_tag == other.m_tag; }
 
-    static QDBusPlatformMenu* byId(int id);
-    static QList<QDBusPlatformMenu *> topLevelMenus() { return m_topLevelMenus; }
-
     uint revision() const { return m_revision; }
 
     void emitUpdated();
@@ -173,12 +184,10 @@ private:
     bool m_isEnabled;
     bool m_isVisible;
     bool m_isSeparator;
-    int m_dbusID;
     uint m_revision;
     QHash<quintptr, QDBusPlatformMenuItem *> m_itemsByTag;
     QList<QDBusPlatformMenuItem *> m_items;
     QDBusPlatformMenuItem *m_containingMenuItem;
-    static QList<QDBusPlatformMenu *> m_topLevelMenus;
 };
 
 QT_END_NAMESPACE

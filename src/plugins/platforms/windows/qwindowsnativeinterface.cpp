@@ -145,8 +145,10 @@ void *QWindowsNativeInterface::nativeResourceForIntegration(const QByteArray &re
 #ifdef QT_NO_OPENGL
     Q_UNUSED(resource)
 #else
-    if (resourceType(resource) == GlHandleType)
-        return QWindowsIntegration::staticOpenGLContext()->moduleHandle();
+    if (resourceType(resource) == GlHandleType) {
+        if (const QWindowsStaticOpenGLContext *sc = QWindowsIntegration::staticOpenGLContext())
+            return sc->moduleHandle();
+    }
 #endif
 
     return 0;
@@ -241,6 +243,8 @@ QFunctionPointer QWindowsNativeInterface::platformFunction(const QByteArray &fun
 {
     if (function == QWindowsWindowFunctions::setTouchWindowTouchTypeIdentifier())
         return QFunctionPointer(QWindowsWindow::setTouchWindowTouchTypeStatic);
+    else if (function == QWindowsWindowFunctions::setHasBorderInFullScreenIdentifier())
+        return QFunctionPointer(QWindowsWindow::setHasBorderInFullScreenStatic);
     return Q_NULLPTR;
 }
 

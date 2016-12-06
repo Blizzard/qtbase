@@ -37,13 +37,16 @@
 #ifndef QWINRTWINDOW_H
 #define QWINRTWINDOW_H
 
+#include <QtCore/QLoggingCategory>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qwindowsysteminterface.h>
+#include <EGL/egl.h>
 
 QT_BEGIN_NAMESPACE
 
-class QWinRTScreen;
+Q_DECLARE_LOGGING_CATEGORY(lcQpaWindows)
 
+class QWinRTWindowPrivate;
 class QWinRTWindow : public QPlatformWindow
 {
 public:
@@ -59,10 +62,17 @@ public:
     void raise();
     void lower();
 
+    WId winId() const Q_DECL_OVERRIDE;
+
     qreal devicePixelRatio() const Q_DECL_OVERRIDE;
+    void setWindowState(Qt::WindowState state) Q_DECL_OVERRIDE;
+
+    EGLSurface eglSurface() const;
+    void createEglSurface(EGLDisplay display, EGLConfig config);
 
 private:
-    QWinRTScreen *m_screen;
+    QScopedPointer<QWinRTWindowPrivate> d_ptr;
+    Q_DECLARE_PRIVATE(QWinRTWindow)
 };
 
 QT_END_NAMESPACE

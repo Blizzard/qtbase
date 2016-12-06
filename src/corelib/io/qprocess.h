@@ -60,9 +60,12 @@ public:
     QProcessEnvironment();
     QProcessEnvironment(const QProcessEnvironment &other);
     ~QProcessEnvironment();
+#ifdef Q_COMPILER_RVALUE_REFS
+    QProcessEnvironment &operator=(QProcessEnvironment && other) Q_DECL_NOTHROW { swap(other); return *this; }
+#endif
     QProcessEnvironment &operator=(const QProcessEnvironment &other);
 
-    inline void swap(QProcessEnvironment &other) { qSwap(d, other.d); }
+    void swap(QProcessEnvironment &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
 
     bool operator==(const QProcessEnvironment &other) const;
     inline bool operator!=(const QProcessEnvironment &other) const
@@ -104,15 +107,21 @@ public:
         WriteError,
         UnknownError
     };
+    Q_ENUM(ProcessError)
+
     enum ProcessState {
         NotRunning,
         Starting,
         Running
     };
+    Q_ENUM(ProcessState)
+
     enum ProcessChannel {
         StandardOutput,
         StandardError
     };
+    Q_ENUM(ProcessChannel)
+
     enum ProcessChannelMode {
         SeparateChannels,
         MergedChannels,
@@ -120,20 +129,27 @@ public:
         ForwardedOutputChannel,
         ForwardedErrorChannel
     };
+    Q_ENUM(ProcessChannelMode)
+
     enum InputChannelMode {
         ManagedInputChannel,
         ForwardedInputChannel
     };
+    Q_ENUM(InputChannelMode)
+
     enum ExitStatus {
         NormalExit,
         CrashExit
     };
+    Q_ENUM(ExitStatus)
 
-    explicit QProcess(QObject *parent = 0);
+    explicit QProcess(QObject *parent = Q_NULLPTR);
     virtual ~QProcess();
 
     void start(const QString &program, const QStringList &arguments, OpenMode mode = ReadWrite);
+#if !defined(QT_NO_PROCESS_COMBINED_ARGUMENT_START)
     void start(const QString &command, OpenMode mode = ReadWrite);
+#endif
     void start(OpenMode mode = ReadWrite);
     bool open(OpenMode mode = ReadWrite) Q_DECL_OVERRIDE;
 
@@ -208,7 +224,7 @@ public:
 #if defined(Q_QDOC)
                               = QString()
 #endif
-                              , qint64 *pid = 0);
+                              , qint64 *pid = Q_NULLPTR);
 #if !defined(Q_QDOC)
     static bool startDetached(const QString &program, const QStringList &arguments); // ### Qt6: merge overloads
 #endif
@@ -226,7 +242,10 @@ Q_SIGNALS:
     void started(QPrivateSignal);
     void finished(int exitCode); // ### Qt 6: merge the two signals with a default value
     void finished(int exitCode, QProcess::ExitStatus exitStatus);
+#if QT_DEPRECATED_SINCE(5,6)
     void error(QProcess::ProcessError error);
+#endif
+    void errorOccurred(QProcess::ProcessError error);
     void stateChanged(QProcess::ProcessState state, QPrivateSignal);
 
     void readyReadStandardOutput(QPrivateSignal);

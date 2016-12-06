@@ -173,7 +173,7 @@ QJsonValue::QJsonValue(int n)
 QJsonValue::QJsonValue(qint64 n)
     : d(0), t(Double)
 {
-    this->dbl = n;
+    this->dbl = double(n);
 }
 
 /*!
@@ -269,25 +269,11 @@ QJsonValue::QJsonValue(const QJsonValue &other)
  */
 QJsonValue &QJsonValue::operator =(const QJsonValue &other)
 {
-    if (t == String && stringData && !stringData->ref.deref())
-        free(stringData);
-
-    t = other.t;
-    dbl = other.dbl;
-
-    if (d != other.d) {
-
-        if (d && !d->ref.deref())
-            delete d;
-        d = other.d;
-        if (d)
-            d->ref.ref();
-
-    }
-
-    if (t == String && stringData)
-        stringData->ref.ref();
-
+    QJsonValue copy(other);
+    // swap(copy);
+    qSwap(dbl, copy.dbl);
+    qSwap(d,   copy.d);
+    qSwap(t,   copy.t);
     return *this;
 }
 
@@ -420,6 +406,18 @@ QJsonValue QJsonValue::fromVariant(const QVariant &variant)
         return QJsonValue(QJsonObject::fromVariantMap(variant.toMap()));
     case QVariant::Hash:
         return QJsonValue(QJsonObject::fromVariantHash(variant.toHash()));
+#ifndef QT_BOOTSTRAPPED
+    case QMetaType::QJsonValue:
+        return variant.toJsonValue();
+    case QMetaType::QJsonObject:
+        return variant.toJsonObject();
+    case QMetaType::QJsonArray:
+        return variant.toJsonArray();
+    case QMetaType::QJsonDocument: {
+        QJsonDocument doc = variant.toJsonDocument();
+        return doc.isArray() ? QJsonValue(doc.array()) : QJsonValue(doc.object());
+    }
+#endif
     default:
         break;
     }
@@ -515,7 +513,7 @@ bool QJsonValue::toBool(bool defaultValue) const
 int QJsonValue::toInt(int defaultValue) const
 {
     if (t == Double && int(dbl) == dbl)
-        return dbl;
+        return int(dbl);
     return defaultValue;
 }
 
@@ -738,23 +736,23 @@ QDebug operator<<(QDebug dbg, const QJsonValue &o)
         dbg << "QJsonValue(null)";
         break;
     case QJsonValue::Bool:
-        dbg.nospace() << "QJsonValue(bool, " << o.toBool() << ")";
+        dbg.nospace() << "QJsonValue(bool, " << o.toBool() << ')';
         break;
     case QJsonValue::Double:
-        dbg.nospace() << "QJsonValue(double, " << o.toDouble() << ")";
+        dbg.nospace() << "QJsonValue(double, " << o.toDouble() << ')';
         break;
     case QJsonValue::String:
-        dbg.nospace() << "QJsonValue(string, " << o.toString() << ")";
+        dbg.nospace() << "QJsonValue(string, " << o.toString() << ')';
         break;
     case QJsonValue::Array:
         dbg.nospace() << "QJsonValue(array, ";
         dbg << o.toArray();
-        dbg << ")";
+        dbg << ')';
         break;
     case QJsonValue::Object:
         dbg.nospace() << "QJsonValue(object, ";
         dbg << o.toObject();
-        dbg << ")";
+        dbg << ')';
         break;
     }
     return dbg;

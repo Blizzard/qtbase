@@ -5,9 +5,9 @@ SUBDIRS       = \
                 customcompleter \
                 echoplugin \
                 i18n \
-                plugandpaintplugins \
                 plugandpaint \
                 regexp \
+                regularexpression \
                 settingseditor \
                 styleplugin \
                 treemodelcompleter \
@@ -15,5 +15,3 @@ SUBDIRS       = \
                 undoframework
 
 contains(DEFINES, QT_NO_TRANSLATION): SUBDIRS -= i18n
-
-plugandpaint.depends = plugandpaintplugins

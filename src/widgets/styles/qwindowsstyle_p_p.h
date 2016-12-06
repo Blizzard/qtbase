@@ -50,7 +50,6 @@
 
 #ifndef QT_NO_STYLE_WINDOWS
 #include <qlist.h>
-#include <qhash.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,8 +64,9 @@ public:
     QWindowsStylePrivate();
     static int pixelMetricFromSystemDp(QStyle::PixelMetric pm, const QStyleOption *option = 0, const QWidget *widget = 0);
     static int fixedPixelMetric(QStyle::PixelMetric pm);
-    static int devicePixelRatio(const QWidget *widget = 0)
-        { return widget ? widget->devicePixelRatio() : QWindowsStylePrivate::appDevicePixelRatio(); }
+    static qreal devicePixelRatio(const QWidget *widget = 0)
+        { return widget ? widget->devicePixelRatioF() : QWindowsStylePrivate::appDevicePixelRatio(); }
+    static qreal nativeMetricScaleFactor(const QWidget *widget = Q_NULLPTR);
 
     bool hasSeenAlt(const QWidget *widget) const;
     bool altDown() const { return alt_down; }
@@ -91,8 +91,7 @@ public:
     };
 
 private:
-    static int appDevicePixelRatio();
-    static int m_appDevicePixelRatio;
+    static qreal appDevicePixelRatio();
 };
 
 QT_END_NAMESPACE
@@ -100,3 +99,4 @@ QT_END_NAMESPACE
 #endif // QT_NO_STYLE_WINDOWS
 
 #endif //QWINDOWSSTYLE_P_P_H
+;

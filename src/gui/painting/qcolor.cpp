@@ -416,6 +416,18 @@ QColor::QColor(QRgb color)
     ct.argb.pad   = 0;
 }
 
+/*!
+    \since 5.6
+
+    Constructs a color with the value \a rgba64.
+
+    \sa fromRgba64()
+*/
+
+QColor::QColor(QRgba64 rgba64)
+{
+    setRgba64(rgba64);
+}
 
 /*!
     \internal
@@ -469,6 +481,7 @@ QColor::QColor(Spec spec)
     \sa setNamedColor(), name(), isValid()
 */
 
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 /*!
     \fn QColor::QColor(const QColor &color)
 
@@ -476,6 +489,7 @@ QColor::QColor(Spec spec)
 
     \sa isValid()
 */
+#endif
 
 /*!
     \fn bool QColor::isValid() const
@@ -507,9 +521,10 @@ QString QColor::name(NameFormat format) const
 {
     switch (format) {
     case HexRgb:
-        return QString::asprintf("#%02x%02x%02x", red(), green(), blue());
+        return QLatin1Char('#') + QString::number(rgba() | 0x1000000, 16).rightRef(6);
     case HexArgb:
-        return QString::asprintf("#%02x%02x%02x%02x", alpha(), red(), green(), blue());
+        // it's called rgba() but it does return AARRGGBB
+        return QLatin1Char('#') + QString::number(rgba() | 0x100000000, 16).rightRef(8);
     }
     return QString();
 }
@@ -941,7 +956,7 @@ void QColor::setRgb(int r, int g, int b, int a)
 
     For an invalid color, the alpha value of the returned color is unspecified.
 
-    \sa setRgba(), rgb()
+    \sa setRgba(), rgb(), rgba64()
 */
 
 QRgb QColor::rgba() const
@@ -954,7 +969,7 @@ QRgb QColor::rgba() const
 /*!
     Sets the RGB value to \a rgba, including its alpha.
 
-    \sa rgba(), rgb()
+    \sa rgba(), rgb(), setRgba64()
 */
 void QColor::setRgba(QRgb rgba)
 {
@@ -963,6 +978,40 @@ void QColor::setRgba(QRgb rgba)
     ct.argb.red   = qRed(rgba)   * 0x101;
     ct.argb.green = qGreen(rgba) * 0x101;
     ct.argb.blue  = qBlue(rgba)  * 0x101;
+    ct.argb.pad   = 0;
+}
+
+/*!
+    \since 5.6
+
+    Returns the RGB64 value of the color, including its alpha.
+
+    For an invalid color, the alpha value of the returned color is unspecified.
+
+    \sa setRgba64(), rgba(), rgb()
+*/
+
+QRgba64 QColor::rgba64() const
+{
+    if (cspec != Invalid && cspec != Rgb)
+        return toRgb().rgba64();
+    return qRgba64(ct.argb.red, ct.argb.green, ct.argb.blue, ct.argb.alpha);
+}
+
+/*!
+    \since 5.6
+
+    Sets the RGB64 value to \a rgba, including its alpha.
+
+    \sa \setRgba(), rgba64()
+*/
+void QColor::setRgba64(QRgba64 rgba)
+{
+    cspec = Rgb;
+    ct.argb.alpha = rgba.alpha();
+    ct.argb.red   = rgba.red();
+    ct.argb.green = rgba.green();
+    ct.argb.blue  = rgba.blue();
     ct.argb.pad   = 0;
 }
 
@@ -1850,7 +1899,7 @@ QColor QColor::fromRgb(QRgb rgb)
     Unlike the fromRgb() function, the alpha-channel specified by the given
     QRgb value is included.
 
-    \sa fromRgb(), isValid()
+    \sa fromRgb(), fromRgba64(), isValid()
 */
 
 QColor QColor::fromRgba(QRgb rgba)
@@ -1865,7 +1914,7 @@ QColor QColor::fromRgba(QRgb rgba)
 
     All the values must be in the range 0-255.
 
-    \sa toRgb(), fromRgbF(), isValid()
+    \sa toRgb(), fromRgba64(), fromRgbF(), isValid()
 */
 QColor QColor::fromRgb(int r, int g, int b, int a)
 {
@@ -1894,7 +1943,7 @@ QColor QColor::fromRgb(int r, int g, int b, int a)
 
     All the values must be in the range 0.0-1.0.
 
-    \sa fromRgb(), toRgb(), isValid()
+    \sa fromRgb(), fromRgba64(), toRgb(), isValid()
 */
 QColor QColor::fromRgbF(qreal r, qreal g, qreal b, qreal a)
 {
@@ -1913,6 +1962,38 @@ QColor QColor::fromRgbF(qreal r, qreal g, qreal b, qreal a)
     color.ct.argb.green = qRound(g * USHRT_MAX);
     color.ct.argb.blue  = qRound(b * USHRT_MAX);
     color.ct.argb.pad   = 0;
+    return color;
+}
+
+
+/*!
+    \since 5.6
+
+    Static convenience function that returns a QColor constructed from the RGBA64
+    color values, \a r (red), \a g (green), \a b (blue), and \a a
+    (alpha-channel, i.e. transparency).
+
+    \sa fromRgb(), fromRgbF(), toRgb(), isValid()
+*/
+QColor QColor::fromRgba64(ushort r, ushort g, ushort b, ushort a)
+{
+    QColor color;
+    color.setRgba64(qRgba64(r, g, b, a));
+    return color;
+}
+
+/*!
+    \since 5.6
+
+    Static convenience function that returns a QColor constructed from the
+    given QRgba64 value \a rgba64.
+
+    \sa fromRgb(), fromRgbF(), toRgb(), isValid()
+*/
+QColor QColor::fromRgba64(QRgba64 rgba64)
+{
+    QColor color;
+    color.setRgba64(rgba64);
     return color;
 }
 
@@ -1995,7 +2076,7 @@ QColor QColor::fromHsl(int h, int s, int l, int a)
         || s < 0 || s > 255
         || l < 0 || l > 255
         || a < 0 || a > 255) {
-        qWarning("QColor::fromHsv: HSV parameters out of range");
+        qWarning("QColor::fromHsl: HSL parameters out of range");
         return QColor();
     }
 
@@ -2027,7 +2108,7 @@ QColor QColor::fromHslF(qreal h, qreal s, qreal l, qreal a)
         || (s < qreal(0.0) || s > qreal(1.0))
         || (l < qreal(0.0) || l > qreal(1.0))
         || (a < qreal(0.0) || a > qreal(1.0))) {
-        qWarning("QColor::fromHsvF: HSV parameters out of range");
+        qWarning("QColor::fromHslF: HSL parameters out of range");
         return QColor();
     }
 
@@ -2307,6 +2388,7 @@ QColor QColor::dark(int factor) const
     return hsv.convertTo(cspec);
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
 /*!
     Assigns a copy of \a color to this color, and returns a reference to it.
 */
@@ -2316,6 +2398,7 @@ QColor &QColor::operator=(const QColor &color)
     ct.argb = color.ct.argb;
     return *this;
 }
+#endif
 
 /*! \overload
     Assigns a copy of \a color and returns a reference to this color.

@@ -72,7 +72,7 @@ public:
     enum ViewMode { ListMode, IconMode };
     Q_ENUM(ViewMode)
 
-    explicit QListView(QWidget *parent = 0);
+    explicit QListView(QWidget *parent = Q_NULLPTR);
     ~QListView();
 
     void setMovement(Movement movement);
@@ -131,7 +131,7 @@ Q_SIGNALS:
     void indexesMoved(const QModelIndexList &indexes);
 
 protected:
-    QListView(QListViewPrivate &, QWidget *parent = 0);
+    QListView(QListViewPrivate &, QWidget *parent = Q_NULLPTR);
 
     bool event(QEvent *e) Q_DECL_OVERRIDE;
 
@@ -146,6 +146,9 @@ protected:
 
     void mouseMoveEvent(QMouseEvent *e) Q_DECL_OVERRIDE;
     void mouseReleaseEvent(QMouseEvent *e) Q_DECL_OVERRIDE;
+#ifndef QT_NO_WHEELEVENT
+    void wheelEvent(QWheelEvent *e) Q_DECL_OVERRIDE;
+#endif
 
     void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
     void resizeEvent(QResizeEvent *e) Q_DECL_OVERRIDE;

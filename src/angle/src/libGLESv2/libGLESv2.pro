@@ -1,5 +1,7 @@
-CONFIG += simd installed
+CONFIG += simd
 include(../common/common.pri)
+DEF_FILE_TARGET=$${TARGET}
+TARGET=$$qtLibraryTarget($${LIBGLESV2_NAME})
 
 INCLUDEPATH += $$OUT_PWD/.. $$ANGLE_DIR/src/libANGLE
 
@@ -203,7 +205,6 @@ SOURCES += \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/IndexBuffer.cpp \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/IndexDataManager.cpp \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/loadimage.cpp \
-    $$ANGLE_DIR/src/libANGLE/renderer/d3d/loadimageSSE2.cpp \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/ProgramD3D.cpp \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/RenderbufferD3D.cpp \
     $$ANGLE_DIR/src/libANGLE/renderer/d3d/RendererD3D.cpp \
@@ -225,6 +226,7 @@ SOURCES += \
     $$ANGLE_DIR/src/libGLESv2/global_state.cpp \
     $$ANGLE_DIR/src/libGLESv2/libGLESv2.cpp
 
+SSE2_SOURCES += $$ANGLE_DIR/src/libANGLE/renderer/d3d/loadimageSSE2.cpp
 
 angle_d3d11 {
     HEADERS += \
@@ -327,8 +329,8 @@ angle_d3d11 {
 }
 
 !static {
-    DEF_FILE = $$ANGLE_DIR/src/libGLESv2/$${TARGET}.def
-    mingw:equals(QT_ARCH, i386): DEF_FILE = $$ANGLE_DIR/src/libGLESv2/$${TARGET}_mingw32.def
+    DEF_FILE = $$ANGLE_DIR/src/libGLESv2/$${DEF_FILE_TARGET}.def
+    mingw:equals(QT_ARCH, i386): DEF_FILE = $$ANGLE_DIR/src/libGLESv2/$${DEF_FILE_TARGET}_mingw32.def
 } else {
     DEFINES += DllMain=DllMain_ANGLE # prevent symbol from conflicting with the user's DllMain
 }

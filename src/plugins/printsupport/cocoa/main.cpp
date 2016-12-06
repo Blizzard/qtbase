@@ -38,8 +38,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_PRINTER
-
 class QCocoaPrinterSupportPlugin : public QPlatformPrinterSupportPlugin
 {
     Q_OBJECT
@@ -51,7 +49,7 @@ public:
 
 QPlatformPrinterSupport *QCocoaPrinterSupportPlugin::create(const QString &key)
 {
-    if (key.compare(key, QStringLiteral("cocoaprintersupport"), Qt::CaseInsensitive) != 0)
+    if (key.compare(key, QLatin1String("cocoaprintersupport"), Qt::CaseInsensitive) != 0)
         return 0;
     QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
     if (!app)
@@ -66,8 +64,6 @@ QPlatformPrinterSupport *QCocoaPrinterSupportPlugin::create(const QString &key)
         return 0;
     return platformPrinterSupport;
 }
-
-#endif
 
 QT_END_NAMESPACE
 

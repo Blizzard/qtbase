@@ -84,7 +84,7 @@ struct QShortcutEntry
     QShortcutMap::ContextMatcher contextMatcher;
 };
 
-#if 0 //ndef QT_NO_DEBUG_STREAM
+#ifdef Dump_QShortcutMap
 /*! \internal
     QDebug operator<< for easy debug output of the shortcut entries.
 */
@@ -99,7 +99,7 @@ static QDebug &operator<<(QDebug &dbg, const QShortcutEntry *se)
         << "), owner(" << se->owner << ')';
     return dbg;
 }
-#endif // QT_NO_DEBUGSTREAM
+#endif // Dump_QShortcutMap
 
 /* \internal
     Private data for QShortcutMap
@@ -309,59 +309,46 @@ QKeySequence::SequenceMatch QShortcutMap::state()
 }
 
 /*! \internal
-    Uses ShortcutOverride event to see if any widgets want to override
-    the event. If not, uses nextState(QKeyEvent) to check for a grabbed
-    Shortcut, and dispatchEvent() is found and identical.
+    Uses nextState(QKeyEvent) to check for a grabbed shortcut.
 
-    \note that this function should only be called from QWindowSystemInterface,
-    otherwise it will result in duplicate events.
+    If so, it is dispatched using dispatchEvent().
+
+    Returns true if a shortcut handled the event.
 
     \sa nextState, dispatchEvent
 */
-bool QShortcutMap::tryShortcutEvent(QObject *o, QKeyEvent *e)
+bool QShortcutMap::tryShortcut(QKeyEvent *e)
 {
     Q_D(QShortcutMap);
 
     if (e->key() == Qt::Key_unknown)
         return false;
 
-    bool wasAccepted = e->isAccepted();
-    bool wasSpontaneous = e->spont;
-    if (d->currentState == QKeySequence::NoMatch) {
-        ushort orgType = e->t;
-        e->t = QEvent::ShortcutOverride;
-        e->ignore();
-        QCoreApplication::sendEvent(o, e);
-        e->t = orgType;
-        e->spont = wasSpontaneous;
-        if (e->isAccepted()) {
-            if (!wasAccepted)
-                e->ignore();
-            return false;
-        }
-    }
+    QKeySequence::SequenceMatch previousState = state();
 
-    QKeySequence::SequenceMatch result = nextState(e);
-    bool stateWasAccepted = e->isAccepted();
-    if (wasAccepted)
-        e->accept();
-    else
-        e->ignore();
-
-    int identicalMatches = d->identicals.count();
-
-    switch(result) {
+    switch (nextState(e)) {
     case QKeySequence::NoMatch:
-        return stateWasAccepted;
-    case QKeySequence::ExactMatch:
+        // In the case of going from a partial match to no match we handled the
+        // event, since we already stated that we did for the partial match. But
+        // in the normal case of directly going to no match we say we didn't.
+        return previousState == QKeySequence::PartialMatch;
+    case QKeySequence::PartialMatch:
+        // For a partial match we don't know yet if we will handle the shortcut
+        // but we need to say we did, so that we get the follow-up key-presses.
+        return true;
+    case QKeySequence::ExactMatch: {
+        // Save number of identical matches before dispatching
+        // to keep QShortcutMap and tryShortcut reentrant.
+        const int identicalMatches = d->identicals.count();
         resetState();
         dispatchEvent(e);
-    default:
-        break;
+        // If there are no identicals we've only found disabled shortcuts, and
+        // shouldn't say that we handled the event.
+        return identicalMatches > 0;
     }
-    // If nextState is QKeySequence::ExactMatch && identicals.count == 0
-    // we've only found disabled shortcuts
-    return identicalMatches > 0 || result == QKeySequence::PartialMatch;
+    default:
+        Q_UNREACHABLE();
+    }
 }
 
 /*! \internal
@@ -396,10 +383,6 @@ QKeySequence::SequenceMatch QShortcutMap::nextState(QKeyEvent *e)
         }
     }
 
-    // Should we eat this key press?
-    if (d->currentState == QKeySequence::PartialMatch
-        || (d->currentState == QKeySequence::ExactMatch && d->identicals.count()))
-        e->accept();
     // Does the new state require us to clean up?
     if (result == QKeySequence::NoMatch)
         clearSequence(d->currentSequences);

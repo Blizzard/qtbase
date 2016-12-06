@@ -457,6 +457,17 @@ QString QSqlDriver::stripDelimiters(const QString &identifier, IdentifierType ty
     This method can be used to manipulate tables without having to worry
     about database-dependent SQL dialects. For non-prepared statements,
     the values will be properly escaped.
+
+    In the WHERE statement, each non-null field of \a rec specifies a
+    filter condition of equality to the field value, or if prepared, a
+    placeholder. However, prepared or not, a null field specifies the
+    condition IS NULL and never introduces a placeholder. The
+    application must not attempt to bind data for the null field during
+    execution. The field must be set to some non-null value if a
+    placeholder is desired. Furthermore, since non-null fields specify
+    equality conditions and SQL NULL is not equal to anything, even
+    itself, it is generally not useful to bind a null to a placeholder.
+
 */
 QString QSqlDriver::sqlStatement(StatementType type, const QString &tableName,
                                  const QSqlRecord &rec, bool preparedStatement) const
@@ -476,31 +487,23 @@ QString QSqlDriver::sqlStatement(StatementType type, const QString &tableName,
         s.prepend(QLatin1String("SELECT ")).append(QLatin1String(" FROM ")).append(tableName);
         break;
     case WhereStatement:
-        if (preparedStatement) {
-            for (int i = 0; i < rec.count(); ++i) {
-                s.append(prepareIdentifier(rec.fieldName(i), FieldName,this));
-                if (rec.isNull(i))
-                    s.append(QLatin1String(" IS NULL"));
-                else
-                    s.append(QLatin1String(" = ?"));
-                s.append(QLatin1String(" AND "));
-            }
-        } else {
-            for (i = 0; i < rec.count(); ++i) {
-                s.append(prepareIdentifier(rec.fieldName(i), QSqlDriver::FieldName, this));
-                QString val = formatValue(rec.field(i));
-                if (val == QLatin1String("NULL"))
-                    s.append(QLatin1String(" IS NULL"));
-                else
-                    s.append(QLatin1String(" = ")).append(val);
-                s.append(QLatin1String(" AND "));
-            }
-        }
-        if (!s.isEmpty()) {
-            s.prepend(QLatin1String("WHERE "));
-            s.chop(5); // remove tailing AND
+    {
+        const QString tableNamePrefix = tableName.isEmpty()
+            ? QString()
+            : prepareIdentifier(tableName, QSqlDriver::TableName, this) + QLatin1Char('.');
+        for (int i = 0; i < rec.count(); ++i) {
+            s.append(QLatin1String(i? " AND " : "WHERE "));
+            s.append(tableNamePrefix);
+            s.append(prepareIdentifier(rec.fieldName(i), QSqlDriver::FieldName, this));
+            if (rec.isNull(i))
+                s.append(QLatin1String(" IS NULL"));
+            else if (preparedStatement)
+                s.append(QLatin1String(" = ?"));
+            else
+                s.append(QLatin1String(" = ")).append(formatValue(rec.field(i)));
         }
         break;
+    }
     case UpdateStatement:
         s.append(QLatin1String("UPDATE ")).append(tableName).append(
                  QLatin1String(" SET "));

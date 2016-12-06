@@ -112,7 +112,7 @@ void QWidgetLineControl::updateDisplayText(bool forceUpdate)
     // characters)
     QChar* uc = str.data();
     for (int i = 0; i < (int)str.length(); ++i) {
-        if ((uc[i] < 0x20 && uc[i] != 0x09)
+        if ((uc[i].unicode() < 0x20 && uc[i].unicode() != 0x09)
             || uc[i] == QChar::LineSeparator
             || uc[i] == QChar::ParagraphSeparator
             || uc[i] == QChar::ObjectReplacementCharacter)
@@ -189,7 +189,7 @@ void QWidgetLineControl::commitPreedit()
 
     m_preeditCursor = 0;
     setPreeditArea(-1, QString());
-    m_textLayout.clearAdditionalFormats();
+    m_textLayout.clearFormats();
     updateDisplayText(/*force*/ true);
 #endif
 }
@@ -557,7 +557,8 @@ void QWidgetLineControl::processInputMethodEvent(QInputMethodEvent *event)
     const int oldPreeditCursor = m_preeditCursor;
     m_preeditCursor = event->preeditString().length();
     m_hideCursor = false;
-    QList<QTextLayout::FormatRange> formats;
+    QVector<QTextLayout::FormatRange> formats;
+    formats.reserve(event->attributes().size());
     for (int i = 0; i < event->attributes().size(); ++i) {
         const QInputMethodEvent::Attribute &a = event->attributes().at(i);
         if (a.type == QInputMethodEvent::Cursor) {
@@ -574,7 +575,7 @@ void QWidgetLineControl::processInputMethodEvent(QInputMethodEvent *event)
             }
         }
     }
-    m_textLayout.setAdditionalFormats(formats);
+    m_textLayout.setFormats(formats);
     updateDisplayText(/*force*/ true);
     if (cursorPositionChanged)
         emitCursorPositionChanged();
@@ -696,7 +697,7 @@ bool QWidgetLineControl::finishChange(int validateFromState, bool update, bool e
             if (m_transactions.count())
                 return false;
             internalUndo(validateFromState);
-            m_history.resize(m_undoState);
+            m_history.erase(m_history.begin() + m_undoState, m_history.end());
             if (m_modifiedState > m_undoState)
                 m_modifiedState = -1;
             m_validInput = true;
@@ -775,14 +776,14 @@ void QWidgetLineControl::internalSetText(const QString &txt, int pos, bool edite
 */
 void QWidgetLineControl::addCommand(const Command &cmd)
 {
-    if (m_separator && m_undoState && m_history[m_undoState - 1].type != Separator) {
-        m_history.resize(m_undoState + 2);
-        m_history[m_undoState++] = Command(Separator, m_cursor, 0, m_selstart, m_selend);
-    } else {
-        m_history.resize(m_undoState + 1);
-    }
+    m_history.erase(m_history.begin() + m_undoState, m_history.end());
+
+    if (m_separator && m_undoState && m_history[m_undoState - 1].type != Separator)
+        m_history.push_back(Command(Separator, m_cursor, 0, m_selstart, m_selend));
+
     m_separator = false;
-    m_history[m_undoState++] = cmd;
+    m_history.push_back(cmd);
+    m_undoState = int(m_history.size());
 }
 
 /*!
@@ -1532,6 +1533,7 @@ void QWidgetLineControl::processShortcutOverrideEvent(QKeyEvent *ke)
         || ke == QKeySequence::Undo
         || ke == QKeySequence::MoveToNextWord
         || ke == QKeySequence::MoveToPreviousWord
+        || ke == QKeySequence::MoveToStartOfLine
         || ke == QKeySequence::MoveToEndOfLine
         || ke == QKeySequence::MoveToStartOfDocument
         || ke == QKeySequence::MoveToEndOfDocument
@@ -1913,9 +1915,11 @@ bool QWidgetLineControl::isRedoAvailable() const
     // Same as with undo. Disabled for password modes.
     return !m_readOnly
             && m_echoMode == QLineEdit::Normal
-            && m_undoState < m_history.size();
+            && m_undoState < int(m_history.size());
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qwidgetlinecontrol_p.cpp"
 
 #endif

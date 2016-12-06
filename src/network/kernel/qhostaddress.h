@@ -84,8 +84,15 @@ public:
     QHostAddress(SpecialAddress address);
     ~QHostAddress();
 
+#ifdef Q_COMPILER_RVALUE_REFS
+    QHostAddress &operator=(QHostAddress &&other) Q_DECL_NOTHROW
+    { swap(other); return *this; }
+#endif
+
     QHostAddress &operator=(const QHostAddress &other);
     QHostAddress &operator=(const QString &address);
+
+    void swap(QHostAddress &other) Q_DECL_NOTHROW { d.swap(other.d); }
 
     void setAddress(quint32 ip4Addr);
     void setAddress(quint8 *ip6Addr);   // ### Qt 6: remove me
@@ -117,6 +124,7 @@ public:
     bool isInSubnet(const QPair<QHostAddress, int> &subnet) const;
 
     bool isLoopback() const;
+    bool isMulticast() const;
 
     static QPair<QHostAddress, int> parseSubnet(const QString &subnet);
 
@@ -124,6 +132,7 @@ public:
 protected:
     QScopedPointer<QHostAddressPrivate> d;
 };
+Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6(QHostAddress)
 
 inline bool operator ==(QHostAddress::SpecialAddress address1, const QHostAddress &address2)
 { return address2 == address1; }

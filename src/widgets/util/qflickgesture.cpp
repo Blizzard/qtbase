@@ -66,8 +66,8 @@ static QMouseEvent *copyMouseEvent(QEvent *e)
     case QEvent::MouseButtonRelease:
     case QEvent::MouseMove: {
         QMouseEvent *me = static_cast<QMouseEvent *>(e);
-        QMouseEvent *cme = new QMouseEvent(me->type(), QPoint(0, 0), me->windowPos(), me->screenPos(), me->button(), me->buttons(), me->modifiers());
-        QGuiApplicationPrivate::setMouseEventSource(cme, me->source());
+        QMouseEvent *cme = new QMouseEvent(me->type(), QPoint(0, 0), me->windowPos(), me->screenPos(),
+                                           me->button(), me->buttons(), me->modifiers(), me->source());
         return cme;
     }
 #ifndef QT_NO_GRAPHICSVIEW
@@ -78,8 +78,8 @@ static QMouseEvent *copyMouseEvent(QEvent *e)
 #if 1
         QEvent::Type met = me->type() == QEvent::GraphicsSceneMousePress ? QEvent::MouseButtonPress :
                            (me->type() == QEvent::GraphicsSceneMouseRelease ? QEvent::MouseButtonRelease : QEvent::MouseMove);
-        QMouseEvent *cme = new QMouseEvent(met, QPoint(0, 0), QPoint(0, 0), me->screenPos(), me->button(), me->buttons(), me->modifiers());
-        QGuiApplicationPrivate::setMouseEventSource(cme, me->source());
+        QMouseEvent *cme = new QMouseEvent(met, QPoint(0, 0), QPoint(0, 0), me->screenPos(),
+                                           me->button(), me->buttons(), me->modifiers(), me->source());
         return cme;
 #else
         QGraphicsSceneMouseEvent *copy = new QGraphicsSceneMouseEvent(me->type());
@@ -155,9 +155,9 @@ public:
             mouseTarget = QApplication::widgetAt(pressDelayEvent->globalPos());
             mouseButton = pressDelayEvent->button();
             mouseEventSource = pressDelayEvent->source();
-            qFGDebug() << "QFG: consuming/delaying mouse press";
+            qFGDebug("QFG: consuming/delaying mouse press");
         } else {
-            qFGDebug() << "QFG: NOT consuming/delaying mouse press";
+            qFGDebug("QFG: NOT consuming/delaying mouse press");
         }
         e->setAccepted(true);
     }
@@ -194,7 +194,7 @@ public:
 
     void scrollerWasIntercepted()
     {
-        qFGDebug() << "QFG: deleting delayed mouse press, since scroller was only intercepted";
+        qFGDebug("QFG: deleting delayed mouse press, since scroller was only intercepted");
         if (pressDelayEvent) {
             // we still haven't even sent the press, so just throw it away now
             if (pressDelayTimer) {
@@ -210,7 +210,7 @@ public:
     {
         if (pressDelayEvent) {
             // we still haven't even sent the press, so just throw it away now
-            qFGDebug() << "QFG: deleting delayed mouse press, since scroller is active now";
+            qFGDebug("QFG: deleting delayed mouse press, since scroller is active now");
             if (pressDelayTimer) {
                 killTimer(pressDelayTimer);
                 pressDelayTimer = 0;
@@ -240,8 +240,7 @@ public:
             qFGDebug() << "QFG: sending a fake mouse release at far-far-away to " << mouseTarget;
             QMouseEvent re(QEvent::MouseButtonRelease, QPoint(), farFarAway, farFarAway,
                            mouseButton, QApplication::mouseButtons() & ~mouseButton,
-                           QApplication::keyboardModifiers());
-            QGuiApplicationPrivate::setMouseEventSource(&re, mouseEventSource);
+                           QApplication::keyboardModifiers(), mouseEventSource);
             sendMouseEvent(&re, RegrabMouseAfterwards);
             // don't clear the mouseTarget just yet, since we need to explicitly ungrab the mouse on release!
         }
@@ -291,8 +290,7 @@ protected:
             if (me) {
                 QMouseEvent copy(me->type(), mouseTarget->mapFromGlobal(me->globalPos()),
                                  mouseTarget->topLevelWidget()->mapFromGlobal(me->globalPos()), me->screenPos(),
-                                 me->button(), me->buttons(), me->modifiers());
-                QGuiApplicationPrivate::setMouseEventSource(&copy, me->source());
+                                 me->button(), me->buttons(), me->modifiers(), me->source());
                 qt_sendSpontaneousEvent(mouseTarget, &copy);
             }
 
@@ -705,5 +703,7 @@ void QFlickGestureRecognizer::reset(QGesture *state)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qflickgesture_p.cpp"
 
 #endif // QT_NO_GESTURES

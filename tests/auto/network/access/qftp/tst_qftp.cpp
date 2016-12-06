@@ -390,8 +390,7 @@ void tst_QFtp::connectToUnresponsiveHost()
     a lot of other stuff in QFtp, so we just expect this test to fail on Windows.
     */
     QEXPECT_FAIL("", "timeout not working due to strange Windows socket behaviour (see source file of this test for explanation)", Abort);
-#else
-    QEXPECT_FAIL("", "QTBUG-20687", Abort);
+
 #endif
     QVERIFY2(! QTestEventLoop::instance().timeout(), "Network timeout longer than expected (should have been 60 seconds)");
 
@@ -733,10 +732,11 @@ void tst_QFtp::put_data()
     QByteArray bigData( 10*1024*1024, 0 );
     bigData.fill( 'A' );
 
-    // test the two put() overloads in one routine
+    // test the two put() overloads in one routine with a file name containing
+    // U+0x00FC (latin small letter u with diaeresis) for QTBUG-52303, testing UTF-8
     for ( int i=0; i<2; i++ ) {
         QTest::newRow( QString("relPath01_%1").arg(i).toLatin1().constData() ) << QtNetworkSettings::serverName() << (uint)21 << QString() << QString()
-                << QString("qtest/upload/rel01_%1") << rfc3252
+                << (QLatin1String("qtest/upload/rel01_") + QChar(0xfc) + QLatin1String("%1")) << rfc3252
                 << (bool)(i==1) << 1;
         /*
     QTest::newRow( QString("relPath02_%1").arg(i).toLatin1().constData() ) << QtNetworkSettings::serverName() << (uint)21 << QString("ftptest")     << QString("password")

@@ -49,6 +49,7 @@
 #include <QtGui/qguiapplication.h>
 #include <qpa/qplatformnativeinterface.h>
 #include <QtGui/qwindow.h>
+#include <QtGui/private/qhighdpiscaling_p.h>
 
 //#include <uiautomationcoreapi.h>
 #ifndef UiaRootObjectId
@@ -94,9 +95,9 @@ HRESULT STDMETHODCALLTYPE QWindowsEnumerate::QueryInterface(REFIID id, LPVOID *i
 {
     *iface = 0;
     if (id == IID_IUnknown)
-        *iface = (IUnknown*)this;
+        *iface = static_cast<IUnknown *>(this);
     else if (id == IID_IEnumVARIANT)
-        *iface = (IEnumVARIANT*)this;
+        *iface = static_cast<IEnumVARIANT *>(this);
 
     if (*iface) {
         AddRef();
@@ -144,13 +145,13 @@ HRESULT STDMETHODCALLTYPE QWindowsEnumerate::Next(unsigned long  celt, VARIANT F
     ULONG l;
     for (l = 0; l < celt; l++) {
         VariantInit(&rgVar[l]);
-        if ((current+1) > (ULONG)array.size()) {
+        if (current + 1 > ULONG(array.size())) {
             *pCeltFetched = l;
             return S_FALSE;
         }
 
         rgVar[l].vt = VT_I4;
-        rgVar[l].lVal = array[(int)current];
+        rgVar[l].lVal = array[int(current)];
         ++current;
     }
     *pCeltFetched = l;
@@ -166,8 +167,8 @@ HRESULT STDMETHODCALLTYPE QWindowsEnumerate::Reset()
 HRESULT STDMETHODCALLTYPE QWindowsEnumerate::Skip(unsigned long celt)
 {
     current += celt;
-    if (current > (ULONG)array.size()) {
-        current = array.size();
+    if (current > ULONG(array.size())) {
+        current = ULONG(array.size());
         return S_FALSE;
     }
     return S_OK;
@@ -195,13 +196,13 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::QueryInterface(REFIID id, LPVO
                                     << strIID << ", iface:" << accessibleInterface();
     }
     if (id == IID_IUnknown) {
-        *iface = (IUnknown*)(IDispatch*)this;
+        *iface =  static_cast<IUnknown *>(static_cast<IDispatch *>(this));
     } else if (id == IID_IDispatch) {
-        *iface = (IDispatch*)this;
+        *iface = static_cast<IDispatch *>(this);
     } else if (id == IID_IAccessible) {
-        *iface = (IAccessible*)this;
+        *iface = static_cast<IAccessible *>(this);
     } else if (id == IID_IOleWindow) {
-        *iface = (IOleWindow*)this;
+        *iface = static_cast<IOleWindow *>(this);
     }
 
     if (*iface) {
@@ -497,7 +498,9 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::accHitTest(long xLeft, long yT
     if (!accessible)
         return E_FAIL;
 
-    QAccessibleInterface *child = accessible->childAt(xLeft, yTop);
+    const QPoint pos = QHighDpi::fromNativeLocalPosition(QPoint(xLeft, yTop),
+                                                         QWindowsAccessibility::windowHelper(accessible));
+    QAccessibleInterface *child = accessible->childAt(pos.x(), pos.y());
     if (child == 0) {
         // no child found, return this item if it contains the coordinates
         if (accessible->rect().contains(xLeft, yTop)) {
@@ -539,7 +542,8 @@ HRESULT STDMETHODCALLTYPE QWindowsMsaaAccessible::accLocation(long *pxLeft, long
     QAccessibleInterface *acc = childPointer(accessible, varID);
     if (!acc || !acc->isValid())
         return E_FAIL;
-    const QRect rect = acc->rect();
+    const QRect rect = QHighDpi::toNativePixels(acc->rect(),
+                                                QWindowsAccessibility::windowHelper(accessible));
 
     *pxLeft = rect.x();
     *pyTop = rect.y();

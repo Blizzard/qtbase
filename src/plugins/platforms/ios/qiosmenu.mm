@@ -61,9 +61,21 @@ static NSString *const kSelectorPrefix = @"_qtMenuItem_";
 {
     if (self = [super init]) {
         [self setVisibleMenuItems:visibleMenuItems];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:self
+            selector:@selector(menuClosed)
+            name:UIMenuControllerDidHideMenuNotification object:nil];
     }
 
     return self;
+}
+
+-(void)dealloc
+{
+    [[NSNotificationCenter defaultCenter]
+        removeObserver:self
+        name:UIMenuControllerDidHideMenuNotification object:nil];
+    [super dealloc];
 }
 
 - (void)setVisibleMenuItems:(const QIOSMenuItemList &)visibleMenuItems
@@ -83,6 +95,11 @@ static NSString *const kSelectorPrefix = @"_qtMenuItem_";
     [UIMenuController sharedMenuController].menuItems = menuItemArray;
     if ([UIMenuController sharedMenuController].menuVisible)
         [[UIMenuController sharedMenuController] setMenuVisible:YES animated:NO];
+}
+
+-(void)menuClosed
+{
+    QIOSMenu::currentMenu()->dismiss();
 }
 
 - (id)targetForAction:(SEL)action withSender:(id)sender
@@ -165,7 +182,7 @@ static NSString *const kSelectorPrefix = @"_qtMenuItem_";
     [self reloadAllComponents];
 }
 
--(void)listenForKeyboardWillHideNotification:(BOOL)listen
+- (void)listenForKeyboardWillHideNotification:(BOOL)listen
 {
     if (listen) {
         [[NSNotificationCenter defaultCenter]
@@ -179,7 +196,7 @@ static NSString *const kSelectorPrefix = @"_qtMenuItem_";
     }
 }
 
--(void)dealloc
+- (void)dealloc
 {
     [self listenForKeyboardWillHideNotification:NO];
     self.toolbar = 0;

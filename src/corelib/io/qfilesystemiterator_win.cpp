@@ -31,13 +31,6 @@
 **
 ****************************************************************************/
 
-#if !defined(WINAPI_FAMILY)
-#  if _WIN32_WINNT < 0x0500
-#    undef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0500
-#  endif // _WIN32_WINNT < 0x500
-#endif // !WINAPI_FAMILY
-
 #include "qfilesystemiterator_p.h"
 #include "qfilesystemengine_p.h"
 #include "qplatformdefs.h"
@@ -67,7 +60,8 @@ QFileSystemIterator::QFileSystemIterator(const QFileSystemEntry &entry, QDir::Fi
     if (!nativePath.endsWith(QLatin1Char('\\')))
         nativePath.append(QLatin1Char('\\'));
     nativePath.append(QLatin1Char('*'));
-#ifdef Q_OS_WINRT
+    // In MSVC2015+ case we prepend //?/ for longer file-name support
+#if defined(Q_OS_WINRT) && _MSC_VER < 1900
     if (nativePath.startsWith(QLatin1Char('\\')))
         nativePath.remove(0, 1);
 #endif

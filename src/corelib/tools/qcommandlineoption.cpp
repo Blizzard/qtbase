@@ -41,10 +41,19 @@ QT_BEGIN_NAMESPACE
 class QCommandLineOptionPrivate : public QSharedData
 {
 public:
-    inline QCommandLineOptionPrivate()
+    Q_NEVER_INLINE
+    explicit QCommandLineOptionPrivate(const QString &name)
+        : names(removeInvalidNames(QStringList(name))),
+          hidden(false)
     { }
 
-    void setNames(const QStringList &nameList);
+    Q_NEVER_INLINE
+    explicit QCommandLineOptionPrivate(const QStringList &names)
+        : names(removeInvalidNames(names)),
+          hidden(false)
+    { }
+
+    static QStringList removeInvalidNames(QStringList nameList);
 
     //! The list of names used for this option.
     QStringList names;
@@ -58,6 +67,9 @@ public:
 
     //! The list of default values used for this option.
     QStringList defaultValues;
+
+    //! Show or hide in --help
+    bool hidden;
 };
 
 /*!
@@ -98,9 +110,8 @@ public:
     \sa setDescription(), setValueName(), setDefaultValues()
 */
 QCommandLineOption::QCommandLineOption(const QString &name)
-    : d(new QCommandLineOptionPrivate)
+    : d(new QCommandLineOptionPrivate(name))
 {
-    d->setNames(QStringList(name));
 }
 
 /*!
@@ -117,9 +128,8 @@ QCommandLineOption::QCommandLineOption(const QString &name)
     \sa setDescription(), setValueName(), setDefaultValues()
 */
 QCommandLineOption::QCommandLineOption(const QStringList &names)
-    : d(new QCommandLineOptionPrivate)
+    : d(new QCommandLineOptionPrivate(names))
 {
-    d->setNames(names);
 }
 
 /*!
@@ -134,7 +144,7 @@ QCommandLineOption::QCommandLineOption(const QStringList &names)
     The description is set to \a description. It is customary to add a "."
     at the end of the description.
 
-    In addition, the \a valueName can be set if the option expects a value.
+    In addition, the \a valueName needs to be set if the option expects a value.
     The default value for the option is set to \a defaultValue.
 
     In Qt versions before 5.4, this constructor was \c explicit. In Qt 5.4
@@ -148,9 +158,8 @@ QCommandLineOption::QCommandLineOption(const QStringList &names)
 QCommandLineOption::QCommandLineOption(const QString &name, const QString &description,
                                        const QString &valueName,
                                        const QString &defaultValue)
-    : d(new QCommandLineOptionPrivate)
+    : d(new QCommandLineOptionPrivate(name))
 {
-    d->setNames(QStringList(name));
     setValueName(valueName);
     setDescription(description);
     setDefaultValue(defaultValue);
@@ -171,7 +180,7 @@ QCommandLineOption::QCommandLineOption(const QString &name, const QString &descr
     The description is set to \a description. It is customary to add a "."
     at the end of the description.
 
-    In addition, the \a valueName can be set if the option expects a value.
+    In addition, the \a valueName needs to be set if the option expects a value.
     The default value for the option is set to \a defaultValue.
 
     In Qt versions before 5.4, this constructor was \c explicit. In Qt 5.4
@@ -185,9 +194,8 @@ QCommandLineOption::QCommandLineOption(const QString &name, const QString &descr
 QCommandLineOption::QCommandLineOption(const QStringList &names, const QString &description,
                                        const QString &valueName,
                                        const QString &defaultValue)
-    : d(new QCommandLineOptionPrivate)
+    : d(new QCommandLineOptionPrivate(names))
 {
-    d->setNames(names);
     setValueName(valueName);
     setDescription(description);
     setDefaultValue(defaultValue);
@@ -236,29 +244,47 @@ QStringList QCommandLineOption::names() const
     return d->names;
 }
 
-void QCommandLineOptionPrivate::setNames(const QStringList &nameList)
-{
-    QStringList newNames;
-    newNames.reserve(nameList.size());
-    if (nameList.isEmpty())
-        qWarning("QCommandLineOption: Options must have at least one name");
-    foreach (const QString &name, nameList) {
-        if (name.isEmpty()) {
-            qWarning("QCommandLineOption: Option names cannot be empty");
-        } else {
+namespace {
+    struct IsInvalidName
+    {
+        typedef bool result_type;
+        typedef QString argument_type;
+
+        Q_NEVER_INLINE
+        result_type operator()(const QString &name) const Q_DECL_NOEXCEPT
+        {
+            if (Q_UNLIKELY(name.isEmpty()))
+                return warn("be empty");
+
             const QChar c = name.at(0);
-            if (c == QLatin1Char('-'))
-                qWarning("QCommandLineOption: Option names cannot start with a '-'");
-            else if (c == QLatin1Char('/'))
-                qWarning("QCommandLineOption: Option names cannot start with a '/'");
-            else if (name.contains(QLatin1Char('=')))
-                qWarning("QCommandLineOption: Option names cannot contain a '='");
-            else
-                newNames.append(name);
+            if (Q_UNLIKELY(c == QLatin1Char('-')))
+                return warn("start with a '-'");
+            if (Q_UNLIKELY(c == QLatin1Char('/')))
+                return warn("start with a '/'");
+            if (Q_UNLIKELY(name.contains(QLatin1Char('='))))
+                return warn("contain a '='");
+
+            return false;
         }
-    }
-    // commit
-    names.swap(newNames);
+
+        Q_NEVER_INLINE
+        static bool warn(const char *what) Q_DECL_NOEXCEPT
+        {
+            qWarning("QCommandLineOption: Option names cannot %s", what);
+            return true;
+        }
+    };
+} // unnamed namespace
+
+// static
+QStringList QCommandLineOptionPrivate::removeInvalidNames(QStringList nameList)
+{
+    if (Q_UNLIKELY(nameList.isEmpty()))
+        qWarning("QCommandLineOption: Options must have at least one name");
+    else
+        nameList.erase(std::remove_if(nameList.begin(), nameList.end(), IsInvalidName()),
+                       nameList.end());
+    return nameList;
 }
 
 /*!
@@ -360,6 +386,32 @@ void QCommandLineOption::setDefaultValues(const QStringList &defaultValues)
 QStringList QCommandLineOption::defaultValues() const
 {
     return d->defaultValues;
+}
+
+/*!
+    Sets whether to hide this option in the user-visible help output.
+
+    All options are visible by default. Setting \a hide to true for
+    a particular option makes it internal, i.e. not listed in the help output.
+
+    \since 5.6
+    \sa isHidden
+ */
+void QCommandLineOption::setHidden(bool hide)
+{
+    d->hidden = hide;
+}
+
+/*!
+    Returns true if this option is omitted from the help output,
+    false if the option is listed.
+
+    \since 5.6
+    \sa setHidden()
+ */
+bool QCommandLineOption::isHidden() const
+{
+    return d->hidden;
 }
 
 QT_END_NAMESPACE

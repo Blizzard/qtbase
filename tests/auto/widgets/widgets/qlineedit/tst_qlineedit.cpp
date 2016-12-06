@@ -229,6 +229,7 @@ private slots:
 
     void isModified();
     void edited();
+    void fixupDoesNotModify_QTBUG_49295();
 
     void insert();
     void setSelection_data();
@@ -1669,7 +1670,7 @@ void tst_QLineEdit::displayText()
     testWidget->setEchoMode(mode);
     testWidget->setText(insertString);
     QCOMPARE(testWidget->displayText(), expectedString);
-    QVERIFY(testWidget->echoMode() == mode);
+    QCOMPARE(testWidget->echoMode(), mode);
 }
 
 void tst_QLineEdit::passwordEchoOnEdit()
@@ -1839,9 +1840,9 @@ void tst_QLineEdit::maxLength()
 
         // Make sure that the textChanged is not emitted unless the text is actually changed
         if (insertString == expectedString) {
-            QVERIFY(changed_count == 0);
+            QCOMPARE(changed_count, 0);
         } else {
-            QVERIFY(changed_count == 1);
+            QCOMPARE(changed_count, 1);
         }
     }
 
@@ -1962,7 +1963,7 @@ void tst_QLineEdit::psKeyClick(QTestEventList &keys, Qt::Key key, Qt::KeyboardMo
 void tst_QLineEdit::cursorPosition()
 {
     QLineEdit *testWidget = ensureTestWidget();
-    QVERIFY(testWidget->cursorPosition() == 0);
+    QCOMPARE(testWidget->cursorPosition(), 0);
 
     // start with a basic text
     QTest::keyClicks(testWidget, "The");
@@ -2208,7 +2209,7 @@ void tst_QLineEdit::selectedText()
     testWidget->cursorForward(true, 9);
     QVERIFY(testWidget->hasSelectedText());
     QCOMPARE(testWidget->selectedText(), QString("Abc defg "));
-    QVERIFY(selection_count == 1);
+    QCOMPARE(selection_count, 1);
 
     // reset selection
     testWidget->home(false);
@@ -2264,19 +2265,19 @@ void tst_QLineEdit::textChangedAndTextEdited()
     QLineEdit *testWidget = ensureTestWidget();
     QTest::keyClick(testWidget, Qt::Key_A);
     QCOMPARE(changed_count, 1);
-    QVERIFY(edited_count == changed_count);
+    QCOMPARE(edited_count, changed_count);
     QTest::keyClick(testWidget, 'b');
     QCOMPARE(changed_count, 2);
-    QVERIFY(edited_count == changed_count);
+    QCOMPARE(edited_count, changed_count);
     QTest::keyClick(testWidget, 'c');
     QCOMPARE(changed_count, 3);
-    QVERIFY(edited_count == changed_count);
+    QCOMPARE(edited_count, changed_count);
     QTest::keyClick(testWidget, ' ');
     QCOMPARE(changed_count, 4);
-    QVERIFY(edited_count == changed_count);
+    QCOMPARE(edited_count, changed_count);
     QTest::keyClick(testWidget, 'd');
     QCOMPARE(changed_count, 5);
-    QVERIFY(edited_count == changed_count);
+    QCOMPARE(edited_count, changed_count);
 
     changed_count = 0;
     edited_count = 0;
@@ -2322,27 +2323,27 @@ void tst_QLineEdit::returnPressed()
 
     QLineEdit *testWidget = ensureTestWidget();
     QTest::keyClick(testWidget, Qt::Key_Return);
-    QVERIFY(return_count == 1);
+    QCOMPARE(return_count, 1);
     return_count = 0;
 
     QTest::keyClick(testWidget, 'A');
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, 'b');
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, 'c');
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, ' ');
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, 'd');
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     psKeyClick(testWidget, Qt::Key_Home);
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     psKeyClick(testWidget, Qt::Key_End);
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, Qt::Key_Escape);
-    QVERIFY(return_count == 0);
+    QCOMPARE(return_count, 0);
     QTest::keyClick(testWidget, Qt::Key_Return);
-    QVERIFY(return_count == 1);
+    QCOMPARE(return_count, 1);
 }
 
 // int validator that fixes all !isNumber to '0'
@@ -2498,14 +2499,14 @@ void tst_QLineEdit::setValidator()
     QCOMPARE(testWidget->validator(), static_cast<const QValidator*>(&iv1));
 
     testWidget->setValidator(0);
-    QVERIFY(testWidget->validator() == 0);
+    QVERIFY(!testWidget->validator());
 
     QIntValidator iv2(0, 99, 0);
     testWidget->setValidator(&iv2);
     QCOMPARE(testWidget->validator(), static_cast<const QValidator *>(&iv2));
 
     testWidget->setValidator(0);
-    QVERIFY(testWidget->validator() == 0);
+    QVERIFY(!testWidget->validator());
 }
 
 void tst_QLineEdit::setValidator_QIntValidator_data()
@@ -2747,7 +2748,7 @@ void tst_QLineEdit::setAlignment()
     QTEST(testWidget, "left");
 #endif
 #endif
-    QVERIFY(testWidget->alignment() == Qt::AlignLeft);
+    QCOMPARE(testWidget->alignment(), Qt::AlignLeft);
 
     testWidget->setText("hcenter");
     testWidget->setAlignment(Qt::AlignHCenter);
@@ -2756,7 +2757,7 @@ void tst_QLineEdit::setAlignment()
     QTEST(testWidget, "hcenter");
 #endif
 #endif
-    QVERIFY(testWidget->alignment() == Qt::AlignHCenter);
+    QCOMPARE(testWidget->alignment(), Qt::AlignHCenter);
 
     testWidget->setText("right");
     testWidget->setAlignment(Qt::AlignRight);
@@ -2765,16 +2766,16 @@ void tst_QLineEdit::setAlignment()
     QTEST(testWidget, "right");
 #endif
 #endif
-    QVERIFY(testWidget->alignment() == Qt::AlignRight);
+    QCOMPARE(testWidget->alignment(), Qt::AlignRight);
 
     testWidget->setAlignment(Qt::AlignTop);
-    QVERIFY(testWidget->alignment() == Qt::AlignTop);
+    QCOMPARE(testWidget->alignment(), Qt::AlignTop);
 
     testWidget->setAlignment(Qt::AlignBottom);
-    QVERIFY(testWidget->alignment() == Qt::AlignBottom);
+    QCOMPARE(testWidget->alignment(), Qt::AlignBottom);
 
     testWidget->setAlignment(Qt::AlignCenter);
-    QVERIFY(testWidget->alignment() == Qt::AlignCenter);
+    QCOMPARE(testWidget->alignment(), Qt::AlignCenter);
 }
 
 void tst_QLineEdit::isModified()
@@ -2841,6 +2842,29 @@ void tst_QLineEdit::edited()
     QVERIFY(!testWidget->isModified());
 
     testWidget->setModified(true);
+    QVERIFY(testWidget->isModified());
+}
+
+void tst_QLineEdit::fixupDoesNotModify_QTBUG_49295()
+{
+    QLineEdit *testWidget = ensureTestWidget();
+
+    ValidatorWithFixup val;
+    testWidget->setValidator(&val);
+    testWidget->setText("foo");
+    QVERIFY(!testWidget->isModified());
+    QVERIFY(!testWidget->hasAcceptableInput());
+
+    QTest::keyClicks(testWidget, QStringLiteral("bar"));
+    QVERIFY(testWidget->isModified());
+    QVERIFY(!testWidget->hasAcceptableInput());
+
+    // trigger a fixup, which should not reset the modified flag
+    QFocusEvent lostFocus(QEvent::FocusOut);
+    qApp->sendEvent(testWidget, &lostFocus);
+
+    QVERIFY(testWidget->hasAcceptableInput());
+    QEXPECT_FAIL("", "QTBUG-49295: a fixup of a line edit should keep it modified", Continue);
     QVERIFY(testWidget->isModified());
 }
 
@@ -3082,10 +3106,10 @@ void tst_QLineEdit::maxLengthAndInputMask()
     QLineEdit *testWidget = ensureTestWidget();
     QVERIFY(testWidget->inputMask().isNull());
     testWidget->setMaxLength(10);
-    QVERIFY(testWidget->maxLength() == 10);
+    QCOMPARE(testWidget->maxLength(), 10);
     testWidget->setInputMask(QString::null);
     QVERIFY(testWidget->inputMask().isNull());
-    QVERIFY(testWidget->maxLength() == 10);
+    QCOMPARE(testWidget->maxLength(), 10);
 }
 
 
@@ -4319,10 +4343,10 @@ void tst_QLineEdit::clearButtonVisibleAfterSettingText_QTBUG_45518()
 #endif // QT_BUILD_INTERNAL
 }
 
-static inline QIcon sideWidgetTestIcon()
+static inline QIcon sideWidgetTestIcon(Qt::GlobalColor color = Qt::yellow)
 {
     QImage image(QSize(20, 20), QImage::Format_ARGB32);
-    image.fill(Qt::yellow);
+    image.fill(color);
     return QIcon(QPixmap::fromImage(image));
 }
 
@@ -4360,6 +4384,15 @@ void tst_QLineEdit::sideWidgets()
     lineEdit->addAction(iconAction);
 }
 
+template <class T> T *findAssociatedWidget(const QAction *a)
+{
+    foreach (QWidget *w, a->associatedWidgets()) {
+        if (T *result = qobject_cast<T *>(w))
+            return result;
+    }
+    return Q_NULLPTR;
+}
+
 void tst_QLineEdit::sideWidgetsActionEvents()
 {
     // QTBUG-39660, verify whether action events are handled by the widget.
@@ -4368,28 +4401,43 @@ void tst_QLineEdit::sideWidgetsActionEvents()
     QLineEdit *lineEdit = new QLineEdit(&testWidget);
     l->addWidget(lineEdit);
     l->addSpacerItem(new QSpacerItem(0, 50, QSizePolicy::Ignored, QSizePolicy::Fixed));
-    QAction *iconAction = lineEdit->addAction(sideWidgetTestIcon(), QLineEdit::LeadingPosition);
+    QAction *iconAction1 = lineEdit->addAction(sideWidgetTestIcon(Qt::red), QLineEdit::LeadingPosition);
+    QAction *iconAction2 = lineEdit->addAction(sideWidgetTestIcon(Qt::blue), QLineEdit::LeadingPosition);
+    QAction *iconAction3 = lineEdit->addAction(sideWidgetTestIcon(Qt::yellow), QLineEdit::LeadingPosition);
+    iconAction3->setVisible(false);
+
     testWidget.move(300, 300);
     testWidget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&testWidget));
 
-    QWidget *toolButton = Q_NULLPTR;
-    foreach (QWidget *w, iconAction->associatedWidgets()) {
-        if (qobject_cast<QToolButton *>(w)) {
-            toolButton = w;
-            break;
-        }
-    }
-    QVERIFY(toolButton);
+    QWidget *toolButton1 = findAssociatedWidget<QToolButton>(iconAction1);
+    QWidget *toolButton2 = findAssociatedWidget<QToolButton>(iconAction2);
+    QWidget *toolButton3 = findAssociatedWidget<QToolButton>(iconAction3);
 
-    QVERIFY(toolButton->isVisible());
-    QVERIFY(toolButton->isEnabled());
+    QVERIFY(toolButton1);
+    QVERIFY(toolButton2);
+    QVERIFY(toolButton3);
 
-    iconAction->setEnabled(false);
-    QVERIFY(!toolButton->isEnabled());
+    QVERIFY(!toolButton3->isVisible()); // QTBUG-48899 , action hidden before show().
 
-    iconAction->setVisible(false);
-    QVERIFY(!toolButton->isVisible());
+    QVERIFY(toolButton1->isVisible());
+    QVERIFY(toolButton1->isEnabled());
+
+    QVERIFY(toolButton2->isVisible());
+    QVERIFY(toolButton2->isEnabled());
+
+    const int toolButton1X = toolButton1->x();
+    const int toolButton2X = toolButton2->x();
+    QVERIFY(toolButton1X < toolButton2X); // QTBUG-48806, positioned beside each other.
+
+    iconAction1->setEnabled(false);
+    QVERIFY(!toolButton1->isEnabled());
+
+    iconAction1->setVisible(false);
+    QVERIFY(!toolButton1->isVisible());
+
+    // QTBUG-39660, button 2 takes position of invisible button 1.
+    QCOMPARE(toolButton2->x(), toolButton1X);
 }
 
 Q_DECLARE_METATYPE(Qt::AlignmentFlag)
@@ -4453,7 +4501,7 @@ void tst_QLineEdit::QTBUG1266_setInputMaskEmittingTextEdited()
     QSignalSpy spy(&lineEdit, SIGNAL(textEdited(QString)));
     lineEdit.setInputMask("AAAA");
     lineEdit.setInputMask(QString());
-    QVERIFY(spy.count() == 0);
+    QCOMPARE(spy.count(), 0);
 }
 
 QTEST_MAIN(tst_QLineEdit)

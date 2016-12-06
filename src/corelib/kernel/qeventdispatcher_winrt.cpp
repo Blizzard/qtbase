@@ -40,6 +40,7 @@
 #include <private/qabstracteventdispatcher_p.h>
 #include <private/qcoreapplication_p.h>
 
+#include <functional>
 #include <wrl.h>
 #include <windows.foundation.h>
 #include <windows.system.threading.h>
@@ -49,6 +50,7 @@ using namespace Microsoft::WRL;
 using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::System::Threading;
 using namespace ABI::Windows::Foundation;
+using namespace ABI::Windows::Foundation::Collections;
 using namespace ABI::Windows::UI::Core;
 using namespace ABI::Windows::ApplicationModel::Core;
 
@@ -70,6 +72,23 @@ struct WinRTTimerInfo : public QAbstractEventDispatcher::TimerInfo {
     quint64 targetTime;
 };
 
+class AgileDispatchedHandler : public RuntimeClass<RuntimeClassFlags<WinRtClassicComMix>, IDispatchedHandler, IAgileObject>
+{
+public:
+    AgileDispatchedHandler(const std::function<HRESULT()> &delegate)
+        : delegate(delegate)
+    {
+    }
+
+    HRESULT __stdcall Invoke()
+    {
+        return delegate();
+    }
+
+private:
+    std::function<HRESULT()> delegate;
+};
+
 class QEventDispatcherWinRTPrivate : public QAbstractEventDispatcherPrivate
 {
     Q_DECLARE_PUBLIC(QEventDispatcherWinRT)
@@ -79,10 +98,6 @@ public:
     ~QEventDispatcherWinRTPrivate();
 
 private:
-    ComPtr<IThreadPoolTimerStatics> timerFactory;
-    ComPtr<ICoreDispatcher> coreDispatcher;
-    QPointer<QThread> thread;
-
     QHash<int, QObject *> timerIdToObject;
     QVector<WinRTTimerInfo> timerInfos;
     QHash<HANDLE, int> timerHandleToId;
@@ -136,40 +151,11 @@ private:
         }
         return true;
     }
-
-    void fetchCoreDispatcher()
-    {
-        ComPtr<ICoreImmersiveApplication> application;
-        HRESULT hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication).Get(),
-                                            IID_PPV_ARGS(&application));
-        RETURN_VOID_IF_FAILED("Failed to get the application factory");
-
-        static ComPtr<ICoreApplicationView> view;
-        if (view)
-            return;
-
-        hr = application->get_MainView(&view);
-        RETURN_VOID_IF_FAILED("Failed to get the main view");
-
-        ComPtr<ICoreApplicationView2> view2;
-        hr = view.As(&view2);
-        RETURN_VOID_IF_FAILED("Failed to cast the main view");
-
-        hr = view2->get_Dispatcher(&coreDispatcher);
-        if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) // expected in thread pool cases
-            return;
-        RETURN_VOID_IF_FAILED("Failed to get core dispatcher");
-
-        thread = QThread::currentThread();
-    }
 };
 
 QEventDispatcherWinRT::QEventDispatcherWinRT(QObject *parent)
     : QAbstractEventDispatcher(*new QEventDispatcherWinRTPrivate, parent)
 {
-    Q_D(QEventDispatcherWinRT);
-
-    d->fetchCoreDispatcher();
 }
 
 QEventDispatcherWinRT::QEventDispatcherWinRT(QEventDispatcherWinRTPrivate &dd, QObject *parent)
@@ -180,33 +166,81 @@ QEventDispatcherWinRT::~QEventDispatcherWinRT()
 {
 }
 
+HRESULT QEventDispatcherWinRT::runOnXamlThread(const std::function<HRESULT ()> &delegate, bool waitForRun)
+{
+    static __declspec(thread) ICoreDispatcher *dispatcher = nullptr;
+    if (!dispatcher) {
+        HRESULT hr;
+        ComPtr<ICoreImmersiveApplication> application;
+        hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication).Get(),
+                                    IID_PPV_ARGS(&application));
+        ComPtr<ICoreApplicationView> view;
+        hr = application->get_MainView(&view);
+        Q_ASSERT_SUCCEEDED(hr);
+        ComPtr<ICoreWindow> window;
+        hr = view->get_CoreWindow(&window);
+        Q_ASSERT_SUCCEEDED(hr);
+        if (!window) {
+            // In case the application is launched via activation
+            // there might not be a main view (eg ShareTarget).
+            // Hence iterate through the available views and try to find
+            // a dispatcher in there
+            ComPtr<IVectorView<CoreApplicationView*>> appViews;
+            hr = application->get_Views(&appViews);
+            Q_ASSERT_SUCCEEDED(hr);
+            quint32 count;
+            hr = appViews->get_Size(&count);
+            Q_ASSERT_SUCCEEDED(hr);
+            for (quint32 i = 0; i < count; ++i) {
+                hr = appViews->GetAt(i, &view);
+                Q_ASSERT_SUCCEEDED(hr);
+                hr = view->get_CoreWindow(&window);
+                Q_ASSERT_SUCCEEDED(hr);
+                if (window) {
+                    hr = window->get_Dispatcher(&dispatcher);
+                    Q_ASSERT_SUCCEEDED(hr);
+                    if (dispatcher)
+                        break;
+                }
+            }
+            Q_ASSERT(dispatcher);
+        } else {
+            hr = window->get_Dispatcher(&dispatcher);
+            Q_ASSERT_SUCCEEDED(hr);
+        }
+    }
+
+    HRESULT hr;
+    boolean onXamlThread;
+    hr = dispatcher->get_HasThreadAccess(&onXamlThread);
+    Q_ASSERT_SUCCEEDED(hr);
+    if (onXamlThread) // Already there
+        return delegate();
+
+    ComPtr<IAsyncAction> op;
+    hr = dispatcher->RunAsync(CoreDispatcherPriority_Normal, Make<AgileDispatchedHandler>(delegate).Get(), &op);
+    if (FAILED(hr) || !waitForRun)
+        return hr;
+    return QWinRTFunctions::await(op);
+}
+
 bool QEventDispatcherWinRT::processEvents(QEventLoop::ProcessEventsFlags flags)
 {
     Q_D(QEventDispatcherWinRT);
 
-    if (d->thread && d->thread != QThread::currentThread())
-        d->fetchCoreDispatcher();
-
+    DWORD waitTime = 0;
     do {
-        // Process native events
-        if (d->coreDispatcher) {
-            boolean hasThreadAccess;
-            HRESULT hr = d->coreDispatcher->get_HasThreadAccess(&hasThreadAccess);
-            if (SUCCEEDED(hr) && hasThreadAccess) {
-                hr = d->coreDispatcher->ProcessEvents(CoreProcessEventsOption_ProcessAllIfPresent);
-                if (FAILED(hr))
-                    qErrnoWarning(hr, "Failed to process events");
-            }
-        }
-
         // Additional user events have to be handled before timer events, but the function may not
         // return yet.
         const bool userEventsSent = sendPostedEvents(flags);
 
-        emit aboutToBlock();
         const QVector<HANDLE> timerHandles = d->timerIdToHandle.values().toVector();
-        DWORD waitResult = WaitForMultipleObjectsEx(timerHandles.count(), timerHandles.constData(), FALSE, 1, TRUE);
-        if (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + timerHandles.count()) {
+        if (waitTime)
+            emit aboutToBlock();
+        bool timerEventsSent = false;
+        DWORD waitResult = WaitForMultipleObjectsEx(timerHandles.count(), timerHandles.constData(), FALSE, waitTime, TRUE);
+        while (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + timerHandles.count()) {
+            timerEventsSent = true;
             const HANDLE handle = timerHandles.value(waitResult - WAIT_OBJECT_0);
             ResetEvent(handle);
             const int timerId = d->timerHandleToId.value(handle);
@@ -221,13 +255,18 @@ bool QEventDispatcherWinRT::processEvents(QEventLoop::ProcessEventsFlags flags)
             // Update timer's targetTime
             const quint64 targetTime = qt_msectime() + info.interval;
             info.targetTime = targetTime;
-            emit awake();
-            return true;
+            waitResult = WaitForMultipleObjectsEx(timerHandles.count(), timerHandles.constData(), FALSE, 0, TRUE);
         }
         emit awake();
-
-        if (userEventsSent)
+        if (timerEventsSent || userEventsSent)
             return true;
+
+        // We cannot wait infinitely like on other platforms, as
+        // WaitForMultipleObjectsEx might not return.
+        // For instance win32 uses MsgWaitForMultipleObjects to hook
+        // into the native event loop, while WinRT handles those
+        // via callbacks.
+        waitTime = 1;
     } while (flags & QEventLoop::WaitForMoreEvents);
     return false;
 }
@@ -283,11 +322,20 @@ void QEventDispatcherWinRT::registerTimer(int timerId, int interval, Qt::TimerTy
     }
 
     TimeSpan period;
-    period.Duration = interval ? (interval * 10000) : 1; // TimeSpan is based on 100-nanosecond units
-    IThreadPoolTimer *timer;
+    // TimeSpan is based on 100-nanosecond units
+    period.Duration = qMax(qint64(1), qint64(interval) * 10000);
     const HANDLE handle = CreateEventEx(NULL, NULL, CREATE_EVENT_MANUAL_RESET, SYNCHRONIZE | EVENT_MODIFY_STATE);
     const HANDLE cancelHandle = CreateEventEx(NULL, NULL, CREATE_EVENT_MANUAL_RESET, SYNCHRONIZE|EVENT_MODIFY_STATE);
-    HRESULT hr = d->timerFactory->CreatePeriodicTimerWithCompletion(
+    HRESULT hr = runOnXamlThread([cancelHandle, handle, period]() {
+        static ComPtr<IThreadPoolTimerStatics> timerFactory;
+        HRESULT hr;
+        if (!timerFactory) {
+            hr = GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_System_Threading_ThreadPoolTimer).Get(),
+                                      &timerFactory);
+            Q_ASSERT_SUCCEEDED(hr);
+        }
+        IThreadPoolTimer *timer;
+        hr = timerFactory->CreatePeriodicTimerWithCompletion(
         Callback<ITimerElapsedHandler>([handle, cancelHandle](IThreadPoolTimer *timer) {
             DWORD cancelResult = WaitForSingleObjectEx(cancelHandle, 0, TRUE);
             if (cancelResult == WAIT_OBJECT_0) {
@@ -306,8 +354,10 @@ void QEventDispatcherWinRT::registerTimer(int timerId, int interval, Qt::TimerTy
             CloseHandle(cancelHandle);
             return S_OK;
         }).Get(), &timer);
+        RETURN_HR_IF_FAILED("Failed to create periodic timer");
+        return hr;
+    }, false);
     if (FAILED(hr)) {
-        qErrnoWarning(hr, "Failed to create periodic timer");
         CloseHandle(handle);
         CloseHandle(cancelHandle);
         return;
@@ -486,9 +536,6 @@ QEventDispatcherWinRTPrivate::QEventDispatcherWinRTPrivate()
     const bool isGuiThread = QCoreApplication::instance() &&
             QThread::currentThread() == QCoreApplication::instance()->thread();
     CoInitializeEx(NULL, isGuiThread ? COINIT_APARTMENTTHREADED : COINIT_MULTITHREADED);
-    HRESULT hr;
-    hr = GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_System_Threading_ThreadPoolTimer).Get(), &timerFactory);
-    Q_ASSERT_SUCCEEDED(hr);
     HANDLE interruptHandle = CreateEventEx(NULL, NULL, NULL, SYNCHRONIZE|EVENT_MODIFY_STATE);
     timerIdToHandle.insert(INTERRUPT_HANDLE, interruptHandle);
     timerHandleToId.insert(interruptHandle, INTERRUPT_HANDLE);

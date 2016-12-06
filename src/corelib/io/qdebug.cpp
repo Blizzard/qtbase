@@ -160,16 +160,15 @@ void QDebug::putUcs4(uint ucs4)
 {
     maybeQuote('\'');
     if (ucs4 < 0x20) {
-        stream->ts << hex << "\\x" << ucs4 << reset;
+        stream->ts << "\\x" << hex << ucs4 << reset;
     } else if (ucs4 < 0x80) {
         stream->ts << char(ucs4);
     } else {
-        stream->ts << hex << qSetPadChar(QLatin1Char('0'));
         if (ucs4 < 0x10000)
-            stream->ts << qSetFieldWidth(4) << "\\u";
+            stream->ts << "\\u" << qSetFieldWidth(4);
         else
-            stream->ts << qSetFieldWidth(8) << "\\U";
-        stream->ts << ucs4 << reset;
+            stream->ts << "\\U" << qSetFieldWidth(8);
+        stream->ts << hex << qSetPadChar(QLatin1Char('0')) << ucs4 << reset;
     }
     maybeQuote('\'');
 }
@@ -351,6 +350,7 @@ QDebug &QDebug::resetFormat()
     stream->space = true;
     if (stream->context.version > 1)
         stream->flags = 0;
+    stream->setVerbosity(Stream::defaultVerbosity);
     return *this;
 }
 
@@ -441,6 +441,32 @@ QDebug &QDebug::resetFormat()
     The default character is a double quote \c{"}.
 
     \sa quote(), noquote()
+*/
+
+/*!
+    \fn int QDebug::verbosity() const
+    \since 5.6
+
+    Returns the verbosity of the debug stream.
+
+    Streaming operators can check the value to decide whether
+    verbose output is desired and print more information depending on the
+    level. Higher values indicate that more information is desired.
+
+    The allowed range is from 0 to 7. The default value is 2.
+
+    \sa setVerbosity()
+*/
+
+/*!
+    \fn void QDebug::setVerbosity(int verbosityLevel)
+    \since 5.6
+
+    Sets the verbosity of the stream to \a verbosityLevel.
+
+    The allowed range is from 0 to 7. The default value is 2.
+
+    \sa verbosity()
 */
 
 /*!
@@ -669,8 +695,64 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \class QDebugStateSaver
+    \fn QDebug operator<<(QDebug stream, const QList<T> &list)
+    \relates QDebug
 
+    Writes the contents of \a list to \a stream. \c T needs to
+    support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QVector<T> &vector)
+    \relates QDebug
+
+    Writes the contents of \a vector to \a stream. \c T needs to
+    support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QSet<T> &set)
+    \relates QDebug
+
+    Writes the contents of \a set to \a stream. \c T needs to
+    support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QMap<Key, T> &map)
+    \relates QDebug
+
+    Writes the contents of \a map to \a stream. Both \c Key and
+    \c T need to support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QHash<Key, T> &hash)
+    \relates QDebug
+
+    Writes the contents of \a hash to \a stream. Both \c Key and
+    \c T need to support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QPair<T1, T2> &pair)
+    \relates QDebug
+
+    Writes the contents of \a pair to \a stream. Both \c T1 and
+    \c T2 need to support streaming into QDebug.
+*/
+
+/*!
+    \fn QDebug operator<<(QDebug stream, const QFlags<T> &flag)
+    \relates QDebug
+    \since 4.7
+
+    Writes \a flag to \a stream.
+*/
+
+/*!
+    \class QDebugStateSaver
+    \inmodule QtCore
     \brief Convenience class for custom QDebug operators
 
     Saves the settings used by QDebug, and restores them upon destruction,

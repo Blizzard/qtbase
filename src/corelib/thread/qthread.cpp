@@ -38,7 +38,6 @@
 #include "qabstracteventdispatcher.h"
 
 #include <qeventloop.h>
-#include <qhash.h>
 
 #include "qthread_p.h"
 #include "private/qcoreapplication_p.h"
@@ -51,7 +50,8 @@ QT_BEGIN_NAMESPACE
 
 QThreadData::QThreadData(int initialRefCount)
     : _ref(initialRefCount), loopLevel(0), thread(0), threadId(0),
-      eventDispatcher(0), quitNow(false), canWait(true), isAdopted(false)
+      eventDispatcher(0),
+      quitNow(false), canWait(true), isAdopted(false), requiresCoreApplication(true)
 {
     // fprintf(stderr, "QThreadData %p created\n", this);
 }
@@ -142,16 +142,12 @@ QThreadPrivate::QThreadPrivate(QThreadData *d)
       exited(false), returnCode(-1),
       stackSize(0), priority(QThread::InheritPriority), data(d)
 {
-#if defined (Q_OS_UNIX)
-    thread_id = 0;
-#elif defined (Q_OS_WIN)
+#if defined (Q_OS_WIN)
     handle = 0;
 #  ifndef Q_OS_WINRT
     id = 0;
 #  endif
     waiters = 0;
-#endif
-#if defined (Q_OS_WIN)
     terminationEnabled = true;
     terminatePending = false;
 #endif
@@ -303,8 +299,9 @@ QThreadPrivate::~QThreadPrivate()
     The effect of the \a priority parameter is dependent on the
     operating system's scheduling policy. In particular, the \a priority
     will be ignored on systems that do not support thread priorities
-    (such as on Linux, see http://linux.die.net/man/2/sched_setscheduler
-    for more details).
+    (such as on Linux, see the
+    \l {http://linux.die.net/man/2/sched_setscheduler}{sched_setscheduler}
+    documentation for more details).
 
     \sa run(), terminate()
 */
@@ -866,6 +863,30 @@ bool QThread::isInterruptionRequested() const
     if (!d->running || d->finished || d->isInFinish)
         return false;
     return d->interruptionRequested;
+}
+
+/*!
+    \class QDaemonThread
+    \since 5.5
+    \brief The QDaemonThread provides a class to manage threads that outlive QCoreApplication
+    \internal
+
+    Note: don't try to deliver events from the started() signal.
+*/
+static void setThreadDoesNotRequireCoreApplication()
+{
+    QThreadData::current()->requiresCoreApplication = false;
+}
+
+QDaemonThread::QDaemonThread(QObject *parent)
+    : QThread(parent)
+{
+    // QThread::started() is emitted from the thread we start
+    connect(this, &QThread::started, setThreadDoesNotRequireCoreApplication);
+}
+
+QDaemonThread::~QDaemonThread()
+{
 }
 
 QT_END_NAMESPACE

@@ -39,6 +39,9 @@
 #include <QtCore/qitemselectionmodel.h>
 #include <QtWidgets/qabstractitemdelegate.h>
 
+class tst_QAbstractItemView;
+class tst_QTreeView;
+
 QT_BEGIN_NAMESPACE
 
 
@@ -115,7 +118,7 @@ public:
     };
     Q_ENUM(ScrollMode)
 
-    explicit QAbstractItemView(QWidget *parent = 0);
+    explicit QAbstractItemView(QWidget *parent = Q_NULLPTR);
     ~QAbstractItemView();
 
     virtual void setModel(QAbstractItemModel *model);
@@ -258,7 +261,7 @@ Q_SIGNALS:
     void iconSizeChanged(const QSize &size);
 
 protected:
-    QAbstractItemView(QAbstractItemViewPrivate &, QWidget *parent = 0);
+    QAbstractItemView(QAbstractItemViewPrivate &, QWidget *parent = Q_NULLPTR);
 
     void setHorizontalStepsPerItem(int steps);
     int horizontalStepsPerItem() const;
@@ -283,7 +286,7 @@ protected:
     virtual bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event);
 
     virtual QItemSelectionModel::SelectionFlags selectionCommand(const QModelIndex &index,
-                                                                 const QEvent *event = 0) const;
+                                                                 const QEvent *event = Q_NULLPTR) const;
 
 #ifndef QT_NO_DRAGANDDROP
     virtual void startDrag(Qt::DropActions supportedActions);
@@ -359,6 +362,8 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_scrollerStateChanged())
 #endif
 
+    friend class ::tst_QAbstractItemView;
+    friend class ::tst_QTreeView;
     friend class QTreeViewPrivate; // needed to compile with MSVC
     friend class QListModeViewBase;
     friend class QListViewPrivate;

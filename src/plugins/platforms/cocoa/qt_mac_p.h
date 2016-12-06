@@ -58,6 +58,7 @@
 #include "QtCore/qvariant.h"
 #include "QtCore/qmimedata.h"
 #include "QtCore/qpointer.h"
+#include "QtCore/qloggingcategory.h"
 #include "private/qcore_mac_p.h"
 
 
@@ -101,17 +102,6 @@ public:
     operator RgnHandle() {
         return qdRgn;
     }
-};
-
-class Q_WIDGETS_EXPORT QMacCocoaAutoReleasePool
-{
-private:
-    void *pool;
-public:
-    QMacCocoaAutoReleasePool();
-    ~QMacCocoaAutoReleasePool();
-
-    inline void *handle() const { return pool; }
 };
 
 QString qt_mac_removeMnemonics(const QString &original); //implemented in qmacstyle_mac.cpp

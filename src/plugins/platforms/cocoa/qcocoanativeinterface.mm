@@ -58,6 +58,8 @@
 #include <qpa/qplatformprintersupport.h>
 #endif
 
+#include <QtPlatformHeaders/qcocoawindowfunctions.h>
+
 #include <Cocoa/Cocoa.h>
 
 QT_BEGIN_NAMESPACE
@@ -160,6 +162,7 @@ void *QCocoaNativeInterface::NSPrintInfoForPrintEngine(QPrintEngine *printEngine
         macPrintEnginePriv->initialize();
     return macPrintEnginePriv->printInfo;
 #else
+    Q_UNUSED(printEngine);
     qFatal("Printing is not supported when Qt is configured with -no-widgets");
     return 0;
 #endif
@@ -217,6 +220,14 @@ void *QCocoaNativeInterface::nsOpenGLContextForContext(QOpenGLContext* context)
 }
 #endif
 
+QFunctionPointer QCocoaNativeInterface::platformFunction(const QByteArray &function) const
+{
+    if (function == QCocoaWindowFunctions::bottomLeftClippedByNSWindowOffsetIdentifier())
+        return QFunctionPointer(QCocoaWindowFunctions::BottomLeftClippedByNSWindowOffset(QCocoaWindow::bottomLeftClippedByNSWindowOffsetStatic));
+
+    return Q_NULLPTR;
+}
+
 void QCocoaNativeInterface::addToMimeList(void *macPasteboardMime)
 {
     qt_mac_addToGlobalMimeList(reinterpret_cast<QMacInternalPasteboardMime *>(macPasteboardMime));
@@ -234,7 +245,7 @@ void QCocoaNativeInterface::registerDraggedTypes(const QStringList &types)
 
 void QCocoaNativeInterface::setDockMenu(QPlatformMenu *platformMenu)
 {
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
     QCocoaMenu *cocoaPlatformMenu = static_cast<QCocoaMenu *>(platformMenu);
     NSMenu *menu = cocoaPlatformMenu->nsMenu();
     [NSApp QT_MANGLE_NAMESPACE(qt_setDockMenu): menu];

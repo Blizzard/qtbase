@@ -10,6 +10,8 @@ SOURCES       = iconpreviewarea.cpp \
                 main.cpp \
                 mainwindow.cpp
 
+DEFINES += SRCDIR=\\\"$$PWD/\\\"
+
 EXAMPLE_FILES = images/*
 
 # install
@@ -24,5 +26,5 @@ wince {
     } else {
         imageFiles.path    = images
     }
-    DEPLOYMENT += imageFiles
+    INSTALLS += imageFiles
 }

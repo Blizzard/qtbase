@@ -885,7 +885,8 @@ void QWidgetTextControl::setTextCursor(const QTextCursor &cursor)
     const bool posChanged = cursor.position() != d->cursor.position();
     const QTextCursor oldSelection = d->cursor;
     d->cursor = cursor;
-    d->cursorOn = d->hasFocus && (d->interactionFlags & Qt::TextEditable);
+    d->cursorOn = d->hasFocus
+            && (d->interactionFlags & (Qt::TextSelectableByKeyboard | Qt::TextEditable));
     d->_q_updateCurrentCharFormatAndSelection();
     ensureCursorVisible();
     d->repaintOldAndNewSelection(oldSelection);
@@ -2030,7 +2031,8 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
     QTextLayout *layout = block.layout();
     if (isGettingInput)
         layout->setPreeditArea(cursor.position() - block.position(), e->preeditString());
-    QList<QTextLayout::FormatRange> overrides;
+    QVector<QTextLayout::FormatRange> overrides;
+    overrides.reserve(e->attributes().size());
     const int oldPreeditCursor = preeditCursor;
     preeditCursor = e->preeditString().length();
     hideCursor = false;
@@ -2050,7 +2052,7 @@ void QWidgetTextControlPrivate::inputMethodEvent(QInputMethodEvent *e)
             }
         }
     }
-    layout->setAdditionalFormats(overrides);
+    layout->setFormats(overrides);
 
     cursor.endEditBlock();
 
@@ -2140,7 +2142,7 @@ void QWidgetTextControlPrivate::focusEvent(QFocusEvent *e)
 #ifdef QT_KEYPAD_NAVIGATION
         if (!QApplication::keypadNavigationEnabled() || (hasEditFocus && (e->reason() == Qt::PopupFocusReason))) {
 #endif
-        cursorOn = (interactionFlags & Qt::TextSelectableByKeyboard);
+        cursorOn = (interactionFlags & (Qt::TextSelectableByKeyboard | Qt::TextEditable));
         if (interactionFlags & Qt::TextEditable) {
             setBlinkingCursorEnabled(true);
         }
@@ -2456,10 +2458,13 @@ QList<QTextEdit::ExtraSelection> QWidgetTextControl::extraSelections() const
 {
     Q_D(const QWidgetTextControl);
     QList<QTextEdit::ExtraSelection> selections;
-    for (int i = 0; i < d->extraSelections.count(); ++i) {
+    const int numExtraSelections = d->extraSelections.count();
+    selections.reserve(numExtraSelections);
+    for (int i = 0; i < numExtraSelections; ++i) {
         QTextEdit::ExtraSelection sel;
-        sel.cursor = d->extraSelections.at(i).cursor;
-        sel.format = d->extraSelections.at(i).format;
+        const QAbstractTextDocumentLayout::Selection &sel2 = d->extraSelections.at(i);
+        sel.cursor = sel2.cursor;
+        sel.format = sel2.format;
         selections.append(sel);
     }
     return selections;
@@ -2896,7 +2901,7 @@ void QWidgetTextControlPrivate::commitPreedit()
     QTextBlock block = cursor.block();
     QTextLayout *layout = block.layout();
     layout->setPreeditArea(-1, QString());
-    layout->clearAdditionalFormats();
+    layout->clearFormats();
     cursor.endEditBlock();
 }
 

@@ -161,6 +161,7 @@ private slots:
     void taskQTBUG2844_visualItemRect();
     void setChildIndicatorPolicy();
 
+    void taskQTBUG_34717_collapseAtBottom();
     void task20345_sortChildren();
     void getMimeDataWithInvalidItem();
 
@@ -1037,7 +1038,7 @@ void tst_QTreeWidget::checkState()
     QCOMPARE(firstChild->checkState(0), Qt::Checked);
     QCOMPARE(seccondChild->checkState(0), Qt::Unchecked);
 
-    item->setFlags(item->flags()|Qt::ItemIsTristate);
+    item->setFlags(item->flags()|Qt::ItemIsAutoTristate);
     QCOMPARE(item->checkState(0), Qt::PartiallyChecked);
     QCOMPARE(firstChild->checkState(0), Qt::Checked);
     QCOMPARE(seccondChild->checkState(0), Qt::Unchecked);
@@ -1586,7 +1587,7 @@ void tst_QTreeWidget::scrollToItem()
 
     testWidget->setHeaderLabels(QStringList() << "foo");
     testWidget->scrollToItem(search);
-    QVERIFY(search->text(0) == "111");
+    QCOMPARE(search->text(0), QLatin1String("111"));
 
     bar = search->parent();
     QVERIFY(testWidget->isItemExpanded(bar));
@@ -2287,7 +2288,7 @@ void tst_QTreeWidget::insertExpandedItemsWithSorting()
         QCOMPARE(parent->childCount(), childText.count());
         QVERIFY(parent->isExpanded());
     }
-    QVERIFY(tree.model()->rowCount() == parentText.count());
+    QCOMPARE(tree.model()->rowCount(), parentText.count());
 
     // verify that the items are still expanded
     foreach (QTreeWidgetItem *item, items) {
@@ -2659,7 +2660,7 @@ void tst_QTreeWidget::sortedIndexOfChild()
     tw.sortItems(0, (Qt::SortOrder)sortOrder);
     tw.expandAll();
 
-    QVERIFY(itms.count() == expectedIndexes.count());
+    QCOMPARE(itms.count(), expectedIndexes.count());
     for (int j = 0; j < expectedIndexes.count(); ++j)
         QCOMPARE(top->indexOfChild(itms.at(j)), expectedIndexes.at(j));
 }
@@ -3155,11 +3156,11 @@ void tst_QTreeWidget::setSelectionModel()
 void tst_QTreeWidget::task217309()
 {
     QTreeWidgetItem item;
-    item.setFlags(item.flags() | Qt::ItemIsTristate);
+    item.setFlags(item.flags() | Qt::ItemIsAutoTristate);
     QTreeWidgetItem subitem1;
-    subitem1.setFlags(subitem1.flags() | Qt::ItemIsTristate);
+    subitem1.setFlags(subitem1.flags() | Qt::ItemIsAutoTristate);
     QTreeWidgetItem subitem2;
-    subitem2.setFlags(subitem2.flags() | Qt::ItemIsTristate);
+    subitem2.setFlags(subitem2.flags() | Qt::ItemIsAutoTristate);
     item.addChild(&subitem1);
     item.addChild(&subitem2);
     subitem1.setCheckState(0, Qt::Checked);
@@ -3180,7 +3181,7 @@ void tst_QTreeWidget::nonEditableTristate()
     QTreeWidget *tree = new QTreeWidget;
     QTreeWidgetItem *item = new QTreeWidgetItem();
     tree->insertTopLevelItem(0, item);
-    item->setFlags(item->flags() | Qt::ItemIsTristate);
+    item->setFlags(item->flags() | Qt::ItemIsAutoTristate);
     item->setCheckState(0, Qt::Unchecked);
     QTreeWidgetItem *subitem1 = new QTreeWidgetItem(item);
     subitem1->setCheckState(0, Qt::Unchecked);
@@ -3235,7 +3236,7 @@ void tst_QTreeWidget::setCurrentItemExpandsParent()
     QTreeWidgetItem *i1 = new QTreeWidgetItem(&w, QStringList() << "parent");
     QTreeWidgetItem *i2 = new QTreeWidgetItem(i1, QStringList() << "child");
     QVERIFY(!i2->isExpanded());
-    QVERIFY(w.currentItem() == 0);
+    QVERIFY(!w.currentItem());
     w.setCurrentItem(i2);
     QVERIFY(!i2->isExpanded());
     QCOMPARE(w.currentItem(), i2);
@@ -3378,9 +3379,41 @@ void tst_QTreeWidget::setChildIndicatorPolicy()
     QTRY_COMPARE(delegate.numPaints, 1);
 }
 
+// From QTBUG_34717 (QTreeWidget crashes when scrolling to the end
+// of an expanded tree, then collapse all)
+// The test passes simply if it doesn't crash.
+void tst_QTreeWidget::taskQTBUG_34717_collapseAtBottom()
+{
+    struct PublicTreeWidget: public QTreeWidget
+    {
+        inline int sizeHintForColumn(int column) const { return QTreeWidget::sizeHintForColumn(column); }
+    };
+    PublicTreeWidget treeWidget;
+    treeWidget.header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    treeWidget.setColumnCount(2);
+    QTreeWidgetItem *mainItem = new QTreeWidgetItem(&treeWidget, QStringList() << "Root");
+    for (int i = 0; i < 200; ++i) {
+        QTreeWidgetItem *item = new QTreeWidgetItem(mainItem, QStringList(QString("Item")));
+        new QTreeWidgetItem(item, QStringList() << "Child" << "1");
+        new QTreeWidgetItem(item, QStringList() << "Child" << "2");
+        new QTreeWidgetItem(item, QStringList() << "Child" << "3");
+    }
+    treeWidget.show();
+    treeWidget.expandAll();
+    treeWidget.scrollToBottom();
+    treeWidget.collapseAll();
+
+    treeWidget.setAnimated(true);
+    treeWidget.expandAll();
+    treeWidget.scrollToBottom();
+    mainItem->setExpanded(false);
+
+    QVERIFY(treeWidget.sizeHintForColumn(1) >= 0);
+}
+
 void tst_QTreeWidget::task20345_sortChildren()
 {
-    if (qApp->platformName().toLower() == QLatin1String("wayland"))
+    if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This causes a crash triggered by setVisible(false)");
 
     // This test case is considered successful if it is executed (no crash in sorting)

@@ -37,7 +37,6 @@
 #include "qcocoamenubar.h"
 #include "messages.h"
 #include "qcocoahelpers.h"
-#include "qcocoaautoreleasepool.h"
 #include "qt_mac_p.h"
 #include "qcocoaapplication.h" // for custom application category
 #include "qcocoamenuloader.h"
@@ -89,28 +88,31 @@ NSUInteger keySequenceModifierMask(const QKeySequence &accel)
 QCocoaMenuItem::QCocoaMenuItem() :
     m_native(NULL),
     m_itemView(nil),
-    m_textSynced(false),
     m_menu(NULL),
+    m_role(NoRole),
+    m_tag(0),
+    m_iconSize(16),
+    m_textSynced(false),
     m_isVisible(true),
     m_enabled(true),
+    m_parentEnabled(true),
     m_isSeparator(false),
-    m_role(NoRole),
     m_checked(false),
-    m_merged(false),
-    m_tag(0),
-    m_iconSize(16)
+    m_merged(false)
 {
 }
 
 QCocoaMenuItem::~QCocoaMenuItem()
 {
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
 
-    if (m_menu && COCOA_MENU_ANCESTOR(m_menu) == this)
-        SET_COCOA_MENU_ANCESTOR(m_menu, 0);
+    if (m_menu && m_menu->menuParent() == this)
+        m_menu->setMenuParent(0);
     if (m_merged) {
         [m_native setHidden:YES];
     } else {
+        if (m_menu && m_menu->attachedItem() == m_native)
+            m_menu->setAttachedItem(nil);
         [m_native release];
     }
 
@@ -132,30 +134,29 @@ void QCocoaMenuItem::setMenu(QPlatformMenu *menu)
     if (menu == m_menu)
         return;
 
-    if (m_menu) {
-        if (COCOA_MENU_ANCESTOR(m_menu) == this)
-            SET_COCOA_MENU_ANCESTOR(m_menu, 0);
-        if (m_menu->containingMenuItem() == this)
-            m_menu->setContainingMenuItem(0);
+    if (m_menu && m_menu->menuParent() == this) {
+        m_menu->setMenuParent(0);
+        // Free the menu from its parent's influence
+        m_menu->propagateEnabledState(true);
+        if (m_native && m_menu->attachedItem() == m_native)
+            m_menu->setAttachedItem(nil);
     }
 
-    QCocoaAutoReleasePool pool;
+    QMacAutoReleasePool pool;
     m_menu = static_cast<QCocoaMenu *>(menu);
     if (m_menu) {
-        SET_COCOA_MENU_ANCESTOR(m_menu, this);
-        m_menu->setContainingMenuItem(this);
+        if (m_native) {
+            // Skip automatic menu item validation
+            m_native.action = nil;
+        }
+        m_menu->setMenuParent(this);
+        m_menu->propagateEnabledState(isEnabled());
     } else {
         // we previously had a menu, but no longer
         // clear out our item so the nexy sync() call builds a new one
         [m_native release];
         m_native = nil;
     }
-}
-
-void QCocoaMenuItem::clearMenu(QCocoaMenu *menu)
-{
-    if (menu == m_menu)
-        m_menu = 0;
 }
 
 void QCocoaMenuItem::setVisible(bool isVisible)
@@ -192,12 +193,18 @@ void QCocoaMenuItem::setChecked(bool isChecked)
 
 void QCocoaMenuItem::setEnabled(bool enabled)
 {
-    m_enabled = enabled;
+    if (m_enabled != enabled) {
+        m_enabled = enabled;
+        if (m_menu)
+            m_menu->propagateEnabledState(isEnabled());
+    }
 }
 
 void QCocoaMenuItem::setNativeContents(WId item)
 {
     NSView *itemView = (NSView *)item;
+    if (m_itemView == itemView)
+        return;
     [m_itemView release];
     m_itemView = [itemView retain];
     [m_itemView setAutoresizesSubviews:YES];
@@ -215,14 +222,6 @@ NSMenuItem *QCocoaMenuItem::sync()
             [m_native setTag:reinterpret_cast<NSInteger>(this)];
         } else
             m_native = nil;
-    }
-
-    if (m_menu) {
-        if (m_native != m_menu->nsMenuItem()) {
-            [m_native release];
-            m_native = [m_menu->nsMenuItem() retain];
-            [m_native setTag:reinterpret_cast<NSInteger>(this)];
-        }
     }
 
     if ((m_role != NoRole && !m_textSynced) || m_merged) {
@@ -245,12 +244,14 @@ NSMenuItem *QCocoaMenuItem::sync()
             mergeItem = [loader preferencesMenuItem];
             break;
         case TextHeuristicRole: {
-            QObject *p = COCOA_MENU_ANCESTOR(this);
+            QObject *p = menuParent();
             int depth = 1;
             QCocoaMenuBar *menubar = 0;
             while (depth < 3 && p && !(menubar = qobject_cast<QCocoaMenuBar *>(p))) {
                 ++depth;
-                p = COCOA_MENU_ANCESTOR(p);
+                QCocoaMenuObject *menuObject = dynamic_cast<QCocoaMenuObject *>(p);
+                Q_ASSERT(menuObject);
+                p = menuObject->menuParent();
             }
             if (depth == 3 || !menubar)
                 break; // Menu item too deep in the hierarchy, or not connected to any menubar
@@ -280,7 +281,7 @@ NSMenuItem *QCocoaMenuItem::sync()
         }
 
         default:
-            qWarning() << Q_FUNC_INFO << "menu item" << m_text << "has unsupported role" << (int)m_role;
+            qWarning() << "menu item" << m_text << "has unsupported role" << (int)m_role;
         }
 
         if (mergeItem) {
@@ -302,8 +303,8 @@ NSMenuItem *QCocoaMenuItem::sync()
 
     if (!m_native) {
         m_native = [[NSMenuItem alloc] initWithTitle:QCFString::toNSString(m_text)
-            action:nil
-                keyEquivalent:@""];
+                                       action:nil
+                                       keyEquivalent:@""];
         [m_native setTag:reinterpret_cast<NSInteger>(this)];
     }
 
@@ -397,19 +398,20 @@ QKeySequence QCocoaMenuItem::mergeAccel()
 void QCocoaMenuItem::syncMerged()
 {
     if (!m_merged) {
-        qWarning() << Q_FUNC_INFO << "Trying to sync a non-merged item";
+        qWarning("Trying to sync a non-merged item");
         return;
     }
     [m_native setTag:reinterpret_cast<NSInteger>(this)];
     [m_native setHidden: !m_isVisible];
 }
 
-void QCocoaMenuItem::syncModalState(bool modal)
+void QCocoaMenuItem::setParentEnabled(bool enabled)
 {
-    if (modal)
-        [m_native setEnabled:NO];
-    else
-        [m_native setEnabled:YES];
+    if (m_parentEnabled != enabled) {
+        m_parentEnabled = enabled;
+        if (m_menu)
+            m_menu->propagateEnabledState(isEnabled());
+    }
 }
 
 QPlatformMenuItem::MenuRole QCocoaMenuItem::effectiveRole() const

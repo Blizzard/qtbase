@@ -117,6 +117,7 @@ private slots:
 //     void check_mouse2();
 
     void check_altPress();
+    void check_altClosePress();
 #if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
     void check_shortcutPress();
     void check_menuPosition();
@@ -131,10 +132,12 @@ private slots:
     void closeOnSecondClickAndOpenOnThirdClick();
     void cornerWidgets_data();
     void cornerWidgets();
+    void taskQTBUG53205_crashReparentNested();
 
 protected slots:
     void onSimpleActivated( QAction*);
     void onComplexActionTriggered();
+    void slotForTaskQTBUG53205();
 
 private:
     TestMenu initSimpleMenuBar(QMenuBar *mb);
@@ -146,7 +149,8 @@ private:
 
     QAction* m_lastSimpleAcceleratorId;
     int m_simpleActivatedCount;
-    int m_complexTriggerCount['k'];
+    int m_complexTriggerCount[int('k')];
+    QMenuBar* taskQTBUG53205MenuBar;
 };
 
 // Testing get/set functions
@@ -534,60 +538,60 @@ void tst_QMenuBar::check_accelKeys()
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_A, Qt::ControlModifier);
     QCOMPARE(m_complexTriggerCount[1], 0);
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 1);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 1);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_C, Qt::ControlModifier);
     QCOMPARE(m_complexTriggerCount[1], 0);
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 1);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['c'], 1);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 1);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('c')], 1);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_B, Qt::ControlModifier);
     QCOMPARE(m_complexTriggerCount[1], 0);
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 1);
-    QCOMPARE(m_complexTriggerCount['b'], 1);
-    QCOMPARE(m_complexTriggerCount['c'], 1);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 1);
+    QCOMPARE(m_complexTriggerCount[int('b')], 1);
+    QCOMPARE(m_complexTriggerCount[int('c')], 1);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_D, Qt::ControlModifier);
     QCOMPARE(m_complexTriggerCount[1], 0);
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 1);
-    QCOMPARE(m_complexTriggerCount['b'], 1);
-    QCOMPARE(m_complexTriggerCount['c'], 1);
-    QCOMPARE(m_complexTriggerCount['d'], 1);
+    QCOMPARE(m_complexTriggerCount[int('a')], 1);
+    QCOMPARE(m_complexTriggerCount[int('b')], 1);
+    QCOMPARE(m_complexTriggerCount[int('c')], 1);
+    QCOMPARE(m_complexTriggerCount[int('d')], 1);
 
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_J, Qt::AltModifier);
     QCOMPARE(m_complexTriggerCount[1], 0);
     QCOMPARE(m_complexTriggerCount[2], 0);
     QCOMPARE(m_complexTriggerCount[3], 1);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 1);
-    QCOMPARE(m_complexTriggerCount['b'], 1);
-    QCOMPARE(m_complexTriggerCount['c'], 1);
-    QCOMPARE(m_complexTriggerCount['d'], 1);
+    QCOMPARE(m_complexTriggerCount[int('a')], 1);
+    QCOMPARE(m_complexTriggerCount[int('b')], 1);
+    QCOMPARE(m_complexTriggerCount[int('c')], 1);
+    QCOMPARE(m_complexTriggerCount[int('d')], 1);
 }
 #endif
 
@@ -606,10 +610,10 @@ void tst_QMenuBar::check_cursorKeys1()
     // the Popupmenu should be visible now
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 
     // Simulate a cursor key down click
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_Down );
@@ -618,10 +622,10 @@ void tst_QMenuBar::check_cursorKeys1()
     // Let's see if the correct slot is called...
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0); // this shouldn't have been called
-    QCOMPARE(m_complexTriggerCount['b'], 1); // and this should have been called by a signal now
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0); // this shouldn't have been called
+    QCOMPARE(m_complexTriggerCount[int('b')], 1); // and this should have been called by a signal now
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 }
 #endif
 
@@ -648,10 +652,10 @@ void tst_QMenuBar::check_cursorKeys2()
     // Let's see if the correct slot is called...
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0); // this shouldn't have been caled
-    QCOMPARE(m_complexTriggerCount['b'], 0); // and this should have been called by a signal ow
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 1);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0); // this shouldn't have been caled
+    QCOMPARE(m_complexTriggerCount[int('b')], 0); // and this should have been called by a signal ow
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 1);
 }
 #endif
 
@@ -679,10 +683,10 @@ void tst_QMenuBar::check_cursorKeys3()
     // Let's see if the correct slot is called...
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0); // this shouldn't have been called
-    QCOMPARE(m_complexTriggerCount['b'], 1); // and this should have been called by a signal now
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0); // this shouldn't have been called
+    QCOMPARE(m_complexTriggerCount[int('b')], 1); // and this should have been called by a signal now
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
 }
 #endif
 
@@ -715,17 +719,17 @@ void tst_QMenuBar::check_homeKey()
     // and press ENTER
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_Enter );
     // Let's see if the correct slot is called...
-//    QVERIFY2( m_complexActionTriggerCount['c'] == 1, "Popupmenu should respond to a Home key" );
-    QCOMPARE(m_complexTriggerCount['c'], 1);
+//    QVERIFY2( m_complexActionTriggerCount[int('c')] == 1, "Popupmenu should respond to a Home key" );
+    QCOMPARE(m_complexTriggerCount[int('c')], 1);
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
-    QCOMPARE(m_complexTriggerCount['e'], 0);
-    QCOMPARE(m_complexTriggerCount['f'], 0);
-    QCOMPARE(m_complexTriggerCount['g'], 0);
-    QCOMPARE(m_complexTriggerCount['h'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
+    QCOMPARE(m_complexTriggerCount[int('e')], 0);
+    QCOMPARE(m_complexTriggerCount[int('f')], 0);
+    QCOMPARE(m_complexTriggerCount[int('g')], 0);
+    QCOMPARE(m_complexTriggerCount[int('h')], 0);
 }
 
 /*!
@@ -754,17 +758,17 @@ void tst_QMenuBar::check_endKey()
     // and press ENTER
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_Enter );
     // Let's see if the correct slot is called...
-//    QVERIFY2( m_complexActionTriggerCount['h'] == 1, "Popupmenu should respond to an End key" );
-    QCOMPARE(m_complexTriggerCount['h'], 1);//, "Popupmenu should respond to an End key");
+//    QVERIFY2( m_complexActionTriggerCount[int('h')] == 1, "Popupmenu should respond to an End key" );
+    QCOMPARE(m_complexTriggerCount[int('h')], 1);//, "Popupmenu should respond to an End key");
     QCOMPARE(m_complexTriggerCount[3], 0);
     QCOMPARE(m_complexTriggerCount[4], 0);
-    QCOMPARE(m_complexTriggerCount['a'], 0);
-    QCOMPARE(m_complexTriggerCount['b'], 0);
-    QCOMPARE(m_complexTriggerCount['c'], 0);
-    QCOMPARE(m_complexTriggerCount['d'], 0);
-    QCOMPARE(m_complexTriggerCount['e'], 0);
-    QCOMPARE(m_complexTriggerCount['f'], 0);
-    QCOMPARE(m_complexTriggerCount['g'], 0);
+    QCOMPARE(m_complexTriggerCount[int('a')], 0);
+    QCOMPARE(m_complexTriggerCount[int('b')], 0);
+    QCOMPARE(m_complexTriggerCount[int('c')], 0);
+    QCOMPARE(m_complexTriggerCount[int('d')], 0);
+    QCOMPARE(m_complexTriggerCount[int('e')], 0);
+    QCOMPARE(m_complexTriggerCount[int('f')], 0);
+    QCOMPARE(m_complexTriggerCount[int('g')], 0);
 }
 
 /*!
@@ -808,7 +812,7 @@ void tst_QMenuBar::check_escKey()
     // and press ENTER
     QTest::keyClick( menu.menus.at(1), Qt::Key_Enter );
     // Let's see if the correct slot is called...
-    QVERIFY2( m_complexTriggerCount['c'] == 1, "Expected item 2C to be selected" );
+    QVERIFY2(m_complexTriggerCount[int('c')] == 1, "Expected item 2C to be selected");
 }
 #endif
 
@@ -976,6 +980,35 @@ void tst_QMenuBar::check_altPress()
 
     QTest::keyClick( &w, Qt::Key_Alt );
     QTRY_VERIFY( ::qobject_cast<QMenuBar *>(qApp->focusWidget()) );
+}
+
+// QTBUG-47377: Pressing 'Alt' after opening a menu by pressing 'Alt+Accelerator'
+// should close it and QMenuBar::activeAction() should be 0.
+void tst_QMenuBar::check_altClosePress()
+{
+    const QStyle *style = QApplication::style();
+    if (!style->styleHint(QStyle::SH_MenuBar_AltKeyNavigation) ) {
+        QSKIP(("This test is not supposed to work in the " + style->objectName().toLatin1()
+               + " style. Skipping.").constData());
+    }
+
+    QMainWindow w;
+    w.setWindowTitle(QTest::currentTestFunction());
+    QMenu *menuFile = w.menuBar()->addMenu(tr("&File"));
+    menuFile->addAction("Quit");
+    QMenu *menuEdit = w.menuBar()->addMenu(tr("&Edit"));
+    menuEdit->addAction("Copy");
+
+    w.show();
+    w.move(QGuiApplication::primaryScreen()->availableGeometry().center());
+    QApplication::setActiveWindow(&w);
+    QVERIFY(QTest::qWaitForWindowActive(&w));
+
+    QTest::keyClick(&w, Qt::Key_F, Qt::AltModifier);
+    QTRY_VERIFY(menuFile->isVisible());
+    QTest::keyClick(menuFile, Qt::Key_Alt, Qt::AltModifier);
+    QTRY_VERIFY(!menuFile->isVisible());
+    QTRY_VERIFY(!w.menuBar()->activeAction());
 }
 
 // Qt/Mac,WinCE does not use the native popups/menubar
@@ -1407,6 +1440,62 @@ void tst_QMenuBar::cornerWidgets()
     QVERIFY(!menuBar->cornerWidget(corner));
     delete cornerLabel;
 }
+
+
+void tst_QMenuBar::taskQTBUG53205_crashReparentNested()
+{
+    // This test was largely inspired by the test case submitted for the bug
+    QMainWindow mainWindow;
+    mainWindow.resize(300, 200);
+    centerOnScreen(&mainWindow);
+    const TestMenu testMenus = initWindowWithComplexMenuBar(mainWindow);
+    QApplication::setActiveWindow(&mainWindow);
+
+    // they can't be windows
+    QWidget hiddenParent(&mainWindow, 0);
+    //this one is going to be moved around
+    QWidget movingParent(&hiddenParent, 0);
+
+    //set up the container widget
+    QWidget containerWidget(&movingParent,0);
+
+    //set the new parent, a window
+    QScopedPointer<QWidget> windowedParent;
+    windowedParent.reset(new QWidget(Q_NULLPTR, Qt::WindowFlags()));
+    windowedParent->setGeometry(400, 10, 300, 300);
+
+    windowedParent->show();
+    QVERIFY(QTest::qWaitForWindowExposed(windowedParent.data()));
+
+    //set the "container", can't be a window
+    QWidget containedWidget(&containerWidget, 0);
+
+    taskQTBUG53205MenuBar = new QMenuBar(&containedWidget);
+
+    connect(testMenus.actions[0], &QAction::triggered, this, &tst_QMenuBar::slotForTaskQTBUG53205);
+    //now, move things around
+    //from : QMainWindow<-hiddenParent<-movingParent<-containerWidget<-containedWidget<-menuBar
+    //to windowedParent<-movingParent<-containerWidget<-containedWidget<-menuBar
+    movingParent.setParent(windowedParent.data(),0);
+    // this resets the parenting and the menu bar's window
+    taskQTBUG53205MenuBar->setParent(Q_NULLPTR);
+    taskQTBUG53205MenuBar->setParent(&containedWidget);
+    //from windowedParent<-movingParent<-containerWidget<-containedWidget<-menuBar
+    //to : QMainWindow<-hiddenParent<-movingParent<-containerWidget<-containedWidget<-menuBar
+    movingParent.setParent(&hiddenParent,0);
+    windowedParent.reset(); //make the old window invalid
+    // trigger the aciton,  reset the menu bar's window, this used to crash here.
+    testMenus.actions[0]->trigger();
+}
+
+void tst_QMenuBar::slotForTaskQTBUG53205()
+{
+    QWidget *parent = taskQTBUG53205MenuBar->parentWidget();
+    taskQTBUG53205MenuBar->setParent(Q_NULLPTR);
+    taskQTBUG53205MenuBar->setParent(parent);
+}
+
+
 
 QTEST_MAIN(tst_QMenuBar)
 #include "tst_qmenubar.moc"

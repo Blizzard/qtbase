@@ -80,6 +80,15 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
 
     \snippet qloggingcategory/main.cpp 1
 
+    \note Category names are free text. However, to allow easy configuration
+    of the categories using \l{Logging Rules} the names should follow some rules:
+    \list
+       \li Use letters and numbers only.
+       \li Further structure categories into common areas by using dots.
+       \li Avoid the category names \c{debug}, \c{info}, \c{warning}, and \c{critical}.
+       \li Category names starting with \c{qt} are reserved for Qt modules.
+    \endlist
+
     \section1 Checking Category Configuration
 
     QLoggingCategory provides \l isDebugEnabled(), \l isInfoEnabled(),
@@ -147,8 +156,17 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     \c QT_LOGGING_CONF, and rules set by \c QT_LOGGING_RULES.
 
 
+    Since Qt 5.6, \c QT_LOGGING_RULES may contain multiple rules separated
+    by semicolons:
+
+    \code
+    QT_LOGGING_RULES="*.debug=false;driver.usb.debug=true"
+    \endcode
+
+
     Order of evaluation:
     \list
+    \li [QLibraryInfo::DataPath]/qtlogging.ini
     \li QtProject/qtlogging.ini
     \li \l setFilterRules()
     \li \c QT_LOGGING_CONF
@@ -159,7 +177,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     by QStandardPaths::GenericConfigLocation, e.g.
 
     \list
-    \li on OS X and iOS: \c ~/Library/Preferences
+    \li on \macos and iOS: \c ~/Library/Preferences
     \li on Unix: \c ~/.config, \c /etc/xdg
     \li on Windows: \c %LOCALAPPDATA%, \c %ProgramData%,
         \l QCoreApplication::applicationDirPath(),

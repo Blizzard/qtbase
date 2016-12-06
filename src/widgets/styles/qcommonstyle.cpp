@@ -80,6 +80,11 @@
 
 QT_BEGIN_NAMESPACE
 
+static QWindow *qt_getWindow(const QWidget *widget)
+{
+    return widget ? widget->window()->windowHandle() : 0;
+}
+
 /*!
     \class QCommonStyle
     \brief The QCommonStyle class encapsulates the common Look and Feel of a GUI.
@@ -260,8 +265,8 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
     case PE_IndicatorProgressChunk:
         {
             bool vertical = false;
-            if (const QStyleOptionProgressBarV2 *pb2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt))
-                vertical = (pb2->orientation == Qt::Vertical);
+            if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt))
+                vertical = pb->orientation == Qt::Vertical;
             if (!vertical) {
                 p->fillRect(opt->rect.x(), opt->rect.y() + 3, opt->rect.width() -2, opt->rect.height() - 6,
                             opt->palette.brush(QPalette::Highlight));
@@ -395,7 +400,7 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
             mode = QIcon::Disabled;
 
         QIcon::State state = opt->state & State_Sunken ? QIcon::On : QIcon::Off;
-        QPixmap pixmap = d->tabBarcloseButtonIcon.pixmap(size, mode, state);
+        QPixmap pixmap = d->tabBarcloseButtonIcon.pixmap(qt_getWindow(widget), QSize(size, size), mode, state);
         proxy()->drawItemPixmap(p, opt->rect, Qt::AlignCenter, pixmap);
         break;
     }
@@ -779,10 +784,8 @@ static void drawArrow(const QStyle *style, const QStyleOptionToolButton *toolbut
     default:
         return;
     }
-    QStyleOption arrowOpt;
+    QStyleOption arrowOpt = *toolbutton;
     arrowOpt.rect = rect;
-    arrowOpt.palette = toolbutton->palette;
-    arrowOpt.state = toolbutton->state;
     style->drawPrimitive(pe, &arrowOpt, painter, widget);
 }
 #endif // QT_NO_TOOLBUTTON
@@ -1067,7 +1070,7 @@ void QCommonStylePrivate::viewItemLayout(const QStyleOptionViewItem *opt,  QRect
 
     Uses the same computation than in QTabBar::tabSizeHint
  */
-void QCommonStylePrivate::tabLayout(const QStyleOptionTabV3 *opt, const QWidget *widget, QRect *textRect, QRect *iconRect) const
+void QCommonStylePrivate::tabLayout(const QStyleOptionTab *opt, const QWidget *widget, QRect *textRect, QRect *iconRect) const
 {
     Q_ASSERT(textRect);
     Q_ASSERT(iconRect);
@@ -1237,7 +1240,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 if (button->state & State_On)
                     state = QIcon::On;
 
-                QPixmap pixmap = button->icon.pixmap(button->iconSize, mode, state);
+                QPixmap pixmap = button->icon.pixmap(qt_getWindow(widget), button->iconSize, mode, state);
 
                 int pixmapWidth = pixmap.width() / pixmap.devicePixelRatio();
                 int pixmapHeight = pixmap.height() / pixmap.devicePixelRatio();
@@ -1314,7 +1317,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             QPixmap pix;
             QRect textRect = btn->rect;
             if (!btn->icon.isNull()) {
-                pix = btn->icon.pixmap(btn->iconSize, btn->state & State_Enabled ? QIcon::Normal : QIcon::Disabled);
+                pix = btn->icon.pixmap(qt_getWindow(widget), btn->iconSize, btn->state & State_Enabled ? QIcon::Normal : QIcon::Disabled);
                 proxy()->drawItemPixmap(p, btn->rect, alignment, pix);
                 if (btn->direction == Qt::RightToLeft)
                     textRect.setRight(textRect.right() - btn->iconSize.width() - 4);
@@ -1355,7 +1358,8 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                             | Qt::TextSingleLine;
             if (!proxy()->styleHint(SH_UnderlineShortcut, mbi, widget))
                 alignment |= Qt::TextHideMnemonic;
-            QPixmap pix = mbi->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize), (mbi->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
+            int iconExtent = proxy()->pixelMetric(PM_SmallIconSize);
+            QPixmap pix = mbi->icon.pixmap(qt_getWindow(widget), QSize(iconExtent, iconExtent), (mbi->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
             if (!pix.isNull())
                 proxy()->drawItemPixmap(p,mbi->rect, alignment, pix);
             else
@@ -1372,7 +1376,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
     case CE_ProgressBar:
         if (const QStyleOptionProgressBar *pb
                 = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
-            QStyleOptionProgressBarV2 subopt = *pb;
+            QStyleOptionProgressBar subopt = *pb;
             subopt.rect = subElementRect(SE_ProgressBarGroove, pb, widget);
             proxy()->drawControl(CE_ProgressBarGroove, &subopt, p, widget);
             subopt.rect = subElementRect(SE_ProgressBarContents, pb, widget);
@@ -1390,10 +1394,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         break;
     case CE_ProgressBarLabel:
         if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
-            bool vertical = false;
-            if (const QStyleOptionProgressBarV2 *pb2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt)) {
-                vertical = (pb2->orientation == Qt::Vertical);
-            }
+            const bool vertical = pb->orientation == Qt::Vertical;
             if (!vertical) {
                 QPalette::ColorRole textRole = QPalette::NoRole;
                 if ((pb->textAlignment & Qt::AlignCenter) && pb->textVisible
@@ -1418,18 +1419,12 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
 
             QRect rect = pb->rect;
-            bool vertical = false;
-            bool inverted = false;
+            const bool vertical = pb->orientation == Qt::Vertical;
+            const bool inverted = pb->invertedAppearance;
             qint64 minimum = qint64(pb->minimum);
             qint64 maximum = qint64(pb->maximum);
             qint64 progress = qint64(pb->progress);
 
-            // Get extra style options if version 2
-            const QStyleOptionProgressBarV2 *pb2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt);
-            if (pb2) {
-                vertical = (pb2->orientation == Qt::Vertical);
-                inverted = pb2->invertedAppearance;
-            }
             QMatrix m;
 
             if (vertical) {
@@ -1489,7 +1484,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 int x0 = reverse ? rect.right() - ((unit_width > 1) ? unit_width : 0)
                                  : rect.x();
 
-                QStyleOptionProgressBarV2 pbBits = *pb;
+                QStyleOptionProgressBar pbBits = *pb;
                 pbBits.rect = rect;
                 pbBits.palette = pal2;
                 int myY = pbBits.rect.y();
@@ -1519,8 +1514,9 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
             QRect rect = header->rect;
             if (!header->icon.isNull()) {
+                int iconExtent = proxy()->pixelMetric(PM_SmallIconSize);
                 QPixmap pixmap
-                    = header->icon.pixmap(proxy()->pixelMetric(PM_SmallIconSize), (header->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
+                    = header->icon.pixmap(qt_getWindow(widget), QSize(iconExtent, iconExtent), (header->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
                 int pixw = pixmap.width() / pixmap.devicePixelRatio();
 
                 QRect aligned = alignedRect(header->direction, QFlag(header->iconAlignment), pixmap.size() / pixmap.devicePixelRatio(), rect);
@@ -1579,7 +1575,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                         mode = QIcon::Active;
                     else
                         mode = QIcon::Normal;
-                    pm = toolbutton->icon.pixmap(toolbutton->rect.size().boundedTo(toolbutton->iconSize),
+                    pm = toolbutton->icon.pixmap(qt_getWindow(widget), toolbutton->rect.size().boundedTo(toolbutton->iconSize),
                                                  mode, state);
                     pmSize = pm.size() / pm.devicePixelRatio();
                 }
@@ -1599,7 +1595,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                         if (!hasArrow) {
                             proxy()->drawItemPixmap(p, pr, Qt::AlignCenter, pm);
                         } else {
-                            drawArrow(this, toolbutton, pr, p, widget);
+                            drawArrow(proxy(), toolbutton, pr, p, widget);
                         }
                         alignment |= Qt::AlignCenter;
                     } else {
@@ -1609,7 +1605,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                         if (!hasArrow) {
                             proxy()->drawItemPixmap(p, QStyle::visualRect(opt->direction, rect, pr), Qt::AlignCenter, pm);
                         } else {
-                            drawArrow(this, toolbutton, pr, p, widget);
+                            drawArrow(proxy(), toolbutton, pr, p, widget);
                         }
                         alignment |= Qt::AlignLeft | Qt::AlignVCenter;
                     }
@@ -1620,7 +1616,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 } else {
                     rect.translate(shiftX, shiftY);
                     if (hasArrow) {
-                        drawArrow(this, toolbutton, rect, p, widget);
+                        drawArrow(proxy(), toolbutton, rect, p, widget);
                     } else {
                         proxy()->drawItemPixmap(p, rect, Qt::AlignCenter, pm);
                     }
@@ -1800,7 +1796,8 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         if (const QStyleOptionToolBox *tb = qstyleoption_cast<const QStyleOptionToolBox *>(opt)) {
             bool enabled = tb->state & State_Enabled;
             bool selected = tb->state & State_Selected;
-            QPixmap pm = tb->icon.pixmap(proxy()->pixelMetric(QStyle::PM_SmallIconSize, tb, widget),
+            int iconExtent = proxy()->pixelMetric(QStyle::PM_SmallIconSize, tb, widget);
+            QPixmap pm = tb->icon.pixmap(qt_getWindow(widget), QSize(iconExtent, iconExtent),
                                          enabled ? QIcon::Normal : QIcon::Disabled);
 
             QRect cr = subElementRect(QStyle::SE_ToolBoxTabContents, tb, widget);
@@ -1843,12 +1840,11 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
         break;
     case CE_TabBarTabLabel:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
-            QStyleOptionTabV3 tabV2(*tab);
-            QRect tr = tabV2.rect;
-            bool verticalTabs = tabV2.shape == QTabBar::RoundedEast
-                                || tabV2.shape == QTabBar::RoundedWest
-                                || tabV2.shape == QTabBar::TriangularEast
-                                || tabV2.shape == QTabBar::TriangularWest;
+            QRect tr = tab->rect;
+            bool verticalTabs = tab->shape == QTabBar::RoundedEast
+                                || tab->shape == QTabBar::RoundedWest
+                                || tab->shape == QTabBar::TriangularEast
+                                || tab->shape == QTabBar::TriangularWest;
 
             int alignment = Qt::AlignCenter | Qt::TextShowMnemonic;
             if (!proxy()->styleHint(SH_UnderlineShortcut, opt, widget))
@@ -1857,7 +1853,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             if (verticalTabs) {
                 p->save();
                 int newX, newY, newRot;
-                if (tabV2.shape == QTabBar::RoundedEast || tabV2.shape == QTabBar::TriangularEast) {
+                if (tab->shape == QTabBar::RoundedEast || tab->shape == QTabBar::TriangularEast) {
                     newX = tr.width() + tr.x();
                     newY = tr.y();
                     newRot = 90;
@@ -1871,15 +1867,15 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 p->setTransform(m, true);
             }
             QRect iconRect;
-            d->tabLayout(&tabV2, widget, &tr, &iconRect);
+            d->tabLayout(tab, widget, &tr, &iconRect);
             tr = proxy()->subElementRect(SE_TabBarTabText, opt, widget); //we compute tr twice because the style may override subElementRect
 
-            if (!tabV2.icon.isNull()) {
-                QPixmap tabIcon = tabV2.icon.pixmap(tabV2.iconSize,
-                                                    (tabV2.state & State_Enabled) ? QIcon::Normal
-                                                                                  : QIcon::Disabled,
-                                                    (tabV2.state & State_Selected) ? QIcon::On
-                                                                                   : QIcon::Off);
+            if (!tab->icon.isNull()) {
+                QPixmap tabIcon = tab->icon.pixmap(qt_getWindow(widget), tab->iconSize,
+                                                   (tab->state & State_Enabled) ? QIcon::Normal
+                                                                                : QIcon::Disabled,
+                                                   (tab->state & State_Selected) ? QIcon::On
+                                                                                 : QIcon::Off);
                 p->drawPixmap(iconRect.x(), iconRect.y(), tabIcon);
             }
 
@@ -1887,17 +1883,17 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             if (verticalTabs)
                 p->restore();
 
-            if (tabV2.state & State_HasFocus) {
+            if (tab->state & State_HasFocus) {
                 const int OFFSET = 1 + pixelMetric(PM_DefaultFrameWidth);
 
                 int x1, x2;
-                x1 = tabV2.rect.left();
-                x2 = tabV2.rect.right() - 1;
+                x1 = tab->rect.left();
+                x2 = tab->rect.right() - 1;
 
                 QStyleOptionFocusRect fropt;
                 fropt.QStyleOption::operator=(*tab);
-                fropt.rect.setRect(x1 + 1 + OFFSET, tabV2.rect.y() + OFFSET,
-                                   x2 - x1 - 2*OFFSET, tabV2.rect.height() - 2*OFFSET);
+                fropt.rect.setRect(x1 + 1 + OFFSET, tab->rect.y() + OFFSET,
+                                   x2 - x1 - 2*OFFSET, tab->rect.height() - 2*OFFSET);
                 drawPrimitive(PE_FrameFocusRect, &fropt, p, widget);
             }
         }
@@ -2016,9 +2012,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             }
 
             if (!dwOpt->title.isEmpty()) {
-                const QStyleOptionDockWidgetV2 *v2
-                    = qstyleoption_cast<const QStyleOptionDockWidgetV2*>(opt);
-                bool verticalTitleBar = v2 == 0 ? false : v2->verticalTitleBar;
+                const bool verticalTitleBar = dwOpt->verticalTitleBar;
 
                 if (verticalTitleBar) {
                     r.setSize(r.size().transposed());
@@ -2077,7 +2071,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             if (!cb->currentIcon.isNull()) {
                 QIcon::Mode mode = cb->state & State_Enabled ? QIcon::Normal
                                                              : QIcon::Disabled;
-                QPixmap pixmap = cb->currentIcon.pixmap(cb->iconSize, mode);
+                QPixmap pixmap = cb->currentIcon.pixmap(qt_getWindow(widget), cb->iconSize, mode);
                 QRect iconRect(editRect);
                 iconRect.setWidth(cb->iconSize.width() + 4);
                 iconRect = alignedRect(cb->direction,
@@ -2376,7 +2370,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             if (!btn->icon.isNull()) {
                 iconRect = itemPixmapRect(cr, Qt::AlignAbsolute | Qt::AlignLeft | Qt::AlignVCenter
                                         | Qt::TextShowMnemonic,
-                                   btn->icon.pixmap(btn->iconSize, QIcon::Normal));
+                                   btn->icon.pixmap(qt_getWindow(widget), btn->iconSize, QIcon::Normal));
                 if (!textRect.isEmpty())
                     textRect.translate(iconRect.right() + 4, 0);
             }
@@ -2424,7 +2418,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             }
             if (!btn->icon.isNull()) {
                 iconRect = itemPixmapRect(cr, Qt::AlignAbsolute | Qt::AlignLeft | Qt::AlignVCenter | Qt::TextShowMnemonic,
-                                   btn->icon.pixmap(btn->iconSize, QIcon::Normal));
+                                   btn->icon.pixmap(qt_getWindow(widget), btn->iconSize, QIcon::Normal));
                 if (!textRect.isEmpty())
                     textRect.translate(iconRect.right() + 4, 0);
             }
@@ -2454,10 +2448,7 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
     case SE_ProgressBarLabel:
         if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
             int textw = 0;
-            bool vertical = false;
-            if (const QStyleOptionProgressBarV2 *pb2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt)) {
-                vertical = (pb2->orientation == Qt::Vertical);
-            }
+            const bool vertical = pb->orientation == Qt::Vertical;
             if (!vertical) {
                 if (pb->textVisible)
                     textw = qMax(pb->fontMetrics.width(pb->text), pb->fontMetrics.width(QLatin1String("100%"))) + 6;
@@ -2710,14 +2701,13 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
         break;
     case SE_TabBarTabText:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
-            QStyleOptionTabV3 tabV3(*tab);
             QRect dummyIconRect;
-            d->tabLayout(&tabV3, widget, &r, &dummyIconRect);
+            d->tabLayout(tab, widget, &r, &dummyIconRect);
         }
         break;
     case SE_TabBarTabLeftButton:
     case SE_TabBarTabRightButton:
-        if (const QStyleOptionTabV3 *tab = qstyleoption_cast<const QStyleOptionTabV3 *>(opt)) {
+        if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
             bool selected = tab->state & State_Selected;
             int verticalShift = proxy()->pixelMetric(QStyle::PM_TabBarTabShiftVertical, tab, widget);
             int horizontalShift = proxy()->pixelMetric(QStyle::PM_TabBarTabShiftHorizontal, tab, widget);
@@ -2889,9 +2879,8 @@ QRect QCommonStyle::subElementRect(SubElement sr, const QStyleOption *opt,
             = qstyleoption_cast<const QStyleOptionDockWidget*>(opt);
         bool canClose = dwOpt == 0 ? true : dwOpt->closable;
         bool canFloat = dwOpt == 0 ? false : dwOpt->floatable;
-        const QStyleOptionDockWidgetV2 *v2
-            = qstyleoption_cast<const QStyleOptionDockWidgetV2*>(opt);
-        bool verticalTitleBar = v2 == 0 ? false : v2->verticalTitleBar;
+
+        const bool verticalTitleBar = dwOpt && dwOpt->verticalTitleBar;
 
         // If this is a vertical titlebar, we transpose and work as if it was
         // horizontal, then transpose again.
@@ -3318,8 +3307,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 mflags |= State_Sunken;
             }
 
-            QStyleOption tool(0);
-            tool.palette = toolbutton->palette;
+            QStyleOption tool = *toolbutton;
             if (toolbutton->subControls & SC_ToolButton) {
                 if (bflags & (State_Sunken | State_On | State_Raised)) {
                     tool.rect = button;
@@ -3388,8 +3376,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
             bool down = false;
             QPixmap pm;
 
-            QStyleOption tool(0);
-            tool.palette = tb->palette;
+            QStyleOption tool = *tb;
             if (tb->subControls & SC_TitleBarCloseButton && tb->titleBarFlags & Qt::WindowSystemMenuHint) {
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarCloseButton, widget);
                 down = tb->activeSubControls & SC_TitleBarCloseButton && (opt->state & State_Sunken);
@@ -3398,9 +3385,9 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                     || qobject_cast<const QDockWidget *>(widget)
 #endif
                     )
-                    pm = proxy()->standardIcon(SP_DockWidgetCloseButton, &tool, widget).pixmap(10, 10);
+                    pm = proxy()->standardIcon(SP_DockWidgetCloseButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 else
-                    pm = proxy()->standardIcon(SP_TitleBarCloseButton, &tool, widget).pixmap(10, 10);
+                    pm = proxy()->standardIcon(SP_TitleBarCloseButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3419,7 +3406,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarMaxButton, widget);
 
                 down = tb->activeSubControls & SC_TitleBarMaxButton && (opt->state & State_Sunken);
-                pm = proxy()->standardIcon(SP_TitleBarMaxButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarMaxButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3437,7 +3424,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                     && !(tb->titleBarState & Qt::WindowMinimized)) {
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarMinButton, widget);
                 down = tb->activeSubControls & SC_TitleBarMinButton && (opt->state & State_Sunken);
-                pm = proxy()->standardIcon(SP_TitleBarMinButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarMinButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3459,7 +3446,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
             if (drawNormalButton) {
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarNormalButton, widget);
                 down = tb->activeSubControls & SC_TitleBarNormalButton && (opt->state & State_Sunken);
-                pm = proxy()->standardIcon(SP_TitleBarNormalButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarNormalButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3477,7 +3464,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                     && !(tb->titleBarState & Qt::WindowMinimized)) {
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarShadeButton, widget);
                 down = (tb->activeSubControls & SC_TitleBarShadeButton && (opt->state & State_Sunken));
-                pm = proxy()->standardIcon(SP_TitleBarShadeButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarShadeButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3495,7 +3482,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarUnshadeButton, widget);
 
                 down = tb->activeSubControls & SC_TitleBarUnshadeButton  && (opt->state & State_Sunken);
-                pm = proxy()->standardIcon(SP_TitleBarUnshadeButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarUnshadeButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3511,7 +3498,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 ir = proxy()->subControlRect(CC_TitleBar, tb, SC_TitleBarContextHelpButton, widget);
 
                 down = tb->activeSubControls & SC_TitleBarContextHelpButton  && (opt->state & State_Sunken);
-                pm = proxy()->standardIcon(SP_TitleBarContextHelpButton, &tool, widget).pixmap(10, 10);
+                pm = proxy()->standardIcon(SP_TitleBarContextHelpButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(10, 10));
                 tool.rect = ir;
                 tool.state = down ? State_Sunken : State_Raised;
                 proxy()->drawPrimitive(PE_PanelButtonTool, &tool, p, widget);
@@ -3528,7 +3515,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                     tb->icon.paint(p, ir);
                 } else {
                     int iconSize = proxy()->pixelMetric(PM_SmallIconSize, tb, widget);
-                    pm = proxy()->standardIcon(SP_TitleBarMenuButton, &tool, widget).pixmap(iconSize, iconSize);
+                    pm = proxy()->standardIcon(SP_TitleBarMenuButton, &tool, widget).pixmap(qt_getWindow(widget), QSize(iconSize, iconSize));
                     tool.rect = ir;
                     p->save();
                     proxy()->drawItemPixmap(p, ir, Qt::AlignCenter, pm);
@@ -3715,7 +3702,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiCloseButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarCloseButton).pixmap(16, 16);
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarCloseButton).pixmap(qt_getWindow(widget), QSize(16, 16));
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
             if (opt->subControls & QStyle::SC_MdiNormalButton) {
@@ -3732,7 +3719,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiNormalButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarNormalButton).pixmap(16, 16);
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarNormalButton).pixmap(qt_getWindow(widget), QSize(16, 16));
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
             if (opt->subControls & QStyle::SC_MdiMinButton) {
@@ -3749,7 +3736,7 @@ void QCommonStyle::drawComplexControl(ComplexControl cc, const QStyleOptionCompl
                 }
                 btnOpt.rect = proxy()->subControlRect(CC_MdiControls, opt, SC_MdiMinButton, widget);
                 proxy()->drawPrimitive(PE_PanelButtonCommand, &btnOpt, p, widget);
-                QPixmap pm = proxy()->standardIcon(SP_TitleBarMinButton).pixmap(16, 16);
+                QPixmap pm = proxy()->standardIcon(SP_TitleBarMinButton).pixmap(qt_getWindow(widget), QSize(16, 16));
                 proxy()->drawItemPixmap(p, btnOpt.rect.translated(bsx, bsy), Qt::AlignCenter, pm);
             }
         }
@@ -5207,6 +5194,37 @@ static QPixmap cachedPixmapFromXPM(const char * const *xpm)
     return result;
 }
 
+#ifndef QT_NO_IMAGEFORMAT_PNG
+static inline QString clearText16IconPath()
+{
+    return QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-16.png");
+}
+#endif // !QT_NO_IMAGEFORMAT_PNG
+
+static QIcon clearTextIcon(bool rtl)
+{
+    const QString directionalThemeName = rtl
+        ? QStringLiteral("edit-clear-locationbar-ltr") : QStringLiteral("edit-clear-locationbar-rtl");
+    if (QIcon::hasThemeIcon(directionalThemeName))
+        return QIcon::fromTheme(directionalThemeName);
+    const QString themeName = QStringLiteral("edit-clear");
+    if (QIcon::hasThemeIcon(themeName))
+        return QIcon::fromTheme(themeName);
+
+    QIcon icon;
+#ifndef QT_NO_IMAGEFORMAT_PNG
+    QPixmap clearText16(clearText16IconPath());
+    Q_ASSERT(!clearText16.size().isEmpty());
+    icon.addPixmap(clearText16);
+    QPixmap clearText32(QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-32.png"));
+    Q_ASSERT(!clearText32.size().isEmpty());
+    icon.addPixmap(clearText32);
+    clearText32.setDevicePixelRatio(2); // The 32x32 pixmap can also be used for 16x16/devicePixelRatio=2
+    icon.addPixmap(clearText32);
+#endif // !QT_NO_IMAGEFORMAT_PNG
+    return icon;
+}
+
 /*! \reimp */
 QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *option,
                                      const QWidget *widget) const
@@ -5379,12 +5397,8 @@ QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *opti
                     }
                 }
                 break;
-        case SP_LineEditClearButton: {
-            QString themeName = rtl ? QStringLiteral("edit-clear-locationbar-ltr") : QStringLiteral("edit-clear-locationbar-rtl");
-            if (!QIcon::hasThemeIcon(themeName))
-                themeName = QStringLiteral("edit-clear");
-            pixmap = QIcon::fromTheme(themeName).pixmap(16);
-        }
+        case SP_LineEditClearButton:
+            pixmap = clearTextIcon(rtl).pixmap(16);
             break;
         default:
             break;
@@ -5515,7 +5529,7 @@ QPixmap QCommonStyle::standardPixmap(StandardPixmap sp, const QStyleOption *opti
     case SP_MediaVolumeMuted:
         return QPixmap(QLatin1String(":/qt-project.org/styles/commonstyle/images/media-volume-muted-16.png"));
     case SP_LineEditClearButton:
-        return QPixmap(QStringLiteral(":/qt-project.org/styles/commonstyle/images/cleartext-16.png"));
+        return QPixmap(clearText16IconPath());
 #endif // QT_NO_IMAGEFORMAT_PNG
     default:
         break;
@@ -5565,6 +5579,8 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
                                  const QWidget *widget) const
 {
     QIcon icon;
+    const bool rtl = (option && option->direction == Qt::RightToLeft) || (!option && QApplication::isRightToLeft());
+
 #ifdef Q_OS_WIN
     switch (standardIcon) {
     case SP_DriveCDIcon:
@@ -5606,6 +5622,9 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
             icon.addPixmap(pixmap);
         }
         break;
+    case SP_LineEditClearButton:
+        icon = clearTextIcon(rtl);
+        break;
     default:
         break;
     }
@@ -5614,7 +5633,6 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
 
 #endif
 
-    const bool rtl = (option && option->direction == Qt::RightToLeft) || (!option && QApplication::isRightToLeft());
     if (QApplication::desktopSettingsAware() && !QIcon::themeName().isEmpty()) {
         switch (standardIcon) {
         case SP_DirHomeIcon:
@@ -5762,8 +5780,8 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
                     const QList<QSize> sizes = baseIcon.availableSizes(QIcon::Normal, QIcon::Off);
                     for (int i = 0 ; i < sizes.size() ; ++i) {
                         int size = sizes[i].width();
-                        QPixmap basePixmap = baseIcon.pixmap(size);
-                        QPixmap linkPixmap = linkIcon.pixmap(size/2);
+                        QPixmap basePixmap = baseIcon.pixmap(qt_getWindow(widget), QSize(size, size));
+                        QPixmap linkPixmap = linkIcon.pixmap(qt_getWindow(widget), QSize(size / 2, size / 2));
                         QPainter painter(&basePixmap);
                         painter.drawPixmap(size/2, size/2, linkPixmap);
                         icon.addPixmap(basePixmap);
@@ -5779,8 +5797,8 @@ QIcon QCommonStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption
                     const QList<QSize> sizes = baseIcon.availableSizes(QIcon::Normal, QIcon::Off);
                     for (int i = 0 ; i < sizes.size() ; ++i) {
                         int size = sizes[i].width();
-                        QPixmap basePixmap = baseIcon.pixmap(size);
-                        QPixmap linkPixmap = linkIcon.pixmap(size/2);
+                        QPixmap basePixmap = baseIcon.pixmap(qt_getWindow(widget), QSize(size, size));
+                        QPixmap linkPixmap = linkIcon.pixmap(qt_getWindow(widget), QSize(size / 2, size / 2));
                         QPainter painter(&basePixmap);
                         painter.drawPixmap(size/2, size/2, linkPixmap);
                         icon.addPixmap(basePixmap);

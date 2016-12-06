@@ -94,6 +94,12 @@
 #  define Q_DECL_DEPRECATED_X(text) __declspec(deprecated(text))
 #  define Q_DECL_EXPORT __declspec(dllexport)
 #  define Q_DECL_IMPORT __declspec(dllimport)
+#  if _MSC_VER >= 1800
+#    define QT_MAKE_UNCHECKED_ARRAY_ITERATOR(x) stdext::make_unchecked_array_iterator(x)
+#  endif
+#  if _MSC_VER >= 1500
+#    define QT_MAKE_CHECKED_ARRAY_ITERATOR(x, N) stdext::make_checked_array_iterator(x, size_t(N))
+#  endif
 /* Intel C++ disguising as Visual C++: the `using' keyword avoids warnings */
 #  if defined(__INTEL_COMPILER)
 #    define Q_DECL_VARIABLE_DEPRECATED
@@ -693,7 +699,9 @@
 #      define Q_COMPILER_TEMPLATE_ALIAS
 #    endif
 #    if __has_feature(cxx_thread_local)
-#      define Q_COMPILER_THREAD_LOCAL
+#      if !defined(__FreeBSD__) /* FreeBSD clang fails on __cxa_thread_atexit */
+#        define Q_COMPILER_THREAD_LOCAL
+#      endif
 #    endif
 #    if __has_feature(cxx_user_literals)
 #      define Q_COMPILER_UDL
@@ -914,6 +922,13 @@
 //#      define Q_COMPILER_UNIFORM_INIT
 #      define Q_COMPILER_UNRESTRICTED_UNIONS
 #    endif
+#    if _MSC_FULL_VER >= 190023419
+#      define Q_COMPILER_ATTRIBUTES
+// Almost working, see https://connect.microsoft.com/VisualStudio/feedback/details/2011648
+//#      define Q_COMPILER_CONSTEXPR
+#      define Q_COMPILER_THREADSAFE_STATICS
+#      define Q_COMPILER_UNIFORM_INIT
+#    endif
 #  endif /* __cplusplus */
 #endif /* Q_CC_MSVC */
 
@@ -922,24 +937,26 @@
 # if defined(Q_OS_QNX)
 // QNX: test if we are using libcpp (Dinkumware-based).
 // Older versions (QNX 650) do not support C++11 features
-// _HAS_CPP0X is defined by toolchains that actually include
+// _HAS_* macros are set to 1 by toolchains that actually include
 // Dinkum C++11 libcpp.
-#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_CPP0X)
+#  if !defined(__GLIBCXX__)
+#   if !defined(_HAS_CPP0X) || !_HAS_CPP0X
 // Disable C++11 features that depend on library support
 #    undef Q_COMPILER_INITIALIZER_LISTS
 #    undef Q_COMPILER_RVALUE_REFS
 #    undef Q_COMPILER_REF_QUALIFIERS
 #    undef Q_COMPILER_UNICODE_STRINGS
 #    undef Q_COMPILER_NOEXCEPT
-#  endif
-#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_NULLPTR_T)
+#   endif // !_HAS_CPP0X
+#   if !defined(_HAS_NULLPTR_T) || !_HAS_NULLPTR_T
 #    undef Q_COMPILER_NULLPTR
-#  endif
-#  if defined(_HAS_DINKUM_CLIB) && !defined(_HAS_CONSTEXPR)
+#   endif //!_HAS_NULLPTR_T
+#   if !defined(_HAS_CONSTEXPR) || !_HAS_CONSTEXPR
 // The libcpp is missing constexpr keywords on important functions like std::numeric_limits<>::min()
 // Disable constexpr support on QNX even if the compiler supports it
 #    undef Q_COMPILER_CONSTEXPR
-#  endif
+#   endif // !_HAS_CONSTEXPR
+#  endif // !__GLIBCXX__
 # endif // Q_OS_QNX
 # if (defined(Q_CC_CLANG) || defined(Q_CC_INTEL)) && defined(Q_OS_MAC) && defined(__GNUC_LIBSTD__) \
     && ((__GNUC_LIBSTD__-0) * 100 + __GNUC_LIBSTD_MINOR__-0 <= 402)
@@ -993,16 +1010,18 @@
 #  define Q_COMPILER_DEFAULT_DELETE_MEMBERS
 #endif
 
-#if defined(__cpp_constexpr) && __cpp_constexpr-0 >= 201304
-# define Q_DECL_CONSTEXPR constexpr
-# define Q_DECL_RELAXED_CONSTEXPR constexpr
-# define Q_CONSTEXPR constexpr
-# define Q_RELAXED_CONSTEXPR constexpr
-#elif defined Q_COMPILER_CONSTEXPR
-# define Q_DECL_CONSTEXPR constexpr
-# define Q_DECL_RELAXED_CONSTEXPR
-# define Q_CONSTEXPR constexpr
-# define Q_RELAXED_CONSTEXPR const
+#if defined Q_COMPILER_CONSTEXPR
+# if defined(__cpp_constexpr) && __cpp_constexpr-0 >= 201304
+#  define Q_DECL_CONSTEXPR constexpr
+#  define Q_DECL_RELAXED_CONSTEXPR constexpr
+#  define Q_CONSTEXPR constexpr
+#  define Q_RELAXED_CONSTEXPR constexpr
+# else
+#  define Q_DECL_CONSTEXPR constexpr
+#  define Q_DECL_RELAXED_CONSTEXPR
+#  define Q_CONSTEXPR constexpr
+#  define Q_RELAXED_CONSTEXPR const
+# endif
 #else
 # define Q_DECL_CONSTEXPR
 # define Q_DECL_RELAXED_CONSTEXPR
@@ -1036,8 +1055,14 @@
 # define Q_DECL_NOTHROW Q_DECL_NOEXCEPT
 #endif
 
-#if defined(Q_COMPILER_ALIGNOF) && !defined(Q_ALIGNOF)
+#if defined(Q_COMPILER_ALIGNOF)
+#  undef Q_ALIGNOF
 #  define Q_ALIGNOF(x)  alignof(x)
+#endif
+
+#if defined(Q_COMPILER_ALIGNAS)
+#  undef Q_DECL_ALIGN
+#  define Q_DECL_ALIGN(n)   alignas(n)
 #endif
 
 /*
@@ -1108,6 +1133,12 @@
 #ifndef Q_DECL_CONST_FUNCTION
 #  define Q_DECL_CONST_FUNCTION Q_DECL_PURE_FUNCTION
 #endif
+#ifndef QT_MAKE_UNCHECKED_ARRAY_ITERATOR
+#  define QT_MAKE_UNCHECKED_ARRAY_ITERATOR(x) (x)
+#endif
+#ifndef QT_MAKE_CHECKED_ARRAY_ITERATOR
+#  define QT_MAKE_CHECKED_ARRAY_ITERATOR(x, N) (x)
+#endif
 
 /*
  * Warning/diagnostic handling
@@ -1143,7 +1174,7 @@
 #  define QT_WARNING_PUSH                       QT_DO_PRAGMA(clang diagnostic push)
 #  define QT_WARNING_POP                        QT_DO_PRAGMA(clang diagnostic pop)
 #  define QT_WARNING_DISABLE_CLANG(text)        QT_DO_PRAGMA(clang diagnostic ignored text)
-#  define QT_WARNING_DISABLE_GCC(text)          QT_DO_PRAGMA(GCC diagnostic ignored text)   // GCC directives work in Clang too
+#  define QT_WARNING_DISABLE_GCC(text)
 #  define QT_WARNING_DISABLE_INTEL(number)
 #  define QT_WARNING_DISABLE_MSVC(number)
 #elif defined(Q_CC_GNU) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)

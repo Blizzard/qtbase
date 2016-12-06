@@ -45,18 +45,18 @@
 
 //! [0]
 TabletCanvas::TabletCanvas()
+  : QWidget(Q_NULLPTR)
+  , m_alphaChannelValuator(TangentialPressureValuator)
+  , m_colorSaturationValuator(NoValuator)
+  , m_lineWidthValuator(PressureValuator)
+  , m_color(Qt::red)
+  , m_brush(m_color)
+  , m_pen(m_brush, 1.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)
+  , m_deviceDown(false)
 {
     resize(500, 500);
-    myBrush = QBrush();
-    myPen = QPen();
     initPixmap();
     setAutoFillBackground(true);
-    deviceDown = false;
-    myColor = Qt::red;
-    myTabletDevice = QTabletEvent::Stylus;
-    alphaChannelType = NoAlpha;
-    colorSaturationType = NoSaturation;
-    lineWidthType = LineWidthPressure;
 }
 
 void TabletCanvas::initPixmap()
@@ -64,24 +64,24 @@ void TabletCanvas::initPixmap()
     QPixmap newPixmap = QPixmap(width(), height());
     newPixmap.fill(Qt::white);
     QPainter painter(&newPixmap);
-    if (!pixmap.isNull())
-        painter.drawPixmap(0, 0, pixmap);
+    if (!m_pixmap.isNull())
+        painter.drawPixmap(0, 0, m_pixmap);
     painter.end();
-    pixmap = newPixmap;
+    m_pixmap = newPixmap;
 }
 //! [0]
 
 //! [1]
 bool TabletCanvas::saveImage(const QString &file)
 {
-    return pixmap.save(file);
+    return m_pixmap.save(file);
 }
 //! [1]
 
 //! [2]
 bool TabletCanvas::loadImage(const QString &file)
 {
-    bool success = pixmap.load(file);
+    bool success = m_pixmap.load(file);
 
     if (success) {
         update();
@@ -97,25 +97,26 @@ void TabletCanvas::tabletEvent(QTabletEvent *event)
 
     switch (event->type()) {
         case QEvent::TabletPress:
-            if (!deviceDown) {
-                deviceDown = true;
-                polyLine[0] = polyLine[1] = polyLine[2] = event->pos();
+            if (!m_deviceDown) {
+                m_deviceDown = true;
+                lastPoint.pos = event->posF();
+                lastPoint.rotation = event->rotation();
+            }
+            break;
+        case QEvent::TabletMove:
+            if (event->device() == QTabletEvent::RotationStylus)
+                updateCursor(event);
+            if (m_deviceDown) {
+                updateBrush(event);
+                QPainter painter(&m_pixmap);
+                paintPixmap(painter, event);
+                lastPoint.pos = event->posF();
+                lastPoint.rotation = event->rotation();
             }
             break;
         case QEvent::TabletRelease:
-            if (deviceDown)
-                deviceDown = false;
-            break;
-        case QEvent::TabletMove:
-            polyLine[2] = polyLine[1];
-            polyLine[1] = polyLine[0];
-            polyLine[0] = event->pos();
-
-            if (deviceDown) {
-                updateBrush(event);
-                QPainter painter(&pixmap);
-                paintPixmap(painter, event);
-            }
+            if (m_deviceDown && event->buttons() == Qt::NoButton)
+                m_deviceDown = false;
             break;
         default:
             break;
@@ -128,30 +129,51 @@ void TabletCanvas::tabletEvent(QTabletEvent *event)
 void TabletCanvas::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.drawPixmap(0, 0, pixmap);
+    painter.drawPixmap(0, 0, m_pixmap);
 }
 //! [4]
 
 //! [5]
 void TabletCanvas::paintPixmap(QPainter &painter, QTabletEvent *event)
 {
-    QPoint brushAdjust(10, 10);
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    switch (myTabletDevice) {
+    switch (event->device()) {
+//! [6]
         case QTabletEvent::Airbrush:
-            myBrush.setColor(myColor);
-            myBrush.setStyle(brushPattern(event->pressure()));
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(myBrush);
-
-            for (int i = 0; i < 3; ++i) {
-                painter.drawEllipse(QRect(polyLine[i] - brushAdjust,
-                                    polyLine[i] + brushAdjust));
+            {
+                painter.setPen(Qt::NoPen);
+                QRadialGradient grad(lastPoint.pos, m_pen.widthF() * 10.0);
+                QColor color = m_brush.color();
+                color.setAlphaF(color.alphaF() * 0.25);
+                grad.setColorAt(0, m_brush.color());
+                grad.setColorAt(0.5, Qt::transparent);
+                painter.setBrush(grad);
+                qreal radius = grad.radius();
+                painter.drawEllipse(event->posF(), radius, radius);
             }
             break;
+        case QTabletEvent::RotationStylus:
+            {
+                m_brush.setStyle(Qt::SolidPattern);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(m_brush);
+                QPolygonF poly;
+                qreal halfWidth = m_pen.widthF();
+                QPointF brushAdjust(qSin(qDegreesToRadians(lastPoint.rotation)) * halfWidth,
+                                    qCos(qDegreesToRadians(lastPoint.rotation)) * halfWidth);
+                poly << lastPoint.pos + brushAdjust;
+                poly << lastPoint.pos - brushAdjust;
+                brushAdjust = QPointF(qSin(qDegreesToRadians(event->rotation())) * halfWidth,
+                                      qCos(qDegreesToRadians(event->rotation())) * halfWidth);
+                poly << event->posF() - brushAdjust;
+                poly << event->posF() + brushAdjust;
+                painter.drawConvexPolygon(poly);
+            }
+            break;
+//! [6]
         case QTabletEvent::Puck:
         case QTabletEvent::FourDMouse:
-        case QTabletEvent::RotationStylus:
             {
                 const QString error(tr("This input device is not supported by the example."));
 #ifndef QT_NO_STATUSTIP
@@ -174,102 +196,122 @@ void TabletCanvas::paintPixmap(QPainter &painter, QTabletEvent *event)
             }
             // FALL-THROUGH
         case QTabletEvent::Stylus:
-            painter.setBrush(myBrush);
-            painter.setPen(myPen);
-            painter.drawLine(polyLine[1], event->pos());
+            painter.setPen(m_pen);
+            painter.drawLine(lastPoint.pos, event->posF());
             break;
     }
 }
 //! [5]
 
-//! [6]
-Qt::BrushStyle TabletCanvas::brushPattern(qreal value)
-{
-    int pattern = int((value) * 100.0) % 7;
-
-    switch (pattern) {
-        case 0:
-            return Qt::SolidPattern;
-        case 1:
-            return Qt::Dense1Pattern;
-        case 2:
-            return Qt::Dense2Pattern;
-        case 3:
-            return Qt::Dense3Pattern;
-        case 4:
-            return Qt::Dense4Pattern;
-        case 5:
-            return Qt::Dense5Pattern;
-        case 6:
-            return Qt::Dense6Pattern;
-        default:
-            return Qt::Dense7Pattern;
-    }
-}
-//! [6]
-
 //! [7]
-void TabletCanvas::updateBrush(QTabletEvent *event)
+void TabletCanvas::updateBrush(const QTabletEvent *event)
 {
     int hue, saturation, value, alpha;
-    myColor.getHsv(&hue, &saturation, &value, &alpha);
+    m_color.getHsv(&hue, &saturation, &value, &alpha);
 
     int vValue = int(((event->yTilt() + 60.0) / 120.0) * 255);
     int hValue = int(((event->xTilt() + 60.0) / 120.0) * 255);
 //! [7] //! [8]
 
-    switch (alphaChannelType) {
-        case AlphaPressure:
-            myColor.setAlpha(int(event->pressure() * 255.0));
+    switch (m_alphaChannelValuator) {
+        case PressureValuator:
+            m_color.setAlphaF(event->pressure());
             break;
-        case AlphaTilt:
-            myColor.setAlpha(maximum(abs(vValue - 127), abs(hValue - 127)));
+        case TangentialPressureValuator:
+            if (event->device() == QTabletEvent::Airbrush)
+                m_color.setAlphaF(qMax(0.01, (event->tangentialPressure() + 1.0) / 2.0));
+            else
+                m_color.setAlpha(255);
+            break;
+        case TiltValuator:
+            m_color.setAlpha(maximum(abs(vValue - 127), abs(hValue - 127)));
             break;
         default:
-            myColor.setAlpha(255);
+            m_color.setAlpha(255);
     }
 
 //! [8] //! [9]
-    switch (colorSaturationType) {
-        case SaturationVTilt:
-            myColor.setHsv(hue, vValue, value, alpha);
+    switch (m_colorSaturationValuator) {
+        case VTiltValuator:
+            m_color.setHsv(hue, vValue, value, alpha);
             break;
-        case SaturationHTilt:
-            myColor.setHsv(hue, hValue, value, alpha);
+        case HTiltValuator:
+            m_color.setHsv(hue, hValue, value, alpha);
             break;
-        case SaturationPressure:
-            myColor.setHsv(hue, int(event->pressure() * 255.0), value, alpha);
+        case PressureValuator:
+            m_color.setHsv(hue, int(event->pressure() * 255.0), value, alpha);
             break;
         default:
             ;
     }
 
 //! [9] //! [10]
-    switch (lineWidthType) {
-        case LineWidthPressure:
-            myPen.setWidthF(event->pressure() * 10 + 1);
+    switch (m_lineWidthValuator) {
+        case PressureValuator:
+            m_pen.setWidthF(event->pressure() * 10 + 1);
             break;
-        case LineWidthTilt:
-            myPen.setWidthF(maximum(abs(vValue - 127), abs(hValue - 127)) / 12);
+        case TiltValuator:
+            m_pen.setWidthF(maximum(abs(vValue - 127), abs(hValue - 127)) / 12);
             break;
         default:
-            myPen.setWidthF(1);
+            m_pen.setWidthF(1);
     }
 
 //! [10] //! [11]
     if (event->pointerType() == QTabletEvent::Eraser) {
-        myBrush.setColor(Qt::white);
-        myPen.setColor(Qt::white);
-        myPen.setWidthF(event->pressure() * 10 + 1);
+        m_brush.setColor(Qt::white);
+        m_pen.setColor(Qt::white);
+        m_pen.setWidthF(event->pressure() * 10 + 1);
     } else {
-        myBrush.setColor(myColor);
-        myPen.setColor(myColor);
+        m_brush.setColor(m_color);
+        m_pen.setColor(m_color);
     }
 }
 //! [11]
 
+//! [12]
+void TabletCanvas::updateCursor(const QTabletEvent *event)
+{
+    QCursor cursor;
+    if (event->type() != QEvent::TabletLeaveProximity) {
+        if (event->pointerType() == QTabletEvent::Eraser) {
+            cursor = QCursor(QPixmap(":/images/cursor-eraser.png"), 3, 28);
+        } else {
+            switch (event->device()) {
+            case QTabletEvent::Stylus:
+                cursor = QCursor(QPixmap(":/images/cursor-pencil.png"), 0, 0);
+                break;
+            case QTabletEvent::Airbrush:
+                cursor = QCursor(QPixmap(":/images/cursor-airbrush.png"), 3, 4);
+                break;
+            case QTabletEvent::RotationStylus: {
+                QImage origImg(QLatin1String(":/images/cursor-felt-marker.png"));
+                QImage img(32, 32, QImage::Format_ARGB32);
+                QColor solid = m_color;
+                solid.setAlpha(255);
+                img.fill(solid);
+                QPainter painter(&img);
+                QTransform transform = painter.transform();
+                transform.translate(16, 16);
+                transform.rotate(-event->rotation());
+                painter.setTransform(transform);
+                painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                painter.drawImage(-24, -24, origImg);
+                painter.setCompositionMode(QPainter::CompositionMode_HardLight);
+                painter.drawImage(-24, -24, origImg);
+                painter.end();
+                cursor = QCursor(QPixmap::fromImage(img), 16, 16);
+            } break;
+            default:
+                break;
+            }
+        }
+    }
+    setCursor(cursor);
+}
+//! [12]
+
 void TabletCanvas::resizeEvent(QResizeEvent *)
 {
     initPixmap();
-    polyLine[0] = polyLine[1] = polyLine[2] = QPoint();
 }

@@ -90,7 +90,7 @@ public:
     QTextDocument *document() const;
 
     void registerHandler(int objectType, QObject *component);
-    void unregisterHandler(int objectType, QObject *component = 0);
+    void unregisterHandler(int objectType, QObject *component = Q_NULLPTR);
     QTextObjectInterface *handlerForObject(int objectType) const;
 
 Q_SIGNALS:
@@ -126,7 +126,7 @@ private:
 class Q_GUI_EXPORT QTextObjectInterface
 {
 public:
-    virtual ~QTextObjectInterface() {}
+    virtual ~QTextObjectInterface();
     virtual QSizeF intrinsicSize(QTextDocument *doc, int posInDocument, const QTextFormat &format) = 0;
     virtual void drawObject(QPainter *painter, const QRectF &rect, QTextDocument *doc, int posInDocument, const QTextFormat &format) = 0;
 };

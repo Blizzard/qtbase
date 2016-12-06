@@ -42,8 +42,7 @@
    The operating system, must be one of: (Q_OS_x)
 
      DARWIN   - Any Darwin system
-     MAC      - OS X and iOS
-     OSX      - OS X
+     MACOS    - macOS
      IOS      - iOS
      MSDOS    - MS-DOS and Windows
      OS2      - OS/2
@@ -60,6 +59,7 @@
      NETBSD   - NetBSD
      OPENBSD  - OpenBSD
      BSDI     - BSD/OS
+     INTERIX  - Interix
      IRIX     - SGI Irix
      OSF      - HP Tru64 UNIX
      SCO      - SCO OpenServer 5
@@ -94,7 +94,7 @@
 #  else
 #    define Q_OS_DARWIN32
 #  endif
-#elif defined(ANDROID)
+#elif defined(__ANDROID__) || defined(ANDROID)
 #  define Q_OS_ANDROID
 #  define Q_OS_LINUX
 #elif defined(__CYGWIN__)
@@ -106,10 +106,13 @@
 #  if defined(WINCE) || defined(_WIN32_WCE)
 #    define Q_OS_WINCE
 #  elif defined(WINAPI_FAMILY)
+#    ifndef WINAPI_FAMILY_PC_APP
+#      define WINAPI_FAMILY_PC_APP WINAPI_FAMILY_APP
+#    endif
 #    if defined(WINAPI_FAMILY_PHONE_APP) && WINAPI_FAMILY==WINAPI_FAMILY_PHONE_APP
 #      define Q_OS_WINPHONE
 #      define Q_OS_WINRT
-#    elif WINAPI_FAMILY==WINAPI_FAMILY_APP
+#    elif WINAPI_FAMILY==WINAPI_FAMILY_PC_APP
 #      define Q_OS_WINRT
 #    else
 #      define Q_OS_WIN32
@@ -143,6 +146,9 @@
 #  define Q_OS_BSD4
 #elif defined(__bsdi__)
 #  define Q_OS_BSDI
+#  define Q_OS_BSD4
+#elif defined(__INTERIX)
+#  define Q_OS_INTERIX
 #  define Q_OS_BSD4
 #elif defined(__sgi)
 #  define Q_OS_IRIX
@@ -192,7 +198,8 @@
 #  if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
 #     define Q_OS_IOS
 #  elif defined(TARGET_OS_MAC) && TARGET_OS_MAC
-#     define Q_OS_OSX
+#     define Q_OS_MACOS
+#     define Q_OS_OSX // compatibility synonym
 #     define Q_OS_MACX // compatibility synonym
 #  endif
 #endif
@@ -207,7 +214,7 @@
 #  include <Availability.h>
 #  include <AvailabilityMacros.h>
 #
-#  ifdef Q_OS_OSX
+#  ifdef Q_OS_MACOS
 #    if !defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_6
 #       undef __MAC_OS_X_VERSION_MIN_REQUIRED
 #       define __MAC_OS_X_VERSION_MIN_REQUIRED __MAC_10_6
@@ -236,6 +243,9 @@
 #  if !defined(__MAC_10_11)
 #       define __MAC_10_11 101100
 #  endif
+#  if !defined(__MAC_10_12)
+#       define __MAC_10_12 101200
+#  endif
 #  if !defined(MAC_OS_X_VERSION_10_7)
 #       define MAC_OS_X_VERSION_10_7 1070
 #  endif
@@ -250,6 +260,9 @@
 #  endif
 #  if !defined(MAC_OS_X_VERSION_10_11)
 #       define MAC_OS_X_VERSION_10_11 101100
+#  endif
+#  if !defined(MAC_OS_X_VERSION_10_12)
+#       define MAC_OS_X_VERSION_10_12 101200
 #  endif
 #
 #  if !defined(__IPHONE_4_3)
@@ -290,6 +303,18 @@
 #  endif
 #  if !defined(__IPHONE_9_0)
 #       define __IPHONE_9_0 90000
+#  endif
+#  if !defined(__IPHONE_9_1)
+#       define __IPHONE_9_1 90100
+#  endif
+#  if !defined(__IPHONE_9_2)
+#       define __IPHONE_9_2 90200
+#  endif
+#  if !defined(__IPHONE_9_3)
+#       define __IPHONE_9_3 90300
+#  endif
+#  if !defined(__IPHONE_10_0)
+#       define __IPHONE_10_0 100000
 #  endif
 #endif
 

@@ -37,6 +37,9 @@ Cpp.ignoretokens        += \
                           Q_DECL_NOTHROW \
                           Q_DECL_PURE_FUNCTION \
                           Q_DECL_UNUSED \
+                          Q_DECL_CF_RETURNS_RETAINED \
+                          Q_DECL_NS_RETURNS_AUTORELEASED \
+                          Q_DECL_EQ_DEFAULT \
                           Q_DECLARATIVE_EXPORT \
                           Q_EXPLICIT \
                           Q_EXPORT \
@@ -66,6 +69,7 @@ Cpp.ignoretokens        += \
                           Q_POSITIONING_EXPORT \
                           Q_MULTIMEDIA_EXPORT \
                           Q_NETWORK_EXPORT \
+                          Q_NEVER_INLINE \
                           Q_NORETURN \
                           Q_OPENGL_EXPORT \
                           Q_OPENVG_EXPORT \
@@ -75,6 +79,7 @@ Cpp.ignoretokens        += \
                           Q_REQUIRED_RESULT \
                           Q_SCRIPT_EXPORT \
                           Q_SCRIPTTOOLS_EXPORT \
+                          Q_SERIALBUS_EXPORT \
                           Q_SQL_EXPORT \
                           Q_SVG_EXPORT \
                           Q_TESTLIB_EXPORT \
@@ -134,6 +139,7 @@ Cpp.ignoredirectives    += \
                           Q_DECLARE_PRIVATE_D \
                           Q_DECLARE_PUBLIC \
                           Q_DECLARE_SHARED \
+                          Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6 \
                           Q_DECLARE_TR_FUNCTIONS \
                           Q_DECLARE_TYPEINFO \
                           Q_DECL_NOEXCEPT_EXPR \
@@ -153,4 +159,9 @@ Cpp.ignoredirectives    += \
                           QT_WARNING_DISABLE_GCC \
                           QT_WARNING_DISABLE_INTEL \
                           QT_WARNING_DISABLE_MSVC \
+                          Q_ATTRIBUTE_FORMAT_PRINTF \
                           Q_MV_IOS
+
+# Qt 6: Remove
+falsehoods              += \
+                          "QT_VERSION >= QT_VERSION_CHECK\\(6,0,0\\)"

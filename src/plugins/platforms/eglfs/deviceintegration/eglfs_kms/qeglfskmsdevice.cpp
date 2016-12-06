@@ -191,6 +191,12 @@ QEglFSKmsScreen *QEglFSKmsDevice::screenForConnector(drmModeResPtr resources, dr
         return Q_NULLPTR;
     }
 
+    // Skip disconnected output
+    if (configuration == OutputConfigPreferred && connector->connection == DRM_MODE_DISCONNECTED) {
+        qCDebug(qLcEglfsKmsDebug) << "Skipping disconnected output" << connectorName;
+        return Q_NULLPTR;
+    }
+
     // Get the current mode on the current crtc
     drmModeModeInfo crtc_mode;
     memset(&crtc_mode, 0, sizeof crtc_mode);
@@ -208,11 +214,12 @@ QEglFSKmsScreen *QEglFSKmsDevice::screenForConnector(drmModeResPtr resources, dr
     }
 
     QList<drmModeModeInfo> modes;
+    modes.reserve(connector->count_modes);
     qCDebug(qLcEglfsKmsDebug) << connectorName << "mode count:" << connector->count_modes;
     for (int i = 0; i < connector->count_modes; i++) {
         const drmModeModeInfo &mode = connector->modes[i];
         qCDebug(qLcEglfsKmsDebug) << "mode" << i << mode.hdisplay << "x" << mode.vdisplay
-                                  << "@" << mode.vrefresh << "hz";
+                                  << '@' << mode.vrefresh << "hz";
         modes << connector->modes[i];
     }
 
@@ -271,7 +278,7 @@ QEglFSKmsScreen *QEglFSKmsDevice::screenForConnector(drmModeResPtr resources, dr
         int height = modes[selected_mode].vdisplay;
         int refresh = modes[selected_mode].vrefresh;
         qCDebug(qLcEglfsKmsDebug) << "Selected mode" << selected_mode << ":" << width << "x" << height
-                                  << "@" << refresh << "hz for output" << connectorName;
+                                  << '@' << refresh << "hz for output" << connectorName;
     }
 
     QEglFSKmsOutput output = {
@@ -282,13 +289,31 @@ QEglFSKmsScreen *QEglFSKmsDevice::screenForConnector(drmModeResPtr resources, dr
         selected_mode,
         false,
         drmModeGetCrtc(m_dri_fd, crtc_id),
-        modes
+        modes,
+        connector->subpixel,
+        connectorProperty(connector, QByteArrayLiteral("DPMS"))
     };
 
     m_crtc_allocator |= (1 << output.crtc_id);
     m_connector_allocator |= (1 << output.connector_id);
 
     return new QEglFSKmsScreen(m_integration, this, output, pos);
+}
+
+drmModePropertyPtr QEglFSKmsDevice::connectorProperty(drmModeConnectorPtr connector, const QByteArray &name)
+{
+    drmModePropertyPtr prop;
+
+    for (int i = 0; i < connector->count_props; i++) {
+        prop = drmModeGetProperty(m_dri_fd, connector->props[i]);
+        if (!prop)
+            continue;
+        if (strcmp(prop->name, name.constData()) == 0)
+            return prop;
+        drmModeFreeProperty(prop);
+    }
+
+    return Q_NULLPTR;
 }
 
 void QEglFSKmsDevice::pageFlipHandler(int fd, unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec, void *user_data)
@@ -392,7 +417,7 @@ void QEglFSKmsDevice::createScreens()
         Q_FOREACH (QPlatformScreen *screen, siblings)
             static_cast<QEglFSKmsScreen *>(screen)->setVirtualSiblings(siblings);
 
-        if (primaryScreen)
+        if (primaryScreen && m_integration->hwCursor())
             m_globalCursor = new QEglFSKmsCursor(primaryScreen);
     }
 }

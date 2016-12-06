@@ -75,16 +75,26 @@ public:
 
     int w,h;
     QWidget *q;
+
+    int m_interval;
+    QVector3D m_rotAxis;
+
+    float clearColor[3];
 };
 
 
-OpenGLWidget::OpenGLWidget(QWidget *parent)
+OpenGLWidget::OpenGLWidget(int interval, const QVector3D &rotAxis, QWidget *parent)
     : QOpenGLWidget(parent)
 {
-    d = new OpenGLWidgetPrivate(this);
-    QTimer *timer = new QTimer(this);
-    connect(timer, SIGNAL(timeout()), this, SLOT(update()));
-    timer->start(30);
+    d.reset(new OpenGLWidgetPrivate(this));
+    d->clearColor[0] = d->clearColor[1] = d->clearColor[2] = 0.0f;
+    d->m_interval = interval;
+    d->m_rotAxis = rotAxis;
+    if (interval > 0) {
+        QTimer *timer = new QTimer(this);
+        connect(timer, SIGNAL(timeout()), this, SLOT(update()));
+        timer->start(interval);
+    }
 }
 
 OpenGLWidget::~OpenGLWidget()
@@ -144,7 +154,7 @@ void OpenGLWidgetPrivate::render()
     const qreal retinaScale = q->devicePixelRatio();
     glViewport(0, 0, width() * retinaScale, height() * retinaScale);
 
-    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glClearColor(clearColor[0], clearColor[1], clearColor[2], 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     m_program->bind();
@@ -152,7 +162,8 @@ void OpenGLWidgetPrivate::render()
     QMatrix4x4 matrix;
     matrix.perspective(60.0f, 4.0f/3.0f, 0.1f, 100.0f);
     matrix.translate(0, 0, -2);
-    matrix.rotate(100.0f * m_frame / 30/*screen()->refreshRate()*/, 0, 1, 0);
+    const qreal angle = 100.0f * m_frame / 30;
+    matrix.rotate(angle, m_rotAxis);
 
     m_program->setUniformValue(m_matrixUniform, matrix);
 
@@ -182,4 +193,14 @@ void OpenGLWidgetPrivate::render()
     m_program->release();
 
     ++m_frame;
+
+    if (m_interval <= 0)
+        q->update();
+}
+
+void OpenGLWidget::setClearColor(const float *c)
+{
+    d->clearColor[0] = c[0];
+    d->clearColor[1] = c[1];
+    d->clearColor[2] = c[2];
 }

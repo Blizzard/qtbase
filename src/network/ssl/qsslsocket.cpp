@@ -49,7 +49,8 @@
     QSslSocket establishes a secure, encrypted TCP connection you can
     use for transmitting encrypted data. It can operate in both client
     and server mode, and it supports modern SSL protocols, including
-    SSLv3 and TLSv1_0. By default, QSslSocket uses TLSv1_0, but you can
+    SSL 3 and TLS 1.2. By default, QSslSocket uses only SSL protocols
+    which are considered to be secure (QSsl::SecureProtocols), but you can
     change the SSL protocol by calling setProtocol() as long as you do
     it before the handshake has started.
 
@@ -131,19 +132,18 @@
     before the handshake phase with setLocalCertificate() and
     setPrivateKey().
     \li The CA certificate database can be extended and customized with
-    addCaCertificate(), addCaCertificates(), setCaCertificates(),
-    addDefaultCaCertificate(), addDefaultCaCertificates(), and
-    setDefaultCaCertificates().
+    addCaCertificate(), addCaCertificates(), addDefaultCaCertificate(),
+    addDefaultCaCertificates(), and QSslConfiguration::defaultConfiguration().setCaCertificates().
     \endlist
 
-    \note If available, root certificates on Unix (excluding OS X) will be
-    loaded on demand from the standard certificate directories. If
-    you do not want to load root certificates on demand, you need to call either
-    the static function setDefaultCaCertificates() before the first SSL handshake
-    is made in your application, (e.g. via
-    "QSslSocket::setDefaultCaCertificates(QSslSocket::systemCaCertificates());"),
-    or call setCaCertificates() on your QSslSocket instance prior to the SSL
-    handshake.
+    \note If available, root certificates on Unix (excluding \macos) will be
+    loaded on demand from the standard certificate directories. If you do not
+    want to load root certificates on demand, you need to call either
+    QSslConfiguration::defaultConfiguration().setCaCertificates() before the first
+    SSL handshake is made in your application (for example, via passing
+    QSslSocket::systemCaCertificates() to it), or call
+    QSslConfiguration::defaultConfiguration()::setCaCertificates() on your QSslSocket instance
+    prior to the SSL handshake.
 
     For more information about ciphers and certificates, refer to QSslCipher and
     QSslCertificate.
@@ -499,8 +499,7 @@ bool QSslSocket::setSocketDescriptor(qintptr socketDescriptor, SocketState state
         d->createPlainSocket(openMode);
     bool retVal = d->plainSocket->setSocketDescriptor(socketDescriptor, state, openMode);
     d->cachedSocketDescriptor = d->plainSocket->socketDescriptor();
-    setSocketError(d->plainSocket->error());
-    setErrorString(d->plainSocket->errorString());
+    d->setError(d->plainSocket->error(), d->plainSocket->errorString());
     setSocketState(state);
     setOpenMode(openMode);
     setLocalPort(d->plainSocket->localPort());
@@ -1243,7 +1242,7 @@ void QSslSocket::setCiphers(const QString &ciphers)
 {
     Q_D(QSslSocket);
     d->configuration.ciphers.clear();
-    foreach (const QString &cipherName, ciphers.split(QLatin1String(":"),QString::SkipEmptyParts)) {
+    foreach (const QString &cipherName, ciphers.split(QLatin1Char(':'), QString::SkipEmptyParts)) {
         QSslCipher cipher(cipherName);
         if (!cipher.isNull())
             d->configuration.ciphers << cipher;
@@ -1312,8 +1311,8 @@ QList<QSslCipher> QSslSocket::supportedCiphers()
 /*!
   Searches all files in the \a path for certificates encoded in the
   specified \a format and adds them to this socket's CA certificate
-  database. \a path can be explicit, or it can contain wildcards in
-  the format specified by \a syntax. Returns \c true if one or more
+  database. \a path must be a file or a pattern matching one or more
+  files, as specified by \a syntax. Returns \c true if one or more
   certificates are added to the socket's CA certificate database;
   otherwise returns \c false.
 
@@ -1532,8 +1531,7 @@ bool QSslSocket::waitForConnected(int msecs)
     bool retVal = d->plainSocket->waitForConnected(msecs);
     if (!retVal) {
         setSocketState(d->plainSocket->state());
-        setSocketError(d->plainSocket->error());
-        setErrorString(d->plainSocket->errorString());
+        d->setError(d->plainSocket->error(), d->plainSocket->errorString());
     }
     return retVal;
 }
@@ -1688,8 +1686,7 @@ bool QSslSocket::waitForDisconnected(int msecs)
     bool retVal = d->plainSocket->waitForDisconnected(qt_subtract_from_timeout(msecs, stopWatch.elapsed()));
     if (!retVal) {
         setSocketState(d->plainSocket->state());
-        setSocketError(d->plainSocket->error());
-        setErrorString(d->plainSocket->errorString());
+        d->setError(d->plainSocket->error(), d->plainSocket->errorString());
     }
     return retVal;
 }
@@ -2402,8 +2399,9 @@ void QSslSocketPrivate::_q_stateChangedSlot(QAbstractSocket::SocketState state)
 */
 void QSslSocketPrivate::_q_errorSlot(QAbstractSocket::SocketError error)
 {
-    Q_Q(QSslSocket);
+    Q_UNUSED(error)
 #ifdef QSSLSOCKET_DEBUG
+    Q_Q(QSslSocket);
     qCDebug(lcSsl) << "QSslSocket::_q_errorSlot(" << error << ')';
     qCDebug(lcSsl) << "\tstate =" << q->state();
     qCDebug(lcSsl) << "\terrorString =" << q->errorString();
@@ -2416,9 +2414,7 @@ void QSslSocketPrivate::_q_errorSlot(QAbstractSocket::SocketError error)
         readBufferMaxSize = tmpReadBufferMaxSize;
     }
 
-    q->setSocketError(plainSocket->error());
-    q->setErrorString(plainSocket->errorString());
-    emit q->error(error);
+    setErrorAndEmit(plainSocket->error(), plainSocket->errorString());
 }
 
 /*!
@@ -2483,7 +2479,6 @@ void QSslSocketPrivate::_q_flushReadBuffer()
 */
 void QSslSocketPrivate::_q_resumeImplementation()
 {
-    Q_Q(QSslSocket);
     if (plainSocket)
         plainSocket->resume();
     paused = false;
@@ -2491,9 +2486,7 @@ void QSslSocketPrivate::_q_resumeImplementation()
         if (verifyErrorsHaveBeenIgnored()) {
             continueHandshake();
         } else {
-            q->setErrorString(sslErrors.first().errorString());
-            q->setSocketError(QAbstractSocket::SslHandshakeFailedError);
-            emit q->error(QAbstractSocket::SslHandshakeFailedError);
+            setErrorAndEmit(QAbstractSocket::SslHandshakeFailedError, sslErrors.first().errorString());
             plainSocket->disconnectFromHost();
             return;
         }
@@ -2598,7 +2591,8 @@ QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
                                << "/var/ssl/certs/" // AIX
                                << "/usr/local/ssl/certs/" // Solaris
                                << "/etc/openssl/certs/" // BlackBerry
-                               << "/opt/openssl/certs/"; // HP-UX
+                               << "/opt/openssl/certs/" // HP-UX
+                               << "/etc/ssl/"; // OpenBSD
 }
 
 /*!

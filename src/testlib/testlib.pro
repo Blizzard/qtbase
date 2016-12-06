@@ -56,6 +56,7 @@ SOURCES = qtestcase.cpp \
     qcsvbenchmarklogger.cpp \
     qtestelement.cpp \
     qtestelementattribute.cpp \
+    qtestmouse.cpp \
     qtestxunitstreamer.cpp \
     qxunittestlogger.cpp \
     qtestblacklist.cpp
@@ -74,7 +75,12 @@ wince: LIBS += \
 
 mac {
     LIBS += -framework Security
-    osx: LIBS += -framework ApplicationServices -framework IOKit
+
+    macos {
+        HEADERS += qtestutil_macos_p.h
+        OBJECTIVE_SOURCES += qtestutil_macos.mm
+        LIBS += -framework Foundation -framework ApplicationServices -framework IOKit
+    }
 
     # XCTest support
     !lessThan(QMAKE_XCODE_VERSION, "6.0") {
@@ -91,7 +97,7 @@ mac {
         # don't know yet if the target that links to testlib will build under Xcode or not.
         # The corresponding flags for the target lives in xctest.prf, where we do know.
         QMAKE_LFLAGS += -F$${platform_dev_frameworks_path} -weak_framework XCTest
-        QMAKE_OBJECTIVE_CFLAGS += -F$${platform_dev_frameworks_path}
+        QMAKE_CXXFLAGS += -F$${platform_dev_frameworks_path}
         MODULE_CONFIG += xctest
     }
 }

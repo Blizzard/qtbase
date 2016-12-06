@@ -50,6 +50,7 @@
 #include <qpa/qplatformwindow.h>
 
 #include <QtCore/private/qobject_p.h>
+#include <QtCore/qelapsedtimer.h>
 #include <QtGui/QIcon>
 
 QT_BEGIN_NAMESPACE
@@ -136,6 +137,7 @@ public:
     void connectToScreen(QScreen *topLevelScreen);
     void disconnectFromScreen();
     void emitScreenChangedRecursion(QScreen *newScreen);
+    QScreen *screenForGeometry(const QRect &rect);
 
     virtual void clearFocusObject();
     virtual QRectF closestAcceptableGeometry(const QRectF &rect) const;
@@ -186,6 +188,7 @@ public:
 #endif
 
     bool compositing;
+    QElapsedTimer lastComposeTime;
 };
 
 

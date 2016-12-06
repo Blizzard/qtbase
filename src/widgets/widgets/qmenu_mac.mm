@@ -66,9 +66,12 @@ inline QPlatformNativeInterface::NativeResourceForIntegrationFunction resolvePla
 /*!
     \since 5.2
 
-    Returns the native NSMenu for this menu. Available on OS X only.
+    Returns the native NSMenu for this menu. Available on \macos only.
+
+    \note Qt sets the delegate on the native menu. If you need to set your own
+    delegate, make sure you save the original one and forward any calls to it.
 */
-NSMenu* QMenu::toNSMenu()
+NSMenu *QMenu::toNSMenu()
 {
     // Call into the cocoa platform plugin: qMenuToNSMenu(platformMenu())
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function = resolvePlatformFunction("qmenutonsmenu");
@@ -84,7 +87,7 @@ NSMenu* QMenu::toNSMenu()
     \since 5.2
 
     Set this menu to be the dock menu available by option-clicking
-    on the application dock icon. Available on OS X only.
+    on the application dock icon. Available on \macos only.
 */
 void QMenu::setAsDockMenu()
 {
@@ -98,15 +101,13 @@ void QMenu::setAsDockMenu()
 
 
 /*! \fn void qt_mac_set_dock_menu(QMenu *menu)
-    \since 5.2
+    \relates QMenu
     \deprecated
 
-    Set this menu to be the dock menu available by option-clicking
-    on the application dock icon. Available on OS X only.
+    Sets this \a menu to be the dock menu available by option-clicking
+    on the application dock icon. Available on \macos only.
 
-    Deprecated; use QMenu:setAsDockMenu() instead.
-
-    \sa QMenu:setAsDockMenu()
+    Deprecated; use \l QMenu::setAsDockMenu() instead.
 */
 
 void QMenuPrivate::moveWidgetToPlatformItem(QWidget *widget, QPlatformMenuItem* item)
@@ -115,6 +116,7 @@ void QMenuPrivate::moveWidgetToPlatformItem(QWidget *widget, QPlatformMenuItem* 
     QObject::connect(platformMenu, SIGNAL(destroyed()), container, SLOT(deleteLater()));
     container->resize(widget->sizeHint());
     widget->setParent(container);
+    widget->setVisible(true);
 
     NSView *containerView = container->nativeView();
     QWindow *containerWindow = container->windowHandle();
@@ -133,9 +135,12 @@ void QMenuPrivate::moveWidgetToPlatformItem(QWidget *widget, QPlatformMenuItem* 
 /*!
     \since 5.2
 
-    Returns the native NSMenu for this menu bar. Available on OS X only.
+    Returns the native NSMenu for this menu bar. Available on \macos only.
+
+    \note Qt may set the delegate on the native menu bar. If you need to set your
+    own delegate, make sure you save the original one and forward any calls to it.
 */
-NSMenu* QMenuBar::toNSMenu()
+NSMenu *QMenuBar::toNSMenu()
 {
     // Call into the cocoa platform plugin: qMenuBarToNSMenu(platformMenuBar())
     QPlatformNativeInterface::NativeResourceForIntegrationFunction function = resolvePlatformFunction("qmenubartonsmenu");

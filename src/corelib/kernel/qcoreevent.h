@@ -133,7 +133,7 @@ public:
         EnabledChange = 98,                     // enabled state has changed
         ActivationChange = 99,                  // window activation has changed
         StyleChange = 100,                      // style has changed
-        IconTextChange = 101,                   // icon text has changed
+        IconTextChange = 101,                   // icon text has changed.  Deprecated.
         ModifiedChange = 102,                   // modified state has changed
         MouseTrackingChange = 109,              // mouse tracking state has changed
 
@@ -317,6 +317,11 @@ private:
     friend class QGraphicsView;
     friend class QGraphicsScene;
     friend class QGraphicsScenePrivate;
+    // from QtTest:
+    friend class QSpontaneKeyEvent;
+    // needs this:
+    Q_ALWAYS_INLINE
+    void setSpontaneous() { spont = true; }
 };
 
 class Q_CORE_EXPORT QTimerEvent : public QEvent

@@ -107,6 +107,16 @@ QT_BEGIN_NAMESPACE
     \internal
 */
 
+QException::~QException()
+#ifdef Q_COMPILER_NOEXCEPT
+    noexcept
+#else
+    throw()
+#endif
+{
+    // must stay empty until ### Qt 6
+}
+
 void QException::raise() const
 {
     QException e = *this;
@@ -116,6 +126,16 @@ void QException::raise() const
 QException *QException::clone() const
 {
     return new QException(*this);
+}
+
+QUnhandledException::~QUnhandledException()
+#ifdef Q_COMPILER_NOEXCEPT
+    noexcept
+#else
+    throw()
+#endif
+{
+    // must stay empty until ### Qt 6
 }
 
 void QUnhandledException::raise() const
@@ -145,7 +165,7 @@ public:
 };
 
 ExceptionHolder::ExceptionHolder(QException *exception)
-: base(new Base(exception)) {}
+: base(exception ? new Base(exception) : Q_NULLPTR) {}
 
 ExceptionHolder::ExceptionHolder(const ExceptionHolder &other)
 : base(other.base)
@@ -161,6 +181,8 @@ ExceptionHolder::~ExceptionHolder()
 
 QException *ExceptionHolder::exception() const
 {
+    if (!base)
+        return Q_NULLPTR;
     return base->exception;
 }
 

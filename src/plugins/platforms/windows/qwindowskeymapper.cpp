@@ -33,15 +33,17 @@
 
 #include "qwindowskeymapper.h"
 #include "qwindowscontext.h"
+#include "qwindowsintegration.h"
 #include "qwindowswindow.h"
-#include "qwindowsguieventdispatcher.h"
-#include "qwindowsscaling.h"
 #include "qwindowsinputcontext.h"
 
+#include <QtGui/QGuiApplication>
 #include <QtGui/QWindow>
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qguiapplication_p.h>
+#include <private/qhighdpiscaling_p.h>
 #include <QtGui/QKeyEvent>
+#include <QtPlatformSupport/private/qwindowsguieventdispatcher_p.h>
 
 #if defined(WM_APPCOMMAND)
 #  ifndef FAPPCOMMAND_MOUSE
@@ -85,10 +87,15 @@ QT_BEGIN_NAMESPACE
     The code originates from \c qkeymapper_win.cpp.
 */
 
+static void clearKeyRecorderOnApplicationInActive(Qt::ApplicationState state);
+
 QWindowsKeyMapper::QWindowsKeyMapper()
     : m_useRTLExtensions(false), m_keyGrabber(0)
 {
     memset(keyLayout, 0, sizeof(keyLayout));
+    QGuiApplication *app = static_cast<QGuiApplication *>(QGuiApplication::instance());
+    QObject::connect(app, &QGuiApplication::applicationStateChanged,
+                     app, clearKeyRecorderOnApplicationInActive);
 }
 
 QWindowsKeyMapper::~QWindowsKeyMapper()
@@ -142,6 +149,12 @@ struct KeyRecorder
     KeyRecord records[QT_MAX_KEY_RECORDINGS];
 };
 static KeyRecorder key_recorder;
+
+static void clearKeyRecorderOnApplicationInActive(Qt::ApplicationState state)
+{
+    if (state == Qt::ApplicationInactive)
+        key_recorder.clearKeys();
+}
 
 KeyRecord *KeyRecorder::findKey(int code, bool remove)
 {
@@ -529,7 +542,7 @@ Q_STATIC_ASSERT((NumMods == KeyboardLayoutItem::NumQtKeys));
 /**
   Remap return or action key to select key for windows mobile.
 */
-inline int winceKeyBend(int keyCode)
+inline quint32 winceKeyBend(quint32 keyCode)
 {
     return KeyTbl[keyCode];
 }
@@ -563,10 +576,10 @@ QT_END_INCLUDE_NAMESPACE
 #endif // Q_OS_WINCE
 
 // Translate a VK into a Qt key code, or unicode character
-static inline int toKeyOrUnicode(int vk, int scancode, unsigned char *kbdBuffer, bool *isDeadkey = 0)
+static inline quint32 toKeyOrUnicode(quint32 vk, quint32 scancode, unsigned char *kbdBuffer, bool *isDeadkey = 0)
 {
     Q_ASSERT(vk > 0 && vk < 256);
-    int code = 0;
+    quint32 code = 0;
     QChar unicodeBuffer[5];
     int res = ToUnicode(vk, scancode, kbdBuffer, reinterpret_cast<LPWSTR>(unicodeBuffer), 5, 0);
     // When Ctrl modifier is used ToUnicode does not return correct values. In order to assign the
@@ -602,10 +615,6 @@ static inline int asciiToKeycode(char a, int state)
     return a & 0xff;
 }
 
-static inline bool isModifierKey(int code)
-{
-    return (code >= Qt::Key_Shift) && (code <= Qt::Key_ScrollLock);
-}
 // Key translation -----------------------------------------------------------------------[ end ]---
 
 
@@ -624,13 +633,13 @@ void QWindowsKeyMapper::changeKeyboard()
     /* MAKELCID()'s first argument is a WORD, and GetKeyboardLayout()
      * returns a DWORD. */
 
-    LCID newLCID = MAKELCID((quintptr)GetKeyboardLayout(0), SORT_DEFAULT);
+    LCID newLCID = MAKELCID(quintptr(GetKeyboardLayout(0)), SORT_DEFAULT);
 //    keyboardInputLocale = qt_localeFromLCID(newLCID);
 
     bool bidi = false;
     wchar_t LCIDFontSig[16];
     if (GetLocaleInfo(newLCID, LOCALE_FONTSIGNATURE, LCIDFontSig, sizeof(LCIDFontSig) / sizeof(wchar_t))
-        && (LCIDFontSig[7] & (wchar_t)0x0800))
+        && (LCIDFontSig[7] & wchar_t(0x0800)))
         bidi = true;
 
     keyboardInputDirection = bidi ? Qt::RightToLeft : Qt::LeftToRight;
@@ -654,7 +663,7 @@ void QWindowsKeyMapper::updateKeyMap(const MSG &msg)
     unsigned char kbdBuffer[256]; // Will hold the complete keyboard state
     GetKeyboardState(kbdBuffer);
     const quint32 scancode = (msg.lParam >> 16) & scancodeBitmask;
-    updatePossibleKeyCodes(kbdBuffer, scancode, msg.wParam);
+    updatePossibleKeyCodes(kbdBuffer, scancode, quint32(msg.wParam));
 }
 
 // Fills keyLayout for that vk_key. Values are all characters one can type using that key
@@ -713,7 +722,7 @@ void QWindowsKeyMapper::updatePossibleKeyCodes(unsigned char *kbdBuffer, quint32
     keyLayout[vk_key].qtKey[7] = toKeyOrUnicode(vk_key, scancode, buffer, &isDeadKey);
     keyLayout[vk_key].deadkeys |= isDeadKey ? 0x80 : 0;
     // Add a fall back key for layouts which don't do composition and show non-latin1 characters
-    int fallbackKey = winceKeyBend(vk_key);
+    quint32 fallbackKey = winceKeyBend(vk_key);
     if (!fallbackKey || fallbackKey == Qt::Key_unknown) {
         fallbackKey = 0;
         if (vk_key != keyLayout[vk_key].qtKey[0] && vk_key < 0x5B && vk_key > 0x2F)
@@ -754,7 +763,7 @@ void QWindowsKeyMapper::updatePossibleKeyCodes(unsigned char *kbdBuffer, quint32
 
 static inline QString messageKeyText(const MSG &msg)
 {
-    const QChar ch = QChar((ushort)msg.wParam);
+    const QChar ch = QChar(ushort(msg.wParam));
     return ch.isNull() ? QString() : QString(ch);
 }
 
@@ -792,12 +801,14 @@ static void showSystemMenu(QWindow* w)
 #undef enabled
 #undef disabled
 #endif // !Q_OS_WINCE
-    const QPoint topLeft = topLevel->geometry().topLeft() * QWindowsScaling::factor();
+    const QPoint pos = QHighDpi::toNativePixels(topLevel->geometry().topLeft(), topLevel);
     const int ret = TrackPopupMenuEx(menu,
                                TPM_LEFTALIGN  | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD,
-                               topLeft.x(), topLeft.y(), topLevelHwnd, 0);
+                               pos.x(), pos.y(),
+                               topLevelHwnd,
+                               0);
     if (ret)
-        qWindowsWndProc(topLevelHwnd, WM_SYSCOMMAND, ret, 0);
+        qWindowsWndProc(topLevelHwnd, WM_SYSCOMMAND, WPARAM(ret), 0);
 }
 
 static inline void sendExtendedPressRelease(QWindow *w, int k,
@@ -861,7 +872,7 @@ bool QWindowsKeyMapper::translateMultimediaKeyEventInternal(QWindow *window, con
     if (cmd < 0 || cmd > 52)
         return false;
 
-    const int qtKey = CmdTbl[cmd];
+    const int qtKey = int(CmdTbl[cmd]);
     sendExtendedPressRelease(receiver, qtKey, Qt::KeyboardModifier(state), 0, 0, 0);
     // QTBUG-43343: Make sure to return false if Qt does not handle the key, otherwise,
     // the keys are not passed to the active media player.
@@ -875,10 +886,10 @@ bool QWindowsKeyMapper::translateMultimediaKeyEventInternal(QWindow *window, con
 
 bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &msg, bool /* grab */)
 {
-    const int  msgType = msg.message;
+    const UINT msgType = msg.message;
 
     const quint32 scancode = (msg.lParam >> 16) & scancodeBitmask;
-    quint32 vk_key = msg.wParam;
+    quint32 vk_key = quint32(msg.wParam);
     quint32 nModifiers = 0;
 
     QWindow *receiver = m_keyGrabber ? m_keyGrabber : window;
@@ -939,13 +950,13 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
                 if (dirStatus == VK_LSHIFT
                         && ((msg.wParam == VK_SHIFT && GetKeyState(VK_LCONTROL))
                             || (msg.wParam == VK_CONTROL && GetKeyState(VK_LSHIFT)))) {
-                    sendExtendedPressRelease(receiver, Qt::Key_Direction_L, 0, scancode, msg.wParam, nModifiers, QString(), false);
+                    sendExtendedPressRelease(receiver, Qt::Key_Direction_L, 0, scancode, vk_key, nModifiers, QString(), false);
                     result = true;
                     dirStatus = 0;
                 } else if (dirStatus == VK_RSHIFT
                            && ( (msg.wParam == VK_SHIFT && GetKeyState(VK_RCONTROL))
                                 || (msg.wParam == VK_CONTROL && GetKeyState(VK_RSHIFT)))) {
-                    sendExtendedPressRelease(receiver, Qt::Key_Direction_R, 0, scancode, msg.wParam, nModifiers, QString(), false);
+                    sendExtendedPressRelease(receiver, Qt::Key_Direction_R, 0, scancode, vk_key, nModifiers, QString(), false);
                     result = true;
                     dirStatus = 0;
                 } else {
@@ -1020,7 +1031,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
                       || (msg.wParam >= VK_OEM_PLUS && msg.wParam <= VK_OEM_3))
                     ? 0 : int(Qt::KeypadModifier);
         default:
-            if ((uint)msg.lParam == 0x004c0001 || (uint)msg.lParam == 0xc04c0001)
+            if (uint(msg.lParam) == 0x004c0001 || uint(msg.lParam) == 0xc04c0001)
                 state |= Qt::KeypadModifier;
             break;
         }
@@ -1032,6 +1043,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         case Qt::Key_Slash:
         case Qt::Key_NumLock:
             state |= Qt::KeypadModifier;
+            break;
         default:
             break;
         }
@@ -1041,13 +1053,13 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
     if (msgType == WM_KEYDOWN || msgType == WM_IME_KEYDOWN || msgType == WM_SYSKEYDOWN) {
         // Get the last record of this key press, so we can validate the current state
         // The record is not removed from the list
-        KeyRecord *rec = key_recorder.findKey(msg.wParam, false);
+        KeyRecord *rec = key_recorder.findKey(int(msg.wParam), false);
 
         // If rec's state doesn't match the current state, something has changed behind our back
         // (Consumed by modal widget is one possibility) So, remove the record from the list
         // This will stop the auto-repeat of the key, should a modifier change, for example
         if (rec && rec->state != state) {
-            key_recorder.findKey(msg.wParam, true);
+            key_recorder.findKey(int(msg.wParam), true);
             rec = 0;
         }
 
@@ -1060,11 +1072,26 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         QChar uch;
         if (PeekMessage(&wm_char, 0, charType, charType, PM_REMOVE)) {
             // Found a ?_CHAR
-            uch = QChar((ushort)wm_char.wParam);
+            uch = QChar(ushort(wm_char.wParam));
+            if (uch.isHighSurrogate()) {
+                m_lastHighSurrogate = uch;
+                return true;
+            } else if (uch.isLowSurrogate() && !m_lastHighSurrogate.isNull()) {
+                if (QObject *focusObject = QGuiApplication::focusObject()) {
+                    const QChar chars[2] = {m_lastHighSurrogate, uch};
+                    QInputMethodEvent event;
+                    event.setCommitString(QString(chars, 2));
+                    QCoreApplication::sendEvent(focusObject, &event);
+                }
+                m_lastHighSurrogate = QChar();
+                return true;
+            } else {
+                m_lastHighSurrogate = QChar();
+            }
             if (msgType == WM_SYSKEYDOWN && uch.isLetter() && (msg.lParam & KF_ALTDOWN))
                 uch = uch.toLower(); // (See doc of WM_SYSCHAR) Alt-letter
             if (!code && !uch.row())
-                code = asciiToKeycode(uch.cell(), state);
+                code = asciiToKeycode(char(uch.cell()), state);
         }
 
         // Special handling for the WM_IME_KEYDOWN message. Microsoft IME (Korean) will not
@@ -1072,8 +1099,10 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         // results, if we map this virtual key-code directly (for eg '?' US layouts). So try
         // to find the correct key using the current message parameters & keyboard state.
         if (uch.isNull() && msgType == WM_IME_KEYDOWN) {
-            if (!QWindowsInputContext::instance()->isComposing())
-                vk_key = ImmGetVirtualKey((HWND)window->winId());
+            const QWindowsInputContext *windowsInputContext =
+                qobject_cast<const QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());
+            if (!(windowsInputContext && windowsInputContext->isComposing()))
+                vk_key = ImmGetVirtualKey(reinterpret_cast<HWND>(window->winId()));
             BYTE keyState[256];
             wchar_t newKey[3] = {0};
             GetKeyboardState(keyState);
@@ -1093,14 +1122,14 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
                 uch = QChar(QLatin1Char(0x7f)); // Windows doesn't know this one.
             } else {
                 if (msgType != WM_SYSKEYDOWN || !code) {
-                    UINT map = MapVirtualKey(msg.wParam, 2);
+                    UINT map = MapVirtualKey(UINT(msg.wParam), 2);
                     // If the high bit of the return value is set, it's a deadkey
                     if (!(map & 0x80000000))
-                        uch = QChar((ushort)map);
+                        uch = QChar(ushort(map));
                 }
             }
             if (!code && !uch.row())
-                code = asciiToKeycode(uch.cell(), state);
+                code = asciiToKeycode(char(uch.cell()), state);
         }
 
         // Special handling of global Windows hotkeys
@@ -1129,9 +1158,9 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         if (rec) {
             if (code < Qt::Key_Shift || code > Qt::Key_ScrollLock) {
                 QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, code,
-                                                               Qt::KeyboardModifier(state), scancode, msg.wParam, nModifiers, rec->text, true);
+                                                               Qt::KeyboardModifier(state), scancode, quint32(msg.wParam), nModifiers, rec->text, true);
                 QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyPress, code,
-                                                               Qt::KeyboardModifier(state), scancode, msg.wParam, nModifiers, rec->text, true);
+                                                               Qt::KeyboardModifier(state), scancode, quint32(msg.wParam), nModifiers, rec->text, true);
                 result = true;
             }
         }
@@ -1139,7 +1168,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         // and store the key data into our records.
         else {
             const QString text = uch.isNull() ? QString() : QString(uch);
-            const char a = uch.row() ? 0 : uch.cell();
+            const char a = uch.row() ? char(0) : char(uch.cell());
             const Qt::KeyboardModifiers modifiers(state);
 #ifndef QT_NO_SHORTCUT
             // Is Qt interested in the context menu key?
@@ -1148,9 +1177,9 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
                 return false;
             }
 #endif // !QT_NO_SHORTCUT
-            key_recorder.storeKey(msg.wParam, a, state, text);
+            key_recorder.storeKey(int(msg.wParam), a, state, text);
             QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyPress, code,
-                                                           modifiers, scancode, msg.wParam, nModifiers, text, false);
+                                                           modifiers, scancode, quint32(msg.wParam), nModifiers, text, false);
             result =true;
             bool store = true;
 #ifndef Q_OS_WINCE
@@ -1169,7 +1198,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
             }
 #endif // !Q_OS_WINCE
             if (!store)
-                key_recorder.findKey(msg.wParam, true);
+                key_recorder.findKey(int(msg.wParam), true);
         }
     }
 
@@ -1179,7 +1208,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
         // The key may not be in our records if, for example, the down event was handled by
         // win32 natively, or our window gets focus while a key is already press, but now gets
         // the key release event.
-        KeyRecord* rec = key_recorder.findKey(msg.wParam, true);
+        const KeyRecord *rec = key_recorder.findKey(int(msg.wParam), true);
         if (!rec && !(code == Qt::Key_Shift
                       || code == Qt::Key_Control
                       || code == Qt::Key_Meta
@@ -1187,13 +1216,14 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, const MSG &ms
             // Someone ate the key down event
         } else {
             if (!code)
-                code = asciiToKeycode(rec->ascii ? rec->ascii : msg.wParam, state);
+                code = asciiToKeycode(rec->ascii ? char(rec->ascii) : char(msg.wParam), state);
 
             // Map SHIFT + Tab to SHIFT + BackTab, QShortcutMap knows about this translation
             if (code == Qt::Key_Tab && (state & Qt::ShiftModifier) == Qt::ShiftModifier)
                 code = Qt::Key_Backtab;
             QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, code,
-                                                           Qt::KeyboardModifier(state), scancode, msg.wParam, nModifiers,
+                                                           Qt::KeyboardModifier(state), scancode, quint32(msg.wParam),
+                                                           nModifiers,
                                                            (rec ? rec->text : QString()), false);
             result = true;
 #ifndef Q_OS_WINCE
@@ -1233,7 +1263,12 @@ QList<int> QWindowsKeyMapper::possibleKeys(const QKeyEvent *e) const
 {
     QList<int> result;
 
-    const KeyboardLayoutItem &kbItem = keyLayout[e->nativeVirtualKey()];
+
+    const quint32 nativeVirtualKey = e->nativeVirtualKey();
+    if (nativeVirtualKey > 255)
+        return result;
+
+    const KeyboardLayoutItem &kbItem = keyLayout[nativeVirtualKey];
     if (!kbItem.exists)
         return result;
 

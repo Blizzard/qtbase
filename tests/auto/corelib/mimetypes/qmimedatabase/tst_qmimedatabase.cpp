@@ -35,6 +35,12 @@
 
 #include "qstandardpaths.h"
 
+#ifdef Q_OS_UNIX
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QStandardPaths>
@@ -126,6 +132,8 @@ tst_QMimeDatabase::tst_QMimeDatabase()
 
 void tst_QMimeDatabase::initTestCase()
 {
+    QLocale::setDefault(QLocale::c());
+    QVERIFY2(m_temporaryDir.isValid(), qPrintable(m_temporaryDir.errorString()));
     QStandardPaths::setTestModeEnabled(true);
     m_localMimeDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/mime";
     if (QDir(m_localMimeDir).exists()) {
@@ -136,7 +144,8 @@ void tst_QMimeDatabase::initTestCase()
 #ifdef USE_XDG_DATA_DIRS
     // Create a temporary "global" XDG data dir for later use
     // It will initially contain a copy of freedesktop.org.xml
-    QVERIFY(m_temporaryDir.isValid());
+    QVERIFY2(m_temporaryDir.isValid(),
+             ("Could not create temporary subdir: " + m_temporaryDir.errorString()).toUtf8());
     const QDir here = QDir(m_temporaryDir.path());
     m_globalXdgDir = m_temporaryDir.path() + QStringLiteral("/global");
     const QString globalPackageDir = m_globalXdgDir + QStringLiteral("/mime/packages");
@@ -442,6 +451,21 @@ void tst_QMimeDatabase::icons()
     QCOMPARE(pub.genericIconName(), QString::fromLatin1("x-office-document"));
 }
 
+void tst_QMimeDatabase::comment()
+{
+    struct RestoreLocale
+    {
+        ~RestoreLocale() { QLocale::setDefault(QLocale::c()); }
+    } restoreLocale;
+
+    QLocale::setDefault(QLocale("de"));
+    QMimeDatabase db;
+    QMimeType directory = db.mimeTypeForName(QStringLiteral("inode/directory"));
+    QCOMPARE(directory.comment(), QStringLiteral("Ordner"));
+    QLocale::setDefault(QLocale("fr"));
+    QCOMPARE(directory.comment(), QStringLiteral("dossier"));
+}
+
 // In here we do the tests that need some content in a temporary file.
 // This could also be added to shared-mime-info's testsuite...
 void tst_QMimeDatabase::mimeTypeForFileWithContent()
@@ -510,6 +534,8 @@ void tst_QMimeDatabase::mimeTypeForUrl()
     QVERIFY(db.mimeTypeForUrl(QUrl::fromEncoded("http://foo/bar.png")).isDefault()); // HTTP can't know before downloading
     QCOMPARE(db.mimeTypeForUrl(QUrl::fromEncoded("ftp://foo/bar.png")).name(), QString::fromLatin1("image/png"));
     QCOMPARE(db.mimeTypeForUrl(QUrl::fromEncoded("ftp://foo/bar")).name(), QString::fromLatin1("application/octet-stream")); // unknown extension
+    QCOMPARE(db.mimeTypeForUrl(QUrl("mailto:something@example.com")).name(), QString::fromLatin1("application/octet-stream")); // unknown
+    QCOMPARE(db.mimeTypeForUrl(QUrl("mailto:something@polish.pl")).name(), QString::fromLatin1("application/octet-stream")); // unknown, NOT perl ;)
 }
 
 void tst_QMimeDatabase::mimeTypeForData_data()
@@ -641,6 +667,28 @@ void tst_QMimeDatabase::knownSuffix()
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.bz2")), QString::fromLatin1("bz2"));
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.bar.bz2")), QString::fromLatin1("bz2"));
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.tar.bz2")), QString::fromLatin1("tar.bz2"));
+}
+
+void tst_QMimeDatabase::symlinkToFifo() // QTBUG-48529
+{
+#ifdef Q_OS_UNIX
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString dir = tempDir.path();
+    const QString fifo = dir + "/fifo";
+    QCOMPARE(mkfifo(QFile::encodeName(fifo), 0006), 0);
+
+    QMimeDatabase db;
+    QCOMPARE(db.mimeTypeForFile(fifo).name(), QString::fromLatin1("inode/fifo"));
+
+    // Now make a symlink to the fifo
+    const QString link = dir + "/link";
+    QVERIFY(QFile::link(fifo, link));
+    QCOMPARE(db.mimeTypeForFile(link).name(), QString::fromLatin1("inode/fifo"));
+
+#else
+    QSKIP("This test requires pipes and symlinks");
+#endif
 }
 
 void tst_QMimeDatabase::findByFileName_data()
@@ -825,16 +873,20 @@ static bool runUpdateMimeDatabase(const QString &path) // TODO make it a QMimeDa
         return false;
     }
 
+    QElapsedTimer timer;
     QProcess proc;
     proc.setProcessChannelMode(QProcess::MergedChannels); // silence output
+    qDebug().noquote() << "runUpdateMimeDatabase: running" << umd << path << "...";
+    timer.start();
     proc.start(umd, QStringList(path));
     if (!proc.waitForStarted()) {
         qWarning("Cannot start %s: %s",
                  qPrintable(umd), qPrintable(proc.errorString()));
         return false;
     }
-    proc.waitForFinished();
-    //qDebug() << "runUpdateMimeDatabase" << path;
+    const bool success = proc.waitForFinished();
+    qDebug().noquote() << "runUpdateMimeDatabase: done,"
+        << success << timer.elapsed() << "ms";
     return true;
 }
 

@@ -38,6 +38,7 @@
 #ifndef QT_NO_REGULAREXPRESSION
 
 #include <QtCore/qcoreapplication.h>
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qstringlist.h>
@@ -1842,6 +1843,21 @@ bool QRegularExpression::operator==(const QRegularExpression &re) const
 */
 
 /*!
+    \since 5.6
+    \relates QRegularExpression
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
+*/
+uint qHash(const QRegularExpression &key, uint seed) Q_DECL_NOTHROW
+{
+    QtPrivate::QHashCombine hash;
+    seed = hash(seed, key.d->pattern);
+    seed = hash(seed, key.d->patternOptions);
+    return seed;
+}
+
+/*!
     Escapes all characters of \a str so that they no longer have any special
     meaning when used as a regular expression pattern string, and returns
     the escaped string. For instance:
@@ -2109,7 +2125,8 @@ QStringRef QRegularExpressionMatch::capturedRef(const QString &name) const
 QStringList QRegularExpressionMatch::capturedTexts() const
 {
     QStringList texts;
-    for (int i = 0; i <= lastCapturedIndex(); ++i)
+    texts.reserve(d->capturedCount);
+    for (int i = 0; i < d->capturedCount; ++i)
         texts << captured(i);
     return texts;
 }
@@ -2462,7 +2479,7 @@ QDataStream &operator>>(QDataStream &in, QRegularExpression &re)
 QDebug operator<<(QDebug debug, const QRegularExpression &re)
 {
     QDebugStateSaver saver(debug);
-    debug.nospace() << "QRegularExpression(" << re.pattern() << ", " << re.patternOptions() << ")";
+    debug.nospace() << "QRegularExpression(" << re.pattern() << ", " << re.patternOptions() << ')';
     return debug;
 }
 
@@ -2504,7 +2521,7 @@ QDebug operator<<(QDebug debug, QRegularExpression::PatternOptions patternOption
         flags.chop(1);
     }
 
-    debug.nospace() << "QRegularExpression::PatternOptions(" << flags << ")";
+    debug.nospace() << "QRegularExpression::PatternOptions(" << flags << ')';
 
     return debug;
 }
@@ -2533,7 +2550,7 @@ QDebug operator<<(QDebug debug, const QRegularExpressionMatch &match)
         for (int i = 0; i <= match.lastCapturedIndex(); ++i) {
             debug << i
                   << ":(" << match.capturedStart(i) << ", " << match.capturedEnd(i)
-                  << ", " << match.captured(i) << ")";
+                  << ", " << match.captured(i) << ')';
             if (i < match.lastCapturedIndex())
                 debug << ", ";
         }
@@ -2541,12 +2558,12 @@ QDebug operator<<(QDebug debug, const QRegularExpressionMatch &match)
         debug << ", has partial match: ("
               << match.capturedStart(0) << ", "
               << match.capturedEnd(0) << ", "
-              << match.captured(0) << ")";
+              << match.captured(0) << ')';
     } else {
         debug << ", no match";
     }
 
-    debug << ")";
+    debug << ')';
 
     return debug;
 }

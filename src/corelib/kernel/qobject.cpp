@@ -47,7 +47,6 @@
 #include <qthread.h>
 #include <private/qthread_p.h>
 #include <qdebug.h>
-#include <qhash.h>
 #include <qpair.h>
 #include <qvarlengtharray.h>
 #include <qset.h>
@@ -65,6 +64,16 @@
 QT_BEGIN_NAMESPACE
 
 static int DIRECT_CONNECTION_ONLY = 0;
+
+
+QDynamicMetaObjectData::~QDynamicMetaObjectData()
+{
+}
+
+QAbstractDynamicMetaObject::~QAbstractDynamicMetaObject()
+{
+}
+
 
 struct QSlotObjectBaseDeleter { // for use with QScopedPointer<QSlotObjectBase,...>
     static void cleanup(QtPrivate::QSlotObjectBase *slot) {
@@ -494,6 +503,7 @@ void QMetaCallEvent::placeMetaCall(QObject *object)
     \brief Exception-safe wrapper around QObject::blockSignals()
     \since 5.3
     \ingroup objectmodel
+    \inmodule QtCore
 
     \reentrant
 
@@ -1113,7 +1123,7 @@ QObjectPrivate::Connection::~Connection()
     RTTI support and it works across dynamic library boundaries.
 
     qobject_cast() can also be used in conjunction with interfaces;
-    see the \l{tools/plugandpaint}{Plug & Paint} example for details.
+    see the \l{tools/plugandpaint/app}{Plug & Paint} example for details.
 
     \warning If T isn't declared with the Q_OBJECT macro, this
     function's return value is undefined.
@@ -1208,6 +1218,13 @@ void QObject::setObjectName(const QString &name)
 
     The event() function can be reimplemented to customize the
     behavior of an object.
+
+    Make sure you call the parent event class implementation
+    for all the events you did not handle.
+
+    Example:
+
+    \snippet code/src_corelib_kernel_qobject.cpp 52
 
     \sa installEventFilter(), timerEvent(), QCoreApplication::sendEvent(),
     QCoreApplication::postEvent()
@@ -1372,7 +1389,7 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
 
     Signals are not blocked by default.
 
-    \sa blockSignals()
+    \sa blockSignals(), QSignalBlocker
 */
 
 /*!
@@ -1387,7 +1404,7 @@ bool QObject::eventFilter(QObject * /* watched */, QEvent * /* event */)
 
     Signals emitted while being blocked are not buffered.
 
-    \sa signalsBlocked()
+    \sa signalsBlocked(), QSignalBlocker
 */
 
 bool QObject::blockSignals(bool block) Q_DECL_NOTHROW
@@ -1468,7 +1485,7 @@ void QObject::moveToThread(QThread *targetThread)
     } else if (d->threadData != currentData) {
         qWarning("QObject::moveToThread: Current thread (%p) is not the object's thread (%p).\n"
                  "Cannot move to target thread (%p)\n",
-                 currentData->thread, d->threadData->thread, targetData ? targetData->thread : Q_NULLPTR);
+                 currentData->thread.load(), d->threadData->thread.load(), targetData ? targetData->thread.load() : Q_NULLPTR);
 
 #ifdef Q_OS_MAC
         qWarning("You might be loading two sets of Qt binaries into the same process. "
@@ -2127,8 +2144,8 @@ void QObject::deleteLater()
 
     Returns a translated version of \a sourceText, optionally based on a
     \a disambiguation string and value of \a n for strings containing plurals;
-    otherwise returns \a sourceText itself if no appropriate translated string
-    is available.
+    otherwise returns QString::fromUtf8(\a sourceText) if no appropriate
+    translated string is available.
 
     Example:
     \snippet ../widgets/mainwindows/sdi/mainwindow.cpp implicit tr context
@@ -2154,7 +2171,7 @@ void QObject::deleteLater()
     translators while performing translations is not supported. Doing
     so will probably result in crashes or other undesirable behavior.
 
-    \sa trUtf8(), QCoreApplication::translate(), {Internationalization with Qt}
+    \sa QCoreApplication::translate(), {Internationalization with Qt}
 */
 
 /*!
@@ -3519,7 +3536,7 @@ static void queued_activate(QObject *sender, int signal, QObjectPrivate::Connect
                             QMutexLocker &locker)
 {
     const int *argumentTypes = c->argumentTypes.load();
-    if (!argumentTypes && argumentTypes != &DIRECT_CONNECTION_ONLY) {
+    if (!argumentTypes) {
         QMetaMethod m = QMetaObjectPrivate::signal(sender->metaObject(), signal);
         argumentTypes = queuedConnectionTypes(m.parameterTypes());
         if (!argumentTypes) // cannot queue arguments
@@ -3666,7 +3683,6 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
                 continue;
 #ifndef QT_NO_THREAD
             } else if (c->connectionType == Qt::BlockingQueuedConnection) {
-                locker.unlock();
                 if (receiverInSameThread) {
                     qWarning("Qt: Dead lock detected while activating a BlockingQueuedConnection: "
                     "Sender is %s(%p), receiver is %s(%p)",
@@ -3678,6 +3694,7 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
                     new QMetaCallEvent(c->slotObj, sender, signal_index, 0, 0, argv ? argv : empty_argv, &semaphore) :
                     new QMetaCallEvent(c->method_offset, c->method_relative, c->callFunction, sender, signal_index, 0, 0, argv ? argv : empty_argv, &semaphore);
                 QCoreApplication::postEvent(receiver, ev);
+                locker.unlock();
                 semaphore.acquire();
                 locker.relock();
                 continue;
@@ -3814,7 +3831,7 @@ int QObjectPrivate::signalIndex(const char *signalName,
   \b{Note:} Dynamic properties starting with "_q_" are reserved for internal
   purposes.
 
-  \sa property(), metaObject(), dynamicPropertyNames()
+  \sa property(), metaObject(), dynamicPropertyNames(), QMetaProperty::write()
 */
 bool QObject::setProperty(const char *name, const QVariant &value)
 {
@@ -4133,11 +4150,11 @@ QDebug operator<<(QDebug dbg, const QObject *o)
 
     Example:
 
-    \snippet ../widgets/tools/plugandpaintplugins/basictools/basictoolsplugin.h 1
+    \snippet ../widgets/tools/plugandpaint/plugins/basictools/basictoolsplugin.h 1
     \dots
-    \snippet ../widgets/tools/plugandpaintplugins/basictools/basictoolsplugin.h 3
+    \snippet ../widgets/tools/plugandpaint/plugins/basictools/basictoolsplugin.h 3
 
-    See the \l{tools/plugandpaintplugins/basictools}{Plug & Paint
+    See the \l{tools/plugandpaint/plugins/basictools}{Plug & Paint
     Basic Tools} example for details.
 
     \sa Q_DECLARE_INTERFACE(), Q_PLUGIN_METADATA(), {How to Create Qt Plugins}
@@ -4245,7 +4262,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     \relates QObject
     \since 5.5
 
-    This macro registers a single \l{QFlags}{flags types} with the
+    This macro registers a single \l{QFlags}{flags type} with the
     meta-object system. It is typically used in a class definition to declare
     that values of a given enum can be used as flags and combined using the
     bitwise OR operator.
@@ -4666,7 +4683,7 @@ QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int s
     QOrderedMutexLocker locker(signalSlotLock(sender),
                                signalSlotLock(receiver));
 
-    if (type & Qt::UniqueConnection) {
+    if (type & Qt::UniqueConnection && slot) {
         QObjectConnectionListVector *connectionLists = QObjectPrivate::get(s)->connectionLists;
         if (connectionLists && connectionLists->count() > signal_index) {
             const QObjectPrivate::Connection *c2 =
@@ -4805,7 +4822,7 @@ bool QObject::disconnect(const QMetaObject::Connection &connection)
 
     \note It is not possible to use this overload to diconnect signals
     connected to functors or lambda expressions. That is because it is not
-    possible to compare them. Instead, use the olverload that take a
+    possible to compare them. Instead, use the overload that takes a
     QMetaObject::Connection
 
     \sa connect()

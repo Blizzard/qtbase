@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2015 Intel Corporation.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the QtDBus module of the Qt Toolkit.
@@ -37,6 +38,7 @@
 #include <qdebug.h>
 #include <qcoreapplication.h>
 #include <qstringlist.h>
+#include <qtimer.h>
 #include <qthread.h>
 
 #include "qdbusconnectioninterface.h"
@@ -52,11 +54,78 @@
 
 #include <algorithm>
 
+#ifdef interface
+#undef interface
+#endif
+
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
 
+#ifdef Q_OS_WIN
+static void preventDllUnload();
+#endif
+
 Q_GLOBAL_STATIC(QDBusConnectionManager, _q_manager)
+
+// can be replaced with a lambda in Qt 5.7
+class QDBusConnectionDispatchEnabler : public QObject
+{
+    Q_OBJECT
+    QDBusConnectionPrivate *con;
+public:
+    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
+
+public slots:
+    void execute()
+    {
+        con->setDispatchEnabled(true);
+        if (!con->ref.deref())
+            con->deleteLater();
+        deleteLater();
+    }
+};
+
+struct QDBusConnectionManager::ConnectionRequestData
+{
+    enum RequestType {
+        ConnectToStandardBus,
+        ConnectToBusByAddress,
+        ConnectToPeerByAddress
+    } type;
+
+    union {
+        QDBusConnection::BusType busType;
+        const QString *busAddress;
+    };
+    const QString *name;
+
+    QDBusConnectionPrivate *result;
+
+    bool suspendedDelivery;
+};
+
+QDBusConnectionPrivate *QDBusConnectionManager::busConnection(QDBusConnection::BusType type)
+{
+    Q_STATIC_ASSERT(int(QDBusConnection::SessionBus) + int(QDBusConnection::SystemBus) == 1);
+    Q_ASSERT(type == QDBusConnection::SessionBus || type == QDBusConnection::SystemBus);
+
+    if (!qdbus_loadLibDBus())
+        return 0;
+
+    // we'll start in suspended delivery mode if we're in the main thread
+    // (the event loop will resume delivery)
+    bool suspendedDelivery = qApp && qApp->thread() == QThread::currentThread();
+
+    QMutexLocker lock(&defaultBusMutex);
+    if (defaultBuses[type])
+        return defaultBuses[type];
+
+    QString name = QStringLiteral("qt_default_session_bus");
+    if (type == QDBusConnection::SystemBus)
+        name = QStringLiteral("qt_default_system_bus");
+    return defaultBuses[type] = connectToBus(type, name, suspendedDelivery);
+}
 
 QDBusConnectionPrivate *QDBusConnectionManager::connection(const QString &name) const
 {
@@ -68,7 +137,7 @@ void QDBusConnectionManager::removeConnection(const QString &name)
     QDBusConnectionPrivate *d = 0;
     d = connectionHash.take(name);
     if (d && !d->ref.deref())
-        d->deleteYourself();
+        d->deleteLater();
 
     // Static objects may be keeping the connection open.
     // However, it is harmless to have outstanding references to a connection that is
@@ -77,17 +146,26 @@ void QDBusConnectionManager::removeConnection(const QString &name)
     // ### Output a warning if connections are being used after they have been removed.
 }
 
+QDBusConnectionManager::QDBusConnectionManager()
+{
+    connect(this, &QDBusConnectionManager::connectionRequested,
+            this, &QDBusConnectionManager::executeConnectionRequest, Qt::BlockingQueuedConnection);
+    connect(this, &QDBusConnectionManager::serverRequested,
+            this, &QDBusConnectionManager::createServer, Qt::BlockingQueuedConnection);
+    moveToThread(this);         // ugly, don't do this in other projects
+
+#ifdef Q_OS_WIN
+    // prevent the library from being unloaded on Windows. See comments in the function.
+    preventDllUnload();
+#endif
+    defaultBuses[0] = defaultBuses[1] = Q_NULLPTR;
+    start();
+}
+
 QDBusConnectionManager::~QDBusConnectionManager()
 {
-    for (QHash<QString, QDBusConnectionPrivate *>::const_iterator it = connectionHash.constBegin();
-         it != connectionHash.constEnd(); ++it) {
-        QDBusConnectionPrivate *d = it.value();
-        if (!d->ref.deref())
-            d->deleteYourself();
-        else
-            d->closeConnection();
-    }
-    connectionHash.clear();
+    quit();
+    wait();
 }
 
 QDBusConnectionManager* QDBusConnectionManager::instance()
@@ -104,6 +182,134 @@ void QDBusConnectionManager::setConnection(const QString &name, QDBusConnectionP
 {
     connectionHash[name] = c;
     c->name = name;
+}
+
+void QDBusConnectionManager::run()
+{
+    exec();
+
+    // cleanup:
+    QMutexLocker locker(&mutex);
+    for (QHash<QString, QDBusConnectionPrivate *>::const_iterator it = connectionHash.constBegin();
+         it != connectionHash.constEnd(); ++it) {
+        QDBusConnectionPrivate *d = it.value();
+        if (!d->ref.deref()) {
+            delete d;
+        } else {
+            d->closeConnection();
+            d->moveToThread(Q_NULLPTR);     // allow it to be deleted in another thread
+        }
+    }
+    connectionHash.clear();
+
+    // allow deletion from any thread without warning
+    moveToThread(Q_NULLPTR);
+}
+
+QDBusConnectionPrivate *QDBusConnectionManager::connectToBus(QDBusConnection::BusType type, const QString &name,
+                                                             bool suspendedDelivery)
+{
+    ConnectionRequestData data;
+    data.type = ConnectionRequestData::ConnectToStandardBus;
+    data.busType = type;
+    data.name = &name;
+    data.suspendedDelivery = suspendedDelivery;
+
+    emit connectionRequested(&data);
+    if (suspendedDelivery && data.result->connection) {
+        data.result->ref.ref();
+        QDBusConnectionDispatchEnabler *o = new QDBusConnectionDispatchEnabler(data.result);
+        QTimer::singleShot(0, o, SLOT(execute()));
+        o->moveToThread(qApp->thread());    // qApp was checked in the caller
+    }
+    return data.result;
+}
+
+QDBusConnectionPrivate *QDBusConnectionManager::connectToBus(const QString &address, const QString &name)
+{
+    ConnectionRequestData data;
+    data.type = ConnectionRequestData::ConnectToBusByAddress;
+    data.busAddress = &address;
+    data.name = &name;
+    data.suspendedDelivery = false;
+
+    emit connectionRequested(&data);
+    return data.result;
+}
+
+QDBusConnectionPrivate *QDBusConnectionManager::connectToPeer(const QString &address, const QString &name)
+{
+    ConnectionRequestData data;
+    data.type = ConnectionRequestData::ConnectToPeerByAddress;
+    data.busAddress = &address;
+    data.name = &name;
+    data.suspendedDelivery = false;
+
+    emit connectionRequested(&data);
+    return data.result;
+}
+
+void QDBusConnectionManager::executeConnectionRequest(QDBusConnectionManager::ConnectionRequestData *data)
+{
+    QMutexLocker locker(&mutex);
+    const QString &name = *data->name;
+    QDBusConnectionPrivate *&d = data->result;
+
+    // check if the connection exists by name
+    d = connection(name);
+    if (d || name.isEmpty())
+        return;
+
+    d = new QDBusConnectionPrivate;
+    DBusConnection *c = 0;
+    QDBusErrorInternal error;
+    switch (data->type) {
+    case ConnectionRequestData::ConnectToStandardBus:
+        switch (data->busType) {
+        case QDBusConnection::SystemBus:
+            c = q_dbus_bus_get_private(DBUS_BUS_SYSTEM, error);
+            break;
+        case QDBusConnection::SessionBus:
+            c = q_dbus_bus_get_private(DBUS_BUS_SESSION, error);
+            break;
+        case QDBusConnection::ActivationBus:
+            c = q_dbus_bus_get_private(DBUS_BUS_STARTER, error);
+            break;
+        }
+        break;
+
+    case ConnectionRequestData::ConnectToBusByAddress:
+    case ConnectionRequestData::ConnectToPeerByAddress:
+        c = q_dbus_connection_open_private(data->busAddress->toUtf8().constData(), error);
+        if (c && data->type == ConnectionRequestData::ConnectToBusByAddress) {
+            // register on the bus
+            if (!q_dbus_bus_register(c, error)) {
+                q_dbus_connection_unref(c);
+                c = 0;
+            }
+        }
+        break;
+    }
+
+    setConnection(name, d);
+    if (data->type == ConnectionRequestData::ConnectToPeerByAddress) {
+        d->setPeer(c, error);
+    } else {
+        // create the bus service
+        // will lock in QDBusConnectionPrivate::connectRelay()
+        d->setConnection(c, error);
+        d->createBusService();
+        if (c && data->suspendedDelivery)
+            d->setDispatchEnabled(false);
+    }
+}
+
+void QDBusConnectionManager::createServer(const QString &address, void *server)
+{
+    QDBusErrorInternal error;
+    QDBusConnectionPrivate *d = new QDBusConnectionPrivate;
+    d->setServer(static_cast<QDBusServer *>(server),
+                 q_dbus_server_listen(address.toUtf8().constData(), error), error);
 }
 
 /*!
@@ -268,7 +474,7 @@ QDBusConnection::QDBusConnection(QDBusConnectionPrivate *dd)
 QDBusConnection::~QDBusConnection()
 {
     if (d && !d->ref.deref())
-        d->deleteYourself();
+        d->deleteLater();
 }
 
 /*!
@@ -283,7 +489,7 @@ QDBusConnection &QDBusConnection::operator=(const QDBusConnection &other)
     if (other.d)
         other.d->ref.ref();
     if (d && !d->ref.deref())
-        d->deleteYourself();
+        d->deleteLater();
     d = other.d;
     return *this;
 }
@@ -295,44 +501,11 @@ QDBusConnection &QDBusConnection::operator=(const QDBusConnection &other)
 */
 QDBusConnection QDBusConnection::connectToBus(BusType type, const QString &name)
 {
-//    Q_ASSERT_X(QCoreApplication::instance(), "QDBusConnection::addConnection",
-//               "Cannot create connection without a Q[Core]Application instance");
     if (!qdbus_loadLibDBus()) {
         QDBusConnectionPrivate *d = 0;
         return QDBusConnection(d);
     }
-
-    QMutexLocker locker(&_q_manager()->mutex);
-
-    QDBusConnectionPrivate *d = _q_manager()->connection(name);
-    if (d || name.isEmpty())
-        return QDBusConnection(d);
-
-    d = new QDBusConnectionPrivate;
-    DBusConnection *c = 0;
-    QDBusErrorInternal error;
-    switch (type) {
-        case SystemBus:
-            c = q_dbus_bus_get_private(DBUS_BUS_SYSTEM, error);
-            break;
-        case SessionBus:
-            c = q_dbus_bus_get_private(DBUS_BUS_SESSION, error);
-            break;
-        case ActivationBus:
-            c = q_dbus_bus_get_private(DBUS_BUS_STARTER, error);
-            break;
-    }
-    d->setConnection(c, error); //setConnection does the error handling for us
-
-    _q_manager()->setConnection(name, d);
-
-    QDBusConnection retval(d);
-
-    // create the bus service
-    // will lock in QDBusConnectionPrivate::connectRelay()
-    d->setBusService(retval);
-
-    return retval;
+    return QDBusConnection(_q_manager()->connectToBus(type, name, false));
 }
 
 /*!
@@ -342,39 +515,11 @@ QDBusConnection QDBusConnection::connectToBus(BusType type, const QString &name)
 QDBusConnection QDBusConnection::connectToBus(const QString &address,
                                               const QString &name)
 {
-//    Q_ASSERT_X(QCoreApplication::instance(), "QDBusConnection::addConnection",
-//               "Cannot create connection without a Q[Core]Application instance");
     if (!qdbus_loadLibDBus()) {
         QDBusConnectionPrivate *d = 0;
         return QDBusConnection(d);
     }
-
-    QMutexLocker locker(&_q_manager()->mutex);
-
-    QDBusConnectionPrivate *d = _q_manager()->connection(name);
-    if (d || name.isEmpty())
-        return QDBusConnection(d);
-
-    d = new QDBusConnectionPrivate;
-    // setConnection does the error handling for us
-    QDBusErrorInternal error;
-    DBusConnection *c = q_dbus_connection_open_private(address.toUtf8().constData(), error);
-    if (c) {
-        if (!q_dbus_bus_register(c, error)) {
-            q_dbus_connection_unref(c);
-            c = 0;
-        }
-    }
-    d->setConnection(c, error);
-    _q_manager()->setConnection(name, d);
-
-    QDBusConnection retval(d);
-
-    // create the bus service
-    // will lock in QDBusConnectionPrivate::connectRelay()
-    d->setBusService(retval);
-
-    return retval;
+    return QDBusConnection(_q_manager()->connectToBus(address, name));
 }
 /*!
     \since 4.8
@@ -385,30 +530,11 @@ QDBusConnection QDBusConnection::connectToBus(const QString &address,
 QDBusConnection QDBusConnection::connectToPeer(const QString &address,
                                                const QString &name)
 {
-//    Q_ASSERT_X(QCoreApplication::instance(), "QDBusConnection::addConnection",
-//               "Cannot create connection without a Q[Core]Application instance");
     if (!qdbus_loadLibDBus()) {
         QDBusConnectionPrivate *d = 0;
         return QDBusConnection(d);
     }
-
-    QMutexLocker locker(&_q_manager()->mutex);
-
-    QDBusConnectionPrivate *d = _q_manager()->connection(name);
-    if (d || name.isEmpty())
-        return QDBusConnection(d);
-
-    d = new QDBusConnectionPrivate;
-    // setPeer does the error handling for us
-    QDBusErrorInternal error;
-    DBusConnection *c = q_dbus_connection_open_private(address.toUtf8().constData(), error);
-
-    d->setPeer(c, error);
-    _q_manager()->setConnection(name, d);
-
-    QDBusConnection retval(d);
-
-    return retval;
+    return QDBusConnection(_q_manager()->connectToPeer(address, name));
 }
 
 /*!
@@ -467,7 +593,7 @@ bool QDBusConnection::send(const QDBusMessage &message) const
             d->lastError = err;
         return false;
     }
-    return d->send(message) != 0;
+    return d->send(message);
 }
 
 /*!
@@ -688,7 +814,6 @@ bool QDBusConnection::connect(const QString &service, const QString &path, const
         return false;
     }
 
-    QDBusWriteLocker locker(ConnectAction, d);
     return d->connectSignal(service, path, interface, name, argumentMatch, signature, receiver, slot);
 }
 
@@ -744,7 +869,6 @@ bool QDBusConnection::disconnect(const QString &service, const QString &path, co
     if (interface.isEmpty() && name.isEmpty())
         return false;
 
-    QDBusWriteLocker locker(DisconnectAction, d);
     return d->disconnectSignal(service, path, interface, name, argumentMatch, signature, receiver, slot);
 }
 
@@ -929,7 +1053,7 @@ QObject *QDBusConnection::objectRegisteredAt(const QString &path) const
 */
 QDBusConnectionInterface *QDBusConnection::interface() const
 {
-    if (!d)
+    if (!d || d->mode != QDBusConnectionPrivate::ClientMode)
         return 0;
     return d->busService;
 }
@@ -1052,35 +1176,6 @@ bool QDBusConnection::unregisterService(const QString &serviceName)
     return false;
 }
 
-static const char _q_sessionBusName[] = "qt_default_session_bus";
-static const char _q_systemBusName[] = "qt_default_system_bus";
-
-class QDBusDefaultConnection: public QDBusConnection
-{
-    const char *ownName;
-public:
-    inline QDBusDefaultConnection(BusType type, const char *name)
-        : QDBusConnection(connectToBus(type, QString::fromLatin1(name))), ownName(name)
-    {
-        // make sure this connection is running on the main thread
-        QCoreApplication *instance = QCoreApplication::instance();
-        if (!instance) {
-            qWarning("QDBusConnection: %s D-Bus connection created before QCoreApplication. Application may misbehave.",
-                     type == SessionBus ? "session" : type == SystemBus ? "system" : "generic");
-        } else if (QDBusConnectionPrivate::d(*this)) {
-            QDBusConnectionPrivate::d(*this)->moveToThread(instance->thread());
-        }
-    }
-
-    inline ~QDBusDefaultConnection()
-    { disconnectFromBus(QString::fromLatin1(ownName)); }
-};
-
-Q_GLOBAL_STATIC_WITH_ARGS(QDBusDefaultConnection, _q_sessionBus,
-                          (QDBusConnection::SessionBus, _q_sessionBusName))
-Q_GLOBAL_STATIC_WITH_ARGS(QDBusDefaultConnection, _q_systemBus,
-                          (QDBusConnection::SystemBus, _q_systemBusName))
-
 /*!
     \fn QDBusConnection QDBusConnection::sessionBus()
 
@@ -1090,7 +1185,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(QDBusDefaultConnection, _q_systemBus,
 */
 QDBusConnection QDBusConnection::sessionBus()
 {
-    return *_q_sessionBus();
+    return QDBusConnection(_q_manager()->busConnection(SessionBus));
 }
 
 /*!
@@ -1102,7 +1197,7 @@ QDBusConnection QDBusConnection::sessionBus()
 */
 QDBusConnection QDBusConnection::systemBus()
 {
-    return *_q_systemBus();
+    return QDBusConnection(_q_manager()->busConnection(SystemBus));
 }
 
 #if QT_DEPRECATED_SINCE(5,5)
@@ -1123,8 +1218,10 @@ QDBusConnection QDBusConnection::sender()
 /*!
   \internal
 */
-void QDBusConnectionPrivate::setBusService(const QDBusConnection &connection)
+void QDBusConnectionPrivate::createBusService()
 {
+    Q_ASSERT(mode == ClientMode);
+    QDBusConnection connection(this);
     busService = new QDBusConnectionInterface(connection, this);
     ref.deref(); // busService has increased the refcounting to us
                  // avoid cyclic refcounting
@@ -1183,5 +1280,34 @@ QByteArray QDBusConnection::localMachineId()
 */
 
 QT_END_NAMESPACE
+
+#include "qdbusconnection.moc"
+
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
+
+QT_BEGIN_NAMESPACE
+static void preventDllUnload()
+{
+    // Thread termination is really wacky on Windows. For some reason we don't
+    // understand, exiting from the thread may try to unload the DLL. Since the
+    // QDBusConnectionManager thread runs until the DLL is unloaded, we've got
+    // a deadlock: the main thread is waiting for the manager thread to exit,
+    // but the manager thread is attempting to acquire a lock to unload the DLL.
+    //
+    // We work around the issue by preventing the unload from happening in the
+    // first place.
+    //
+    // For this trick, see
+    // https://blogs.msdn.microsoft.com/oldnewthing/20131105-00/?p=2733
+
+    static HMODULE self;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                      GET_MODULE_HANDLE_EX_FLAG_PIN,
+                      reinterpret_cast<const wchar_t *>(&self), // any address in this DLL
+                      &self);
+}
+QT_END_NAMESPACE
+#endif
 
 #endif // QT_NO_DBUS

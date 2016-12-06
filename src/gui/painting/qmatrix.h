@@ -92,7 +92,7 @@ public:
     bool isInvertible() const { return !qFuzzyIsNull(_m11*_m22 - _m12*_m21); }
     qreal determinant() const { return _m11*_m22 - _m12*_m21; }
 
-    QMatrix inverted(bool *invertible = 0) const Q_REQUIRED_RESULT;
+    QMatrix inverted(bool *invertible = Q_NULLPTR) const Q_REQUIRED_RESULT;
 
     bool operator==(const QMatrix &) const;
     bool operator!=(const QMatrix &) const;
@@ -125,6 +125,8 @@ private:
     qreal _dx, _dy;
 };
 Q_DECLARE_TYPEINFO(QMatrix, Q_MOVABLE_TYPE);
+
+Q_GUI_EXPORT Q_DECL_CONST_FUNCTION uint qHash(const QMatrix &key, uint seed = 0) Q_DECL_NOTHROW;
 
 // mathematical semantics
 inline QPoint operator*(const QPoint &p, const QMatrix &m)

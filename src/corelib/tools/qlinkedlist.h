@@ -74,7 +74,7 @@ class QLinkedList
     union { QLinkedListData *d; QLinkedListNode<T> *e; };
 
 public:
-    inline QLinkedList() : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null)) { }
+    inline QLinkedList() Q_DECL_NOTHROW : d(const_cast<QLinkedListData *>(&QLinkedListData::shared_null)) { }
     inline QLinkedList(const QLinkedList<T> &l) : d(l.d) { d->ref.ref(); if (!d->sharable) detach(); }
 #if defined(Q_COMPILER_INITIALIZER_LISTS)
     inline QLinkedList(std::initializer_list<T> list)
@@ -86,11 +86,12 @@ public:
     ~QLinkedList();
     QLinkedList<T> &operator=(const QLinkedList<T> &);
 #ifdef Q_COMPILER_RVALUE_REFS
-    inline QLinkedList(QLinkedList<T> &&other) : d(other.d) { other.d = const_cast<QLinkedListData *>(&QLinkedListData::shared_null); }
-    inline QLinkedList<T> &operator=(QLinkedList<T> &&other)
-    { qSwap(d, other.d); return *this; }
+    QLinkedList(QLinkedList<T> &&other) Q_DECL_NOTHROW
+        : d(other.d) { other.d = const_cast<QLinkedListData *>(&QLinkedListData::shared_null); }
+    QLinkedList<T> &operator=(QLinkedList<T> &&other) Q_DECL_NOTHROW
+    { QLinkedList moved(std::move(other)); swap(moved); return *this; }
 #endif
-    inline void swap(QLinkedList<T> &other) { qSwap(d, other.d); }
+    inline void swap(QLinkedList<T> &other) Q_DECL_NOTHROW { qSwap(d, other.d); }
     bool operator==(const QLinkedList<T> &l) const;
     inline bool operator!=(const QLinkedList<T> &l) const { return !(*this == l); }
 
@@ -98,7 +99,7 @@ public:
     inline void detach()
     { if (d->ref.isShared()) detach_helper2(this->e); }
     inline bool isDetached() const { return !d->ref.isShared(); }
-#if QT_SUPPORTS(UNSHARABLE_CONTAINERS)
+#if !defined(QT_NO_UNSHARABLE_CONTAINERS)
     inline void setSharable(bool sharable) { if (!sharable) detach(); if (d != &QLinkedListData::shared_null) d->sharable = sharable; }
 #endif
     inline bool isSharedWith(const QLinkedList<T> &other) const { return d == other.d; }
@@ -127,7 +128,7 @@ public:
         typedef T *pointer;
         typedef T &reference;
         Node *i;
-        inline iterator() : i(0) {}
+        inline iterator() : i(Q_NULLPTR) {}
         inline iterator(Node *n) : i(n) {}
         inline iterator(const iterator &o) : i(o.i) {}
         inline iterator &operator=(const iterator &o) { i = o.i; return *this; }
@@ -160,7 +161,7 @@ public:
         typedef const T *pointer;
         typedef const T &reference;
         Node *i;
-        inline const_iterator() : i(0) {}
+        inline const_iterator() : i(Q_NULLPTR) {}
         inline const_iterator(Node *n) : i(n) {}
         inline const_iterator(const const_iterator &o) : i(o.i){}
         inline const_iterator(iterator ci) : i(ci.i){}
@@ -182,14 +183,25 @@ public:
     friend class const_iterator;
 
     // stl style
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+
     inline iterator begin() { detach(); return e->n; }
-    inline const_iterator begin() const { return e->n; }
-    inline const_iterator cbegin() const { return e->n; }
-    inline const_iterator constBegin() const { return e->n; }
+    inline const_iterator begin() const Q_DECL_NOTHROW { return e->n; }
+    inline const_iterator cbegin() const Q_DECL_NOTHROW { return e->n; }
+    inline const_iterator constBegin() const Q_DECL_NOTHROW { return e->n; }
     inline iterator end() { detach(); return e; }
-    inline const_iterator end() const { return e; }
-    inline const_iterator cend() const { return e; }
-    inline const_iterator constEnd() const { return e; }
+    inline const_iterator end() const Q_DECL_NOTHROW { return e; }
+    inline const_iterator cend() const Q_DECL_NOTHROW { return e; }
+    inline const_iterator constEnd() const Q_DECL_NOTHROW { return e; }
+
+    reverse_iterator rbegin() { return reverse_iterator(end()); }
+    reverse_iterator rend() { return reverse_iterator(begin()); }
+    const_reverse_iterator rbegin() const Q_DECL_NOTHROW { return const_reverse_iterator(end()); }
+    const_reverse_iterator rend() const Q_DECL_NOTHROW { return const_reverse_iterator(begin()); }
+    const_reverse_iterator crbegin() const Q_DECL_NOTHROW { return const_reverse_iterator(end()); }
+    const_reverse_iterator crend() const Q_DECL_NOTHROW { return const_reverse_iterator(begin()); }
+
     iterator insert(iterator before, const T &t);
     iterator erase(iterator pos);
     iterator erase(iterator first, iterator last);

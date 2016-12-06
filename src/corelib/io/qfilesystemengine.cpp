@@ -152,7 +152,7 @@ static bool _q_resolveEntryAndCreateLegacyEngine_recursive(QFileSystemEntry &ent
 
             const QStringList &paths = QDir::searchPaths(filePath.left(prefixSeparator));
             for (int i = 0; i < paths.count(); i++) {
-                entry = QFileSystemEntry(QDir::cleanPath(paths.at(i) % QLatin1Char('/') % filePath.mid(prefixSeparator + 1)));
+                entry = QFileSystemEntry(QDir::cleanPath(paths.at(i) % QLatin1Char('/') % filePath.midRef(prefixSeparator + 1)));
                 // Recurse!
                 if (_q_resolveEntryAndCreateLegacyEngine_recursive(entry, data, engine, true))
                     return true;
@@ -258,13 +258,13 @@ void QFileSystemMetaData::fillFromStatBuf(const QT_STATBUF &statBuffer)
         entryFlags |= QFileSystemMetaData::FileType;
     else if ((statBuffer.st_mode & S_IFMT) == S_IFDIR)
         entryFlags |= QFileSystemMetaData::DirectoryType;
-    else
+    else if ((statBuffer.st_mode & S_IFMT) != S_IFBLK)
         entryFlags |= QFileSystemMetaData::SequentialType;
 
     // Attributes
     entryFlags |= QFileSystemMetaData::ExistsAttribute;
     size_ = statBuffer.st_size;
-#if defined(Q_OS_MACX)
+#if defined(Q_OS_DARWIN)
     if (statBuffer.st_flags & UF_HIDDEN) {
         entryFlags |= QFileSystemMetaData::HiddenAttribute;
         knownFlagsMask |= QFileSystemMetaData::HiddenAttribute;
@@ -341,6 +341,18 @@ void QFileSystemMetaData::fillFromDirEnt(const QT_DIRENT &entry)
         break;
 
     case DT_BLK:
+        knownFlagsMask = QFileSystemMetaData::LinkType
+            | QFileSystemMetaData::FileType
+            | QFileSystemMetaData::DirectoryType
+            | QFileSystemMetaData::BundleType
+            | QFileSystemMetaData::AliasType
+            | QFileSystemMetaData::SequentialType
+            | QFileSystemMetaData::ExistsAttribute;
+
+        entryFlags = QFileSystemMetaData::ExistsAttribute;
+
+        break;
+
     case DT_CHR:
     case DT_FIFO:
     case DT_SOCK:

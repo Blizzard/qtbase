@@ -67,7 +67,7 @@ class EvalHandler : public QMakeHandler {
 public:
     void message(int type, const QString &msg, const QString &fileName, int lineNo);
 
-    void fileMessage(const QString &msg);
+    void fileMessage(int type, const QString &msg);
 
     void aboutToEval(ProFile *, ProFile *, EvalFileType);
     void doneWithEval(ProFile *);
@@ -91,6 +91,8 @@ struct Option
     static QStringList h_ext;
     static QStringList cpp_ext;
     static QStringList c_ext;
+    static QString objc_ext;
+    static QString objcpp_ext;
     static QString cpp_moc_ext;
     static QString obj_ext;
     static QString lex_ext;

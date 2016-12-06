@@ -56,8 +56,14 @@ QT_BEGIN_NAMESPACE
 class QEGLPlatformContext : public QPlatformOpenGLContext
 {
 public:
+    enum Flag {
+        NoSurfaceless = 0x01
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     QEGLPlatformContext(const QSurfaceFormat &format, QPlatformOpenGLContext *share, EGLDisplay display,
-                        EGLConfig *config = 0, const QVariant &nativeHandle = QVariant());
+                        EGLConfig *config = 0, const QVariant &nativeHandle = QVariant(),
+                        Flags flags = 0);
     ~QEGLPlatformContext();
 
     void initialize() Q_DECL_OVERRIDE;
@@ -78,6 +84,7 @@ protected:
     virtual EGLSurface eglSurfaceForPlatformSurface(QPlatformSurface *surface) = 0;
     virtual EGLSurface createTemporaryOffscreenSurface();
     virtual void destroyTemporaryOffscreenSurface(EGLSurface surface);
+    virtual void runGLChecks();
 
 private:
     void init(const QSurfaceFormat &format, QPlatformOpenGLContext *share);
@@ -93,8 +100,12 @@ private:
     int m_swapInterval;
     bool m_swapIntervalEnvChecked;
     int m_swapIntervalFromEnv;
+    Flags m_flags;
     bool m_ownsContext;
+    QVector<EGLint> m_contextAttrs;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QEGLPlatformContext::Flags)
 
 QT_END_NAMESPACE
 

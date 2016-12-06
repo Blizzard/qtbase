@@ -60,13 +60,12 @@ public:
     explicit QWindowsIntegration(const QStringList &paramList);
     virtual ~QWindowsIntegration();
 
-    bool hasCapability(QPlatformIntegration::Capability cap) const;
+    bool hasCapability(QPlatformIntegration::Capability cap) const Q_DECL_OVERRIDE;
 
-    QWindowsWindowData createWindowData(QWindow *window) const;
-    QPlatformWindow *createPlatformWindow(QWindow *window) const;
+    QPlatformWindow *createPlatformWindow(QWindow *window) const Q_DECL_OVERRIDE;
 #ifndef QT_NO_OPENGL
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const Q_DECL_OVERRIDE;
-    QOpenGLContext::OpenGLModuleType openGLModuleType();
+    QOpenGLContext::OpenGLModuleType openGLModuleType() Q_DECL_OVERRIDE;
     static QWindowsStaticOpenGLContext *staticOpenGLContext();
 #endif
     QAbstractEventDispatcher *createEventDispatcher() const Q_DECL_OVERRIDE;
@@ -84,7 +83,7 @@ public:
     QPlatformFontDatabase *fontDatabase() const Q_DECL_OVERRIDE;
     QStringList themeNames() const Q_DECL_OVERRIDE;
     QPlatformTheme *createPlatformTheme(const QString &name) const Q_DECL_OVERRIDE;
-    QPlatformServices *services() const;
+    QPlatformServices *services() const Q_DECL_OVERRIDE;
     QVariant styleHint(StyleHint hint) const Q_DECL_OVERRIDE;
 
     Qt::KeyboardModifiers queryKeyboardModifiers() const Q_DECL_OVERRIDE;
@@ -100,6 +99,9 @@ public:
 #if !defined(Q_OS_WINCE) && !defined(QT_NO_SESSIONMANAGER)
     QPlatformSessionManager *createPlatformSessionManager(const QString &id, const QString &key) const Q_DECL_OVERRIDE;
 #endif
+
+protected:
+    virtual QWindowsWindow *createPlatformWindowHelper(QWindow *window, const QWindowsWindowData &) const;
 
 private:
     QScopedPointer<QWindowsIntegrationPrivate> d;

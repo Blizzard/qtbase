@@ -71,13 +71,13 @@ class QPlatformTextureListWatcher : public QObject
 public:
     QPlatformTextureListWatcher(QWidgetBackingStore *backingStore);
     void watch(QPlatformTextureList *textureList);
-    bool isLocked() const { return m_locked; }
+    bool isLocked() const;
 
 private slots:
      void onLockStatusChanged(bool locked);
 
 private:
-     bool m_locked;
+     QHash<QPlatformTextureList *, bool> m_locked;
      QWidgetBackingStore *m_backingStore;
 };
 #endif
@@ -110,7 +110,7 @@ public:
 
     inline bool isDirty() const
     {
-        return !(dirtyWidgets.isEmpty() && dirty.isEmpty() && !fullUpdatePending);
+        return !(dirtyWidgets.isEmpty() && dirty.isEmpty() && !fullUpdatePending && dirtyRenderToTextureWidgets.isEmpty());
     }
 
     // ### Qt 4.6: Merge into a template function (after MSVC isn't supported anymore).
@@ -128,7 +128,6 @@ private:
     QVector<QWidget *> dirtyRenderToTextureWidgets;
     QVector<QWidget *> *dirtyOnScreenWidgets;
     QList<QWidget *> staticWidgets;
-    QPlatformTextureList *widgetTextures;
     QBackingStore *store;
     uint fullUpdatePending : 1;
     uint updateRequestSent : 1;
@@ -164,6 +163,8 @@ private:
     void removeDirtyWidget(QWidget *w);
 
     void updateLists(QWidget *widget);
+
+    bool syncAllowed();
 
     inline void addDirtyWidget(QWidget *widget, const QRegion &rgn)
     {
@@ -301,6 +302,8 @@ private:
     friend class QWidgetPrivate;
     friend class QWidget;
     friend class QBackingStore;
+
+    Q_DISABLE_COPY(QWidgetBackingStore)
 };
 
 QT_END_NAMESPACE

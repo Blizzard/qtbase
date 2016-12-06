@@ -1,18 +1,15 @@
 # In case the user sets the SDK manually
 contains(QMAKE_MAC_SDK, ^iphonesimulator.*) {
-    iphonesimulator_and_iphoneos: \
+    contains(QT_CONFIG, simulator_and_device): \
         error("iOS simulator is handled automatically for iphonesimulator_and_iphoneos")
 
     CONFIG += iphonesimulator
 }
 
-iphonesimulator_and_iphoneos:iphonesimulator: \
+build_pass:iphonesimulator: \
     QMAKE_MAC_SDK ~= s,^iphoneos,iphonesimulator,
 
 load(sdk)
-
-lessThan(QMAKE_MAC_SDK_VERSION, "8.0"): \
-    error("Current $$QMAKE_MAC_SDK SDK version ($$QMAKE_MAC_SDK_VERSION) is too old. Please upgrade Xcode.")
 
 macx-xcode {
     sdk_path_iphoneos.name = "QMAKE_MAC_SDK_PATH[sdk=iphoneos*]"

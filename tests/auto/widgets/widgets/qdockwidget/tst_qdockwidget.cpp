@@ -40,6 +40,7 @@
 #include <qdockwidget.h>
 #include <qmainwindow.h>
 #include <qlineedit.h>
+#include <qtabbar.h>
 #include <QDesktopWidget>
 #include <QtGui/QPainter>
 #include "private/qdockwidget_p.h"
@@ -68,11 +69,13 @@ private slots:
     void allowedAreas();
     void toggleViewAction();
     void visibilityChanged();
+    void updateTabBarOnVisibilityChanged();
     void dockLocationChanged();
     void setTitleBarWidget();
     void titleBarDoubleClick();
     void restoreStateOfFloating();
     void restoreDockWidget();
+    void restoreStateWhileStillFloating();
     // task specific tests:
     void task165177_deleteFocusWidget();
     void task169808_setFloating();
@@ -120,7 +123,7 @@ void tst_QDockWidget::widget()
 {
     {
         QDockWidget dw;
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
     }
 
     {
@@ -130,32 +133,32 @@ void tst_QDockWidget::widget()
 
         dw.setWidget(w1);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w1);
+        QCOMPARE(dw.widget(), w1);
         QCOMPARE(w1->parentWidget(), (QWidget*)&dw);
 
         dw.setWidget(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
 
         dw.setWidget(w2);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w2);
+        QCOMPARE(dw.widget(), w2);
         QCOMPARE(w2->parentWidget(), (QWidget*)&dw);
 
         dw.setWidget(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
 
         dw.setWidget(w1);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w1);
+        QCOMPARE(dw.widget(), w1);
         QCOMPARE(w1->parentWidget(), (QWidget*)&dw);
 
         dw.setWidget(w2);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w2);
+        QCOMPARE(dw.widget(), w2);
         QCOMPARE(w2->parentWidget(), (QWidget*)&dw);
 
         dw.setWidget(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
     }
 
     {
@@ -165,37 +168,37 @@ void tst_QDockWidget::widget()
 
         dw.setWidget(w1);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w1);
+        QCOMPARE(dw.widget(), w1);
         QCOMPARE(w1->parentWidget(), (QWidget*)&dw);
 
         w1->setParent(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
 
         dw.setWidget(w2);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w2);
+        QCOMPARE(dw.widget(), w2);
         QCOMPARE(w2->parentWidget(), (QWidget*)&dw);
 
         w2->setParent(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
 
         dw.setWidget(w1);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w1);
+        QCOMPARE(dw.widget(), w1);
         QCOMPARE(w1->parentWidget(), (QWidget*)&dw);
 
         dw.setWidget(w2);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w2);
+        QCOMPARE(dw.widget(), w2);
         QCOMPARE(w2->parentWidget(), (QWidget*)&dw);
 
         w1->setParent(0);
         QVERIFY(dw.widget() != 0);
-        QVERIFY(dw.widget() == w2);
+        QCOMPARE(dw.widget(), w2);
         QCOMPARE(w2->parentWidget(), (QWidget*)&dw);
 
         w2->setParent(0);
-        QVERIFY(dw.widget() == 0);
+        QVERIFY(!dw.widget());
         delete w1;
         delete w2;
     }
@@ -586,6 +589,44 @@ void tst_QDockWidget::visibilityChanged()
     QCOMPARE(spy.at(0).at(0).toBool(), true);
 }
 
+void tst_QDockWidget::updateTabBarOnVisibilityChanged()
+{
+    // QTBUG49045: Populate tabified dock area with 4 widgets, set the tab
+    // index to 2 (dw2), hide dw0, dw1 and check that the tab index is 0 (dw3).
+    QMainWindow mw;
+    mw.setMinimumSize(400, 400);
+    mw.setWindowTitle(QTest::currentTestFunction());
+    QDockWidget *dw0 = new QDockWidget("d1", &mw);
+    dw0->setAllowedAreas(Qt::LeftDockWidgetArea);
+    mw.addDockWidget(Qt::LeftDockWidgetArea, dw0);
+    QDockWidget *dw1 = new QDockWidget("d2", &mw);
+    dw1->setAllowedAreas(Qt::LeftDockWidgetArea);
+    mw.addDockWidget(Qt::LeftDockWidgetArea, dw1);
+    QDockWidget *dw2 = new QDockWidget("d3", &mw);
+    dw2->setAllowedAreas(Qt::LeftDockWidgetArea);
+    mw.addDockWidget(Qt::LeftDockWidgetArea, dw2);
+    QDockWidget *dw3 = new QDockWidget("d4", &mw);
+    dw3->setAllowedAreas(Qt::LeftDockWidgetArea);
+    mw.addDockWidget(Qt::LeftDockWidgetArea, dw3);
+    mw.tabifyDockWidget(dw0, dw1);
+    mw.tabifyDockWidget(dw1, dw2);
+    mw.tabifyDockWidget(dw2, dw3);
+
+    QTabBar *tabBar = mw.findChild<QTabBar *>();
+    QVERIFY(tabBar);
+    tabBar->setCurrentIndex(2);
+
+    mw.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mw));
+
+    QCOMPARE(tabBar->currentIndex(), 2);
+
+    dw0->hide();
+    dw1->hide();
+    QTRY_COMPARE(tabBar->count(), 2);
+    QCOMPARE(tabBar->currentIndex(), 0);
+}
+
 Q_DECLARE_METATYPE(Qt::DockWidgetArea)
 
 void tst_QDockWidget::dockLocationChanged()
@@ -717,10 +758,38 @@ void tst_QDockWidget::restoreStateOfFloating()
     QVERIFY(!dock->isFloating());
 }
 
+void tst_QDockWidget::restoreStateWhileStillFloating()
+{
+    // When the dock widget is already floating then it takes a different code path
+    // so this test covers the case where the restoreState() is effectively just
+    // moving it back and resizing it
+    const QRect availGeom = QApplication::desktop()->availableGeometry();
+    const QPoint startingDockPos = availGeom.center();
+    QMainWindow mw;
+    QDockWidget *dock = createTestDock(mw);
+    mw.addDockWidget(Qt::TopDockWidgetArea, dock);
+    dock->setFloating(true);
+    dock->move(startingDockPos);
+    mw.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mw));
+    QVERIFY(dock->isFloating());
+    QByteArray ba = mw.saveState();
+    const QPoint dockPos = dock->pos();
+    dock->move(availGeom.topLeft() + QPoint(10, 10));
+    dock->resize(dock->size() + QSize(10, 10));
+    QVERIFY(mw.restoreState(ba));
+    QVERIFY(dock->isFloating());
+    if (!QGuiApplication::platformName().compare("xcb", Qt::CaseInsensitive))
+        QTRY_COMPARE(dock->pos(), dockPos);
+}
+
 void tst_QDockWidget::restoreDockWidget()
 {
     QByteArray geometry;
     QByteArray state;
+
+    const bool isXcb = !QGuiApplication::platformName().compare("xcb", Qt::CaseInsensitive);
+
     const QString name = QStringLiteral("main");
     const QRect availableGeometry = QApplication::desktop()->availableGeometry();
     const QSize size = availableGeometry.size() / 5;
@@ -745,11 +814,22 @@ void tst_QDockWidget::restoreDockWidget()
         QVERIFY(dock->isFloating());
         state = saveWindow.saveState();
         geometry = saveWindow.saveGeometry();
+
+        // QTBUG-49832: Delete and recreate the dock; it should be restored to the same position.
+        delete dock;
+        dock = createTestDock(saveWindow);
+        QVERIFY(saveWindow.restoreDockWidget(dock));
+        dock->show();
+        QVERIFY(QTest::qWaitForWindowExposed(dock));
+        QTRY_VERIFY(dock->isFloating());
+        if (!isXcb) // Avoid Window manager positioning issues
+            QTRY_COMPARE(dock->pos(), dockPos);
     }
 
     QVERIFY(!geometry.isEmpty());
     QVERIFY(!state.isEmpty());
 
+    // QTBUG-45780: Completely recreate the dock widget from the saved state.
     {
         QMainWindow restoreWindow;
         restoreWindow.setObjectName(name);
@@ -764,7 +844,7 @@ void tst_QDockWidget::restoreDockWidget()
         restoreWindow.show();
         QVERIFY(QTest::qWaitForWindowExposed(&restoreWindow));
         QTRY_VERIFY(dock->isFloating());
-        if (!QGuiApplication::platformName().compare("xcb", Qt::CaseInsensitive))
+        if (isXcb)
             QSKIP("Skip due to Window manager positioning issues", Abort);
         QTRY_COMPARE(dock->pos(), dockPos);
     }

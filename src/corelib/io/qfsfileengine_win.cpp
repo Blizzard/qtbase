@@ -423,15 +423,13 @@ qint64 QFSFileEnginePrivate::nativeWrite(const char *data, qint64 len)
     if (fileHandle == INVALID_HANDLE_VALUE)
         return -1;
 
-    qint64 bytesToWrite = DWORD(len); // <- lossy
+    qint64 bytesToWrite = len;
 
     // Writing on Windows fails with ERROR_NO_SYSTEM_RESOURCES when
     // the chunks are too large, so we limit the block size to 32MB.
-    static const DWORD maxBlockSize = 32 * 1024 * 1024;
-
+    const DWORD blockSize = DWORD(qMin(bytesToWrite, qint64(32 * 1024 * 1024)));
     qint64 totalWritten = 0;
     do {
-        DWORD blockSize = qMin<DWORD>(bytesToWrite, maxBlockSize);
         DWORD bytesWritten;
         if (!WriteFile(fileHandle, data + totalWritten, blockSize, &bytesWritten, NULL)) {
             if (totalWritten == 0) {
@@ -626,7 +624,9 @@ QFileInfoList QFSFileEngine::drives()
     QFileInfoList ret;
 #if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
 #if defined(Q_OS_WIN32)
+    const UINT oldErrorMode = ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     quint32 driveBits = (quint32) GetLogicalDrives() & 0x3ffffff;
+    ::SetErrorMode(oldErrorMode);
 #endif
     char driveName[] = "A:/";
 
@@ -711,7 +711,7 @@ bool QFSFileEngine::link(const QString &newName)
     Q_UNUSED(newName);
     return false;
 #endif // QT_NO_LIBRARY
-#elif defined(Q_OS_WINCE)
+#elif defined(Q_OS_WINCE) && !defined(QT_NO_WINCE_SHELLSDK)
     QString linkName = newName;
     linkName.replace(QLatin1Char('/'), QLatin1Char('\\'));
     if (!linkName.endsWith(QLatin1String(".lnk")))
@@ -724,7 +724,7 @@ bool QFSFileEngine::link(const QString &newName)
     if (!ret)
         setError(QFile::RenameError, qt_error_string());
     return ret;
-#else // Q_OS_WINCE
+#else // Q_OS_WINCE && !QT_NO_WINCE_SHELLSDK
     Q_UNUSED(newName);
     Q_UNIMPLEMENTED();
     return false;
@@ -1037,7 +1037,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size,
                                       offsetHi, offsetLo, size + extra);
 #else
     LPVOID mapAddress = ::MapViewOfFileFromApp(mapHandle, access,
-                                               (ULONG64(offsetHi) << 32) + offsetLo, size);
+                                               (ULONG64(offsetHi) << 32) + offsetLo, size + extra);
 #endif
     if (mapAddress) {
         uchar *address = extra + static_cast<uchar*>(mapAddress);

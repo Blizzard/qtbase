@@ -36,7 +36,22 @@
 #include <QAction>
 
 // Temporarily disabling IRIX due to build issuues with GCC
-#if !defined(__sgi) || defined(__sgi) && !defined(__GNUC__)
+#if defined(__sgi) && defined(__GNUC__)
+
+class tst_QUndoGroup : public QObject
+{
+    Q_OBJECT
+public:
+    tst_QUndoGroup() {}
+
+private slots:
+    void setActive() { QSKIP( "Not tested on irix-g++"); }
+    void addRemoveStack() { QSKIP( "Not tested on irix-g++"); }
+    void deleteStack() { QSKIP( "Not tested on irix-g++"); }
+    void checkSignals() { QSKIP( "Not tested on irix-g++"); }
+    void addStackAndDie() { QSKIP( "Not tested on irix-g++"); }
+};
+#else
 
 /******************************************************************************
 ** Commands
@@ -193,9 +208,7 @@ private slots:
     void deleteStack();
     void checkSignals();
     void addStackAndDie();
-#ifndef QT_NO_PROCESS
     void commandTextFormat();
-#endif
 };
 
 tst_QUndoGroup::tst_QUndoGroup()
@@ -599,9 +612,11 @@ void tst_QUndoGroup::addStackAndDie()
     delete stack;
 }
 
-#ifndef QT_NO_PROCESS
 void tst_QUndoGroup::commandTextFormat()
 {
+#ifdef QT_NO_PROCESS
+    QSKIP("No QProcess available");
+#else
     QString binDir = QLibraryInfo::location(QLibraryInfo::BinariesPath);
 
     if (QProcess::execute(binDir + "/lrelease -version") != 0)
@@ -609,13 +624,13 @@ void tst_QUndoGroup::commandTextFormat()
 
     const QString tsFile = QFINDTESTDATA("testdata/qundogroup.ts");
     QVERIFY(!tsFile.isEmpty());
-    QVERIFY(!QProcess::execute(binDir + "/lrelease " + tsFile));
+    QFile::remove("qundogroup.qm"); // Avoid confusion by strays.
+    QVERIFY(!QProcess::execute(binDir + "/lrelease -silent " + tsFile + " -qm qundogroup.qm"));
 
     QTranslator translator;
 
-    const QString qmFile = QFINDTESTDATA("testdata/qundogroup.qm");
-    QVERIFY(!qmFile.isEmpty());
-    QVERIFY(translator.load(qmFile));
+    QVERIFY(translator.load("qundogroup.qm"));
+    QFile::remove("qundogroup.qm");
     qApp->installTranslator(&translator);
 
     QUndoGroup group;
@@ -643,24 +658,9 @@ void tst_QUndoGroup::commandTextFormat()
     QCOMPARE(redo_action->text(), QString("redo-prefix append redo-suffix"));
 
     qApp->removeTranslator(&translator);
+#endif
 }
-#endif
-
-#else
-class tst_QUndoGroup : public QObject
-{
-    Q_OBJECT
-public:
-    tst_QUndoGroup() {}
-
-private slots:
-    void setActive() { QSKIP( "Not tested on irix-g++"); }
-    void addRemoveStack() { QSKIP( "Not tested on irix-g++"); }
-    void deleteStack() { QSKIP( "Not tested on irix-g++"); }
-    void checkSignals() { QSKIP( "Not tested on irix-g++"); }
-    void addStackAndDie() { QSKIP( "Not tested on irix-g++"); }
-};
-#endif
+#endif // !(SGI && GCC)
 
 QTEST_MAIN(tst_QUndoGroup)
 

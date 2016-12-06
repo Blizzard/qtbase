@@ -78,6 +78,9 @@ class QBackingStore;
 class QScreen;
 class QAccessibleInterface;
 class QWindowContainer;
+#ifndef QT_NO_DEBUG_STREAM
+class QDebug;
+#endif
 
 class Q_GUI_EXPORT QWindow : public QObject, public QSurface
 {
@@ -122,7 +125,7 @@ public:
     };
     Q_ENUM(Visibility)
 
-    explicit QWindow(QScreen *screen = 0);
+    explicit QWindow(QScreen *screen = Q_NULLPTR);
     explicit QWindow(QWindow *parent);
     virtual ~QWindow();
 
@@ -357,15 +360,19 @@ private:
 #ifndef Q_QDOC
 template <> inline QWindow *qobject_cast<QWindow*>(QObject *o)
 {
-    if (!o || !o->isWindowType()) return 0;
+    if (!o || !o->isWindowType()) return Q_NULLPTR;
     return static_cast<QWindow*>(o);
 }
 template <> inline const QWindow *qobject_cast<const QWindow*>(const QObject *o)
 {
-    if (!o || !o->isWindowType()) return 0;
+    if (!o || !o->isWindowType()) return Q_NULLPTR;
     return static_cast<const QWindow*>(o);
 }
 #endif // !Q_QDOC
+
+#ifndef QT_NO_DEBUG_STREAM
+Q_GUI_EXPORT QDebug operator<<(QDebug, const QWindow *);
+#endif
 
 QT_END_NAMESPACE
 

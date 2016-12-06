@@ -116,8 +116,6 @@ public:
     QNetworkReplyImplPrivate();
 
     void _q_startOperation();
-    void _q_sourceReadyRead();
-    void _q_sourceReadChannelFinished();
     void _q_copyReadyRead();
     void _q_copyReadChannelFinished();
     void _q_bufferOutgoingData();
@@ -205,6 +203,7 @@ public:
 
     Q_DECLARE_PUBLIC(QNetworkReplyImpl)
 };
+Q_DECLARE_TYPEINFO(QNetworkReplyImplPrivate::InternalNotifications, Q_PRIMITIVE_TYPE);
 
 #ifndef QT_NO_BEARERMANAGEMENT
 class QDisabledNetworkReply : public QNetworkReply

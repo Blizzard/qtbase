@@ -234,7 +234,7 @@ QDateTime &QFileInfoPrivate::getFileTime(QAbstractFileEngine::FileTime request) 
     isSymLink(). The symLinkTarget() function provides the name of the file
     the symlink points to.
 
-    On Unix (including OS X and iOS), the symlink has the same size() has
+    On Unix (including \macos and iOS), the symlink has the same size() has
     the file it points to, because Unix handles symlinks
     transparently; similarly, opening a symlink using QFile
     effectively opens the link's target. For example:
@@ -754,7 +754,7 @@ QString QFileInfo::fileName() const
     \since 4.3
     Returns the name of the bundle.
 
-    On OS X and iOS this returns the proper localized name for a bundle if the
+    On \macos and iOS this returns the proper localized name for a bundle if the
     path isBundle(). On all other platforms an empty QString is returned.
 
     Example:
@@ -814,7 +814,7 @@ QString QFileInfo::completeBaseName() const
 }
 
 /*!
-    Returns the complete suffix of the file.
+    Returns the complete suffix (extension) of the file.
 
     The complete suffix consists of all characters in the file after
     (but not including) the first '.'.
@@ -833,7 +833,7 @@ QString QFileInfo::completeSuffix() const
 }
 
 /*!
-    Returns the suffix of the file.
+    Returns the suffix (extension) of the file.
 
     The suffix consists of all characters in the file after (but not
     including) the last '.'.
@@ -1036,7 +1036,7 @@ bool QFileInfo::isDir() const
 /*!
     \since 4.3
     Returns \c true if this object points to a bundle or to a symbolic
-    link to a bundle on OS X and iOS; otherwise returns \c false.
+    link to a bundle on \macos and iOS; otherwise returns \c false.
 
     \sa isDir(), isSymLink(), isFile()
 */
@@ -1057,7 +1057,7 @@ bool QFileInfo::isBundle() const
     Returns \c true if this object points to a symbolic link (or to a
     shortcut on Windows); otherwise returns \c false.
 
-    On Unix (including OS X and iOS), opening a symlink effectively opens
+    On Unix (including \macos and iOS), opening a symlink effectively opens
     the \l{symLinkTarget()}{link's target}. On Windows, it opens the \c
     .lnk file itself.
 
@@ -1095,7 +1095,7 @@ bool QFileInfo::isRoot() const
         return true;
     if (d->fileEngine == 0) {
         if (d->fileEntry.isRoot()) {
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
             //the path is a drive root, but the drive may not exist
             //for backward compatibility, return true only if the drive exists
             if (!d->cache_enabled || !d->metaData.hasFlags(QFileSystemMetaData::ExistsAttribute))

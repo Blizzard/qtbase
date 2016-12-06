@@ -89,7 +89,7 @@ void tst_QFileSelector::basicTest_data()
     QString expectedPlatform2File(""); //Only the last selector
     QString expectedPlatform3File; // Only the first selector (the family)
 #if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID) && !defined(Q_OS_BLACKBERRY) && \
-    !defined(Q_OS_DARWIN) && !defined(Q_OS_LINUX)
+    !defined(Q_OS_DARWIN) && !defined(Q_OS_LINUX) && !defined(Q_OS_HAIKU)
     /* We are only aware of specific unixes, and do not have test files for any of the others.
        However those unixes can get a selector added from the result of a uname call, so this will
        lead to a case where we don't have that file so we can't expect the concatenation of platform
@@ -99,7 +99,7 @@ void tst_QFileSelector::basicTest_data()
     expectedPlatform2File = QString(":/platforms/test2");
 #else
     QString distributionName;
-#  if (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)) || defined(Q_OS_FREEBSD)
+#  if (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)) || defined(Q_OS_FREEBSD) || defined(Q_OS_WINRT)
     distributionName = QSysInfo::productType();
 #  endif
     foreach (const QString &selector, QFileSelectorPrivate::platformSelectors()) {

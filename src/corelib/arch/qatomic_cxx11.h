@@ -78,11 +78,13 @@ template<> struct QAtomicOpsSupport<8> { enum { IsSupported = 1 }; };
 #define Q_ATOMIC_INT16_FETCH_AND_STORE_IS_ALWAYS_NATIVE
 #define Q_ATOMIC_INT16_FETCH_AND_ADD_IS_ALWAYS_NATIVE
 
-#define Q_ATOMIC_INT64_IS_SUPPORTED
-#define Q_ATOMIC_INT64_REFERENCE_COUNTING_IS_ALWAYS_NATIVE
-#define Q_ATOMIC_INT64_TEST_AND_SET_IS_ALWAYS_NATIVE
-#define Q_ATOMIC_INT64_FETCH_AND_STORE_IS_ALWAYS_NATIVE
-#define Q_ATOMIC_INT64_FETCH_AND_ADD_IS_ALWAYS_NATIVE
+#ifndef QT_NO_STD_ATOMIC64
+#  define Q_ATOMIC_INT64_IS_SUPPORTED
+#  define Q_ATOMIC_INT64_REFERENCE_COUNTING_IS_ALWAYS_NATIVE
+#  define Q_ATOMIC_INT64_TEST_AND_SET_IS_ALWAYS_NATIVE
+#  define Q_ATOMIC_INT64_FETCH_AND_STORE_IS_ALWAYS_NATIVE
+#  define Q_ATOMIC_INT64_FETCH_AND_ADD_IS_ALWAYS_NATIVE
+#endif
 
 template <typename X> struct QAtomicOps
 {
@@ -142,7 +144,7 @@ template <typename X> struct QAtomicOps
     static inline Q_DECL_CONSTEXPR bool isTestAndSetWaitFree() Q_DECL_NOTHROW { return false; }
 
     template <typename T>
-    static bool testAndSetRelaxed(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = 0) Q_DECL_NOTHROW
+    static bool testAndSetRelaxed(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = Q_NULLPTR) Q_DECL_NOTHROW
     {
         bool tmp = _q_value.compare_exchange_strong(expectedValue, newValue, std::memory_order_relaxed);
         if (currentValue)
@@ -151,7 +153,7 @@ template <typename X> struct QAtomicOps
     }
 
     template <typename T>
-    static bool testAndSetAcquire(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = 0) Q_DECL_NOTHROW
+    static bool testAndSetAcquire(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = Q_NULLPTR) Q_DECL_NOTHROW
     {
         bool tmp = _q_value.compare_exchange_strong(expectedValue, newValue, std::memory_order_acquire);
         if (currentValue)
@@ -160,7 +162,7 @@ template <typename X> struct QAtomicOps
     }
 
     template <typename T>
-    static bool testAndSetRelease(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = 0) Q_DECL_NOTHROW
+    static bool testAndSetRelease(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = Q_NULLPTR) Q_DECL_NOTHROW
     {
         bool tmp = _q_value.compare_exchange_strong(expectedValue, newValue, std::memory_order_release);
         if (currentValue)
@@ -169,7 +171,7 @@ template <typename X> struct QAtomicOps
     }
 
     template <typename T>
-    static bool testAndSetOrdered(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = 0) Q_DECL_NOTHROW
+    static bool testAndSetOrdered(std::atomic<T> &_q_value, T expectedValue, T newValue, T *currentValue = Q_NULLPTR) Q_DECL_NOTHROW
     {
         bool tmp = _q_value.compare_exchange_strong(expectedValue, newValue, std::memory_order_acq_rel);
         if (currentValue)

@@ -39,7 +39,9 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <QtGui/qwindow.h>
 #include <QtGui/qscreen.h>
+#include <private/qhighdpiscaling_p.h>
 #include <private/qwindow_p.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -481,13 +483,30 @@ QString QPlatformWindow::formatWindowTitle(const QString &title, const QString &
 QPlatformScreen *QPlatformWindow::screenForGeometry(const QRect &newGeometry) const
 {
     QPlatformScreen *currentScreen = screen();
-    if (!parent() && currentScreen && !currentScreen->geometry().intersects(newGeometry)) {
+    QPlatformScreen *fallback = currentScreen;
+    // QRect::center can return a value outside the rectangle if it's empty.
+    // Apply mapToGlobal() in case it is a foreign/embedded window.
+    QPoint center = newGeometry.isEmpty() ? newGeometry.topLeft() : newGeometry.center();
+    if (window()->type() == Qt::ForeignWindow)
+        center = mapToGlobal(center - newGeometry.topLeft());
+
+    if (!parent() && currentScreen && !currentScreen->geometry().contains(center)) {
         Q_FOREACH (QPlatformScreen* screen, currentScreen->virtualSiblings()) {
-            if (screen->geometry().intersects(newGeometry))
+            if (screen->geometry().contains(center))
                 return screen;
+            if (screen->geometry().intersects(newGeometry))
+                fallback = screen;
         }
     }
-    return currentScreen;
+    return fallback;
+}
+
+/*!
+    Returns a size with both dimensions bounded to [0, QWINDOWSIZE_MAX]
+*/
+QSize QPlatformWindow::constrainWindowSize(const QSize &size)
+{
+    return size.expandedTo(QSize(0, 0)).boundedTo(QSize(QWINDOWSIZE_MAX, QWINDOWSIZE_MAX));
 }
 
 /*!
@@ -553,6 +572,20 @@ void QPlatformWindow::invalidateSurface()
 {
 }
 
+static QSize fixInitialSize(QSize size, const QWindow *w,
+                            int defaultWidth, int defaultHeight)
+{
+    if (size.width() == 0) {
+        const int minWidth = w->minimumWidth();
+        size.setWidth(minWidth > 0 ? minWidth : defaultWidth);
+    }
+    if (size.height() == 0) {
+        const int minHeight = w->minimumHeight();
+        size.setHeight(minHeight > 0 ? minHeight : defaultHeight);
+    }
+    return size;
+}
+
 /*!
     Helper function to get initial geometry on windowing systems which do not
     do smart positioning and also do not provide a means of centering a
@@ -565,35 +598,35 @@ void QPlatformWindow::invalidateSurface()
 QRect QPlatformWindow::initialGeometry(const QWindow *w,
     const QRect &initialGeometry, int defaultWidth, int defaultHeight)
 {
-    QRect rect(initialGeometry);
-    if (rect.width() == 0) {
-        const int minWidth = w->minimumWidth();
-        rect.setWidth(minWidth > 0 ? minWidth : defaultWidth);
+    if (!w->isTopLevel()) {
+        const qreal factor = QHighDpiScaling::factor(w);
+        const QSize size = fixInitialSize(QHighDpi::fromNative(initialGeometry.size(), factor),
+                                          w, defaultWidth, defaultHeight);
+        return QRect(initialGeometry.topLeft(), QHighDpi::toNative(size, factor));
     }
-    if (rect.height() == 0) {
-        const int minHeight = w->minimumHeight();
-        rect.setHeight(minHeight > 0 ? minHeight : defaultHeight);
-    }
-    if (w->isTopLevel() && qt_window_private(const_cast<QWindow*>(w))->positionAutomatic
-        && w->type() != Qt::Popup) {
-        if (const QScreen *screen = effectiveScreen(w)) {
-            const QRect availableGeometry = screen->availableGeometry();
-            // Center unless the geometry ( + unknown window frame) is too large for the screen).
-            if (rect.height() < (availableGeometry.height() * 8) / 9
+    const QScreen *screen = effectiveScreen(w);
+    if (!screen)
+        return initialGeometry;
+    QRect rect(QHighDpi::fromNativePixels(initialGeometry, w));
+    rect.setSize(fixInitialSize(rect.size(), w, defaultWidth, defaultHeight));
+    if (qt_window_private(const_cast<QWindow*>(w))->positionAutomatic
+            && w->type() != Qt::Popup) {
+        const QRect availableGeometry = screen->availableGeometry();
+        // Center unless the geometry ( + unknown window frame) is too large for the screen).
+        if (rect.height() < (availableGeometry.height() * 8) / 9
                 && rect.width() < (availableGeometry.width() * 8) / 9) {
-                const QWindow *tp = w->transientParent();
-                if (tp) {
-                    // A transient window should be centered w.r.t. its transient parent.
-                    rect.moveCenter(tp->geometry().center());
-                } else {
-                    // Center the window on the screen.  (Only applicable on platforms
-                    // which do not provide a better way.)
-                    rect.moveCenter(availableGeometry.center());
-                }
+            const QWindow *tp = w->transientParent();
+            if (tp) {
+                // A transient window should be centered w.r.t. its transient parent.
+                rect.moveCenter(tp->geometry().center());
+            } else {
+                // Center the window on the screen.  (Only applicable on platforms
+                // which do not provide a better way.)
+                rect.moveCenter(availableGeometry.center());
             }
         }
     }
-    return rect;
+    return QHighDpi::toNativePixels(rect, screen);
 }
 
 /*!
@@ -624,6 +657,82 @@ void QPlatformWindow::requestUpdate()
     QWindowPrivate *wp = (QWindowPrivate *) QObjectPrivate::get(w);
     Q_ASSERT(wp->updateTimer == 0);
     wp->updateTimer = w->startTimer(timeout, Qt::PreciseTimer);
+}
+
+/*!
+    Returns the QWindow minimum size.
+*/
+QSize QPlatformWindow::windowMinimumSize() const
+{
+    return constrainWindowSize(QHighDpi::toNativePixels(window()->minimumSize(), window()));
+}
+
+/*!
+    Returns the QWindow maximum size.
+*/
+QSize QPlatformWindow::windowMaximumSize() const
+{
+    return constrainWindowSize(QHighDpi::toNativePixels(window()->maximumSize(), window()));
+}
+
+/*!
+    Returns the QWindow base size.
+*/
+QSize QPlatformWindow::windowBaseSize() const
+{
+    return QHighDpi::toNativePixels(window()->baseSize(), window());
+}
+
+/*!
+    Returns the QWindow size increment.
+*/
+QSize QPlatformWindow::windowSizeIncrement() const
+{
+    QSize increment = window()->sizeIncrement();
+    if (!QHighDpiScaling::isActive())
+        return increment;
+
+    // Normalize the increment. If not set the increment can be
+    // (-1, -1) or (0, 0). Make that (1, 1) which is scalable.
+    if (increment.isEmpty())
+        increment = QSize(1, 1);
+
+    return QHighDpi::toNativePixels(increment, window());
+}
+
+/*!
+    Returns the QWindow geometry.
+*/
+QRect QPlatformWindow::windowGeometry() const
+{
+    return QHighDpi::toNativePixels(window()->geometry(), window());
+}
+
+/*!
+    Returns the QWindow frame geometry.
+*/
+QRect QPlatformWindow::windowFrameGeometry() const
+{
+    return QHighDpi::toNativePixels(window()->frameGeometry(), window());
+}
+
+/*!
+    Returns the closest acceptable geometry for a given geometry before
+    a resize/move event for platforms that support it, for example to
+    implement heightForWidth().
+*/
+
+QRectF QPlatformWindow::closestAcceptableGeometry(const QWindow *qWindow, const QRectF &nativeRect)
+{
+    const QRectF rectF = QHighDpi::fromNativePixels(nativeRect, qWindow);
+    const QRectF correctedGeometryF = qt_window_private(const_cast<QWindow *>(qWindow))->closestAcceptableGeometry(rectF);
+    return !correctedGeometryF.isEmpty() && rectF != correctedGeometryF
+        ? QHighDpi::toNativePixels(correctedGeometryF, qWindow) : nativeRect;
+}
+
+QRectF QPlatformWindow::windowClosestAcceptableGeometry(const QRectF &nativeRect) const
+{
+    return QPlatformWindow::closestAcceptableGeometry(window(), nativeRect);
 }
 
 /*!

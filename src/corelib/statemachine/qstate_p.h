@@ -45,12 +45,15 @@
 // We mean it.
 //
 
+#include "qstate.h"
 #include "private/qabstractstate_p.h"
 
 #include <QtCore/qlist.h>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qvariant.h>
+
+#ifndef QT_NO_STATEMACHINE
 
 QT_BEGIN_NAMESPACE
 
@@ -75,6 +78,7 @@ struct QPropertyAssignment
     QVariant value;
     bool explicitlySet; // false means the property is being restored to its old value
 };
+Q_DECLARE_TYPEINFO(QPropertyAssignment, Q_MOVABLE_TYPE);
 
 #endif // QT_NO_PROPERTIES
 
@@ -82,7 +86,7 @@ class QAbstractTransition;
 class QHistoryState;
 
 class QState;
-class Q_AUTOTEST_EXPORT QStatePrivate : public QAbstractStatePrivate
+class Q_CORE_EXPORT QStatePrivate : public QAbstractStatePrivate
 {
     Q_DECLARE_PUBLIC(QState)
 public:
@@ -108,10 +112,12 @@ public:
     mutable QList<QAbstractTransition*> transitionsList;
 
 #ifndef QT_NO_PROPERTIES
-    QList<QPropertyAssignment> propertyAssignments;
+    QVector<QPropertyAssignment> propertyAssignments;
 #endif
 };
 
 QT_END_NAMESPACE
+
+#endif // QT_NO_STATEMACHINE
 
 #endif

@@ -326,7 +326,7 @@ void QHttpNetworkConnectionPrivate::prepareRequest(HttpMessagePair &messagePair)
         QByteArray host;
         if (add.setAddress(hostName)) {
             if (add.protocol() == QAbstractSocket::IPv6Protocol)
-                host = "[" + hostName.toLatin1() + "]";//format the ipv6 in the standard way
+                host = '[' + hostName.toLatin1() + ']'; //format the ipv6 in the standard way
             else
                 host = hostName.toLatin1();
 
@@ -504,6 +504,53 @@ bool QHttpNetworkConnectionPrivate::handleAuthenticateChallenge(QAbstractSocket 
         return true;
     }
     return false;
+}
+
+QUrl QHttpNetworkConnectionPrivate::parseRedirectResponse(QAbstractSocket *socket, QHttpNetworkReply *reply)
+{
+    if (!reply->request().isFollowRedirects())
+        return QUrl();
+
+    QUrl rUrl;
+    QList<QPair<QByteArray, QByteArray> > fields = reply->header();
+    foreach (const QNetworkReply::RawHeaderPair &header, fields) {
+        if (header.first.toLower() == "location") {
+            rUrl = QUrl::fromEncoded(header.second);
+            break;
+        }
+    }
+
+    // If the location url is invalid/empty, we emit ProtocolUnknownError
+    if (!rUrl.isValid()) {
+        emitReplyError(socket, reply, QNetworkReply::ProtocolUnknownError);
+        return QUrl();
+    }
+
+    // Check if we have exceeded max redirects allowed
+    if (reply->request().redirectCount() <= 0) {
+        emitReplyError(socket, reply, QNetworkReply::TooManyRedirectsError);
+        return QUrl();
+    }
+
+    // Resolve the URL if it's relative
+    if (rUrl.isRelative())
+        rUrl = reply->request().url().resolved(rUrl);
+
+    // Check redirect url protocol
+    QString scheme = rUrl.scheme();
+    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
+        QString previousUrlScheme = reply->request().url().scheme();
+        // Check if we're doing an unsecure redirect (https -> http)
+        if (previousUrlScheme == QLatin1String("https")
+            && scheme == QLatin1String("http")) {
+            emitReplyError(socket, reply, QNetworkReply::InsecureRedirectError);
+            return QUrl();
+        }
+    } else {
+        emitReplyError(socket, reply, QNetworkReply::ProtocolUnknownError);
+        return QUrl();
+    }
+    return rUrl;
 }
 
 void QHttpNetworkConnectionPrivate::createAuthorization(QAbstractSocket *socket, QHttpNetworkRequest &request)
@@ -802,6 +849,12 @@ QString QHttpNetworkConnectionPrivate::errorDetail(QNetworkReply::NetworkError e
     case QNetworkReply::SslHandshakeFailedError:
         errorString = QCoreApplication::translate("QHttp", "SSL handshake failed");
         break;
+    case QNetworkReply::TooManyRedirectsError:
+        errorString = QCoreApplication::translate("QHttp", "Too many redirects");
+        break;
+    case QNetworkReply::InsecureRedirectError:
+        errorString = QCoreApplication::translate("QHttp", "Insecure redirect");
+        break;
     default:
         // all other errors are treated as QNetworkReply::UnknownNetworkError
         errorString = extraDetail;
@@ -835,8 +888,13 @@ void QHttpNetworkConnectionPrivate::removeReply(QHttpNetworkReply *reply)
             // if HTTP mandates we should close
             // or the reply is not finished yet, e.g. it was aborted
             // we have to close that connection
-            if (reply->d_func()->isConnectionCloseEnabled() || !reply->isFinished())
-                channels[i].close();
+            if (reply->d_func()->isConnectionCloseEnabled() || !reply->isFinished()) {
+                if (reply->isAborted()) {
+                    channels[i].abort();
+                } else {
+                    channels[i].close();
+                }
+            }
 
             QMetaObject::invokeMethod(q, "_q_startNextRequest", Qt::QueuedConnection);
             return;
@@ -1389,7 +1447,7 @@ void QHttpNetworkConnectionPrivate::emitProxyAuthenticationRequired(const QHttpN
         // but that does not matter because the signal will ultimately be emitted
         // by the QNetworkAccessManager.
         Q_ASSERT(chan->spdyRequestsToSend.count() > 0);
-        reply = chan->spdyRequestsToSend.values().first().second;
+        reply = chan->spdyRequestsToSend.cbegin().value().second;
     } else { // HTTP
 #endif // QT_NO_SSL
         reply = chan->reply;

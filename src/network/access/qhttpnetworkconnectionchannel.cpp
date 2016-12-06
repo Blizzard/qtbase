@@ -205,6 +205,26 @@ void QHttpNetworkConnectionChannel::close()
 }
 
 
+void QHttpNetworkConnectionChannel::abort()
+{
+    if (!socket)
+        state = QHttpNetworkConnectionChannel::IdleState;
+    else if (socket->state() == QAbstractSocket::UnconnectedState)
+        state = QHttpNetworkConnectionChannel::IdleState;
+    else
+        state = QHttpNetworkConnectionChannel::ClosingState;
+
+    // pendingEncrypt must only be true in between connected and encrypted states
+    pendingEncrypt = false;
+
+    if (socket) {
+        // socket can be 0 since the host lookup is done from qhttpnetworkconnection.cpp while
+        // there is no socket yet.
+        socket->abort();
+    }
+}
+
+
 bool QHttpNetworkConnectionChannel::sendRequest()
 {
     Q_ASSERT(!protocolHandler.isNull());
@@ -234,6 +254,10 @@ void QHttpNetworkConnectionChannel::handleUnexpectedEOF()
         close();
         reply->d_func()->errorString = connection->d_func()->errorDetail(QNetworkReply::RemoteHostClosedError, socket);
         emit reply->finishedWithError(QNetworkReply::RemoteHostClosedError, reply->d_func()->errorString);
+        reply = 0;
+        if (protocolHandler)
+            protocolHandler->setReply(0);
+        request = QHttpNetworkRequest();
         QMetaObject::invokeMethod(connection, "_q_startNextRequest", Qt::QueuedConnection);
     } else {
         reconnectAttempts--;
@@ -252,7 +276,12 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
     QAbstractSocket::SocketState socketState = socket->state();
 
     // resend this request after we receive the disconnected signal
-    if (socketState == QAbstractSocket::ClosingState) {
+    // If !socket->isOpen() then we have already called close() on the socket, but there was still a
+    // pending connectToHost() for which we hadn't seen a connected() signal, yet. The connected()
+    // has now arrived (as indicated by socketState != ClosingState), but we cannot send anything on
+    // such a socket anymore.
+    if (socketState == QAbstractSocket::ClosingState ||
+            (socketState != QAbstractSocket::UnconnectedState && !socket->isOpen())) {
         if (reply)
             resendCurrent = true;
         return false;
@@ -296,7 +325,7 @@ bool QHttpNetworkConnectionChannel::ensureConnection()
             priv->phase = QAuthenticatorPrivate::Start;
 
         QString connectHost = connection->d_func()->hostName;
-        qint16 connectPort = connection->d_func()->port;
+        quint16 connectPort = connection->d_func()->port;
 
 #ifndef QT_NO_NETWORKPROXY
         // HTTPS always use transparent proxy.
@@ -511,6 +540,20 @@ void QHttpNetworkConnectionChannel::handleStatus()
     bool resend = false;
 
     switch (statusCode) {
+    case 301:
+    case 302:
+    case 303:
+    case 305:
+    case 307: {
+        // Parse the response headers and get the "location" url
+        QUrl redirectUrl = connection->d_func()->parseRedirectResponse(socket, reply);
+        if (redirectUrl.isValid())
+            reply->setRedirectUrl(redirectUrl);
+
+        if (qobject_cast<QHttpNetworkConnection *>(connection))
+            QMetaObject::invokeMethod(connection, "_q_startNextRequest", Qt::QueuedConnection);
+        break;
+    }
     case 401: // auth required
     case 407: // proxy auth required
         if (connection->d_func()->handleAuthenticateChallenge(socket, reply, (statusCode == 407), resend)) {
@@ -1066,6 +1109,8 @@ void QHttpNetworkConnectionChannel::_q_sslErrors(const QList<QSslError> &errors)
     connection->d_func()->pauseConnection();
     if (pendingEncrypt && !reply)
         connection->d_func()->dequeueRequest(socket);
+    if (reply) // a reply was actually dequeued.
+        reply->d_func()->connectionChannel = this; // set correct channel like in sendRequest() and queueRequest();
     if (connection->connectionType() == QHttpNetworkConnection::ConnectionTypeHTTP) {
         if (reply)
             emit reply->sslErrors(errors);

@@ -42,16 +42,24 @@ QT_BEGIN_NAMESPACE
 
 // #define CACHE_DEBUG
 
+// out-of-line to avoid vtable duplication, breaking e.g. RTTI
+QTextureGlyphCache::~QTextureGlyphCache()
+{
+}
+
 int QTextureGlyphCache::calculateSubPixelPositionCount(glyph_t glyph) const
 {
     // Test 12 different subpixel positions since it factors into 3*4 so it gives
     // the coverage we need.
 
-    QList<QImage> images;
-    for (int i=0; i<12; ++i) {
+    const int NumSubpixelPositions = 12;
+
+    QImage images[NumSubpixelPositions];
+    int numImages = 0;
+    for (int i = 0; i < NumSubpixelPositions; ++i) {
         QImage img = textureMapForGlyph(glyph, QFixed::fromReal(i / 12.0));
 
-        if (images.isEmpty()) {
+        if (numImages == 0) {
             QPainterPath path;
             QFixedPoint point;
             m_current_fontengine->addGlyphsToPath(&glyph, &point, 1, &path, QTextItem::RenderFlags());
@@ -60,21 +68,21 @@ int QTextureGlyphCache::calculateSubPixelPositionCount(glyph_t glyph) const
             if (path.isEmpty())
                 break;
 
-            images.append(img);
+            images[numImages++] = qMove(img);
         } else {
             bool found = false;
-            for (int j=0; j<images.size(); ++j) {
-                if (images.at(j) == img) {
+            for (int j = 0; j < numImages; ++j) {
+                if (images[j] == img) {
                     found = true;
                     break;
                 }
             }
             if (!found)
-                images.append(img);
+                images[numImages++] = qMove(img);
         }
     }
 
-    return images.size();
+    return numImages;
 }
 
 bool QTextureGlyphCache::populate(QFontEngine *fontEngine, int numGlyphs, const glyph_t *glyphs,
@@ -262,6 +270,11 @@ QImage QTextureGlyphCache::textureMapForGlyph(glyph_t g, QFixed subPixelPosition
  * QImageTextureGlyphCache
  */
 
+// out-of-line to avoid vtable duplication, breaking e.g. RTTI
+QImageTextureGlyphCache::~QImageTextureGlyphCache()
+{
+}
+
 void QImageTextureGlyphCache::resizeTextureData(int width, int height)
 {
     m_image = m_image.copy(0, 0, width, height);
@@ -273,9 +286,9 @@ void QImageTextureGlyphCache::createTextureData(int width, int height)
     case QFontEngine::Format_Mono:
         m_image = QImage(width, height, QImage::Format_Mono);
         break;
-    case QFontEngine::Format_A8: {
+    case QFontEngine::Format_A8:
         m_image = QImage(width, height, QImage::Format_Alpha8);
-        break;   }
+        break;
     case QFontEngine::Format_A32:
         m_image = QImage(width, height, QImage::Format_RGB32);
         break;
@@ -326,7 +339,7 @@ void QImageTextureGlyphCache::fillTexture(const Coord &c, glyph_t g, QFixed subP
             uchar *dest = d + (c.y + y) *dbpl + c.x/8;
 
             if (y < mh) {
-                uchar *src = mask.scanLine(y);
+                const uchar *src = mask.constScanLine(y);
                 for (int x = 0; x < c.w/8; ++x) {
                     if (x < (mw+7)/8)
                         dest[x] = src[x];
@@ -348,7 +361,7 @@ void QImageTextureGlyphCache::fillTexture(const Coord &c, glyph_t g, QFixed subP
             for (int y = 0; y < c.h; ++y) {
                 uchar *dest = d + (c.y + y) *dbpl + c.x;
                 if (y < mh) {
-                    uchar *src = (uchar *) mask.scanLine(y);
+                    const uchar *src = mask.constScanLine(y);
                     for (int x = 0; x < c.w; ++x) {
                         if (x < mw)
                             dest[x] = (src[x >> 3] & (1 << (7 - (x & 7)))) > 0 ? 255 : 0;
@@ -359,7 +372,7 @@ void QImageTextureGlyphCache::fillTexture(const Coord &c, glyph_t g, QFixed subP
             for (int y = 0; y < c.h; ++y) {
                 uchar *dest = d + (c.y + y) *dbpl + c.x;
                 if (y < mh) {
-                    uchar *src = (uchar *) mask.scanLine(y);
+                    const uchar *src = mask.constScanLine(y);
                     for (int x = 0; x < c.w; ++x) {
                         if (x < mw)
                             dest[x] = src[x];

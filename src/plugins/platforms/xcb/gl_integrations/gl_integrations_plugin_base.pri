@@ -3,6 +3,8 @@ QT += core-private gui-private platformsupport-private xcb_qpa_lib-private
 INCLUDEPATH += $$PWD
 INCLUDEPATH += $$PWD/../
 
+load(qt_build_paths)
+
 # needed by Xcursor ...
 contains(QT_CONFIG, xcb-xlib) {
     DEFINES += XCB_USE_XLIB
@@ -31,7 +33,7 @@ contains(QT_CONFIG, xcb-qt) {
     DEFINES += XCB_USE_RENDER
     XCB_DIR = $$clean_path($$PWD/../../../../3rdparty/xcb)
     INCLUDEPATH += $$XCB_DIR/include $$XCB_DIR/include/xcb $$XCB_DIR/sysinclude
-    LIBS += -lxcb -L$$OUT_PWD/xcb-static -lxcb-static
+    LIBS += -lxcb -L$$MODULE_BASE_OUTDIR/lib -lxcb-static$$qtPlatformTargetSuffix()
 } else {
     LIBS += -lxcb -lxcb-image -lxcb-icccm -lxcb-sync -lxcb-xfixes -lxcb-shm -lxcb-randr -lxcb-shape -lxcb-keysyms
     !contains(DEFINES, QT_NO_XKB):LIBS += -lxcb-xkb

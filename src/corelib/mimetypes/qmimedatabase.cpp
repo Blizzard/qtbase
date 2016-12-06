@@ -239,7 +239,7 @@ bool QMimeDatabasePrivate::inherits(const QString &mime, const QString &parent)
 
     The MIME type database is provided by the freedesktop.org shared-mime-info
     project. If the MIME type database cannot be found on the system, as is the case
-    on most Windows, OS X, and iOS systems, Qt will use its own copy of it.
+    on most Windows, \macos, and iOS systems, Qt will use its own copy of it.
 
     Applications which want to define custom MIME types need to install an
     XML file into the locations searched for MIME definitions.
@@ -354,9 +354,10 @@ QMimeType QMimeDatabase::mimeTypeForFile(const QFileInfo &fileInfo, MatchMode mo
 
 #ifdef Q_OS_UNIX
     // Cannot access statBuf.st_mode from the filesystem engine, so we have to stat again.
+    // In addition we want to follow symlinks.
     const QByteArray nativeFilePath = QFile::encodeName(file.fileName());
     QT_STATBUF statBuffer;
-    if (QT_LSTAT(nativeFilePath.constData(), &statBuffer) == 0) {
+    if (QT_STAT(nativeFilePath.constData(), &statBuffer) == 0) {
         if (S_ISCHR(statBuffer.st_mode))
             return d->mimeTypeForName(QLatin1String("inode/chardevice"));
         if (S_ISBLK(statBuffer.st_mode))
@@ -435,6 +436,7 @@ QList<QMimeType> QMimeDatabase::mimeTypesForFileName(const QString &fileName) co
     QStringList matches = d->mimeTypeForFileName(fileName);
     QList<QMimeType> mimes;
     matches.sort(); // Make it deterministic
+    mimes.reserve(matches.count());
     foreach (const QString &mime, matches)
         mimes.append(d->mimeTypeForName(mime));
     return mimes;
@@ -513,7 +515,7 @@ QMimeType QMimeDatabase::mimeTypeForUrl(const QUrl &url) const
         return mimeTypeForFile(url.toLocalFile());
 
     const QString scheme = url.scheme();
-    if (scheme.startsWith(QLatin1String("http")))
+    if (scheme.startsWith(QLatin1String("http")) || scheme == QLatin1String("mailto"))
         return mimeTypeForName(d->defaultMimeType());
 
     return mimeTypeForFile(url.path());

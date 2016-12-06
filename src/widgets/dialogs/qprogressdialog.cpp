@@ -411,7 +411,8 @@ void QProgressDialog::setCancelButton(QPushButton *cancelButton)
     if (cancelButton) {
         connect(d->cancel, SIGNAL(clicked()), this, SIGNAL(canceled()));
 #ifndef QT_NO_SHORTCUT
-        d->escapeShortcut = new QShortcut(Qt::Key_Escape, this, SIGNAL(canceled()));
+        // FIXME: This only registers the primary key sequence of the cancel action
+        d->escapeShortcut = new QShortcut(QKeySequence::Cancel, this, SIGNAL(canceled()));
 #endif
     } else {
 #ifndef QT_NO_SHORTCUT
@@ -697,9 +698,6 @@ void QProgressDialog::setValue(int progress)
                 d->shown_once = true;
             }
         }
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
-        QApplication::flush();
-#endif
     }
 
     if (progress == d->bar->maximum() && d->autoReset)

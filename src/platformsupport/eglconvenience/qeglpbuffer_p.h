@@ -45,15 +45,17 @@
 // We mean it.
 //
 
-#include <EGL/egl.h>
 #include <qpa/qplatformoffscreensurface.h>
+#include <QtPlatformSupport/private/qeglplatformcontext_p.h>
+#include <EGL/egl.h>
 
 QT_BEGIN_NAMESPACE
 
 class QEGLPbuffer : public QPlatformOffscreenSurface
 {
 public:
-    QEGLPbuffer(EGLDisplay display, const QSurfaceFormat &format, QOffscreenSurface *offscreenSurface);
+    QEGLPbuffer(EGLDisplay display, const QSurfaceFormat &format, QOffscreenSurface *offscreenSurface,
+                QEGLPlatformContext::Flags flags = 0);
     ~QEGLPbuffer();
 
     QSurfaceFormat format() const Q_DECL_OVERRIDE { return m_format; }

@@ -57,6 +57,7 @@ private slots:
     void mapRect();
     void assignments();
     void mapToPolygon();
+    void qhash();
     void translate();
     void scale();
     void matrix();
@@ -361,6 +362,22 @@ void tst_QTransform::mapToPolygon()
     QVERIFY(equal);
 }
 
+void tst_QTransform::qhash()
+{
+    QMatrix m1;
+    m1.shear(3.0, 2.0);
+    m1.rotate(44);
+
+    QMatrix m2 = m1;
+
+    QTransform t1(m1);
+    QTransform t2(m2);
+
+    // not really much to test here, so just the bare minimum:
+    QCOMPARE(qHash(m1), qHash(m2));
+    QCOMPARE(qHash(t1), qHash(t2));
+}
+
 
 void tst_QTransform::translate()
 {
@@ -411,14 +428,14 @@ void tst_QTransform::matrix()
                     mat1.m21(), mat1.m22(), 0,
                     mat1.dx(), mat1.dy(), 1);
 
-    QVERIFY(tran1 == dummy);
-    QVERIFY(tran1.inverted() == dummy.inverted());
-    QVERIFY(tran1.inverted() == QTransform(mat1.inverted()));
-    QVERIFY(tran2.inverted() == QTransform(mat2.inverted()));
+    QCOMPARE(tran1, dummy);
+    QCOMPARE(tran1.inverted(), dummy.inverted());
+    QCOMPARE(tran1.inverted(), QTransform(mat1.inverted()));
+    QCOMPARE(tran2.inverted(), QTransform(mat2.inverted()));
 
     QMatrix mat3 = mat1 * mat2;
     QTransform tran3 = tran1 * tran2;
-    QVERIFY(QTransform(mat3) == tran3);
+    QCOMPARE(QTransform(mat3), tran3);
 
     /* QMatrix::operator==() doesn't use qFuzzyCompare(), which
      * on win32-g++ results in a failure. So we work around it by
@@ -430,15 +447,15 @@ void tst_QTransform::matrix()
 
     QRect rect(43, 70, 200, 200);
     QPoint pt(43, 66);
-    QVERIFY(tranInv.map(pt) == matInv.map(pt));
-    QVERIFY(tranInv.map(pt) == matInv.map(pt));
+    QCOMPARE(tranInv.map(pt), matInv.map(pt));
+    QCOMPARE(tranInv.map(pt), matInv.map(pt));
 
     QPainterPath path;
     path.moveTo(55, 60);
     path.lineTo(110, 110);
     path.quadTo(220, 50, 10, 20);
     path.closeSubpath();
-    QVERIFY(tranInv.map(path) == matInv.map(path));
+    QCOMPARE(tranInv.map(path), matInv.map(path));
 }
 
 void tst_QTransform::testOffset()
@@ -724,8 +741,8 @@ void tst_QTransform::inverted()
 
     const QTransform inverted = matrix.inverted();
 
-    QVERIFY(matrix.isIdentity() == inverted.isIdentity());
-    QVERIFY(matrix.type() == inverted.type());
+    QCOMPARE(matrix.isIdentity(), inverted.isIdentity());
+    QCOMPARE(matrix.type(), inverted.type());
 
     QVERIFY((matrix * inverted).isIdentity());
     QVERIFY((inverted * matrix).isIdentity());

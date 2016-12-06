@@ -204,7 +204,7 @@ enum PseudoElement {
 
 struct PseudoElementInfo {
     QStyle::SubControl subControl;
-    const char *name;
+    const char name[19];
 };
 
 static const PseudoElementInfo knownPseudoElements[NumPseudoElements] = {
@@ -460,7 +460,6 @@ class QRenderRule
 public:
     QRenderRule() : features(0), hasFont(false), pal(0), b(0), bg(0), bd(0), ou(0), geo(0), p(0), img(0), clipset(0) { }
     QRenderRule(const QVector<QCss::Declaration> &, const QObject *);
-    ~QRenderRule() { }
 
     QRect borderRect(const QRect &r) const;
     QRect outlineRect(const QRect &r) const;
@@ -558,16 +557,22 @@ public:
         return csz;
     }
 
+    bool hasStyleHint(const QString &sh) const { return styleHints.contains(sh); }
+    QVariant styleHint(const QString &sh) const { return styleHints.value(sh); }
+
+    void fixupBorder(int);
+
+    // Shouldn't be here
+    void setClip(QPainter *p, const QRect &rect);
+    void unsetClip(QPainter *);
+
+public:
     int features;
     QBrush defaultBackground;
     QFont font;
     bool hasFont;
 
     QHash<QString, QVariant> styleHints;
-    bool hasStyleHint(const QString& sh) const { return styleHints.contains(sh); }
-    QVariant styleHint(const QString& sh) const { return styleHints.value(sh); }
-
-    void fixupBorder(int);
 
     QSharedDataPointer<QStyleSheetPaletteData> pal;
     QSharedDataPointer<QStyleSheetBoxData> b;
@@ -578,15 +583,13 @@ public:
     QSharedDataPointer<QStyleSheetPositionData> p;
     QSharedDataPointer<QStyleSheetImageData> img;
 
-    // Shouldn't be here
-    void setClip(QPainter *p, const QRect &rect);
-    void unsetClip(QPainter *);
     int clipset;
     QPainterPath clipPath;
 };
+Q_DECLARE_TYPEINFO(QRenderRule, Q_MOVABLE_TYPE);
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-static const char *const knownStyleHints[] = {
+static const char knownStyleHints[][45] = {
     "activate-on-singleclick",
     "alignment",
     "arrow-keys-navigate-into-children",
@@ -728,6 +731,7 @@ namespace {
         int width;
     };
 }
+template <> class QTypeInfo<ButtonInfo> : public QTypeInfoMerger<ButtonInfo, QRenderRule, int> {};
 
 QHash<QStyle::SubControl, QRect> QStyleSheetStyle::titleBarLayout(const QWidget *w, const QStyleOptionTitleBar *tb) const
 {
@@ -742,16 +746,19 @@ QHash<QStyle::SubControl, QRect> QStyleSheetStyle::titleBarLayout(const QWidget 
 
     int offsets[3] = { 0, 0, 0 };
     enum Where { Left, Right, Center, NoWhere } where = Left;
-    QList<ButtonInfo> infos;
-    for (int i = 0; i < layout.count(); i++) {
-        ButtonInfo info;
-        info.element = layout[i].toInt();
-        if (info.element == '(') {
+    QVector<ButtonInfo> infos;
+    const int numLayouts = layout.size();
+    infos.reserve(numLayouts);
+    for (int i = 0; i < numLayouts; i++) {
+        const int element = layout[i].toInt();
+        if (element == '(') {
             where = Center;
-        } else if (info.element == ')') {
+        } else if (element == ')') {
             where = Right;
         } else {
-            switch (info.element) {
+            ButtonInfo info;
+            info.element = element;
+            switch (element) {
             case PseudoElement_TitleBar:
                 if (!(tb->titleBarFlags & (Qt::WindowTitleHint | Qt::WindowSystemMenuHint)))
                     continue;
@@ -796,14 +803,14 @@ QHash<QStyle::SubControl, QRect> QStyleSheetStyle::titleBarLayout(const QWidget 
             info.rule = subRule;
             info.offset = offsets[where];
             info.where = where;
-            infos.append(info);
+            infos.append(qMove(info));
 
             offsets[where] += info.width;
         }
     }
 
-    for (int i = 0; i < infos.count(); i++) {
-        ButtonInfo info = infos[i];
+    for (int i = 0; i < infos.size(); i++) {
+        const ButtonInfo &info = infos[i];
         QRect lr = cr;
         switch (info.where) {
         case Center: {
@@ -989,15 +996,17 @@ QRenderRule::QRenderRule(const QVector<Declaration> &declarations, const QObject
         }
     }
 
-    if (const QWidget *widget = qobject_cast<const QWidget *>(object)) {
-        QStyleSheetStyle *style = const_cast<QStyleSheetStyle *>(globalStyleSheetStyle);
-        if (!style)
-            style = qobject_cast<QStyleSheetStyle *>(widget->style());
-        if (style)
-            fixupBorder(style->nativeFrameWidth(widget));
+    if (hasBorder()) {
+        if (const QWidget *widget = qobject_cast<const QWidget *>(object)) {
+            QStyleSheetStyle *style = const_cast<QStyleSheetStyle *>(globalStyleSheetStyle);
+            if (!style)
+                style = qobject_cast<QStyleSheetStyle *>(widget->style());
+            if (style)
+                fixupBorder(style->nativeFrameWidth(widget));
+        }
+        if (border()->hasBorderImage())
+            defaultBackground = QBrush();
     }
-    if (hasBorder() && border()->hasBorderImage())
-        defaultBackground = QBrush();
 }
 
 QRect QRenderRule::borderRect(const QRect& r) const
@@ -1951,24 +1960,24 @@ QRenderRule QStyleSheetStyle::renderRule(const QObject *obj, const QStyleOption 
         }
 #endif // QT_NO_TOOLBAR
 #ifndef QT_NO_TOOLBOX
-        else if (const QStyleOptionToolBoxV2 *tab = qstyleoption_cast<const QStyleOptionToolBoxV2 *>(opt)) {
-            if (tab->position == QStyleOptionToolBoxV2::OnlyOneTab)
+        else if (const QStyleOptionToolBox *tb = qstyleoption_cast<const QStyleOptionToolBox *>(opt)) {
+            if (tb->position == QStyleOptionToolBox::OnlyOneTab)
                 extraClass |= PseudoClass_OnlyOne;
-            else if (tab->position == QStyleOptionToolBoxV2::Beginning)
+            else if (tb->position == QStyleOptionToolBox::Beginning)
                 extraClass |= PseudoClass_First;
-            else if (tab->position == QStyleOptionToolBoxV2::End)
+            else if (tb->position == QStyleOptionToolBox::End)
                 extraClass |= PseudoClass_Last;
-            else if (tab->position == QStyleOptionToolBoxV2::Middle)
+            else if (tb->position == QStyleOptionToolBox::Middle)
                 extraClass |= PseudoClass_Middle;
 
-            if (tab->selectedPosition == QStyleOptionToolBoxV2::NextIsSelected)
+            if (tb->selectedPosition == QStyleOptionToolBox::NextIsSelected)
                 extraClass |= PseudoClass_NextSelected;
-            else if (tab->selectedPosition == QStyleOptionToolBoxV2::PreviousIsSelected)
+            else if (tb->selectedPosition == QStyleOptionToolBox::PreviousIsSelected)
                 extraClass |= PseudoClass_PreviousSelected;
         }
 #endif // QT_NO_TOOLBOX
 #ifndef QT_NO_DOCKWIDGET
-        else if (const QStyleOptionDockWidgetV2 *dw = qstyleoption_cast<const QStyleOptionDockWidgetV2 *>(opt)) {
+        else if (const QStyleOptionDockWidget *dw = qstyleoption_cast<const QStyleOptionDockWidget *>(opt)) {
             if (dw->verticalTitleBar)
                 extraClass |= PseudoClass_Vertical;
             else
@@ -2393,6 +2402,13 @@ static bool unstylable(const QWidget *w)
             return true;
     }
 #endif
+
+#ifndef QT_NO_TABBAR
+    if (w->metaObject() == &QWidget::staticMetaObject
+            && qobject_cast<const QTabBar*>(w->parentWidget()))
+        return true; // The moving tab of a QTabBar
+#endif
+
     return false;
 }
 
@@ -3793,7 +3809,7 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
     case CE_ProgressBarContents: {
         QRenderRule subRule = renderRule(w, opt, PseudoElement_ProgressBarChunk);
         if (subRule.hasDrawable()) {
-            if (const QStyleOptionProgressBarV2 *pb = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt)) {
+            if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
                 p->save();
                 p->setClipRect(pb->rect);
 
@@ -3874,12 +3890,12 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
         break;
 
     case CE_ProgressBarLabel:
-        if (const QStyleOptionProgressBarV2 *pb = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt)) {
+        if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
             if (rule.hasBox() || rule.hasBorder() || hasStyleRule(w, PseudoElement_ProgressBarChunk)) {
                 drawItemText(p, pb->rect, pb->textAlignment | Qt::TextSingleLine, pb->palette,
                              pb->state & State_Enabled, pb->text, QPalette::Text);
             } else {
-                QStyleOptionProgressBarV2 pbCopy(*pb);
+                QStyleOptionProgressBar pbCopy(*pb);
                 rule.configurePalette(&pbCopy.palette, QPalette::HighlightedText, QPalette::Highlight);
                 baseStyle()->drawControl(ce, &pbCopy, p, w);
             }
@@ -4002,13 +4018,13 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
     case CE_TabBarTabLabel:
     case CE_TabBarTabShape:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(opt)) {
-            QStyleOptionTabV3 tabCopy(*tab);
             QRenderRule subRule = renderRule(w, opt, PseudoElement_TabBarTab);
             QRect r = positionRect(w, subRule, PseudoElement_TabBarTab, opt->rect, opt->direction);
             if (ce == CE_TabBarTabShape && subRule.hasDrawable()) {
                 subRule.drawRule(p, r);
                 return;
             }
+            QStyleOptionTab tabCopy(*tab);
             subRule.configurePalette(&tabCopy.palette, QPalette::WindowText, QPalette::Window);
             QFont oldFont = p->font();
             if (subRule.hasFont)
@@ -4036,14 +4052,14 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
        break;
 
     case CE_DockWidgetTitle:
-       if (const QStyleOptionDockWidgetV2 *dwOpt = qstyleoption_cast<const QStyleOptionDockWidgetV2 *>(opt)) {
+       if (const QStyleOptionDockWidget *dwOpt = qstyleoption_cast<const QStyleOptionDockWidget *>(opt)) {
            QRenderRule subRule = renderRule(w, opt, PseudoElement_DockWidgetTitle);
            if (!subRule.hasDrawable() && !subRule.hasPosition())
                break;
            if (subRule.hasDrawable()) {
                subRule.drawRule(p, opt->rect);
            } else {
-               QStyleOptionDockWidgetV2 dwCopy(*dwOpt);
+               QStyleOptionDockWidget dwCopy(*dwOpt);
                dwCopy.title = QString();
                baseStyle()->drawControl(ce, &dwCopy, p, w);
            }
@@ -4379,7 +4395,7 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
             QRenderRule subRule = renderRule(w, opt, PseudoElement_TabWidgetPane);
             if (subRule.hasNativeBorder()) {
                 subRule.drawBackground(p, opt->rect);
-                QStyleOptionTabWidgetFrameV2 frmCopy(*frm);
+                QStyleOptionTabWidgetFrame frmCopy(*frm);
                 subRule.configurePalette(&frmCopy.palette, QPalette::WindowText, QPalette::Window);
                 baseStyle()->drawPrimitive(pe, &frmCopy, p, w);
             } else {
@@ -5695,7 +5711,7 @@ QRect QStyleSheetStyle::subElementRect(SubElement se, const QStyleOption *opt, c
     case SE_ProgressBarGroove:
     case SE_ProgressBarContents:
     case SE_ProgressBarLabel:
-        if (const QStyleOptionProgressBarV2 *pb = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(opt)) {
+        if (const QStyleOptionProgressBar *pb = qstyleoption_cast<const QStyleOptionProgressBar *>(opt)) {
             if (rule.hasBox() || !rule.hasNativeBorder() || rule.hasPosition() || hasStyleRule(w, PseudoElement_ProgressBarChunk)) {
                 if (se == SE_ProgressBarGroove)
                     return rule.borderRect(pb->rect);

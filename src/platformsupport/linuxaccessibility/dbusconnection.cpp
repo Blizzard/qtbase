@@ -42,10 +42,16 @@
 #include <QDBusConnectionInterface>
 #include "bus_interface.h"
 
+#include <QtGui/qguiapplication.h>
+#include <qplatformnativeinterface.h>
+
 QT_BEGIN_NAMESPACE
 
-QString A11Y_SERVICE = QStringLiteral("org.a11y.Bus");
-QString A11Y_PATH = QStringLiteral("/org/a11y/bus");
+/* note: do not change these to QStringLiteral;
+   we are unloaded before QtDBus is done using the strings.
+ */
+#define A11Y_SERVICE QLatin1String("org.a11y.Bus")
+#define A11Y_PATH QLatin1String("/org/a11y/bus")
 
 /*!
     \class DBusConnection
@@ -65,6 +71,29 @@ DBusConnection::DBusConnection(QObject *parent)
     // If it is registered already, setup a11y right away
     if (c.interface()->isServiceRegistered(A11Y_SERVICE))
         serviceRegistered();
+
+    // In addition try if there is an xatom exposing the bus address, this allows applications run as root to work
+    QString address = getAddressFromXCB();
+    if (!address.isEmpty()) {
+        m_enabled = true;
+        connectA11yBus(address);
+    }
+}
+
+QString DBusConnection::getAddressFromXCB()
+{
+    QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+    if (!app)
+        return QString();
+    QPlatformNativeInterface *platformNativeInterface = app->platformNativeInterface();
+    QByteArray *addressByteArray = reinterpret_cast<QByteArray*>(
+                platformNativeInterface->nativeResourceForIntegration(QByteArrayLiteral("AtspiBus")));
+    if (addressByteArray) {
+        QString address = QString::fromLatin1(*addressByteArray);
+        delete addressByteArray;
+        return address;
+    }
+    return QString();
 }
 
 // We have the a11y registry on the session bus.
@@ -111,7 +140,7 @@ void DBusConnection::connectA11yBus(const QString &address)
         qWarning("Could not find Accessibility DBus address.");
         return;
     }
-    m_a11yConnection = QDBusConnection(QDBusConnection::connectToBus(address, QStringLiteral("a11y")));
+    m_a11yConnection = QDBusConnection(QDBusConnection::connectToBus(address, QLatin1String("a11y")));
 
     if (m_enabled)
         emit enabledChanged(true);

@@ -657,7 +657,7 @@
     qmake knows about many of these features, which can be accessed via specific
     variables that only take effect on the platforms where they are relevant.
 
-    \section1 OS X and iOS
+    \section1 \macos and iOS
 
     Features specific to these platforms include support for creating universal
     binaries, frameworks and bundles.
@@ -681,7 +681,7 @@
 
     qmake is able to automatically generate build
     rules for linking against frameworks in the standard framework directory on
-    OS X, located at \c{/Library/Frameworks/}.
+    \macos, located at \c{/Library/Frameworks/}.
 
     Directories other than the standard framework directory need to be specified
     to the build system, and this is achieved by appending linker options to the
@@ -722,13 +722,13 @@
     and \l{QMAKE_FRAMEWORK_VERSION} variables. By default, the values used for
     these variables are obtained from the \l{TARGET} and \l{VERSION} variables.
 
-    See \l{Qt for OS X - Deployment} for more information about
+    See \l{Qt for macOS - Deployment} for more information about
     deploying applications and libraries.
 
     \section2 Creating and Moving Xcode Projects
 
-    Developers on OS X can take advantage of the qmake support for Xcode
-    project files, as described in \l{Additional Command-Line Options},
+    Developers on \macos can take advantage of the qmake support for Xcode
+    project files, as described in \l{Qt for macOS#Additional Command-Line Options}{Qt for \macos} documentation.
     by running qmake to generate an Xcode project from an existing qmake project
     file. For example:
 
@@ -1069,7 +1069,7 @@
     See \l{Platform Notes#Visual Studio Manifest Files}{Platform Notes}
     for more information about the options for embedding manifest files.
 
-    The following options take an effect only on OS X:
+    The following options take an effect only on \macos:
 
     \table
     \header \li Option \li Description
@@ -1118,38 +1118,6 @@
 
     Specifies a list of all directories to look in to resolve dependencies. This
     variable is used when crawling through \c included files.
-
-    \target DEPLOYMENT
-    \section1 DEPLOYMENT
-
-    \note This variable is used only on the Windows CE platform.
-
-    Specifies which additional files will be deployed. Deployment means the
-    transfer of files from the development system to the target device or
-    emulator.
-
-    Files can be deployed by either creating a Visual Studio project or using
-    the \l {Using Qt Test remotely on Windows CE}{cetest} executable.
-
-    For example, the following definition uploads all PNG images in \c path to
-    the directory where the build target is deployed:
-
-    \snippet code/doc_src_qmake-manual.pro 28
-
-    The default deployment target path for Windows CE is
-    \c{%CSIDL_PROGRAM_FILES%\target}, which usually gets expanded to
-    \c{\Program Files\target}.
-
-    It is also possible to specify multiple \c sources to be deployed on
-    target \c paths. In addition, different variables can be used for
-    deployment to different directories.
-
-    For example:
-
-    \snippet code/doc_src_qmake-manual.pro 29
-
-    \note In Windows CE all linked Qt libraries will be deployed to the path
-    specified by \c{myFiles.path}.
 
     \target DEPLOYMENT_PLUGIN
     \section1 DEPLOYMENT_PLUGIN
@@ -1274,6 +1242,13 @@
     \snippet code/doc_src_qmake-manual.pro 36
 
     For more information, see \l{Installing Files}.
+
+    This variable is also used to specify which additional files will be
+    deployed to embedded devices.
+
+    For Windows CE, the default deployment target path is
+    \c{%CSIDL_PROGRAM_FILES%\target}, which usually gets expanded to
+    \c{\Program Files\target}.
 
     \target LEXIMPLS
     \section1 LEXIMPLS
@@ -1464,7 +1439,7 @@
     \target QMAKE_BUNDLE_DATA
     \section1 QMAKE_BUNDLE_DATA
 
-    \note This variable is used on OS X and iOS only.
+    \note This variable is used on \macos and iOS only.
 
     Specifies the data that will be installed with a library
     bundle, and is often used to specify a collection of header files.
@@ -1486,7 +1461,7 @@
 
     \section1 QMAKE_BUNDLE_EXTENSION
 
-    \note This variable is used on OS X and iOS only.
+    \note This variable is used on \macos and iOS only.
 
     Specifies the extension to be used for library bundles.
     This allows frameworks to be created with custom extensions instead of the
@@ -1641,6 +1616,13 @@
     \note Platform-specific variables that change the extension override
     the contents of this variable.
 
+    \target QMAKE_EXTENSION_STATICLIB
+    \section1 QMAKE_EXTENSION_STATICLIB
+
+    Contains the extension for shared static libraries. The value of
+    this variable is typically handled by qmake or
+    \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
+
     \section1 QMAKE_EXT_MOC
 
     Contains the extension used on included moc files.
@@ -1713,7 +1695,7 @@
 
     \section1 QMAKE_FRAMEWORK_BUNDLE_NAME
 
-    \note This variable is used on OS X and iOS only.
+    \note This variable is used on \macos and iOS only.
 
     In a framework project, this variable contains the name to be used for the
     framework that is built.
@@ -1727,9 +1709,9 @@
     \target QMAKE_FRAMEWORK_VERSION
     \section1 QMAKE_FRAMEWORK_VERSION
 
-    \note This variable is used on OS X and iOS only.
+    \note This variable is used on \macos and iOS only.
 
-    For projects where the build target is an OS X or iOS framework, this variable
+    For projects where the build target is a \macos or an iOS framework, this variable
     is used to specify the version number that will be applied to the framework
     that is built.
 
@@ -1755,7 +1737,7 @@
     \row    \li .version_string    \li Host OS version string
     \endtable
 
-    \snippet code/doc_src_qmake-manual.pro 186
+    \snippet code/doc_src_qmake-manual.pro 187
 
     \target QMAKE_INCDIR
     \section1 QMAKE_INCDIR
@@ -1822,10 +1804,10 @@
     \target QMAKE_INFO_PLIST
     \section1 QMAKE_INFO_PLIST
 
-    \note This variable is used on OS X and iOS platforms only.
+    \note This variable is used on \macos and iOS platforms only.
 
     Specifies the name of the property list file, \c{.plist}, you
-    would like to include in your OS X and iOS application bundle.
+    would like to include in your \macos and iOS application bundle.
 
     In the \c{.plist} file, you can define some variables, e.g., @EXECUTABLE@,
     which qmake will replace with the actual executable name. Other variables
@@ -1866,6 +1848,22 @@
     \note This variable is used on Unix platforms only.
 
     Specifies the linker flags needed to use the values from \l{QMAKE_RPATHDIR}.
+
+    The value of this variable is typically handled by
+    qmake or \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
+
+    \section1 QMAKE_LFLAGS_REL_RPATH
+
+    Specifies the linker flags needed to enable relative paths in
+    \l{QMAKE_RPATHDIR}.
+
+    The value of this variable is typically handled by
+    qmake or \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
+
+    \section1 QMAKE_REL_RPATH_BASE
+
+    Specifies the string the dynamic linker understands to be the
+    location of the referring executable or library.
 
     The value of this variable is typically handled by
     qmake or \l{#QMAKESPEC}{qmake.conf} and rarely needs to be modified.
@@ -2079,16 +2077,16 @@
 
     \section1 QMAKE_MAC_SDK
 
-    This variable is used on OS X when building universal binaries.
+    This variable is used on \macos when building universal binaries.
 
     \section1 QMAKE_MACOSX_DEPLOYMENT_TARGET
 
-    This variable only takes effect when building on OS X. On that
+    This variable only takes effect when building on \macos. On that
     platform, the variable will be forwarded to the MACOSX_DEPLOYMENT_TARGET
     environment variable, which is interpreted by the compiler or linker.
     For more information, see the
-    \l{Qt for OS X - Deployment#OS X Version Dependencies}{Deploying
-    an Application on OS X} document.
+    \l{Qt for macOS - Deployment#macOS Version Dependencies}{Deploying
+    an Application on \macos} document.
 
     \section1 QMAKE_MAKEFILE
 
@@ -2119,6 +2117,13 @@
     Specifies a list of library paths that are added to the
     executable at link time so that the paths will be preferentially
     searched at runtime.
+
+    When relative paths are specified, qmake will mangle them into a form
+    understood by the dynamic linker to be relative to the location of
+    the referring executable or library.
+    This is supported only by some platforms (currently Linux and
+    Darwin-based ones) and is detectable by checking whether
+    \l{QMAKE_REL_RPATH_BASE} is set.
 
     \section1 QMAKE_RPATHLINKDIR
 
@@ -2228,52 +2233,10 @@
 
     \section1 QT
 
-    Specifies the Qt modules that are used by your project.
+    Specifies the \l{All Modules}{Qt modules} that are used by your project. For
+    the value to add for each module, see the module documentation.
 
-    The table below shows the options that can be used with the \c QT variable
-    and the Qt modules that are associated with each of them:
-
-    \table
-    \header \li Option                     \li Module Enabled
-    \row    \li axcontainer                \li \l{Using ActiveX controls and COM in Qt}
-                                               {QAxContainer}, which is
-                                               part of the \l{Active Qt} framework
-    \row    \li axserver                   \li \l{Building ActiveX servers in Qt}
-                                               {QAxServer}, which is
-                                               part of the \l{Active Qt} framework
-    \row    \li concurrent                 \li \l{Qt Concurrent}
-    \row    \li core (included by default) \li \l{Qt Core}
-    \row    \li dbus                       \li \l{Qt D-Bus}
-    \row    \li declarative                \li \l{Qt Quick 1} (deprecated)
-    \row    \li designer                   \li \l{Qt Designer}
-    \row    \li gui  (included by default) \li \l{Qt GUI}
-    \row    \li help                       \li \l{Qt Help}
-    \row    \li multimedia                 \li \l{Qt Multimedia}
-    \row    \li multimediawidgets          \li \l{Qt Multimedia Widgets}
-    \row    \li network                    \li \l{Qt Network}
-    \row    \li opengl                     \li \l{Qt OpenGL} (deprecated)
-    \row    \li printsupport               \li \l{Qt Print Support}
-    \row    \li qml                        \li \l{Qt QML}
-    \row    \li qmltest                    \li \l{Qt QML Test}
-    \row    \li x11extras                  \li \l{Qt X11 Extras}
-    \row    \li quick                      \li \l{Qt Quick}
-    \row    \li script                     \li \l{Qt Script} (deprecated)
-    \row    \li scripttools                \li \l{Qt Script Tools} (deprecated)
-    \row    \li sensors                    \li \l{Qt Sensors}
-    \row    \li serialport                 \li \l{Qt Serial Port}
-    \row    \li sql                        \li \l{Qt SQL}
-    \row    \li svg                        \li \l{Qt SVG}
-    \row    \li testlib                    \li \l{Qt Test}
-    \row    \li uitools                    \li \l{Qt UI Tools}
-    \row    \li webkit                     \li \l{Qt WebKit}
-    \row    \li webkitwidgets              \li \l{Qt WebKit Widgets}
-    \row    \li widgets                    \li \l{Qt Widgets}
-    \row    \li winextras                  \li \l{Qt Windows Extras}
-    \row    \li xml                        \li \l{Qt XML} (deprecated)
-    \row    \li xmlpatterns                \li \l{Qt XML Patterns}
-    \endtable
-
-    By default, \c QT contains both \c core and \c gui, ensuring that standard
+    By default, \c QT contains \c core and \c gui, ensuring that standard
     GUI applications can be built without further configuration.
 
     If you want to build a project \e without the \l{Qt GUI} module, you need to
@@ -2335,6 +2298,14 @@
     Windows only. Specifies the codepage that should be specified in a generated
     .rc file. This is only utilized if the \l{VERSION} or \l{RC_ICONS} variable
     is set and the \l{RC_FILE} and \l{RES_FILE} variables are not set.
+
+    \target RC_DEFINES
+    \section1 RC_DEFINES
+
+    Windows only. qmake adds the values of this variable as RC preprocessor macros
+    (/d option). If this variable is not set, the \l{DEFINES} variable is used instead.
+
+    \snippet code/doc_src_qmake-manual.pro 186
 
     \target RC_ICONS
     \section1 RC_ICONS
@@ -2444,7 +2415,6 @@
     \row \li .file       \li Specify the subproject \c pro file explicitly. Cannot be
                         used in conjunction with \c .subdir modifier.
     \row \li .depends    \li This subproject depends on specified subproject.
-                        Available only on platforms that use makefiles.
     \row \li .makefile   \li The makefile of subproject.
                         Available only on platforms that use makefiles.
     \row \li .target     \li Base string used for makefile targets related to this
@@ -2723,6 +2693,13 @@
     \row
         \li version
         \li The version number of the package. Defaults to \c{1.0.0.0}.
+    \row
+        \li minVersion
+        \li The minimum required Windows version to run the package. Defaults to the environment variable \c UCRTVersion.
+    \row
+        \li maxVersionTested
+        \li The maximum Windows version the package has been tested against. Defaults to \c WINRT_MANIFEST.minVersion
+
     \endtable
 
     You can use any combination of those values.
@@ -4001,25 +3978,27 @@
 
     \list 1
     \li In a directory listed in the \c QMAKEFEATURES environment variable that
-        contains a colon-separated list of directories.
+        contains a list of directories delimited by the platform's path list separator
+        (colon for Unix, semicolon for Windows).
     \li In a directory listed in the \c QMAKEFEATURES property variable that
-       contains a colon-spearated list of directories.
+        contains a list of directories delimited by the platform's path list separator.
     \omit
     \li In a features directory beneath the project's root directory (where
-       the \c{.qmake.cache} file is generated).
+        the \c{.qmake.cache} file is generated).
     \endomit
     \li In a features directory residing within a \c mkspecs directory.
-       \c mkspecs directories can be located beneath any of the directories
-       listed in the \c QMAKEPATH environment variable that contains a
-        colon-separated list of directories. For example:
+        \c mkspecs directories can be located beneath any of the directories
+        listed in the \c QMAKEPATH environment variable that contains a
+        list of directories delimited by the platform's path list separator.
+        For example:
         \c{$QMAKEPATH/mkspecs/<features>}.
     \li In a features directory residing beneath the directory provided by the
-       \l{QMAKESPEC} environment variable. For example: \c{$QMAKESPEC/<features>}.
+        \l{QMAKESPEC} environment variable. For example: \c{$QMAKESPEC/<features>}.
     \li In a features directory residing in the \c data_install/mkspecs directory.
-       For example: \c{data_install/mkspecs/<features>}.
+        For example: \c{data_install/mkspecs/<features>}.
     \li In a features directory that exists as a sibling of the directory
-       specified by the \c QMAKESPEC environment variable.
-       For example: \c{$QMAKESPEC/../<features>}.
+        specified by the \c QMAKESPEC environment variable.
+        For example: \c{$QMAKESPEC/../<features>}.
     \endlist
 
     The following features directories are searched for features files:
@@ -4336,7 +4315,7 @@
         \li nmake
         \li Visual Studio projects (VS 2008 and later)
         \endlist
-    \li OS X and iOS
+    \li \macos and iOS
         \list
         \li Makefile
         \li Xcode
@@ -4525,7 +4504,7 @@
 */
 
 /*!
-    \target qmake-getting-started
+    \keyword qmake-getting-started
     \page qmake-tutorial.html
     \title Getting Started
     \contentspage {qmake Manual}{Contents}
@@ -4707,7 +4686,7 @@
     them uses project-specific variables to customize output files.
 
     Platform-specific variables are not described here. For more information,
-    see  \l{Qt for Windows - Deployment} and \l{Qt for OS X}.
+    see  \l{Qt for Windows - Deployment} and \l{Qt for macOS}.
 
     \target Application
     \section1 Building an Application
@@ -4855,7 +4834,7 @@
     \endlist
 
     The target file name for the library is platform-dependent. For example, on
-    X11, OS X, and iOS, the library name will be prefixed by \c lib. On Windows,
+    X11, \macos, and iOS, the library name will be prefixed by \c lib. On Windows,
     no prefix is added to the file name.
 
     \target Plugin

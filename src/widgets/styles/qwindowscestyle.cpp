@@ -1437,8 +1437,7 @@ void QWindowsCEStyle::drawComplexControl(ComplexControl control, const QStyleOpt
             if (toolbutton->activeSubControls & SC_ToolButtonMenu)
                 mflags |= State_Sunken;
 
-            QStyleOption tool(0);
-            tool.palette = toolbutton->palette;
+            QStyleOption tool = *toolbutton;
             if (toolbutton->subControls & SC_ToolButton) {
                     tool.rect = button;
                     tool.state = bflags;
@@ -1536,7 +1535,7 @@ void QWindowsCEStyle::drawComplexControl(ComplexControl control, const QStyleOpt
             QRect textRect = subControlRect(CC_GroupBox, &groupBoxFont, SC_GroupBoxLabel, widget);
             QRect checkBoxRect = subControlRect(CC_GroupBox, option, SC_GroupBoxCheckBox, widget);
             if (groupBox->subControls & QStyle::SC_GroupBoxFrame) {
-                QStyleOptionFrameV2 frame;
+                QStyleOptionFrame frame;
                 frame.QStyleOption::operator=(*groupBox);
                 frame.features = groupBox->features;
                 frame.lineWidth = groupBox->lineWidth;
@@ -1620,9 +1619,8 @@ void QWindowsCEStyle::drawComplexControl(ComplexControl control, const QStyleOpt
 
                 if (cmb->activeSubControls == SC_ComboBoxArrow)
                     flags |= State_Sunken;
-                QStyleOption arrowOpt(0);
+                QStyleOption arrowOpt = *cmb;
                 arrowOpt.rect = ar;
-                arrowOpt.palette = cmb->palette;
                 arrowOpt.state = flags;
                 drawPrimitive(PE_IndicatorArrowDown, &arrowOpt, painter, widget);
             }
@@ -2002,7 +2000,7 @@ QRect QWindowsCEStyle::subControlRect(ComplexControl control, const QStyleOption
                 }
 
                 int frameWidth = 0;
-                if ((groupBox->features & QStyleOptionFrameV2::Flat) == 0)
+                if ((groupBox->features & QStyleOptionFrame::Flat) == 0)
                     frameWidth = pixelMetric(PM_DefaultFrameWidth, groupBox, widget);
                 rect = frameRect.adjusted(frameWidth, frameWidth + topHeight, -frameWidth, -frameWidth - noLabelMargin);
                 break;
@@ -2013,7 +2011,7 @@ QRect QWindowsCEStyle::subControlRect(ComplexControl control, const QStyleOption
                 QFontMetrics fontMetrics = groupBox->fontMetrics;
                 int h = fontMetrics.height();
                 int tw = fontMetrics.size(Qt::TextShowMnemonic, groupBox->text + QLatin1Char(' ')).width();
-                int marg = (groupBox->features & QStyleOptionFrameV2::Flat) ? 0 : 8;
+                const int marg = (groupBox->features & QStyleOptionFrame::Flat) ? 0 : 8;
                 rect = groupBox->rect.adjusted(marg, 0, -marg, 0);
                 rect.setHeight(h);
 

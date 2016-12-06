@@ -34,10 +34,12 @@
 #include <QtTest/QtTest>
 #include <qcoreapplication.h>
 #include <qstring.h>
+#include <qtemporarydir.h>
 #include <qtemporaryfile.h>
 #include <qfile.h>
 #include <qdir.h>
 #include <qset.h>
+#include <qtextcodec.h>
 
 #if defined(Q_OS_WIN)
 # include <windows.h>
@@ -85,10 +87,17 @@ private slots:
     void QTBUG_4796_data();
     void QTBUG_4796();
     void guaranteeUnique();
+private:
+    QTemporaryDir m_temporaryDir;
+    QString m_previousCurrent;
 };
 
 void tst_QTemporaryFile::initTestCase()
 {
+    QVERIFY2(m_temporaryDir.isValid(), qPrintable(m_temporaryDir.errorString()));
+    m_previousCurrent = QDir::currentPath();
+    QVERIFY(QDir::setCurrent(m_temporaryDir.path()));
+
     // For QTBUG_4796
     QVERIFY(QDir("test-XXXXXX").exists() || QDir().mkdir("test-XXXXXX"));
     QCoreApplication::setApplicationName("tst_qtemporaryfile");
@@ -114,8 +123,7 @@ void tst_QTemporaryFile::initTestCase()
 
 void tst_QTemporaryFile::cleanupTestCase()
 {
-    // From QTBUG_4796
-    QVERIFY(QDir().rmdir("test-XXXXXX"));
+    QDir::setCurrent(m_previousCurrent);
 }
 
 void tst_QTemporaryFile::construction()
@@ -136,6 +144,38 @@ void tst_QTemporaryFile::getSetCheck()
     QCOMPARE(false, obj1.autoRemove());
     obj1.setAutoRemove(true);
     QCOMPARE(true, obj1.autoRemove());
+}
+
+static inline bool canHandleUnicodeFileNames()
+{
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+    return true;
+#else
+    // Check for UTF-8 by converting the Euro symbol (see tst_utf8)
+    return QFile::encodeName(QString(QChar(0x20AC))) == QByteArrayLiteral("\342\202\254");
+#endif
+}
+
+static QString hanTestText()
+{
+    QString text;
+    text += QChar(0x65B0);
+    text += QChar(0x5E10);
+    text += QChar(0x6237);
+    return text;
+}
+
+static QString umlautTestText()
+{
+    QString text;
+    text += QChar(0xc4);
+    text += QChar(0xe4);
+    text += QChar(0xd6);
+    text += QChar(0xf6);
+    text += QChar(0xdc);
+    text += QChar(0xfc);
+    text += QChar(0xdf);
+    return text;
 }
 
 void tst_QTemporaryFile::fileTemplate_data()
@@ -164,6 +204,14 @@ void tst_QTemporaryFile::fileTemplate_data()
     QTest::newRow("set template, with xxx") << "" << "qt_" << ".xxx" << "qt_XXXXXX.xxx";
     QTest::newRow("set template, with >6 X's") << "" << "qt_" << ".xxx" << "qt_XXXXXXXXXXXXXX.xxx";
     QTest::newRow("set template, with >6 X's, no suffix") << "" << "qt_" << "" << "qt_XXXXXXXXXXXXXX";
+    if (canHandleUnicodeFileNames()) {
+        // Test Umlauts (contained in Latin1)
+        QString prefix = "qt_" + umlautTestText();
+        QTest::newRow("Umlauts") << (prefix + "XXXXXX") << prefix << QString() << QString();
+        // Test Chinese
+        prefix = "qt_" + hanTestText();
+        QTest::newRow("Chinese characters") << (prefix + "XXXXXX") << prefix << QString() << QString();
+    }
 }
 
 void tst_QTemporaryFile::fileTemplate()
@@ -678,8 +726,11 @@ void tst_QTemporaryFile::createNativeFile_data()
     const QString nativeFilePath = QFINDTESTDATA("resources/test.txt");
 #endif
 
-    QTest::newRow("nativeFile") << nativeFilePath << (qint64)-1 << false << QByteArray();
-    QTest::newRow("nativeFileWithPos") << nativeFilePath << (qint64)5 << false << QByteArray();
+    // File might not exist locally in case of sandboxing or remote testing
+    if (!nativeFilePath.startsWith(QLatin1String(":/"))) {
+        QTest::newRow("nativeFile") << nativeFilePath << (qint64)-1 << false << QByteArray();
+        QTest::newRow("nativeFileWithPos") << nativeFilePath << (qint64)5 << false << QByteArray();
+    }
     QTest::newRow("resourceFile") << ":/resources/test.txt" << (qint64)-1 << true << QByteArray("This is a test");
     QTest::newRow("resourceFileWithPos") << ":/resources/test.txt" << (qint64)5 << true << QByteArray("This is a test");
 }

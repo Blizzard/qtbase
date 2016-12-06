@@ -80,6 +80,7 @@ void tst_QLockFile::initTestCase()
 #elif defined(QT_NO_PROCESS)
     QSKIP("This test requires QProcess support");
 #else
+    QVERIFY2(dir.isValid(), qPrintable(dir.errorString()));
     // chdir to our testdata path and execute helper apps relative to that.
     QString testdata_dir = QFileInfo(QFINDTESTDATA("qlockfiletesthelper")).absolutePath();
     QVERIFY2(QDir::setCurrent(testdata_dir), qPrintable("Could not chdir to " + testdata_dir));
@@ -544,6 +545,16 @@ bool tst_QLockFile::overwritePidInLockFile(const QString &filePath, qint64 pid)
     f.resize(buf.size());
     return f.write(buf) == buf.size();
 }
+
+struct LockFileUsageInGlobalDtor
+{
+    ~LockFileUsageInGlobalDtor() {
+        QLockFile lockFile(QDir::currentPath() + "/lastlock");
+        QVERIFY(lockFile.lock());
+        QVERIFY(lockFile.isLocked());
+    }
+};
+LockFileUsageInGlobalDtor s_instance;
 
 QTEST_MAIN(tst_QLockFile)
 #include "tst_qlockfile.moc"

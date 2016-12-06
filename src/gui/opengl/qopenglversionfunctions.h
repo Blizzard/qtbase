@@ -47,7 +47,10 @@
 
 #ifndef QT_NO_OPENGL
 
+#if QT_DEPRECATED_SINCE(5, 6)
 #include <QtCore/qhash.h>
+#endif
+#include <QtCore/qhashfunctions.h>
 #include <QtCore/qpair.h>
 #include <QtGui/qopengl.h>
 
@@ -120,7 +123,7 @@ class QAbstractOpenGLFunctionsPrivate
 {
 public:
     QAbstractOpenGLFunctionsPrivate()
-        : owningContext(0),
+        : owningContext(Q_NULLPTR),
           initialized(false)
     {}
 

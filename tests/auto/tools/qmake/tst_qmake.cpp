@@ -39,6 +39,14 @@
 #include <QStandardPaths>
 #include <QDir>
 
+#if defined(DEBUG_BUILD)
+#  define DIR_INFIX "debug/"
+#elif defined(RELEASE_BUILD)
+#  define DIR_INFIX "release/"
+#else
+#  define DIR_INFIX ""
+#endif
+
 class tst_qmake : public QObject
 {
     Q_OBJECT
@@ -71,12 +79,14 @@ private slots:
     void one_space();
     void findMocs();
     void findDeps();
+    void rawString();
 #if defined(Q_OS_MAC)
     void bundle_spaces();
 #endif
     void substitutes();
     void project();
     void proFileCache();
+    void resources();
 
 private:
     TestCompiler test_compiler;
@@ -397,6 +407,24 @@ void tst_qmake::findDeps()
     QVERIFY( test_compiler.removeMakefile(workDir) );
 }
 
+void tst_qmake::rawString()
+{
+#ifdef Q_COMPILER_RAW_STRINGS
+    QString workDir = base_path + "/testdata/rawString";
+
+    QVERIFY( test_compiler.qmake(workDir, "rawString") );
+    QVERIFY( test_compiler.make(workDir) );
+    QVERIFY( test_compiler.exists(workDir, "rawString", Exe, "1.0.0" ) );
+    QVERIFY( test_compiler.makeClean(workDir) );
+    QVERIFY( test_compiler.exists(workDir, "rawString", Exe, "1.0.0" ) );
+    QVERIFY( test_compiler.makeDistClean(workDir ) );
+    QVERIFY( !test_compiler.exists(workDir, "rawString", Exe, "1.0.0" ) );
+    QVERIFY( test_compiler.removeMakefile(workDir) );
+#else
+    QSKIP("Test for C++11 raw strings depends on compiler support for them");
+#endif
+}
+
 struct TempFile
     : QFile
 {
@@ -488,6 +516,39 @@ void tst_qmake::proFileCache()
 {
     QString workDir = base_path + "/testdata/pro_file_cache";
     QVERIFY( test_compiler.qmake( workDir, "pro_file_cache" ));
+}
+
+void tst_qmake::resources()
+{
+    QString workDir = base_path + "/testdata/resources";
+    QVERIFY(test_compiler.qmake(workDir, "resources"));
+
+    {
+        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_pro_file.qrc");
+        QVERIFY(qrcFile.exists());
+        QVERIFY(qrcFile.open(QFile::ReadOnly));
+        QByteArray qrcXml = qrcFile.readAll();
+        QVERIFY(qrcXml.contains("alias=\"resources.pro\""));
+        QVERIFY(qrcXml.contains("prefix=\"/prefix\""));
+    }
+
+    {
+        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_subdir.qrc");
+        QVERIFY(qrcFile.exists());
+        QVERIFY(qrcFile.open(QFile::ReadOnly));
+        QByteArray qrcXml = qrcFile.readAll();
+        QVERIFY(qrcXml.contains("alias=\"file.txt\""));
+    }
+
+    {
+        QFile qrcFile(workDir + "/.rcc/" DIR_INFIX "qmake_qmake_immediate.qrc");
+        QVERIFY(qrcFile.exists());
+        QVERIFY(qrcFile.open(QFile::ReadOnly));
+        QByteArray qrcXml = qrcFile.readAll();
+        QVERIFY(qrcXml.contains("alias=\"main.cpp\""));
+    }
+
+    QVERIFY(test_compiler.make(workDir));
 }
 
 QTEST_MAIN(tst_qmake)

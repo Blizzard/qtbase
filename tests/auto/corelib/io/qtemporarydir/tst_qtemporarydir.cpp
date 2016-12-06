@@ -39,6 +39,7 @@
 #include <qfile.h>
 #include <qdir.h>
 #include <qset.h>
+#include <qtextcodec.h>
 #ifdef Q_OS_WIN
 # include <windows.h>
 #endif
@@ -72,11 +73,14 @@ private slots:
 
     void QTBUG43352_failedSetPermissions();
 
-public:
+private:
+    QString m_previousCurrent;
 };
 
 void tst_QTemporaryDir::initTestCase()
 {
+    m_previousCurrent = QDir::currentPath();
+    QDir::setCurrent(QDir::tempPath());
     QVERIFY(QDir("test-XXXXXX").exists() || QDir().mkdir("test-XXXXXX"));
     QCoreApplication::setApplicationName("tst_qtemporarydir");
 }
@@ -84,6 +88,8 @@ void tst_QTemporaryDir::initTestCase()
 void tst_QTemporaryDir::cleanupTestCase()
 {
     QVERIFY(QDir().rmdir("test-XXXXXX"));
+
+    QDir::setCurrent(m_previousCurrent);
 }
 
 void tst_QTemporaryDir::construction()
@@ -93,6 +99,7 @@ void tst_QTemporaryDir::construction()
     QCOMPARE(dir.path().left(tmp.size()), tmp);
     QVERIFY(dir.path().contains("tst_qtemporarydir"));
     QVERIFY(QFileInfo(dir.path()).isDir());
+    QCOMPARE(dir.errorString(), QString());
 }
 
 // Testing get/set functions
@@ -105,6 +112,38 @@ void tst_QTemporaryDir::getSetCheck()
     QCOMPARE(false, obj1.autoRemove());
     obj1.setAutoRemove(true);
     QCOMPARE(true, obj1.autoRemove());
+}
+
+static inline bool canHandleUnicodeFileNames()
+{
+#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+    return true;
+#else
+    // Check for UTF-8 by converting the Euro symbol (see tst_utf8)
+    return QFile::encodeName(QString(QChar(0x20AC))) == QByteArrayLiteral("\342\202\254");
+#endif
+}
+
+static QString hanTestText()
+{
+    QString text;
+    text += QChar(0x65B0);
+    text += QChar(0x5E10);
+    text += QChar(0x6237);
+    return text;
+}
+
+static QString umlautTestText()
+{
+    QString text;
+    text += QChar(0xc4);
+    text += QChar(0xe4);
+    text += QChar(0xd6);
+    text += QChar(0xf6);
+    text += QChar(0xdc);
+    text += QChar(0xfc);
+    text += QChar(0xdf);
+    return text;
 }
 
 void tst_QTemporaryDir::fileTemplate_data()
@@ -123,6 +162,14 @@ void tst_QTemporaryDir::fileTemplate_data()
     QTest::newRow("constructor with XXXX suffix") << "qt_XXXXXX_XXXX" << "qt_";
     QTest::newRow("constructor with XXXX prefix") << "qt_XXXX" << "qt_";
     QTest::newRow("constructor with XXXXX prefix") << "qt_XXXXX" << "qt_";
+    if (canHandleUnicodeFileNames()) {
+        // Test Umlauts (contained in Latin1)
+        QString prefix = "qt_" + umlautTestText();
+        QTest::newRow("Umlauts") << (prefix + "XXXXXX") << prefix;
+        // Test Chinese
+        prefix = "qt_" + hanTestText();
+        QTest::newRow("Chinese characters") << (prefix + "XXXXXX") << prefix;
+    }
 }
 
 void tst_QTemporaryDir::fileTemplate()
@@ -228,6 +275,13 @@ void tst_QTemporaryDir::autoRemove()
 void tst_QTemporaryDir::nonWritableCurrentDir()
 {
 #ifdef Q_OS_UNIX
+
+#  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+    const char nonWritableDir[] = "/data";
+#  else
+    const char nonWritableDir[] = "/home";
+#  endif
+
     if (::geteuid() == 0)
         QSKIP("not valid running this test as root");
 
@@ -239,18 +293,19 @@ void tst_QTemporaryDir::nonWritableCurrentDir()
         }
         QString dir;
     };
-    ChdirOnReturn cor(QDir::currentPath());
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
-    QDir::setCurrent("/data");
-#else
-    QDir::setCurrent("/home");
-#endif
+    const QFileInfo nonWritableDirFi = QFileInfo(QLatin1String(nonWritableDir));
+    QVERIFY(nonWritableDirFi.isDir());
+    QVERIFY(!nonWritableDirFi.isWritable());
+
+    ChdirOnReturn cor(QDir::currentPath());
+    QVERIFY(QDir::setCurrent(nonWritableDirFi.absoluteFilePath()));
     // QTemporaryDir("tempXXXXXX") is probably a bad idea in any app
     // where the current dir could anything...
     QTemporaryDir dir("tempXXXXXX");
     dir.setAutoRemove(true);
     QVERIFY(!dir.isValid());
+    QVERIFY(!dir.errorString().isEmpty());
     QVERIFY(dir.path().isEmpty());
 #endif
 }
@@ -287,7 +342,11 @@ void tst_QTemporaryDir::stressTest()
     for (int i = 0; i < iterations; ++i) {
         QTemporaryDir dir(pattern);
         dir.setAutoRemove(false);
-        QVERIFY2(dir.isValid(), qPrintable(QString::fromLatin1("Failed to create #%1 under %2.").arg(i).arg(QDir::toNativeSeparators(pattern))));
+        QVERIFY2(dir.isValid(),
+                 qPrintable(QString::fromLatin1("Failed to create #%1 under %2: %3.")
+                            .arg(i)
+                            .arg(QDir::toNativeSeparators(pattern))
+                            .arg(dir.errorString())));
         QVERIFY(!names.contains(dir.path()));
         names.insert(dir.path());
     }

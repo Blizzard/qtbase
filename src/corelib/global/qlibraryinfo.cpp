@@ -47,7 +47,7 @@ QT_END_NAMESPACE
 # include "qcoreapplication.h"
 #endif
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #  include "private/qcore_mac_p.h"
 #endif
 #ifdef Q_OS_WIN
@@ -168,7 +168,7 @@ QSettings *QLibraryInfoPrivate::findConfiguration()
     if (QFile::exists(qtconfig))
         return new QSettings(qtconfig, QSettings::IniFormat);
 #else
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
     CFBundleRef bundleRef = CFBundleGetMainBundle();
     if (bundleRef) {
         QCFType<CFURLRef> urlRef = CFBundleCopyResourceURL(bundleRef,
@@ -438,12 +438,11 @@ static const struct {
 
 /*!
   Returns the location specified by \a loc.
-
 */
 QString
 QLibraryInfo::location(LibraryLocation loc)
 {
-#ifdef QT_BUILD_QMAKE
+#ifdef QT_BUILD_QMAKE // ends inside rawLocation !
     QString ret = rawLocation(loc, FinalPaths);
 
     // Automatically prepend the sysroot to target paths
@@ -462,7 +461,7 @@ QLibraryInfo::location(LibraryLocation loc)
 QString
 QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
 {
-#endif
+#endif // QT_BUILD_QMAKE, started inside location !
     QString ret;
 #ifdef QT_BUILD_QMAKE
     // Logic for choosing the right data source: if EffectivePaths are requested
@@ -578,25 +577,26 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         } else {
             // we make any other path absolute to the prefix directory
             baseDir = rawLocation(PrefixPath, group);
+        }
 #else
         if (loc == PrefixPath) {
             if (QCoreApplication::instance()) {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
                 CFBundleRef bundleRef = CFBundleGetMainBundle();
                 if (bundleRef) {
                     QCFType<CFURLRef> urlRef = CFBundleCopyBundleURL(bundleRef);
                     if (urlRef) {
                         QCFString path = CFURLCopyFileSystemPath(urlRef, kCFURLPOSIXPathStyle);
-#ifdef Q_OS_MACX
+#ifdef Q_OS_OSX
                         QString bundleContentsDir = QString(path) + QLatin1String("/Contents/");
                         if (QDir(bundleContentsDir).exists())
                             return QDir::cleanPath(bundleContentsDir + ret);
 #else
                         return QDir::cleanPath(QString(path) + QLatin1Char('/') + ret); // iOS
-#endif
+#endif // Q_OS_OSX
                     }
                 }
-#endif
+#endif // Q_OS_DARWIN
                 // We make the prefix path absolute to the executable's directory.
                 baseDir = QCoreApplication::applicationDirPath();
             } else {
@@ -605,8 +605,8 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         } else {
             // we make any other path absolute to the prefix directory
             baseDir = location(PrefixPath);
-#endif
         }
+#endif // QT_BUILD_QMAKE
         ret = QDir::cleanPath(baseDir + QLatin1Char('/') + ret);
     }
     return ret;
@@ -682,7 +682,7 @@ extern "C" void qt_core_boilerplate();
 void qt_core_boilerplate()
 {
     printf("This is the QtCore library version " QT_BUILD_STR "\n"
-           "Copyright (C) 2015 The Qt Company Ltd.\n"
+           "Copyright (C) 2016 The Qt Company Ltd.\n"
            "Contact: http://www.qt.io/licensing/\n"
            "\n"
            "Installation prefix: %s\n"

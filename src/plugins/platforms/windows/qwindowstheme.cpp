@@ -43,7 +43,6 @@
 #include "qwindowsintegration.h"
 #include "qt_windows.h"
 #include "qwindowsfontdatabase.h"
-#include "qwindowsscaling.h"
 #ifdef Q_OS_WINCE
 #  include "qplatformfunctions_wince.h"
 #  include "winuser.h"
@@ -68,6 +67,7 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPixmapCache>
 #include <qpa/qwindowsysteminterface.h>
+#include <private/qhighdpiscaling_p.h>
 #include <private/qsystemlibrary_p.h>
 
 #include <algorithm>
@@ -77,11 +77,6 @@
 #endif
 
 QT_BEGIN_NAMESPACE
-
-static inline COLORREF qColorToCOLORREF(const QColor &color)
-{
-    return RGB(color.red(), color.green(), color.blue());
-}
 
 static inline QColor COLORREFToQColor(COLORREF cr)
 {
@@ -99,30 +94,6 @@ static inline QTextStream& operator<<(QTextStream &str, const QColor &c)
     return str;
 }
 
-static inline void paletteRoleToString(const QPalette &palette,
-                                       const QPalette::ColorRole role,
-                                       QTextStream &str)
-{
-    str << "Role: ";
-    str.setFieldWidth(2);
-    str.setPadChar(QLatin1Char('0'));
-    str << role;
-    str.setFieldWidth(0);
-    str << " Active: "  << palette.color(QPalette::Active, role)
-        << " Disabled: "  << palette.color(QPalette::Disabled, role)
-        << " Inactive: " << palette.color(QPalette::Inactive, role)
-        << '\n';
-}
-
-static inline QString paletteToString(const QPalette &palette)
-{
-    QString result;
-    QTextStream str(&result);
-    for (int r = 0; r < QPalette::NColorRoles; ++r)
-        paletteRoleToString(palette, static_cast<QPalette::ColorRole>(r), str);
-    return result;
-}
-
 static inline bool booleanSystemParametersInfo(UINT what, bool defaultValue)
 {
     BOOL result;
@@ -131,7 +102,7 @@ static inline bool booleanSystemParametersInfo(UINT what, bool defaultValue)
     return defaultValue;
 }
 
-static inline bool dWordSystemParametersInfo(UINT what, DWORD defaultValue)
+static inline DWORD dWordSystemParametersInfo(UINT what, DWORD defaultValue)
 {
     DWORD result;
     if (SystemParametersInfo(what, 0, &result, 0))
@@ -150,6 +121,50 @@ static inline QColor getSysColor(int index)
 {
     return COLORREFToQColor(GetSysColor(index));
 }
+
+#ifndef QT_NO_WINCE_SHELLSDK
+// QTBUG-48823/Windows 10: SHGetFileInfo() (as called by item views on file system
+// models has been observed to trigger a WM_PAINT on the mainwindow. Suppress the
+// behavior by running it in a thread.
+class ShGetFileInfoFunction
+{
+public:
+    explicit ShGetFileInfoFunction(const wchar_t *fn, DWORD a, SHFILEINFO *i, UINT f, bool *r) :
+        m_fileName(fn), m_attributes(a), m_flags(f), m_info(i), m_result(r) {}
+
+    void operator()() const
+    {
+#ifndef Q_OS_WINCE
+        const UINT oldErrorMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+#endif
+        *m_result = SHGetFileInfo(m_fileName, m_attributes, m_info, sizeof(SHFILEINFO), m_flags);
+#ifndef Q_OS_WINCE
+        SetErrorMode(oldErrorMode);
+#endif
+    }
+
+private:
+    const wchar_t *m_fileName;
+    const DWORD m_attributes;
+    const UINT m_flags;
+    SHFILEINFO *const m_info;
+    bool *m_result;
+};
+
+static bool shGetFileInfoBackground(QWindowsThreadPoolRunner &r,
+                                    const wchar_t *fileName, DWORD attributes,
+                                    SHFILEINFO *info, UINT flags,
+                                    unsigned long  timeOutMSecs = 5000)
+{
+    bool result = false;
+    if (!r.run(ShGetFileInfoFunction(fileName, attributes, info, flags, &result), timeOutMSecs)) {
+        qWarning().noquote() << "ShGetFileInfoBackground() timed out for "
+            << QString::fromWCharArray(fileName);
+        return false;
+    }
+    return result;
+}
+#endif // !QT_NO_WINCE_SHELLSDK
 
 // from QStyle::standardPalette
 static inline QPalette standardPalette()
@@ -314,6 +329,7 @@ QWindowsTheme::QWindowsTheme()
     std::fill(m_fonts, m_fonts + NFonts, static_cast<QFont *>(0));
     std::fill(m_palettes, m_palettes + NPalettes, static_cast<QPalette *>(0));
     refresh();
+    refreshIconPixmapSizes();
 }
 
 QWindowsTheme::~QWindowsTheme()
@@ -379,20 +395,19 @@ QVariant QWindowsTheme::themeHint(ThemeHint hint) const
         return QVariant(int(WindowsKeyboardScheme));
     case UiEffects:
         return QVariant(uiEffects());
-    case IconPixmapSizes: {
-        QList<int> sizes;
-        sizes << 16 << 32;
-#ifdef USE_IIMAGELIST
-        sizes << 48; // sHIL_EXTRALARGE
-        if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA)
-            sizes << 256; // SHIL_JUMBO
-#endif // USE_IIMAGELIST
-        return QVariant::fromValue(sizes);
-    }
+    case IconPixmapSizes:
+        return m_fileIconSizes;
     case DialogSnapToDefaultButton:
         return QVariant(booleanSystemParametersInfo(SPI_GETSNAPTODEFBUTTON, false));
     case ContextMenuOnMouseRelease:
         return QVariant(true);
+    case WheelScrollLines: {
+        int result = 3;
+        const DWORD scrollLines = dWordSystemParametersInfo(SPI_GETWHEELSCROLLLINES, DWORD(result));
+        if (scrollLines != DWORD(-1)) // Special value meaning "scroll one screen", unimplemented in Qt.
+            result = int(scrollLines);
+        return QVariant(result);
+    }
     default:
         break;
     }
@@ -456,6 +471,15 @@ void QWindowsTheme::refreshFonts()
 #endif // !Q_OS_WINCE
 }
 
+enum FileIconSize {
+    // Standard icons obtainable via shGetFileInfo(), SHGFI_SMALLICON, SHGFI_LARGEICON
+    SmallFileIcon, LargeFileIcon,
+    // Larger icons obtainable via SHGetImageList()
+    ExtraLargeFileIcon,
+    JumboFileIcon, // Vista onwards
+    FileIconSizeCount
+};
+
 bool QWindowsTheme::usePlatformNativeDialog(DialogType type) const
 {
     return QWindowsDialogs::useHelper(type);
@@ -472,6 +496,27 @@ void QWindowsTheme::windowsThemeChanged(QWindow * window)
     QWindowSystemInterface::handleThemeChange(window);
 }
 
+static int fileIconSizes[FileIconSizeCount];
+
+void QWindowsTheme::refreshIconPixmapSizes()
+{
+    // Standard sizes: 16, 32, 48, 256
+    fileIconSizes[SmallFileIcon] = GetSystemMetrics(SM_CXSMICON); // corresponds to SHGFI_SMALLICON);
+    fileIconSizes[LargeFileIcon] = GetSystemMetrics(SM_CXICON); // corresponds to SHGFI_LARGEICON
+    fileIconSizes[ExtraLargeFileIcon] =
+        fileIconSizes[LargeFileIcon] + fileIconSizes[LargeFileIcon] / 2;
+    fileIconSizes[JumboFileIcon] = 8 * fileIconSizes[LargeFileIcon]; // empirical, has not been observed to work
+    QList<int> sizes;
+    sizes << fileIconSizes[SmallFileIcon] << fileIconSizes[LargeFileIcon];
+#ifdef USE_IIMAGELIST
+    sizes << fileIconSizes[ExtraLargeFileIcon]; // sHIL_EXTRALARGE
+    if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA)
+        sizes << fileIconSizes[JumboFileIcon]; // SHIL_JUMBO
+#endif // USE_IIMAGELIST
+    qCDebug(lcQpaWindows) << __FUNCTION__ << sizes;
+    m_fileIconSizes = QVariant::fromValue(sizes);
+}
+
 // Defined in qpixmap_win.cpp
 Q_GUI_EXPORT QPixmap qt_pixmapFromWinHICON(HICON icon);
 
@@ -483,7 +528,9 @@ static QPixmap loadIconFromShell32(int resourceId, QSizeF size)
     HMODULE hmod = QSystemLibrary::load(L"shell32");
 #endif
     if (hmod) {
-        HICON iconHandle = (HICON)LoadImage(hmod, MAKEINTRESOURCE(resourceId), IMAGE_ICON, size.width(), size.height(), 0);
+        HICON iconHandle =
+            static_cast<HICON>(LoadImage(hmod, MAKEINTRESOURCE(resourceId),
+                                         IMAGE_ICON, int(size.width()), int(size.height()), 0));
         if (iconHandle) {
             QPixmap iconpixmap = qt_pixmapFromWinHICON(iconHandle);
             DestroyIcon(iconHandle);
@@ -493,10 +540,8 @@ static QPixmap loadIconFromShell32(int resourceId, QSizeF size)
     return QPixmap();
 }
 
-QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) const
+QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &pixmapSize) const
 {
-    const int scaleFactor = QWindowsScaling::factor();
-    const QSizeF pixmapSize = size * scaleFactor;
     int resourceId = -1;
     LPCTSTR iconName = 0;
     switch (sp) {
@@ -566,7 +611,6 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
             const int iconSize = pixmapSize.width() > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
             if (QWindowsContext::shell32dll.sHGetStockIconInfo(SIID_SHIELD, SHGFI_ICON | iconSize, &iconInfo) == S_OK) {
                 pixmap = qt_pixmapFromWinHICON(iconInfo.hIcon);
-                pixmap.setDevicePixelRatio(scaleFactor);
                 DestroyIcon(iconInfo.hIcon);
                 return pixmap;
             }
@@ -583,9 +627,8 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
             if (sp == FileLinkIcon || sp == DirLinkIcon || sp == DirLinkOpenIcon) {
                 QPainter painter(&pixmap);
                 QPixmap link = loadIconFromShell32(30, pixmapSize);
-                painter.drawPixmap(0, 0, pixmapSize.width(), pixmapSize.height(), link);
+                painter.drawPixmap(0, 0, int(pixmapSize.width()), int(pixmapSize.height()), link);
             }
-            pixmap.setDevicePixelRatio(scaleFactor);
             return pixmap;
         }
     }
@@ -593,13 +636,12 @@ QPixmap QWindowsTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) con
     if (iconName) {
         HICON iconHandle = LoadIcon(NULL, iconName);
         QPixmap pixmap = qt_pixmapFromWinHICON(iconHandle);
-        pixmap.setDevicePixelRatio(scaleFactor);
         DestroyIcon(iconHandle);
         if (!pixmap.isNull())
             return pixmap;
     }
 
-    return QPlatformTheme::standardPixmap(sp, size);
+    return QPlatformTheme::standardPixmap(sp, pixmapSize);
 }
 
 enum { // Shell image list ids
@@ -632,7 +674,7 @@ public:
 
     static FakePointer *create(T thing)
     {
-        return reinterpret_cast<FakePointer *>(thing);
+        return reinterpret_cast<FakePointer *>(qintptr(thing));
     }
 
     T operator * () const
@@ -658,7 +700,8 @@ static QPixmap pixmapFromShellImageList(int iImageList, const SHFILEINFO &info)
         return result;
 
     IImageList *imageList = 0;
-    HRESULT hr = QWindowsContext::shell32dll.sHGetImageList(iImageList, iID_IImageList, (void **)&imageList);
+    HRESULT hr = QWindowsContext::shell32dll.sHGetImageList(iImageList, iID_IImageList,
+                                                            reinterpret_cast<void **>(&imageList));
     if (hr != S_OK)
         return result;
     HICON hIcon;
@@ -690,11 +733,13 @@ QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &s
 
     QPixmap pixmap;
     const QString filePath = QDir::toNativeSeparators(fileInfo.filePath());
-    const int width = size.width();
-    const int iconSize = width > 16 ? SHGFI_LARGEICON : SHGFI_SMALLICON;
+    const int width = int(size.width());
+    const int iconSize = width > fileIconSizes[SmallFileIcon] ? SHGFI_LARGEICON : SHGFI_SMALLICON;
     const int requestedImageListSize =
 #ifdef USE_IIMAGELIST
-        width > 48 ? sHIL_JUMBO : (width > 32 ? sHIL_EXTRALARGE : 0);
+        width > fileIconSizes[ExtraLargeFileIcon]
+            ? sHIL_JUMBO
+            : (width > fileIconSizes[LargeFileIcon] ? sHIL_EXTRALARGE : 0);
 #else
         0;
 #endif // !USE_IIMAGELIST
@@ -713,22 +758,23 @@ QPixmap QWindowsTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &s
     }
 
     SHFILEINFO info;
-    unsigned int flags =
+    const unsigned int flags =
 #ifndef Q_OS_WINCE
         SHGFI_ICON|iconSize|SHGFI_SYSICONINDEX|SHGFI_ADDOVERLAYS|SHGFI_OVERLAYINDEX;
 #else
         iconSize|SHGFI_SYSICONINDEX;
 #endif // Q_OS_WINCE
-    unsigned long val = 0;
-    if (cacheableDirIcon && useDefaultFolderIcon) {
-        flags |= SHGFI_USEFILEATTRIBUTES;
-        val = SHGetFileInfo(L"dummy",
-                            FILE_ATTRIBUTE_DIRECTORY,
-                            &info, sizeof(SHFILEINFO), flags);
-    } else {
-        val = SHGetFileInfo(reinterpret_cast<const wchar_t *>(filePath.utf16()), 0,
-                            &info, sizeof(SHFILEINFO), flags);
-    }
+
+
+#if !defined(QT_NO_WINCE_SHELLSDK)
+    const bool val = cacheableDirIcon && useDefaultFolderIcon
+        ? shGetFileInfoBackground(m_threadPoolRunner, L"dummy", FILE_ATTRIBUTE_DIRECTORY,
+                                  &info, flags | SHGFI_USEFILEATTRIBUTES)
+        : shGetFileInfoBackground(m_threadPoolRunner, reinterpret_cast<const wchar_t *>(filePath.utf16()), 0,
+                                  &info, flags);
+#else
+    const bool val = false;
+#endif // !QT_NO_WINCE_SHELLSDK
 
     // Even if GetFileInfo returns a valid result, hIcon can be empty in some cases
     if (val && info.hIcon) {

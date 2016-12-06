@@ -39,6 +39,8 @@
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qthread_p.h>
 
+#include <qpa/qwindowsysteminterface.h>
+
 #import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSProcessInfo.h>
@@ -198,7 +200,7 @@ namespace
     bool debugStackUsage = false;
 }
 
-extern "C" int __attribute__((weak)) main(int argc, char *argv[])
+extern "C" int qt_main_wrapper(int argc, char *argv[])
 {
     @autoreleasepool {
         size_t defaultStackSize = 512 * kBytesPerKiloByte; // Same as secondary threads
@@ -233,18 +235,7 @@ enum SetJumpResult
     kJumpedFromUserMainTrampoline,
 };
 
-// We define qtmn so that user_main_trampoline() will not cause
-// missing symbols in the case of hybrid applications that don't
-// use our main wrapper. Since the symbol is weak, it will not
-// get used or cause a clash in the normal Qt application usecase,
-// where we rename main to qtmn before linking.
-extern "C" int __attribute__((weak)) qtmn(int argc, char *argv[])
-{
-    Q_UNUSED(argc);
-    Q_UNUSED(argv);
-
-    Q_UNREACHABLE();
-}
+extern "C" int main(int argc, char *argv[]);
 
 static void __attribute__((noinline, noreturn)) user_main_trampoline()
 {
@@ -263,7 +254,7 @@ static void __attribute__((noinline, noreturn)) user_main_trampoline()
             qFatal("Could not convert argv[%d] to C string", i);
     }
 
-    int exitCode = qtmn(argc, argv);
+    int exitCode = main(argc, argv);
     delete[] argv;
 
     qEventDispatcherDebug() << "Returned from main with exit code " << exitCode;
@@ -293,7 +284,7 @@ static bool rootLevelRunLoopIntegration()
 
 @implementation QIOSApplicationStateTracker
 
-+ (void) load
++ (void)load
 {
     [[NSNotificationCenter defaultCenter]
         addObserver:self
@@ -323,7 +314,7 @@ static bool rootLevelRunLoopIntegration()
 #  error "Unknown processor family"
 #endif
 
-+ (void) applicationDidFinishLaunching
++ (void)applicationDidFinishLaunching
 {
     if (!isQtApplication())
         return;
@@ -377,7 +368,7 @@ static bool rootLevelRunLoopIntegration()
 // four bits of the exit code (exit(3) will only pass on the lower 8 bits).
 static const char kApplicationWillTerminateExitCode = SIGTERM | 0x80;
 
-+ (void) applicationWillTerminate
++ (void)applicationWillTerminate
 {
     if (!isQtApplication())
         return;
@@ -470,6 +461,25 @@ bool __attribute__((returns_twice)) QIOSEventDispatcher::processEvents(QEventLoo
     --m_processEventLevel;
 
     return processedEvents;
+}
+
+/*!
+    Override of the CoreFoundation posted events runloop source callback
+    so that we can send window system (QPA) events in addition to sending
+    normal Qt events.
+*/
+bool QIOSEventDispatcher::processPostedEvents()
+{
+    // Don't send window system events if the base CF dispatcher has determined
+    // that events should not be sent for this pass of the runloop source.
+    if (!QEventDispatcherCoreFoundation::processPostedEvents())
+        return false;
+
+    qEventDispatcherDebug() << "Sending window system events for " << m_processEvents.flags; qIndent();
+    QWindowSystemInterface::sendWindowSystemEvents(m_processEvents.flags);
+    qUnIndent();
+
+    return true;
 }
 
 void QIOSEventDispatcher::handleRunLoopExit(CFRunLoopActivity activity)

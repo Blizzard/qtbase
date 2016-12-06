@@ -73,7 +73,7 @@ QT_BEGIN_NAMESPACE
     memory.
 
     The \e{Qt Quarterly} article
-    \l{http://doc.qt.digia.com/qq/qq12-qpixmapcache.html}{Optimizing
+    \l{http://doc.qt.io/archives/qq/qq12-qpixmapcache.html}{Optimizing
     with QPixmapCache} explains how to use QPixmapCache to speed up
     applications by caching the results of painting.
 
@@ -138,6 +138,24 @@ bool QPixmapCache::Key::operator ==(const Key &key) const
 */
 
 /*!
+    \fn QPixmapCache::Key::Key(Key &&)
+    \internal
+    \since 5.6
+*/
+
+/*!
+    \fn QPixmapCache::Key &QPixmapCache::Key::operator=(Key &&)
+    \internal
+    \since 5.6
+*/
+
+/*!
+    \fn void QPixmapCache::Key::swap(Key &)
+    \internal
+    \since 5.6
+*/
+
+/*!
     \internal
 */
 QPixmapCache::Key &QPixmapCache::Key::operator =(const Key &other)
@@ -179,7 +197,6 @@ public:
 
     static QPixmapCache::KeyData* getKeyData(QPixmapCache::Key *key);
 
-    QList< QPair<QString,QPixmap> > allPixmaps() const;
     bool flushDetachedPixmaps(bool nt);
 
 private:
@@ -423,20 +440,6 @@ QPixmapCache::KeyData* QPMCache::getKeyData(QPixmapCache::Key *key)
     return key->d;
 }
 
-QList< QPair<QString,QPixmap> > QPMCache::allPixmaps() const
-{
-    QList< QPair<QString,QPixmap> > r;
-    QHash<QString, QPixmapCache::Key>::const_iterator it = cacheKeys.begin();
-    while (it != cacheKeys.end()) {
-        QPixmap *ptr = QCache<QPixmapCache::Key, QPixmapCacheEntry>::object(it.value());
-        if (ptr)
-            r.append(QPair<QString,QPixmap>(it.key(),*ptr));
-        ++it;
-    }
-    return r;
-}
-
-
 Q_GLOBAL_STATIC(QPMCache, pm_cache)
 
 int Q_AUTOTEST_EXPORT q_QPixmapCache_keyHashSize()
@@ -639,7 +642,8 @@ void QPixmapCache::remove(const Key &key)
 void QPixmapCache::clear()
 {
     QT_TRY {
-        pm_cache()->clear();
+        if (pm_cache.exists())
+            pm_cache->clear();
     } QT_CATCH(const std::bad_alloc &) {
         // if we ran out of memory during pm_cache(), it's no leak,
         // so just ignore it.
@@ -656,10 +660,6 @@ int QPixmapCache::totalUsed()
     return (pm_cache()->totalCost()+1023) / 1024;
 }
 
-QList< QPair<QString,QPixmap> > QPixmapCache::allPixmaps()
-{
-    return pm_cache()->allPixmaps();
-}
 /*!
    \fn QPixmapCache::KeyData::KeyData()
 
@@ -667,7 +667,6 @@ QList< QPair<QString,QPixmap> > QPixmapCache::allPixmaps()
 */
 /*!
    \fn QPixmapCache::KeyData::KeyData(const KeyData &other)
-
    \internal
 */
 /*!

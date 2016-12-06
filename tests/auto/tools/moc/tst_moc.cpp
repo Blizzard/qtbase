@@ -131,6 +131,33 @@ typedef struct {
     int doNotConfuseMoc;
 } OldStyleCStruct;
 
+namespace {
+
+    class GadgetInUnnamedNS
+    {
+        Q_GADGET
+        Q_PROPERTY(int x READ x WRITE setX)
+        Q_PROPERTY(int y READ y WRITE setY)
+    public:
+        explicit GadgetInUnnamedNS(int x, int y) : m_x(x), m_y(y) {}
+        int x() const { return m_x; }
+        int y() const { return m_y; }
+        void setX(int x) { m_x = x; }
+        void setY(int y) { m_y = y; }
+
+    private:
+        int m_x, m_y;
+    };
+
+    class ObjectInUnnamedNS : public QObject
+    {
+        Q_OBJECT
+    public:
+        explicit ObjectInUnnamedNS(QObject *parent = Q_NULLPTR) : QObject(parent) {}
+    };
+
+}
+
 class Sender : public QObject
 {
     Q_OBJECT
@@ -513,6 +540,8 @@ class tst_Moc : public QObject
     Q_PROPERTY(QString member4 MEMBER sMember NOTIFY member4Changed)
     Q_PROPERTY(QString member5 MEMBER sMember NOTIFY member5Changed)
     Q_PROPERTY(QString member6 MEMBER sConst CONSTANT)
+    Q_PROPERTY(QString sub1 MEMBER (sub.m_string))
+    Q_PROPERTY(QString sub2 READ (sub.string) WRITE (sub.setString))
 
 public:
     inline tst_Moc() : sConst("const") {}
@@ -595,8 +624,11 @@ private slots:
     void relatedMetaObjectsNameConflict_data();
     void relatedMetaObjectsNameConflict();
     void strignLiteralsInMacroExtension();
+    void unnamedNamespaceObjectsAndGadgets();
     void veryLongStringData();
     void gadgetHierarchy();
+    void optionsFileError_data();
+    void optionsFileError();
 
 signals:
     void sigWithUnsignedArg(unsigned foo);
@@ -626,6 +658,13 @@ private:
     QString sMember;
     const QString sConst;
     PrivatePropertyTest *pPPTest;
+
+    struct {
+        QString m_string;
+        void setString(const QString &s) { m_string = s; }
+        QString string() { return m_string; }
+    } sub;
+
 };
 
 void tst_Moc::initTestCase()
@@ -880,7 +919,7 @@ void tst_Moc::preprocessorConditionals()
     QVERIFY(mobj->indexOfSignal("signalInIf1()") != -1);
     QVERIFY(mobj->indexOfSignal("signalInIf2()") != -1);
     QVERIFY(mobj->indexOfSignal("signalInIf3()") != -1);
-    QVERIFY(mobj->indexOfSignal("doNotExist()") == -1);
+    QCOMPARE(mobj->indexOfSignal("doNotExist()"), -1);
 }
 
 void tst_Moc::blackslashNewlines()
@@ -888,7 +927,7 @@ void tst_Moc::blackslashNewlines()
     BackslashNewlines tst;
     const QMetaObject *mobj = tst.metaObject();
     QVERIFY(mobj->indexOfSlot("works()") != -1);
-    QVERIFY(mobj->indexOfSlot("buggy()") == -1);
+    QCOMPARE(mobj->indexOfSlot("buggy()"), -1);
 }
 
 void tst_Moc::slotWithSillyConst()
@@ -928,8 +967,8 @@ void tst_Moc::testExtraDataForEnum()
 
     const QMetaObject * const *objects = mobjUser->d.relatedMetaObjects;
     QVERIFY(objects);
-    QVERIFY(objects[0] == mobjSource);
-    QVERIFY(objects[1] == 0);
+    QCOMPARE(objects[0], mobjSource);
+    QVERIFY(!objects[1]);
 }
 
 void tst_Moc::namespaceTypeProperty()
@@ -982,7 +1021,7 @@ void tst_Moc::namespacedFlags()
     const QVariant v = bar.property("flags");
     QVERIFY(v.isValid());
     QVERIFY(baz.setProperty("flags", v));
-    QVERIFY(baz.flags() == bar.flags());
+    QCOMPARE(baz.flags(), bar.flags());
 
     QList<Foo::Bar::Flags> l;
     l << baz.flags();
@@ -1104,7 +1143,7 @@ void tst_Moc::winNewline()
         if (data.at(i) == QLatin1Char('\r')) {
             QVERIFY(i < data.count() - 1);
             ++i;
-            QVERIFY(data.at(i) == '\n');
+            QCOMPARE(data.at(i), '\n');
         } else {
             QVERIFY(data.at(i) != '\n');
         }
@@ -1255,14 +1294,14 @@ void tst_Moc::invokable()
     {
         const QMetaObject &mobj = InvokableBeforeReturnType::staticMetaObject;
         QCOMPARE(mobj.methodCount(), 6);
-        QVERIFY(mobj.method(5).methodSignature() == QByteArray("foo()"));
+        QCOMPARE(mobj.method(5).methodSignature(), QByteArray("foo()"));
     }
 
     {
         const QMetaObject &mobj = InvokableBeforeInline::staticMetaObject;
         QCOMPARE(mobj.methodCount(), 7);
-        QVERIFY(mobj.method(5).methodSignature() == QByteArray("foo()"));
-        QVERIFY(mobj.method(6).methodSignature() == QByteArray("bar()"));
+        QCOMPARE(mobj.method(5).methodSignature(), QByteArray("foo()"));
+        QCOMPARE(mobj.method(6).methodSignature(), QByteArray("bar()"));
     }
 }
 
@@ -1271,22 +1310,22 @@ void tst_Moc::singleFunctionKeywordSignalAndSlot()
     {
         const QMetaObject &mobj = SingleFunctionKeywordBeforeReturnType::staticMetaObject;
         QCOMPARE(mobj.methodCount(), 7);
-        QVERIFY(mobj.method(5).methodSignature() == QByteArray("mySignal()"));
-        QVERIFY(mobj.method(6).methodSignature() == QByteArray("mySlot()"));
+        QCOMPARE(mobj.method(5).methodSignature(), QByteArray("mySignal()"));
+        QCOMPARE(mobj.method(6).methodSignature(), QByteArray("mySlot()"));
     }
 
     {
         const QMetaObject &mobj = SingleFunctionKeywordBeforeInline::staticMetaObject;
         QCOMPARE(mobj.methodCount(), 7);
-        QVERIFY(mobj.method(5).methodSignature() == QByteArray("mySignal()"));
-        QVERIFY(mobj.method(6).methodSignature() == QByteArray("mySlot()"));
+        QCOMPARE(mobj.method(5).methodSignature(), QByteArray("mySignal()"));
+        QCOMPARE(mobj.method(6).methodSignature(), QByteArray("mySlot()"));
     }
 
     {
         const QMetaObject &mobj = SingleFunctionKeywordAfterInline::staticMetaObject;
         QCOMPARE(mobj.methodCount(), 7);
-        QVERIFY(mobj.method(5).methodSignature() == QByteArray("mySignal()"));
-        QVERIFY(mobj.method(6).methodSignature() == QByteArray("mySlot()"));
+        QCOMPARE(mobj.method(5).methodSignature(), QByteArray("mySignal()"));
+        QCOMPARE(mobj.method(6).methodSignature(), QByteArray("mySlot()"));
     }
 }
 
@@ -1740,34 +1779,34 @@ template <class T>
 void tst_Moc::revisions_T()
 {
     int idx = T::staticMetaObject.indexOfProperty("prop1");
-    QVERIFY(T::staticMetaObject.property(idx).revision() == 0);
+    QCOMPARE(T::staticMetaObject.property(idx).revision(), 0);
     idx = T::staticMetaObject.indexOfProperty("prop2");
-    QVERIFY(T::staticMetaObject.property(idx).revision() == 2);
+    QCOMPARE(T::staticMetaObject.property(idx).revision(), 2);
 
     idx = T::staticMetaObject.indexOfMethod("method1()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 0);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 0);
     idx = T::staticMetaObject.indexOfMethod("method2()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 4);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 4);
 
     idx = T::staticMetaObject.indexOfSlot("slot1()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 0);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 0);
     idx = T::staticMetaObject.indexOfSlot("slot2()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 3);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 3);
 
     idx = T::staticMetaObject.indexOfSlot("slot3()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 6);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 6);
     idx = T::staticMetaObject.indexOfSlot("slot4()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 6);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 6);
 
     idx = T::staticMetaObject.indexOfSignal("signal1()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 0);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 0);
     idx = T::staticMetaObject.indexOfSignal("signal2()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 5);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 5);
 
     idx = T::staticMetaObject.indexOfSignal("signal3()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 7);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 7);
     idx = T::staticMetaObject.indexOfSignal("signal4()");
-    QVERIFY(T::staticMetaObject.method(idx).revision() == 7);
+    QCOMPARE(T::staticMetaObject.method(idx).revision(), 7);
 
     idx = T::staticMetaObject.indexOfEnumerator("TestEnum");
     QCOMPARE(T::staticMetaObject.enumerator(idx).keyCount(), 2);
@@ -1883,12 +1922,33 @@ void tst_Moc::warnings_data()
         << QString()
         << QString("standard input:5: Error: Class declaration lacks Q_OBJECT macro.");
 
-    QTest::newRow("QTBUG-46210: crash on invalid macro")
-        << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c #d\n Foo(45);")
+    QTest::newRow("Invalid macro definition")
+        << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c #d\n Foo(45, 42, 39);")
         << QStringList()
         << 1
         << QString("IGNORE_ALL_STDOUT")
         << QString(":2: Error: '#' is not followed by a macro parameter");
+
+    QTest::newRow("QTBUG-46210: crash on invalid macro invocation")
+        << QByteArray("#define Foo(a, b, c) a b c #a #b #c a##b##c\n Foo(45);")
+        << QStringList()
+        << 1
+        << QString("IGNORE_ALL_STDOUT")
+        << QString(":2: Error: Macro invoked with too few parameters for a use of '#'");
+
+    QTest::newRow("QTBUG-54609: crash on invalid input")
+        << QByteArray::fromBase64("EAkJCQkJbGFzcyBjbGFzcyBiYWkcV2kgTUEKcGYjZGVmaW5lIE1BKFEs/4D/FoQ=")
+        << QStringList()
+        << 1
+        << QString("IGNORE_ALL_STDOUT")
+        << QString(":-1: Error: Unexpected character in macro argument list.");
+
+    QTest::newRow("QTBUG-54815: Crash on invalid input")
+        << QByteArray("class M{(})F<{}d000000000000000#0")
+        << QStringList()
+        << 0
+        << QString()
+        << QString("standard input:1: Note: No relevant classes found. No output generated.");
 }
 
 void tst_Moc::warnings()
@@ -1904,7 +1964,7 @@ void tst_Moc::warnings()
 
 #ifdef Q_CC_MSVC
     // for some reasons, moc compiled with MSVC uses a different output format
-    QRegExp lineNumberRe(":(\\d+):");
+    QRegExp lineNumberRe(":(-?\\d+):");
     lineNumberRe.setMinimal(true);
     expectedStdErr.replace(lineNumberRe, "(\\1):");
 #endif
@@ -1947,7 +2007,7 @@ public:
 
 void tst_Moc::privateClass()
 {
-    QVERIFY(PrivateClass::staticMetaObject.indexOfConstructor("PrivateClass()") == 0);
+    QCOMPARE(PrivateClass::staticMetaObject.indexOfConstructor("PrivateClass()"), 0);
     QVERIFY(PrivateClass::staticMetaObject.indexOfSignal("someSignal()") > 0);
 }
 
@@ -2037,6 +2097,10 @@ void tst_Moc::memberProperties_data()
             << 1 << "blub5" << "blub5Changed(const QString&)" << "mno" << true << "mno";
     QTest::newRow("private MEMBER property with CONSTANT")
             << 1 << "blub6" << "" << "test" << false << "const";
+    QTest::newRow("sub1")
+            << 0 << "sub1" << "" << "helloSub1" << true << "helloSub1";
+    QTest::newRow("sub2")
+            << 0 << "sub2" << "" << "helloSub2" << true << "helloSub2";
 }
 
 void tst_Moc::memberProperties()
@@ -3068,7 +3132,7 @@ void tst_Moc::parseDefines()
 
     int index = mo->indexOfSlot("stringMethod()");
     QVERIFY(index != -1);
-    QVERIFY(mo->method(index).returnType() == QMetaType::QString);
+    QCOMPARE(mo->method(index).returnType(), int(QMetaType::QString));
 
     index = mo->indexOfSlot("combined1()");
     QVERIFY(index != -1);
@@ -3127,7 +3191,7 @@ void tst_Moc::parseDefines()
             QVERIFY(!qstrcmp(mci.value(), "TestValue"));
         }
     }
-    QVERIFY(count == 3);
+    QCOMPARE(count, 3);
 
     index = mo->indexOfSlot("PD_DEFINE_ITSELF_SUFFIX(int)");
     QVERIFY(index != -1);
@@ -3253,7 +3317,7 @@ void tst_Moc::relatedMetaObjectsWithinNamespaces()
 
     const QMetaObject *testMo = &QTBUG_2151::B::staticMetaObject;
     QVERIFY(testMo->d.relatedMetaObjects);
-    QVERIFY(testMo->d.relatedMetaObjects[0] == relatedMo);
+    QCOMPARE(testMo->d.relatedMetaObjects[0], relatedMo);
 }
 
 void tst_Moc::relatedMetaObjectsInGadget()
@@ -3262,7 +3326,7 @@ void tst_Moc::relatedMetaObjectsInGadget()
 
     const QMetaObject *testMo = &QTBUG_35657::B::staticMetaObject;
     QVERIFY(testMo->d.relatedMetaObjects);
-    QVERIFY(testMo->d.relatedMetaObjects[0] == relatedMo);
+    QCOMPARE(testMo->d.relatedMetaObjects[0], relatedMo);
 }
 
 void tst_Moc::relatedMetaObjectsNameConflict_data()
@@ -3401,6 +3465,28 @@ class VeryLongStringData : public QObject
     #undef repeat65534
 };
 
+void tst_Moc::unnamedNamespaceObjectsAndGadgets()
+{
+    // these just test very basic functionality of gadgets and objects
+    // defined in unnamed namespaces.
+    {
+        GadgetInUnnamedNS gadget(21, 42);
+        QCOMPARE(gadget.x(), 21);
+        QCOMPARE(gadget.y(), 42);
+        gadget.staticMetaObject.property(0).writeOnGadget(&gadget, 12);
+        gadget.staticMetaObject.property(1).writeOnGadget(&gadget, 24);
+        QCOMPARE(gadget.x(), 12);
+        QCOMPARE(gadget.y(), 24);
+    }
+
+    {
+        ObjectInUnnamedNS object;
+        QObject *qObject = &object;
+        QCOMPARE(static_cast<ObjectInUnnamedNS *>(qObject),
+                 qobject_cast<ObjectInUnnamedNS *>(qObject));
+    }
+}
+
 void tst_Moc::veryLongStringData()
 {
     const QMetaObject *mobj = &VeryLongStringData::staticMetaObject;
@@ -3429,6 +3515,31 @@ void tst_Moc::gadgetHierarchy()
 {
     QCOMPARE(NonGadgetParent::Derived::staticMetaObject.superClass(), static_cast<const QMetaObject*>(Q_NULLPTR));
     QCOMPARE(GrandParentGadget::DerivedGadget::staticMetaObject.superClass(), &GrandParentGadget::BaseGadget::staticMetaObject);
+}
+
+void tst_Moc::optionsFileError_data()
+{
+    QTest::addColumn<QString>("optionsArgument");
+    QTest::newRow("no filename") << QStringLiteral("@");
+    QTest::newRow("nonexistent file") << QStringLiteral("@letshuntasnark");
+}
+
+void tst_Moc::optionsFileError()
+{
+#ifdef MOC_CROSS_COMPILED
+    QSKIP("Not tested when cross-compiled");
+#endif
+#if !defined(QT_NO_PROCESS)
+    QFETCH(QString, optionsArgument);
+    QProcess p;
+    p.start(m_moc, QStringList(optionsArgument));
+    QVERIFY(p.waitForFinished());
+    QCOMPARE(p.exitCode(), 1);
+    QVERIFY(p.readAllStandardOutput().isEmpty());
+    const QByteArray err = p.readAllStandardError();
+    QVERIFY(err.contains("moc: "));
+    QVERIFY(!err.contains("QCommandLineParser"));
+#endif
 }
 
 QTEST_MAIN(tst_Moc)

@@ -38,6 +38,7 @@
 
 #include <qpa/qplatformwindow.h>
 #include <QRect>
+#include <QPointer>
 
 #ifndef QT_NO_OPENGL
 #include "qcocoaglcontext.h"
@@ -46,6 +47,32 @@
 #include "qt_mac_p.h"
 
 QT_FORWARD_DECLARE_CLASS(QCocoaWindow)
+
+QT_BEGIN_NAMESPACE
+
+class QCocoaWindowPointer
+{
+public:
+    void assign(QCocoaWindow *w);
+    void clear();
+
+    QCocoaWindow *data() const
+    { return watcher.isNull() ? Q_NULLPTR : window; }
+    bool isNull() const
+    { return watcher.isNull(); }
+    operator QCocoaWindow*() const
+    { return data(); }
+    QCocoaWindow *operator->() const
+    { return data(); }
+    QCocoaWindow &operator*() const
+    { return *data(); }
+
+private:
+    QPointer<QObject> watcher;
+    QCocoaWindow *window;
+};
+
+QT_END_NAMESPACE
 
 @class QT_MANGLE_NAMESPACE(QNSWindowHelper);
 
@@ -63,13 +90,13 @@ typedef NSWindow<QNSWindowProtocol> QCocoaNSWindow;
 @interface QT_MANGLE_NAMESPACE(QNSWindowHelper) : NSObject
 {
     QCocoaNSWindow *_window;
-    QCocoaWindow *_platformWindow;
+    QCocoaWindowPointer _platformWindow;
     BOOL _grabbingMouse;
     BOOL _releaseOnMouseUp;
 }
 
 @property (nonatomic, readonly) QCocoaNSWindow *window;
-@property (nonatomic, readonly) QCocoaWindow *platformWindow;
+@property (nonatomic, readonly) QCocoaWindowPointer platformWindow;
 @property (nonatomic) BOOL grabbingMouse;
 @property (nonatomic) BOOL releaseOnMouseUp;
 
@@ -228,6 +255,9 @@ public:
     QWindow *childWindowAt(QPoint windowPoint);
     bool shouldRefuseKeyWindowAndFirstResponder();
 
+    static QPoint bottomLeftClippedByNSWindowOffsetStatic(QWindow *window);
+    QPoint bottomLeftClippedByNSWindowOffset() const;
+
     void closeActivePopupWindow();
 protected:
     void recreateWindow(const QPlatformWindow *parentWindow);
@@ -236,7 +266,7 @@ protected:
 
     bool shouldUseNSPanel();
 
-    QRect windowGeometry() const;
+    QRect nativeWindowGeometry() const;
     QCocoaWindow *parentCocoaWindow() const;
     void syncWindowState(Qt::WindowState newState);
     void reinsertChildWindow(QCocoaWindow *child);
@@ -247,10 +277,12 @@ public: // for QNSView
     friend class QCocoaBackingStore;
     friend class QCocoaNativeInterface;
 
+    void removeMonitor();
+
     NSView *m_contentView;
     QNSView *m_qtView;
     QCocoaNSWindow *m_nsWindow;
-    QCocoaWindow *m_forwardWindow;
+    QCocoaWindowPointer m_forwardWindow;
 
     // TODO merge to one variable if possible
     bool m_contentViewIsEmbedded; // true if the m_contentView is actually embedded in a "foreign" NSView hiearchy
@@ -267,10 +299,10 @@ public: // for QNSView
     QPointer<QWindow> m_enterLeaveTargetWindow;
     bool m_windowUnderMouse;
 
-    bool m_ignoreWindowShouldClose;
     bool m_inConstructor;
     bool m_inSetVisible;
     bool m_inSetGeometry;
+    bool m_inSetStyleMask;
 #ifndef QT_NO_OPENGL
     QCocoaGLContext *m_glContext;
 #endif
@@ -312,6 +344,10 @@ public: // for QNSView
     };
     QHash<quintptr, BorderRange> m_contentBorderAreas; // identifer -> uppper/lower
     QHash<quintptr, bool> m_enabledContentBorderAreas; // identifer -> enabled state (true/false)
+
+    // This object is tracked by QCocoaWindowPointer,
+    // preventing the use of dangling pointers.
+    QObject sentinel;
 };
 
 QT_END_NAMESPACE

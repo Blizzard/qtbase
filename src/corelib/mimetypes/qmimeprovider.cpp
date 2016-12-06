@@ -541,6 +541,7 @@ QList<QMimeType> QMimeBinaryProvider::allMimeTypes()
 {
     QList<QMimeType> result;
     loadMimeTypeList();
+    result.reserve(m_mimetypeNames.count());
 
     for (QSet<QString>::const_iterator it = m_mimetypeNames.constBegin();
           it != m_mimetypeNames.constEnd(); ++it)
@@ -567,21 +568,18 @@ void QMimeBinaryProvider::loadMimeTypePrivate(QMimeTypePrivate &data)
         mimeFiles = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QString::fromLatin1("mime/") + file); // pre-1.3
     }
     if (mimeFiles.isEmpty()) {
-        qWarning() << "No file found for" << file << ", even though update-mime-info said it would exist.";
-        qWarning() << "Either it was just removed, or the directory doesn't have executable permission...";
-        qWarning() << QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QLatin1String("mime"), QStandardPaths::LocateDirectory);
+        qWarning() << "No file found for" << file << ", even though update-mime-info said it would exist.\n"
+                      "Either it was just removed, or the directory doesn't have executable permission..."
+                   << QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QLatin1String("mime"), QStandardPaths::LocateDirectory);
         return;
     }
 
     QString comment;
     QString mainPattern;
-    const QString preferredLanguage = QLocale::system().name();
+    const QString preferredLanguage = QLocale().name();
 
-    QListIterator<QString> mimeFilesIter(mimeFiles);
-    mimeFilesIter.toBack();
-    while (mimeFilesIter.hasPrevious()) { // global first, then local.
-        const QString fullPath = mimeFilesIter.previous();
-        QFile qfile(fullPath);
+    for (QStringList::const_reverse_iterator it = mimeFiles.crbegin(), end = mimeFiles.crend(); it != end; ++it) { // global first, then local.
+        QFile qfile(*it);
         if (!qfile.open(QFile::ReadOnly))
             continue;
 
@@ -590,12 +588,11 @@ void QMimeBinaryProvider::loadMimeTypePrivate(QMimeTypePrivate &data)
             if (xml.name() != QLatin1String("mime-type")) {
                 continue;
             }
-            const QString name = xml.attributes().value(QLatin1String("type")).toString();
+            const QStringRef name = xml.attributes().value(QLatin1String("type"));
             if (name.isEmpty())
                 continue;
-            if (name != data.name) {
+            if (name.compare(data.name, Qt::CaseInsensitive))
                 qWarning() << "Got name" << name << "in file" << file << "expected" << data.name;
-            }
 
             while (xml.readNextStartElement()) {
                 const QStringRef tag = xml.name();
@@ -758,7 +755,7 @@ void QMimeXMLProvider::ensureLoaded()
         foreach (const QString &packageDir, packageDirs) {
             QDir dir(packageDir);
             const QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
-            //qDebug() << static_cast<const void *>(this) << Q_FUNC_INFO << packageDir << files;
+            //qDebug() << static_cast<const void *>(this) << packageDir << files;
             if (!fdoXmlFound)
                 fdoXmlFound = files.contains(QLatin1String("freedesktop.org.xml"));
             QStringList::const_iterator endIt(files.constEnd());

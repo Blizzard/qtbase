@@ -150,7 +150,7 @@ QT_BEGIN_NAMESPACE
     \value HoverLeave                       The mouse cursor leaves a hover widget (QHoverEvent).
     \value HoverMove                        The mouse cursor moves inside a hover widget (QHoverEvent).
     \value IconDrag                         The main icon of a window has been dragged away (QIconDragEvent).
-    \value IconTextChange                   Widget's icon text has been changed.
+    \value IconTextChange                   Widget's icon text has been changed. (Deprecated)
     \value InputMethod                      An input method is being used (QInputMethodEvent).
     \value InputMethodQuery                 A input method query event (QInputMethodQueryEvent)
     \value KeyboardLayoutChange             The keyboard layout has changed.
@@ -167,7 +167,7 @@ QT_BEGIN_NAMESPACE
     \value NonClientAreaMouseButtonPress    A mouse button press occurred outside the client area.
     \value NonClientAreaMouseButtonRelease  A mouse button release occurred outside the client area.
     \value NonClientAreaMouseMove           A mouse move occurred outside the client area.
-    \value MacSizeChange                    The user changed his widget sizes (OS X only).
+    \value MacSizeChange                    The user changed his widget sizes (\macos only).
     \value MetaCall                         An asynchronous method invocation via QMetaObject::invokeMethod().
     \value ModifiedChange                   Widgets modification state has been changed.
     \value MouseButtonDblClick              Mouse press again (QMouseEvent).
@@ -211,7 +211,7 @@ QT_BEGIN_NAMESPACE
     \omitvalue ThemeChange
     \value ThreadChange                     The object is moved to another thread. This is the last event sent to this object in the previous thread. See QObject::moveToThread().
     \value Timer                            Regular timer events (QTimerEvent).
-    \value ToolBarChange                    The toolbar button is toggled on OS X.
+    \value ToolBarChange                    The toolbar button is toggled on \macos.
     \value ToolTip                          A tooltip was requested (QHelpEvent).
     \value ToolTipChange                    The widget's tooltip has changed.
     \value TouchBegin                       Beginning of a sequence of touch-screen or track-pad events (QTouchEvent).
@@ -219,7 +219,7 @@ QT_BEGIN_NAMESPACE
     \value TouchEnd                         End of touch-event sequence (QTouchEvent).
     \value TouchUpdate                      Touch-screen event (QTouchEvent).
     \value UngrabKeyboard                   Item loses keyboard grab (QGraphicsItem only).
-    \value UngrabMouse                      Item loses mouse grab (QGraphicsItem only).
+    \value UngrabMouse                      Item loses mouse grab (QGraphicsItem, QQuickItem).
     \value UpdateLater                      The widget should be queued to be repainted at a later time.
     \value UpdateRequest                    The widget should be repainted.
     \value WhatsThis                        The widget should reveal "What's This?" help (QHelpEvent).

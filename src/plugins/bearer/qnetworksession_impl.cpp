@@ -42,8 +42,6 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/qstringlist.h>
 
-#ifndef QT_NO_BEARERMANAGEMENT
-
 QT_BEGIN_NAMESPACE
 
 static QBearerEngineImpl *getEngineFromId(const QString &id)
@@ -281,7 +279,7 @@ quint64 QNetworkSessionPrivateImpl::bytesReceived() const
 quint64 QNetworkSessionPrivateImpl::activeTime() const
 {
     if (state == QNetworkSession::Connected && startTime != Q_UINT64_C(0))
-        return QDateTime::currentDateTime().toTime_t() - startTime;
+        return QDateTime::currentDateTimeUtc().toTime_t() - startTime;
     return Q_UINT64_C(0);
 }
 
@@ -423,5 +421,3 @@ void QNetworkSessionPrivateImpl::decrementTimeout()
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_BEARERMANAGEMENT

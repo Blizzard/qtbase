@@ -53,6 +53,13 @@ QT_BEGIN_NAMESPACE
 class Q_CORE_EXPORT QException : public std::exception
 {
 public:
+    ~QException()
+#ifdef Q_COMPILER_NOEXCEPT
+    noexcept
+#else
+    throw()
+#endif
+    ;
     virtual void raise() const;
     virtual QException *clone() const;
 };
@@ -60,6 +67,13 @@ public:
 class Q_CORE_EXPORT QUnhandledException : public QException
 {
 public:
+    ~QUnhandledException()
+#ifdef Q_COMPILER_NOEXCEPT
+    noexcept
+#else
+    throw()
+#endif
+    ;
     void raise() const Q_DECL_OVERRIDE;
     QUnhandledException *clone() const Q_DECL_OVERRIDE;
 };
@@ -70,9 +84,9 @@ class Base;
 class Q_CORE_EXPORT ExceptionHolder
 {
 public:
-    ExceptionHolder(QException *exception = 0);
+    ExceptionHolder(QException *exception = Q_NULLPTR);
     ExceptionHolder(const ExceptionHolder &other);
-    void operator=(const ExceptionHolder &other);
+    void operator=(const ExceptionHolder &other); // ### Qt6: copy-assign operator shouldn't return void. Remove this method and the copy-ctor, they are unneeded.
     ~ExceptionHolder();
     QException *exception() const;
     QExplicitlySharedDataPointer<Base> base;

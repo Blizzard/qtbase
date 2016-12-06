@@ -53,8 +53,8 @@ QT_BEGIN_NAMESPACE
 
 #ifndef QT_NO_DRAGANDDROP
 
-class QMouseEvent;
 class QWindow;
+class QPlatformWindow;
 class QXcbConnection;
 class QXcbWindow;
 class QXcbDropData;
@@ -69,17 +69,18 @@ public:
     ~QXcbDrag();
 
     virtual QMimeData *platformDropData() Q_DECL_OVERRIDE;
+    bool eventFilter(QObject *o, QEvent *e) Q_DECL_OVERRIDE;
 
     void startDrag() Q_DECL_OVERRIDE;
     void cancel() Q_DECL_OVERRIDE;
-    void move(const QMouseEvent *me) Q_DECL_OVERRIDE;
-    void drop(const QMouseEvent *me) Q_DECL_OVERRIDE;
+    void move(const QPoint &globalPos) Q_DECL_OVERRIDE;
+    void drop(const QPoint &globalPos) Q_DECL_OVERRIDE;
     void endDrag() Q_DECL_OVERRIDE;
 
-    void handleEnter(QWindow *window, const xcb_client_message_event_t *event);
-    void handlePosition(QWindow *w, const xcb_client_message_event_t *event);
-    void handleLeave(QWindow *w, const xcb_client_message_event_t *event);
-    void handleDrop(QWindow *, const xcb_client_message_event_t *event);
+    void handleEnter(QPlatformWindow *window, const xcb_client_message_event_t *event, xcb_window_t proxy = 0);
+    void handlePosition(QPlatformWindow *w, const xcb_client_message_event_t *event);
+    void handleLeave(QPlatformWindow *w, const xcb_client_message_event_t *event);
+    void handleDrop(QPlatformWindow *, const xcb_client_message_event_t *event);
 
     void handleStatus(const xcb_client_message_event_t *event);
     void handleSelectionRequest(const xcb_selection_request_event_t *event);
@@ -99,13 +100,14 @@ private:
 
     void init();
 
-    void handle_xdnd_position(QWindow *w, const xcb_client_message_event_t *event);
+    void handle_xdnd_position(QPlatformWindow *w, const xcb_client_message_event_t *event);
     void handle_xdnd_status(const xcb_client_message_event_t *event);
     void send_leave();
 
     Qt::DropAction toDropAction(xcb_atom_t atom) const;
     xcb_atom_t toXdndAction(Qt::DropAction a) const;
 
+    QPointer<QWindow> initiatorWindow;
     QPointer<QWindow> currentWindow;
     QPoint currentPosition;
 
@@ -133,7 +135,7 @@ private:
     // window to send events to (always valid if current_target)
     xcb_window_t current_proxy_target;
 
-    QXcbScreen *current_screen;
+    QXcbVirtualDesktop *current_virtual_desktop;
 
     // 10 minute timer used to discard old XdndDrop transactions
     enum { XdndDropTransactionTimeout = 600000 };
@@ -146,7 +148,7 @@ private:
         xcb_timestamp_t timestamp;
         xcb_window_t target;
         xcb_window_t proxy_target;
-        QWindow *targetWindow;
+        QPlatformWindow *targetWindow;
 //        QWidget *embedding_widget;
         QPointer<QDrag> drag;
         QTime time;

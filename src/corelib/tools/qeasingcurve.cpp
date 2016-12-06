@@ -170,7 +170,7 @@
     \value OutSine      \image qeasingcurve-outsine.png
                         \caption
                         Easing curve for a sinusoidal (sin(t)) function:
-                        decelerating from zero velocity.
+                        decelerating to zero velocity.
     \value InOutSine    \image qeasingcurve-inoutsine.png
                         \caption
                         Easing curve for a sinusoidal (sin(t)) function:
@@ -186,7 +186,7 @@
     \value OutExpo      \image qeasingcurve-outexpo.png
                         \caption
                         Easing curve for an exponential (2^t) function:
-                        decelerating from zero velocity.
+                        decelerating to zero velocity.
     \value InOutExpo    \image qeasingcurve-inoutexpo.png
                         \caption
                         Easing curve for an exponential (2^t) function:
@@ -202,7 +202,7 @@
     \value OutCirc      \image qeasingcurve-outcirc.png
                         \caption
                         Easing curve for a circular (sqrt(1-t^2)) function:
-                        decelerating from zero velocity.
+                        decelerating to zero velocity.
     \value InOutCirc    \image qeasingcurve-inoutcirc.png
                         \caption
                         Easing curve for a circular (sqrt(1-t^2)) function:
@@ -222,7 +222,7 @@
                         \caption
                         Easing curve for an elastic
                         (exponentially decaying sine wave) function:
-                        decelerating from zero velocity.  The peak amplitude
+                        decelerating to zero velocity.  The peak amplitude
                         can be set with the \e amplitude parameter, and the
                         period of decay by the \e period parameter.
     \value InOutElastic \image qeasingcurve-inoutelastic.png
@@ -340,6 +340,7 @@ struct TCBPoint {
                 qFuzzyCompare(_b, other._b);
     }
 };
+Q_DECLARE_TYPEINFO(TCBPoint, Q_PRIMITIVE_TYPE);
 
 
 typedef QVector<TCBPoint> TCBPoints;
@@ -1219,6 +1220,7 @@ QVector<QPointF> static inline tcbToBezier(const TCBPoints &tcbPoints)
 {
     const int count = tcbPoints.count();
     QVector<QPointF> bezierPoints;
+    bezierPoints.reserve(3 * (count - 1));
 
     for (int i = 1; i < count; i++) {
         const qreal t_0 = tcbPoints.at(i - 1)._t;
