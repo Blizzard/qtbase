@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,6 +39,7 @@
 
 #include "qplatformdialoghelper.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QVariant>
 #include <QtCore/QSharedData>
 #include <QtCore/QSettings>
@@ -149,23 +156,33 @@ public:
     QString windowTitle;
 };
 
-QFontDialogOptions::QFontDialogOptions() : d(new QFontDialogOptionsPrivate)
+QFontDialogOptions::QFontDialogOptions(QFontDialogOptionsPrivate *dd)
+    : d(dd)
 {
-}
-
-QFontDialogOptions::QFontDialogOptions(const QFontDialogOptions &rhs) : d(rhs.d)
-{
-}
-
-QFontDialogOptions &QFontDialogOptions::operator=(const QFontDialogOptions &rhs)
-{
-    if (this != &rhs)
-        d = rhs.d;
-    return *this;
 }
 
 QFontDialogOptions::~QFontDialogOptions()
 {
+}
+
+namespace {
+    struct FontDialogCombined : QFontDialogOptionsPrivate, QFontDialogOptions
+    {
+        FontDialogCombined() : QFontDialogOptionsPrivate(), QFontDialogOptions(this) {}
+        FontDialogCombined(const FontDialogCombined &other)
+            : QFontDialogOptionsPrivate(other), QFontDialogOptions(this) {}
+    };
+}
+
+// static
+QSharedPointer<QFontDialogOptions> QFontDialogOptions::create()
+{
+    return QSharedPointer<FontDialogCombined>::create();
+}
+
+QSharedPointer<QFontDialogOptions> QFontDialogOptions::clone() const
+{
+    return QSharedPointer<FontDialogCombined>::create(*static_cast<const FontDialogCombined*>(this));
 }
 
 QString QFontDialogOptions::windowTitle() const
@@ -251,7 +268,7 @@ void QColorDialogStaticData::readSettings()
 #ifndef QT_NO_SETTINGS
     const QSettings settings(QSettings::UserScope, QStringLiteral("QtProject"));
     for (int i = 0; i < int(CustomColorCount); ++i) {
-        const QVariant v = settings.value(QStringLiteral("Qt/customColors/") + QString::number(i));
+        const QVariant v = settings.value(QLatin1String("Qt/customColors/") + QString::number(i));
         if (v.isValid())
             customRgb[i] = v.toUInt();
     }
@@ -261,10 +278,10 @@ void QColorDialogStaticData::readSettings()
 void QColorDialogStaticData::writeSettings() const
 {
 #ifndef QT_NO_SETTINGS
-    if (!customSet) {
+    if (customSet) {
         QSettings settings(QSettings::UserScope, QStringLiteral("QtProject"));
         for (int i = 0; i < int(CustomColorCount); ++i)
-            settings.setValue(QStringLiteral("Qt/customColors/") + QString::number(i), customRgb[i]);
+            settings.setValue(QLatin1String("Qt/customColors/") + QString::number(i), customRgb[i]);
     }
 #endif
 }
@@ -282,23 +299,33 @@ public:
     QString windowTitle;
 };
 
-QColorDialogOptions::QColorDialogOptions() : d(new QColorDialogOptionsPrivate)
+QColorDialogOptions::QColorDialogOptions(QColorDialogOptionsPrivate *dd)
+    : d(dd)
 {
-}
-
-QColorDialogOptions::QColorDialogOptions(const QColorDialogOptions &rhs) : d(rhs.d)
-{
-}
-
-QColorDialogOptions &QColorDialogOptions::operator=(const QColorDialogOptions &rhs)
-{
-    if (this != &rhs)
-        d = rhs.d;
-    return *this;
 }
 
 QColorDialogOptions::~QColorDialogOptions()
 {
+}
+
+namespace {
+    struct ColorDialogCombined : QColorDialogOptionsPrivate, QColorDialogOptions
+    {
+        ColorDialogCombined() : QColorDialogOptionsPrivate(), QColorDialogOptions(this) {}
+        ColorDialogCombined(const ColorDialogCombined &other)
+            : QColorDialogOptionsPrivate(other), QColorDialogOptions(this) {}
+    };
+}
+
+// static
+QSharedPointer<QColorDialogOptions> QColorDialogOptions::create()
+{
+    return QSharedPointer<ColorDialogCombined>::create();
+}
+
+QSharedPointer<QColorDialogOptions> QColorDialogOptions::clone() const
+{
+    return QSharedPointer<ColorDialogCombined>::create(*static_cast<const ColorDialogCombined*>(this));
 }
 
 QString QColorDialogOptions::windowTitle() const
@@ -405,7 +432,8 @@ public:
         viewMode(QFileDialogOptions::Detail),
         fileMode(QFileDialogOptions::AnyFile),
         acceptMode(QFileDialogOptions::AcceptOpen),
-        filters(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::AllDirs)
+        filters(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::AllDirs),
+        useDefaultNameFilters(true)
     {}
 
     QFileDialogOptions::FileDialogOptions options;
@@ -417,33 +445,44 @@ public:
     QString labels[QFileDialogOptions::DialogLabelCount];
     QDir::Filters filters;
     QList<QUrl> sidebarUrls;
+    bool useDefaultNameFilters;
     QStringList nameFilters;
     QStringList mimeTypeFilters;
     QString defaultSuffix;
     QStringList history;
     QUrl initialDirectory;
+    QString initiallySelectedMimeTypeFilter;
     QString initiallySelectedNameFilter;
     QList<QUrl> initiallySelectedFiles;
     QStringList supportedSchemes;
 };
 
-QFileDialogOptions::QFileDialogOptions() : d(new QFileDialogOptionsPrivate)
+QFileDialogOptions::QFileDialogOptions(QFileDialogOptionsPrivate *dd)
+    : d(dd)
 {
-}
-
-QFileDialogOptions::QFileDialogOptions(const QFileDialogOptions &rhs) : d(rhs.d)
-{
-}
-
-QFileDialogOptions &QFileDialogOptions::operator=(const QFileDialogOptions &rhs)
-{
-    if (this != &rhs)
-        d = rhs.d;
-    return *this;
 }
 
 QFileDialogOptions::~QFileDialogOptions()
 {
+}
+
+namespace {
+    struct FileDialogCombined : QFileDialogOptionsPrivate, QFileDialogOptions
+    {
+        FileDialogCombined() : QFileDialogOptionsPrivate(), QFileDialogOptions(this) {}
+        FileDialogCombined(const FileDialogCombined &other) : QFileDialogOptionsPrivate(other), QFileDialogOptions(this) {}
+    };
+}
+
+// static
+QSharedPointer<QFileDialogOptions> QFileDialogOptions::create()
+{
+    return QSharedPointer<FileDialogCombined>::create();
+}
+
+QSharedPointer<QFileDialogOptions> QFileDialogOptions::clone() const
+{
+    return QSharedPointer<FileDialogCombined>::create(*static_cast<const FileDialogCombined*>(this));
 }
 
 QString QFileDialogOptions::windowTitle() const
@@ -528,14 +567,48 @@ QList<QUrl> QFileDialogOptions::sidebarUrls() const
     return d->sidebarUrls;
 }
 
+/*!
+    \since 5.7
+    \internal
+    The bool property useDefaultNameFilters indicates that no name filters have been
+    set or that they are equivalent to \gui{All Files (*)}. If it is true, the
+    platform can choose to hide the filter combo box.
+
+    \sa defaultNameFilterString().
+*/
+bool QFileDialogOptions::useDefaultNameFilters() const
+{
+    return d->useDefaultNameFilters;
+}
+
+void QFileDialogOptions::setUseDefaultNameFilters(bool dnf)
+{
+    d->useDefaultNameFilters = dnf;
+}
+
 void QFileDialogOptions::setNameFilters(const QStringList &filters)
 {
+    d->useDefaultNameFilters = filters.size() == 1
+        && filters.first() == QFileDialogOptions::defaultNameFilterString();
     d->nameFilters = filters;
 }
 
 QStringList QFileDialogOptions::nameFilters() const
 {
-    return d->nameFilters;
+    return d->useDefaultNameFilters ?
+        QStringList(QFileDialogOptions::defaultNameFilterString()) : d->nameFilters;
+}
+
+/*!
+    \since 5.6
+    \internal
+    \return The translated default name filter string (\gui{All Files (*)}).
+    \sa defaultNameFilters(), nameFilters()
+*/
+
+QString QFileDialogOptions::defaultNameFilterString()
+{
+    return QCoreApplication::translate("QFileDialog", "All Files (*)");
 }
 
 void QFileDialogOptions::setMimeTypeFilters(const QStringList &filters)
@@ -596,6 +669,16 @@ void QFileDialogOptions::setInitialDirectory(const QUrl &directory)
     d->initialDirectory = directory;
 }
 
+QString QFileDialogOptions::initiallySelectedMimeTypeFilter() const
+{
+    return d->initiallySelectedMimeTypeFilter;
+}
+
+void QFileDialogOptions::setInitiallySelectedMimeTypeFilter(const QString &filter)
+{
+    d->initiallySelectedMimeTypeFilter = filter;
+}
+
 QString QFileDialogOptions::initiallySelectedNameFilter() const
 {
     return d->initiallySelectedNameFilter;
@@ -625,6 +708,16 @@ void QFileDialogOptions::setSupportedSchemes(const QStringList &schemes)
 QStringList QFileDialogOptions::supportedSchemes() const
 {
     return d->supportedSchemes;
+}
+
+void QPlatformFileDialogHelper::selectMimeTypeFilter(const QString &filter)
+{
+    Q_UNUSED(filter)
+}
+
+QString QPlatformFileDialogHelper::selectedMimeTypeFilter() const
+{
+    return QString();
 }
 
 // Return true if the URL is supported by the filedialog implementation *and* by the application.
@@ -685,23 +778,33 @@ public:
     QPlatformDialogHelper::StandardButtons buttons;
 };
 
-QMessageDialogOptions::QMessageDialogOptions() : d(new QMessageDialogOptionsPrivate)
+QMessageDialogOptions::QMessageDialogOptions(QMessageDialogOptionsPrivate *dd)
+    : d(dd)
 {
-}
-
-QMessageDialogOptions::QMessageDialogOptions(const QMessageDialogOptions &rhs) : d(rhs.d)
-{
-}
-
-QMessageDialogOptions &QMessageDialogOptions::operator=(const QMessageDialogOptions &rhs)
-{
-    if (this != &rhs)
-        d = rhs.d;
-    return *this;
 }
 
 QMessageDialogOptions::~QMessageDialogOptions()
 {
+}
+
+namespace {
+    struct MessageDialogCombined : QMessageDialogOptionsPrivate, QMessageDialogOptions
+    {
+        MessageDialogCombined() : QMessageDialogOptionsPrivate(), QMessageDialogOptions(this) {}
+        MessageDialogCombined(const MessageDialogCombined &other)
+            : QMessageDialogOptionsPrivate(other), QMessageDialogOptions(this) {}
+    };
+}
+
+// static
+QSharedPointer<QMessageDialogOptions> QMessageDialogOptions::create()
+{
+    return QSharedPointer<MessageDialogCombined>::create();
+}
+
+QSharedPointer<QMessageDialogOptions> QMessageDialogOptions::clone() const
+{
+    return QSharedPointer<MessageDialogCombined>::create(*static_cast<const MessageDialogCombined*>(this));
 }
 
 QString QMessageDialogOptions::windowTitle() const

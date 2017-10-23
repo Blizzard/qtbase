@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,14 +42,19 @@
 #include "qmainwindow.h"
 #include "qmainwindowlayout_p.h"
 
-#ifndef QT_NO_MAINWINDOW
-
+#if QT_CONFIG(dockwidget)
 #include "qdockwidget.h"
+#endif
 #include "qtoolbar.h"
 
 #include <qapplication.h>
+#include <qmenu.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
+#if QT_CONFIG(statusbar)
 #include <qstatusbar.h>
+#endif
 #include <qevent.h>
 #include <qstyle.h>
 #include <qdebug.h>
@@ -55,7 +66,7 @@
 #ifdef Q_OS_OSX
 #include <qpa/qplatformnativeinterface.h>
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qt_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 QT_BEGIN_NAMESPACE
@@ -74,11 +85,11 @@ public:
 #ifdef Q_OS_OSX
             , useUnifiedToolBar(false)
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
             , useHIToolBar(false)
             , activateUnifiedToolbarAfterFullScreen(false)
 #endif
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
             , hasOldCursor(false) , cursorAdjusted(false)
 #endif
     { }
@@ -89,7 +100,7 @@ public:
 #ifdef Q_OS_OSX
     bool useUnifiedToolBar;
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     bool useHIToolBar;
     bool activateUnifiedToolbarAfterFullScreen;
 #endif
@@ -97,7 +108,7 @@ public:
     QList<int> hoverSeparator;
     QPoint hoverPos;
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
     QCursor separatorCursor(const QList<int> &path) const;
     void adjustCursor(const QPoint &pos);
     QCursor oldCursor;
@@ -320,7 +331,7 @@ void QMainWindowPrivate::init()
     direction.
 
     Two dock widgets may also be stacked on top of each other. A
-    QTabBar is then used to select which of the widgets that should be
+    QTabBar is then used to select which of the widgets should be
     displayed.
 
     We give an example of how to create and add dock widgets to a
@@ -370,6 +381,18 @@ void QMainWindowPrivate::init()
 
     \sa setToolButtonStyle()
 */
+
+#if QT_CONFIG(dockwidget)
+/*!
+    \fn void QMainWindow::tabifiedDockWidgetActivated(QDockWidget *dockWidget)
+
+    This signal is emitted when the tabified dock widget is activated by
+    selecting the tab. The activated dock widget is passed in \a dockWidget.
+
+    \since 5.8
+    \sa tabifyDockWidget(), tabifiedDockWidgets()
+*/
+#endif
 
 /*!
     Constructs a QMainWindow with the given \a parent and the specified
@@ -498,7 +521,7 @@ void QMainWindow::setToolButtonStyle(Qt::ToolButtonStyle toolButtonStyle)
     emit toolButtonStyleChanged(d->toolButtonStyle);
 }
 
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
 /*!
     Returns the menu bar for the main window. This function creates
     and returns an empty menu bar if the menu bar does not exist.
@@ -585,9 +608,9 @@ void QMainWindow::setMenuWidget(QWidget *menuBar)
     }
     d->layout->setMenuBar(menuBar);
 }
-#endif // QT_NO_MENUBAR
+#endif // QT_CONFIG(menubar)
 
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
 /*!
     Returns the status bar for the main window. This function creates
     and returns an empty status bar if the status bar does not exist.
@@ -624,7 +647,7 @@ void QMainWindow::setStatusBar(QStatusBar *statusbar)
     }
     d->layout->setStatusBar(statusbar);
 }
-#endif // QT_NO_STATUSBAR
+#endif // QT_CONFIG(statusbar)
 
 /*!
     Returns the central widget for the main window. This function
@@ -658,18 +681,20 @@ void QMainWindow::setCentralWidget(QWidget *widget)
 
     The ownership of the removed widget is passed to the caller.
 
-    \since Qt 5.2
+    \since 5.2
 */
 QWidget *QMainWindow::takeCentralWidget()
 {
     Q_D(QMainWindow);
     QWidget *oldcentralwidget = d->layout->centralWidget();
-    oldcentralwidget->setParent(0);
-    d->layout->setCentralWidget(0);
+    if (oldcentralwidget) {
+        oldcentralwidget->setParent(0);
+        d->layout->setCentralWidget(0);
+    }
     return oldcentralwidget;
 }
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 /*!
     Sets the given dock widget \a area to occupy the specified \a
     corner.
@@ -693,7 +718,7 @@ void QMainWindow::setCorner(Qt::Corner corner, Qt::DockWidgetArea area)
         valid = (area == Qt::BottomDockWidgetArea || area == Qt::RightDockWidgetArea);
         break;
     }
-    if (!valid)
+    if (Q_UNLIKELY(!valid))
         qWarning("QMainWindow::setCorner(): 'area' is not valid for 'corner'");
     else
         d_func()->layout->setCorner(corner, area);
@@ -775,12 +800,12 @@ void QMainWindow::addToolBar(Qt::ToolBarArea area, QToolBar *toolbar)
 
     if(toolbar->d_func()->state && toolbar->d_func()->state->dragging) {
         //removing a toolbar which is dragging will cause crash
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         bool animated = isAnimated();
         setAnimated(false);
 #endif
         toolbar->d_func()->endDrag();
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         setAnimated(animated);
 #endif
     }
@@ -883,7 +908,7 @@ bool QMainWindow::toolBarBreak(QToolBar *toolbar) const
 
 #endif // QT_NO_TOOLBAR
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 
 /*! \property QMainWindow::animated
     \brief whether manipulating dock widgets and tool bars is animated
@@ -916,10 +941,7 @@ void QMainWindow::setAnimated(bool enabled)
     Q_D(QMainWindow);
 
     DockOptions opts = d->layout->dockOptions;
-    if (enabled)
-        opts |= AnimatedDocks;
-    else
-        opts &= ~AnimatedDocks;
+    opts.setFlag(AnimatedDocks, enabled);
 
     d->layout->setDockOptions(opts);
 }
@@ -955,10 +977,7 @@ void QMainWindow::setDockNestingEnabled(bool enabled)
     Q_D(QMainWindow);
 
     DockOptions opts = d->layout->dockOptions;
-    if (enabled)
-        opts |= AllowNestedDocks;
-    else
-        opts &= ~AllowNestedDocks;
+    opts.setFlag(AllowNestedDocks, enabled);
 
     d->layout->setDockOptions(opts);
 }
@@ -1003,7 +1022,7 @@ static bool checkDockWidgetArea(Qt::DockWidgetArea area, const char *where)
     return false;
 }
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
     \property QMainWindow::documentMode
     \brief whether the tab bar for tabbed dockwidgets is set to document mode.
@@ -1022,9 +1041,9 @@ void QMainWindow::setDocumentMode(bool enabled)
 {
     d_func()->layout->setDocumentMode(enabled);
 }
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
 /*!
     \property QMainWindow::tabShape
     \brief the tab shape used for tabbed dock widgets.
@@ -1076,7 +1095,7 @@ void QMainWindow::setTabPosition(Qt::DockWidgetAreas areas, QTabWidget::TabPosit
 {
     d_func()->layout->setTabPosition(areas, tabPosition);
 }
-#endif // QT_NO_TABWIDGET
+#endif // QT_CONFIG(tabwidget)
 
 /*!
     Adds the given \a dockwidget to the specified \a area.
@@ -1098,7 +1117,7 @@ void QMainWindow::addDockWidget(Qt::DockWidgetArea area, QDockWidget *dockwidget
     d_func()->layout->removeWidget(dockwidget); // in case it was already in here
     addDockWidget(area, dockwidget, orientation);
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC     //drawer support
+#if 0 // Used to be included in Qt4 for Q_WS_MAC     //drawer support
     QMacAutoReleasePool pool;
     extern bool qt_mac_is_macdrawer(const QWidget *); //qwidget_mac.cpp
     if (qt_mac_is_macdrawer(dockwidget)) {
@@ -1194,7 +1213,7 @@ void QMainWindow::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
 QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) const
 {
     QList<QDockWidget*> ret;
-#if defined(QT_NO_TABBAR)
+#if !QT_CONFIG(tabbar)
     Q_UNUSED(dockwidget);
 #else
     const QDockAreaLayoutInfo *info = d_func()->layout->layoutState.dockAreaLayout.info(dockwidget);
@@ -1266,7 +1285,7 @@ void QMainWindow::resizeDocks(const QList<QDockWidget *> &docks,
 }
 
 
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 
 /*!
     Saves the current state of this mainwindow's toolbars and
@@ -1330,7 +1349,7 @@ bool QMainWindow::restoreState(const QByteArray &state, int version)
     return restored;
 }
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
 QCursor QMainWindowPrivate::separatorCursor(const QList<int> &path) const
 {
     QDockAreaLayoutInfo *info = layout->layoutState.dockAreaLayout.info(path);
@@ -1412,7 +1431,7 @@ bool QMainWindow::event(QEvent *event)
     Q_D(QMainWindow);
     switch (event->type()) {
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         case QEvent::Paint: {
             QPainter p(this);
             QRegion r = static_cast<QPaintEvent*>(event)->region();
@@ -1484,25 +1503,25 @@ bool QMainWindow::event(QEvent *event)
         }
 #endif
 
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
         case QEvent::StatusTip:
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
             if (QStatusBar *sb = d->layout->statusBar())
                 sb->showMessage(static_cast<QStatusTipEvent*>(event)->tip());
             else
 #endif
                 static_cast<QStatusTipEvent*>(event)->ignore();
             return true;
-#endif // QT_NO_STATUSTIP
+#endif // QT_CONFIG(statustip)
 
         case QEvent::StyleChange:
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
             d->layout->layoutState.dockAreaLayout.styleChangedEvent();
 #endif
             if (!d->explicitIconSize)
                 setIconSize(QSize());
             break;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         case QEvent::Show:
             if (unifiedTitleAndToolBarOnMac())
                 d->layout->syncUnifiedToolbarVisibility();
@@ -1521,8 +1540,8 @@ bool QMainWindow::event(QEvent *event)
                 }
             }
             break;
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_CURSOR)
+#endif
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_CURSOR)
        case QEvent::CursorChange:
            // CursorChange events are triggered as mouse moves to new widgets even
            // if the cursor doesn't actually change, so do not change oldCursor if
@@ -1577,7 +1596,7 @@ void QMainWindow::setUnifiedTitleAndToolBarOnMac(bool set)
     }
 #endif
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     Q_D(QMainWindow);
     if (!isWindow() || d->useHIToolBar == set || QSysInfo::MacintoshVersion < QSysInfo::MV_10_3)
         return;
@@ -1612,7 +1631,7 @@ bool QMainWindow::unifiedTitleAndToolBarOnMac() const
 #ifdef Q_OS_OSX
     return d_func()->useUnifiedToolBar;
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     return d_func()->useHIToolBar && !testAttribute(Qt::WA_MacBrushedMetal) && !(windowFlags() & Qt::FramelessWindowHint);
 #endif
     return false;
@@ -1625,7 +1644,7 @@ bool QMainWindow::unifiedTitleAndToolBarOnMac() const
 */
 bool QMainWindow::isSeparator(const QPoint &pos) const
 {
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     Q_D(const QMainWindow);
     return !d->layout->layoutState.dockAreaLayout.findSeparator(pos).isEmpty();
 #else
@@ -1645,14 +1664,14 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
     // children and for the menu bar as well
     QWidget *child = childAt(event->pos());
     while (child && child != this) {
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
         if (QMenuBar *mb = qobject_cast<QMenuBar *>(child)) {
             if (mb->parentWidget() != this)
                 return;
             break;
         }
 #endif
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
         if (QDockWidget *dw = qobject_cast<QDockWidget *>(child)) {
             if (dw->parentWidget() != this)
                 return;
@@ -1663,7 +1682,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
             }
             break;
         }
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 #ifndef QT_NO_TOOLBAR
         if (QToolBar *tb = qobject_cast<QToolBar *>(child)) {
             if (tb->parentWidget() != this)
@@ -1676,7 +1695,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
     if (child == this)
         return;
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     QMenu *popup = createPopupMenu();
     if (popup) {
         if (!popup->isEmpty()) {
@@ -1691,7 +1710,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
 }
 #endif // QT_NO_CONTEXTMENU
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
     Returns a popup menu containing checkable entries for the toolbars and
     dock widgets present in the main window. If  there are no toolbars and
@@ -1711,7 +1730,7 @@ QMenu *QMainWindow::createPopupMenu()
 {
     Q_D(QMainWindow);
     QMenu *menu = 0;
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QList<QDockWidget *> dockwidgets = findChildren<QDockWidget *>();
     if (dockwidgets.size()) {
         menu = new QMenu(this);
@@ -1734,7 +1753,7 @@ QMenu *QMainWindow::createPopupMenu()
         }
         menu->addSeparator();
     }
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 #ifndef QT_NO_TOOLBAR
     QList<QToolBar *> toolbars = findChildren<QToolBar *>();
     if (toolbars.size()) {
@@ -1752,10 +1771,8 @@ QMenu *QMainWindow::createPopupMenu()
     Q_UNUSED(d);
     return menu;
 }
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 QT_END_NAMESPACE
 
 #include "moc_qmainwindow.cpp"
-
-#endif // QT_NO_MAINWINDOW

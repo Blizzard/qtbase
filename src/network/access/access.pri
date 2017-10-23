@@ -1,7 +1,6 @@
 # Qt network access module
 
 HEADERS += \
-    access/qftp_p.h \
     access/qhttpnetworkheader_p.h \
     access/qhttpnetworkrequest_p.h \
     access/qhttpnetworkreply_p.h \
@@ -18,7 +17,6 @@ HEADERS += \
     access/qnetworkaccessdebugpipebackend_p.h \
     access/qnetworkaccessfilebackend_p.h \
     access/qnetworkaccesscachebackend_p.h \
-    access/qnetworkaccessftpbackend_p.h \
     access/qnetworkcookie.h \
     access/qnetworkcookie_p.h \
     access/qnetworkcookiejar.h \
@@ -33,14 +31,15 @@ HEADERS += \
     access/qnetworkreplyfileimpl_p.h \
     access/qabstractnetworkcache_p.h \
     access/qabstractnetworkcache.h \
-    access/qnetworkdiskcache_p.h \
-    access/qnetworkdiskcache.h \
     access/qhttpthreaddelegate_p.h \
     access/qhttpmultipart.h \
-    access/qhttpmultipart_p.h
+    access/qhttpmultipart_p.h \
+    access/qnetworkfile_p.h \
+    access/qhttp2protocolhandler_p.h \
+    access/qhsts_p.h \
+    access/qhstspolicy.h
 
 SOURCES += \
-    access/qftp.cpp \
     access/qhttpnetworkheader.cpp \
     access/qhttpnetworkrequest.cpp \
     access/qhttpnetworkreply.cpp \
@@ -56,7 +55,6 @@ SOURCES += \
     access/qnetworkaccessdebugpipebackend.cpp \
     access/qnetworkaccessfilebackend.cpp \
     access/qnetworkaccesscachebackend.cpp \
-    access/qnetworkaccessftpbackend.cpp \
     access/qnetworkcookie.cpp \
     access/qnetworkcookiejar.cpp \
     access/qnetworkrequest.cpp \
@@ -66,10 +64,32 @@ SOURCES += \
     access/qnetworkreplyhttpimpl.cpp \
     access/qnetworkreplyfileimpl.cpp \
     access/qabstractnetworkcache.cpp \
-    access/qnetworkdiskcache.cpp \
     access/qhttpthreaddelegate.cpp \
-    access/qhttpmultipart.cpp
+    access/qhttpmultipart.cpp \
+    access/qnetworkfile.cpp \
+    access/qhttp2protocolhandler.cpp \
+    access/qhsts.cpp \
+    access/qhstspolicy.cpp
+
+qtConfig(ftp) {
+    HEADERS += \
+        access/qftp_p.h \
+        access/qnetworkaccessftpbackend_p.h
+
+    SOURCES += \
+        access/qftp.cpp \
+        access/qnetworkaccessftpbackend.cpp
+}
+
+qtConfig(networkdiskcache) {
+    HEADERS += \
+        access/qnetworkdiskcache_p.h \
+        access/qnetworkdiskcache.h
+
+    SOURCES += access/qnetworkdiskcache.cpp
+}
 
 mac: LIBS_PRIVATE += -framework Security
 
 include($$PWD/../../3rdparty/zlib_dependency.pri)
+include($$PWD/http2/http2.pri)

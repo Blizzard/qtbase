@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Canonical, Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 Canonical, Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,7 +43,7 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLTexture>
 #include <QtGui/QMatrix4x4>
-#include <QtGui/private/qopengltextureblitter_p.h>
+#include <QtGui/qopengltextureblitter.h>
 #include <QtGui/qopenglfunctions.h>
 
 QMirClientBackingStore::QMirClientBackingStore(QWindow* window)
@@ -58,6 +61,7 @@ QMirClientBackingStore::QMirClientBackingStore(QWindow* window)
 
 QMirClientBackingStore::~QMirClientBackingStore()
 {
+    mContext->makeCurrent(window()); // needed as QOpenGLTexture destructor assumes current context
 }
 
 void QMirClientBackingStore::flush(QWindow* window, const QRegion& region, const QPoint& offset)
@@ -73,7 +77,6 @@ void QMirClientBackingStore::flush(QWindow* window, const QRegion& region, const
         mBlitter->create();
 
     mBlitter->bind();
-    mBlitter->setSwizzleRB(true);
     mBlitter->blit(mTexture->textureId(), QMatrix4x4(), QOpenGLTextureBlitter::OriginTopLeft);
     mBlitter->release();
 
@@ -97,7 +100,7 @@ void QMirClientBackingStore::updateTexture()
     QRegion fixed;
     QRect imageRect = mImage.rect();
 
-    Q_FOREACH (const QRect &rect, mDirty.rects()) {
+    for (const QRect &rect : mDirty) {
         // intersect with image rect to be sure
         QRect r = imageRect & rect;
 
@@ -110,7 +113,7 @@ void QMirClientBackingStore::updateTexture()
         fixed |= r;
     }
 
-    Q_FOREACH (const QRect &rect, fixed.rects()) {
+    for (const QRect &rect : fixed) {
         // if the sub-rect is full-width we can pass the image data directly to
         // OpenGL instead of copying, since there is no gap between scanlines
         if (rect.width() == imageRect.width()) {
@@ -134,7 +137,9 @@ void QMirClientBackingStore::beginPaint(const QRegion& region)
 
 void QMirClientBackingStore::resize(const QSize& size, const QRegion& /*staticContents*/)
 {
-    mImage = QImage(size, QImage::Format_RGB32);
+    mImage = QImage(size, QImage::Format_RGBA8888);
+
+    mContext->makeCurrent(window());
 
     if (mTexture->isCreated())
         mTexture->destroy();
@@ -143,4 +148,10 @@ void QMirClientBackingStore::resize(const QSize& size, const QRegion& /*staticCo
 QPaintDevice* QMirClientBackingStore::paintDevice()
 {
     return &mImage;
+}
+
+QImage QMirClientBackingStore::toImage() const
+{
+    // used by QPlatformBackingStore::composeAndFlush
+    return mImage;
 }

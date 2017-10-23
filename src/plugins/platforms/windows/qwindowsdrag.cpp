@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,12 +40,12 @@
 #include "qwindowsdrag.h"
 #include "qwindowscontext.h"
 #include "qwindowsscreen.h"
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
 #  include "qwindowsclipboard.h"
 #endif
 #include "qwindowsintegration.h"
 #include "qwindowsole.h"
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 #include "qwindowswindow.h"
 #include "qwindowsmousehandler.h"
 #include "qwindowscursor.h"
@@ -78,7 +84,7 @@ public:
     void setPixmap(const QPixmap &p);
 
 protected:
-    void paintEvent(QPaintEvent *) Q_DECL_OVERRIDE
+    void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
         painter.drawPixmap(0, 0, m_pixmap);
@@ -184,6 +190,20 @@ static inline Qt::KeyboardModifiers toQtKeyboardModifiers(DWORD keyState)
     return modifiers;
 }
 
+static inline Qt::MouseButtons toQtMouseButtons(DWORD keyState)
+{
+    Qt::MouseButtons buttons = Qt::NoButton;
+
+    if (keyState & MK_LBUTTON)
+        buttons |= Qt::LeftButton;
+    if (keyState & MK_RBUTTON)
+        buttons |= Qt::RightButton;
+    if (keyState & MK_MBUTTON)
+        buttons |= Qt::MidButton;
+
+    return buttons;
+}
+
 /*!
     \class QWindowsOleDropSource
     \brief Implementation of IDropSource
@@ -230,8 +250,6 @@ private:
     };
 
     typedef QMap<Qt::DropAction, CursorEntry> ActionCursorMap;
-    typedef ActionCursorMap::Iterator ActionCursorMapIt;
-    typedef ActionCursorMap::ConstIterator ActionCursorMapConstIt;
 
     const Mode m_mode;
     QWindowsDrag *m_drag;
@@ -315,7 +333,7 @@ void QWindowsOleDropSource::createCursors()
         if (cursorPixmap.isNull() && platformCursor)
             cursorPixmap = static_cast<QWindowsCursor *>(platformCursor)->dragDefaultCursor(action);
         const qint64 cacheKey = cursorPixmap.cacheKey();
-        const ActionCursorMapIt it = m_cursors.find(action);
+        const auto it = m_cursors.find(action);
         if (it != m_cursors.end() && it.value().cacheKey == cacheKey)
             continue;
         if (cursorPixmap.isNull()) {
@@ -394,43 +412,39 @@ QWindowsOleDropSource::Release(void)
 QT_ENSURE_STACK_ALIGNED_FOR_SSE STDMETHODIMP
 QWindowsOleDropSource::QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeyState)
 {
-    HRESULT hr = S_OK;
-    do {
-        if (fEscapePressed) {
-            hr = ResultFromScode(DRAGDROP_S_CANCEL);
-            break;
-        }
+    Qt::MouseButtons buttons = toQtMouseButtons(grfKeyState);
 
-    // grfKeyState is broken on CE & some Windows XP versions,
-    // therefore we need to check the state manually
-    if ((GetAsyncKeyState(VK_LBUTTON) == 0)
-        && (GetAsyncKeyState(VK_MBUTTON) == 0)
-        && (GetAsyncKeyState(VK_RBUTTON) == 0)) {
-        hr = ResultFromScode(DRAGDROP_S_DROP);
-        break;
-    }
-
-    const Qt::MouseButtons buttons =  QWindowsMouseHandler::keyStateToMouseButtons(grfKeyState, true);
-    if (m_currentButtons == Qt::NoButton) {
-        m_currentButtons = buttons;
+    SCODE result = S_OK;
+    if (fEscapePressed || QWindowsDrag::isCanceled()) {
+        result = DRAGDROP_S_CANCEL;
+        buttons = Qt::NoButton;
     } else {
-        // Button changed: Complete Drop operation.
-        if (!(m_currentButtons & buttons)) {
-            hr = ResultFromScode(DRAGDROP_S_DROP);
-            break;
+        if (buttons && !m_currentButtons) {
+            m_currentButtons = buttons;
+        } else if (!(m_currentButtons & buttons)) { // Button changed: Complete Drop operation.
+            result = DRAGDROP_S_DROP;
         }
     }
 
-    QGuiApplication::processEvents();
+    switch (result) {
+        case DRAGDROP_S_DROP:
+        case DRAGDROP_S_CANCEL:
+            QGuiApplicationPrivate::modifier_buttons = toQtKeyboardModifiers(grfKeyState);
+            QGuiApplicationPrivate::mouse_buttons = buttons;
+            m_currentButtons = Qt::NoButton;
+            break;
 
-    } while (false);
+        default:
+            QGuiApplication::processEvents();
+            break;
+    }
 
-    if (QWindowsContext::verbose > 1 || hr != S_OK) {
+    if (QWindowsContext::verbose > 1 || result != S_OK) {
         qCDebug(lcQpaMime) << __FUNCTION__ << "fEscapePressed=" << fEscapePressed
             << "grfKeyState=" << grfKeyState << "buttons" << m_currentButtons
-            << "returns 0x" << hex <<int(hr) << dec;
+            << "returns 0x" << hex << int(result) << dec;
     }
-    return hr;
+    return ResultFromScode(result);
 }
 
 /*!
@@ -444,7 +458,7 @@ QWindowsOleDropSource::GiveFeedback(DWORD dwEffect)
     m_drag->updateAction(action);
 
     const qint64 currentCacheKey = m_drag->currentDrag()->dragCursor(action).cacheKey();
-    ActionCursorMapConstIt it = m_cursors.constFind(action);
+    auto it = m_cursors.constFind(action);
     // If a custom drag cursor is set, check its cache key to detect changes.
     if (it == m_cursors.constEnd() || (currentCacheKey && currentCacheKey != it.value().cacheKey)) {
         createCursors();
@@ -485,8 +499,7 @@ QWindowsOleDropSource::GiveFeedback(DWORD dwEffect)
     \ingroup qt-lighthouse-win
 */
 
-QWindowsOleDropTarget::QWindowsOleDropTarget(QWindow *w) :
-    m_refs(1), m_window(w), m_chosenEffect(0), m_lastKeyState(0)
+QWindowsOleDropTarget::QWindowsOleDropTarget(QWindow *w) : m_window(w)
 {
     qCDebug(lcQpaMime) << __FUNCTION__ << this << w;
 }
@@ -602,6 +615,12 @@ QWindowsOleDropTarget::DragLeave()
     qCDebug(lcQpaMime) << __FUNCTION__ << ' ' << m_window;
 
     QWindowSystemInterface::handleDrag(m_window, 0, QPoint(), Qt::IgnoreAction);
+
+    if (!QDragManager::self()->source()) {
+        QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
+        QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
+        m_lastKeyState = 0;
+    }
     QWindowsDrag::instance()->releaseDropDataObject();
 
     return NOERROR;
@@ -620,11 +639,9 @@ QWindowsOleDropTarget::Drop(LPDATAOBJECT pDataObj, DWORD grfKeyState,
         << "keys=" << grfKeyState << "pt=" << pt.x << ',' << pt.y;
 
     m_lastPoint = QWindowsGeometryHint::mapFromGlobal(m_window, QPoint(pt.x,pt.y));
-    // grfKeyState does not all ways contain button state in the drop so if
-    // it doesn't then use the last known button state;
-    if ((grfKeyState & KEY_STATE_BUTTON_MASK) == 0)
-        grfKeyState |= m_lastKeyState & KEY_STATE_BUTTON_MASK;
-    m_lastKeyState = grfKeyState;
+    // grfKeyState does not all ways contain button state in the drop
+    QGuiApplicationPrivate::mouse_buttons = toQtMouseButtons(m_lastKeyState);
+    QGuiApplicationPrivate::modifier_buttons = toQtKeyboardModifiers(grfKeyState);
 
     QWindowsDrag *windowsDrag = QWindowsDrag::instance();
 
@@ -632,6 +649,10 @@ QWindowsOleDropTarget::Drop(LPDATAOBJECT pDataObj, DWORD grfKeyState,
         QWindowSystemInterface::handleDrop(m_window, windowsDrag->dropData(),
                                            m_lastPoint,
                                            translateToQDragDropActions(*pdwEffect));
+
+    QGuiApplicationPrivate::mouse_buttons = toQtMouseButtons(grfKeyState);
+    m_lastKeyState = grfKeyState;
+
     if (response.isAccepted()) {
         const Qt::DropAction action = response.acceptedAction();
         if (action == Qt::MoveAction || action == Qt::TargetMoveAction) {
@@ -676,10 +697,9 @@ QWindowsOleDropTarget::Drop(LPDATAOBJECT pDataObj, DWORD grfKeyState,
     \ingroup qt-lighthouse-win
 */
 
-QWindowsDrag::QWindowsDrag() :
-    m_dropDataObject(0), m_cachedDropTargetHelper(0)
-{
-}
+bool QWindowsDrag::m_canceled = false;
+
+QWindowsDrag::QWindowsDrag() = default;
 
 QWindowsDrag::~QWindowsDrag()
 {
@@ -717,6 +737,7 @@ Qt::DropAction QWindowsDrag::drag(QDrag *drag)
     Qt::DropAction dragResult = Qt::IgnoreAction;
 
     DWORD resultEffect;
+    QWindowsDrag::m_canceled = false;
     QWindowsOleDropSource *windowDropSource = new QWindowsOleDropSource(this);
     windowDropSource->createCursors();
     QWindowsOleDataObject *dropDataObject = new QWindowsOleDataObject(dropData);

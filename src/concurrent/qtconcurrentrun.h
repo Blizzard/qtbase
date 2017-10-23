@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -95,7 +101,7 @@ QFuture<T> run(T (*functionPointer)(Param1, Param2, Param3, Param4, Param5), con
 #if defined(Q_COMPILER_DECLTYPE) && defined(Q_COMPILER_AUTO_FUNCTION)
 
 template <typename Functor>
-auto run(Functor functor) -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor())> >::Type
+auto run(Functor functor) -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor())>>::type
 {
     typedef decltype(functor()) result_type;
     return (new StoredFunctorCall0<result_type, Functor>(functor))->start();
@@ -103,7 +109,7 @@ auto run(Functor functor) -> typename QtPrivate::QEnableIf<!QtPrivate::HasResult
 
 template <typename Functor, typename Arg1>
 auto run(Functor functor, const Arg1 &arg1)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1))>>::type
 {
     typedef decltype(functor(arg1)) result_type;
     return (new StoredFunctorCall1<result_type, Functor, Arg1>(functor, arg1))->start();
@@ -111,7 +117,7 @@ auto run(Functor functor, const Arg1 &arg1)
 
 template <typename Functor, typename Arg1, typename Arg2>
 auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2))>>::type
 {
     typedef decltype(functor(arg1, arg2)) result_type;
     return (new StoredFunctorCall2<result_type, Functor, Arg1, Arg2>(functor, arg1, arg2))->start();
@@ -119,7 +125,7 @@ auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2)
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3>
 auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3)) result_type;
     return (new StoredFunctorCall3<result_type, Functor, Arg1, Arg2, Arg3>(functor, arg1, arg2, arg3))->start();
@@ -127,7 +133,7 @@ auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3, typename Arg4>
 auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3, arg4)) result_type;
     return (new StoredFunctorCall4<result_type, Functor, Arg1, Arg2, Arg3, Arg4>(functor, arg1, arg2, arg3, arg4))->start();
@@ -135,7 +141,7 @@ auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, 
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3, typename Arg4, typename Arg5>
 auto run(Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4, arg5))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4, arg5))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3, arg4, arg5)) result_type;
     return (new StoredFunctorCall5<result_type, Functor, Arg1, Arg2, Arg3, Arg4, Arg5>(functor, arg1, arg2, arg3, arg4, arg5))->start();
@@ -366,7 +372,7 @@ QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1, Param2, Param3, P
 #if defined(Q_COMPILER_DECLTYPE) && defined(Q_COMPILER_AUTO_FUNCTION)
 
 template <typename Functor>
-auto run(QThreadPool *pool, Functor functor) -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor())> >::Type
+auto run(QThreadPool *pool, Functor functor) -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor())>>::type
 {
     typedef decltype(functor()) result_type;
     return (new StoredFunctorCall0<result_type, Functor>(functor))->start(pool);
@@ -374,7 +380,7 @@ auto run(QThreadPool *pool, Functor functor) -> typename QtPrivate::QEnableIf<!Q
 
 template <typename Functor, typename Arg1>
 auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1))>>::type
 {
     typedef decltype(functor(arg1)) result_type;
     return (new StoredFunctorCall1<result_type, Functor, Arg1>(functor, arg1))->start(pool);
@@ -382,7 +388,7 @@ auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1)
 
 template <typename Functor, typename Arg1, typename Arg2>
 auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2))>>::type
 {
     typedef decltype(functor(arg1, arg2)) result_type;
     return (new StoredFunctorCall2<result_type, Functor, Arg1, Arg2>(functor, arg1, arg2))->start(pool);
@@ -390,7 +396,7 @@ auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2)
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3>
 auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3)) result_type;
     return (new StoredFunctorCall3<result_type, Functor, Arg1, Arg2, Arg3>(functor, arg1, arg2, arg3))->start(pool);
@@ -398,7 +404,7 @@ auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2,
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3, typename Arg4>
 auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3, arg4)) result_type;
     return (new StoredFunctorCall4<result_type, Functor, Arg1, Arg2, Arg3, Arg4>(functor, arg1, arg2, arg3, arg4))->start(pool);
@@ -406,7 +412,7 @@ auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2,
 
 template <typename Functor, typename Arg1, typename Arg2, typename Arg3, typename Arg4, typename Arg5>
 auto run(QThreadPool *pool, Functor functor, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
-    -> typename QtPrivate::QEnableIf<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4, arg5))> >::Type
+    -> typename std::enable_if<!QtPrivate::HasResultType<Functor>::Value, QFuture<decltype(functor(arg1, arg2, arg3, arg4, arg5))>>::type
 {
     typedef decltype(functor(arg1, arg2, arg3, arg4, arg5)) result_type;
     return (new StoredFunctorCall5<result_type, Functor, Arg1, Arg2, Arg3, Arg4, Arg5>(functor, arg1, arg2, arg3, arg4, arg5))->start(pool);
@@ -599,6 +605,317 @@ QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1, Pa
 {
     return (new typename SelectStoredConstMemberFunctionPointerCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start(pool);
 }
+
+#if defined(__cpp_noexcept_function_type) && __cpp_noexcept_function_type >= 201510
+template <typename T>
+QFuture<T> run(T (*functionPointer)() noexcept)
+{
+    return (new StoredFunctorCall0<T, T (*)() noexcept>(functionPointer))->start();
+}
+template <typename T, typename Param1, typename Arg1>
+QFuture<T> run(T (*functionPointer)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new StoredFunctorCall1<T, T (*)(Param1) noexcept, Arg1>(functionPointer, arg1))->start();
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(T (*functionPointer)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new StoredFunctorCall2<T, T (*)(Param1, Param2) noexcept, Arg1, Arg2>(functionPointer, arg1, arg2))->start();
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(T (*functionPointer)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new StoredFunctorCall3<T, T (*)(Param1, Param2, Param3) noexcept, Arg1, Arg2, Arg3>(functionPointer, arg1, arg2, arg3))->start();
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(T (*functionPointer)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new StoredFunctorCall4<T, T (*)(Param1, Param2, Param3, Param4) noexcept, Arg1, Arg2, Arg3, Arg4>(functionPointer, arg1, arg2, arg3, arg4))->start();
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(T (*functionPointer)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new StoredFunctorCall5<T, T (*)(Param1, Param2, Param3, Param4, Param5) noexcept, Arg1, Arg2, Arg3, Arg4, Arg5>(functionPointer, arg1, arg2, arg3, arg4, arg5))->start();
+}
+
+template <typename T, typename Class>
+QFuture<T> run(const Class &object, T (Class::*fn)() noexcept)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall0<T, Class>::type(fn, object))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start();
+}
+
+template <typename T, typename Class>
+QFuture<T> run(const Class &object, T (Class::*fn)() const noexcept)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall0<T, Class>::type(fn, object))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1) const noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2) const noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start();
+}
+
+template <typename T, typename Class>
+QFuture<T> run(Class *object, T (Class::*fn)() noexcept)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall0<T, Class>::type(fn, object))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(Class *object, T (Class::*fn)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(Class *object, T (Class::*fn)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(Class *object, T (Class::*fn)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start();
+}
+
+template <typename T, typename Class>
+QFuture<T> run(const Class *object, T (Class::*fn)() const noexcept)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall0<T, Class>::type(fn, object))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(const Class *object, T (Class::*fn)(Param1) const noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(const Class *object, T (Class::*fn)(Param1, Param2) const noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(const Class *object, T (Class::*fn)(Param1, Param2, Param3) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(const Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start();
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(const Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start();
+}
+template <typename T>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)() noexcept)
+{
+    return (new StoredFunctorCall0<T, T (*)() noexcept>(functionPointer))->start(pool);
+}
+template <typename T, typename Param1, typename Arg1>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new StoredFunctorCall1<T, T (*)(Param1) noexcept, Arg1>(functionPointer, arg1))->start(pool);
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new StoredFunctorCall2<T, T (*)(Param1, Param2) noexcept, Arg1, Arg2>(functionPointer, arg1, arg2))->start(pool);
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new StoredFunctorCall3<T, T (*)(Param1, Param2, Param3) noexcept, Arg1, Arg2, Arg3>(functionPointer, arg1, arg2, arg3))->start(pool);
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new StoredFunctorCall4<T, T (*)(Param1, Param2, Param3, Param4) noexcept, Arg1, Arg2, Arg3, Arg4>(functionPointer, arg1, arg2, arg3, arg4))->start(pool);
+}
+template <typename T, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(QThreadPool *pool, T (*functionPointer)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new StoredFunctorCall5<T, T (*)(Param1, Param2, Param3, Param4, Param5) noexcept, Arg1, Arg2, Arg3, Arg4, Arg5>(functionPointer, arg1, arg2, arg3, arg4, arg5))->start(pool);
+}
+
+template <typename T, typename Class>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)() noexcept)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall0<T, Class>::type(fn, object))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start(pool);
+}
+
+template <typename T, typename Class>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)() const noexcept)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall0<T, Class>::type(fn, object))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1) const noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2) const noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(QThreadPool *pool, const Class &object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start(pool);
+}
+
+template <typename T, typename Class>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)() noexcept)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall0<T, Class>::type(fn, object))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)(Param1) noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)(Param1, Param2) noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)(Param1, Param2, Param3) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(QThreadPool *pool, Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredNoExceptMemberFunctionPointerCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start(pool);
+}
+
+template <typename T, typename Class>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)() const noexcept)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall0<T, Class>::type(fn, object))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1) const noexcept, const Arg1 &arg1)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall1<T, Class, Param1, Arg1>::type(fn, object, arg1))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1, Param2) const noexcept, const Arg1 &arg1, const Arg2 &arg2)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall2<T, Class, Param1, Arg1, Param2, Arg2>::type(fn, object, arg1, arg2))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1, Param2, Param3) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall3<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3>::type(fn, object, arg1, arg2, arg3))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall4<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4>::type(fn, object, arg1, arg2, arg3, arg4))->start(pool);
+}
+template <typename T, typename Class, typename Param1, typename Arg1, typename Param2, typename Arg2, typename Param3, typename Arg3, typename Param4, typename Arg4, typename Param5, typename Arg5>
+QFuture<T> run(QThreadPool *pool, const Class *object, T (Class::*fn)(Param1, Param2, Param3, Param4, Param5) const noexcept, const Arg1 &arg1, const Arg2 &arg2, const Arg3 &arg3, const Arg4 &arg4, const Arg5 &arg5)
+{
+    return (new typename SelectStoredConstNoExceptMemberFunctionPointerCall5<T, Class, Param1, Arg1, Param2, Arg2, Param3, Arg3, Param4, Arg4, Param5, Arg5>::type(fn, object, arg1, arg2, arg3, arg4, arg5))->start(pool);
+}
+#endif
 
 } //namespace QtConcurrent
 

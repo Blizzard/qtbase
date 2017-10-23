@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,7 +54,6 @@ QT_BEGIN_NAMESPACE
 
 QWindowsDirect2DWindow::QWindowsDirect2DWindow(QWindow *window, const QWindowsWindowData &data)
     : QWindowsWindow(window, data)
-    , m_needsFullFlush(true)
     , m_directRendering(!(data.flags & Qt::FramelessWindowHint && window->format().hasAlpha()))
 {
     if (window->type() == Qt::Desktop)
@@ -61,7 +66,7 @@ QWindowsDirect2DWindow::QWindowsDirect2DWindow(QWindow *window, const QWindowsWi
                 D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
                 m_deviceContext.GetAddressOf());
     if (FAILED(hr))
-        qWarning("%s: Couldn't create Direct2D Device context: %#x", __FUNCTION__, hr);
+        qWarning("%s: Couldn't create Direct2D Device context: %#lx", __FUNCTION__, hr);
 }
 
 QWindowsDirect2DWindow::~QWindowsDirect2DWindow()
@@ -94,12 +99,12 @@ void QWindowsDirect2DWindow::flush(QWindowsDirect2DBitmap *bitmap, const QRegion
         HRESULT hr = m_swapChain->GetDesc1(&desc);
         QRect geom = geometry();
 
-        if ((FAILED(hr) || (desc.Width != geom.width()) || (desc.Height != geom.height()))) {
+        if (FAILED(hr) || (desc.Width != UINT(geom.width()) || (desc.Height != UINT(geom.height())))) {
             resizeSwapChain(geom.size());
             m_swapChain->GetDesc1(&desc);
         }
-        size.setWidth(desc.Width);
-        size.setHeight(desc.Height);
+        size.setWidth(int(desc.Width));
+        size.setHeight(int(desc.Height));
     } else {
         size = geometry().size();
     }
@@ -116,7 +121,7 @@ void QWindowsDirect2DWindow::flush(QWindowsDirect2DBitmap *bitmap, const QRegion
             QRegion clipped = region;
             clipped &= QRect(QPoint(), size);
 
-            foreach (const QRect &rect, clipped.rects()) {
+            for (const QRect &rect : clipped) {
                 QRectF rectF(rect);
                 dc->DrawBitmap(bitmap->bitmap(),
                                to_d2d_rect_f(rectF),
@@ -169,7 +174,7 @@ void QWindowsDirect2DWindow::present(const QRegion &region)
     UPDATELAYEREDWINDOWINFO info = { sizeof(UPDATELAYEREDWINDOWINFO), NULL,
                                      &ptDst, &size, hdc, &ptSrc, 0, &blend, ULW_ALPHA, &dirty };
     if (!UpdateLayeredWindowIndirect(handle(), &info))
-        qErrnoWarning(GetLastError(), "Failed to update the layered window");
+        qErrnoWarning(int(GetLastError()), "Failed to update the layered window");
 
     hr = dxgiSurface->ReleaseDC(NULL);
     if (FAILED(hr))
@@ -195,7 +200,7 @@ void QWindowsDirect2DWindow::setupSwapChain()
                 m_swapChain.ReleaseAndGetAddressOf());            // [out]  IDXGISwapChain1 **ppSwapChain
 
     if (FAILED(hr))
-        qWarning("%s: Could not create swap chain: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create swap chain: %#lx", __FUNCTION__, hr);
 
     m_needsFullFlush = true;
 }
@@ -211,11 +216,11 @@ void QWindowsDirect2DWindow::resizeSwapChain(const QSize &size)
         return;
 
     HRESULT hr = m_swapChain->ResizeBuffers(0,
-                                            size.width(), size.height(),
+                                            UINT(size.width()), UINT(size.height()),
                                             DXGI_FORMAT_UNKNOWN,
                                             0);
     if (FAILED(hr))
-        qWarning("%s: Could not resize swap chain: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not resize swap chain: %#lx", __FUNCTION__, hr);
 }
 
 QSharedPointer<QWindowsDirect2DBitmap> QWindowsDirect2DWindow::copyBackBuffer() const
@@ -242,13 +247,13 @@ QSharedPointer<QWindowsDirect2DBitmap> QWindowsDirect2DWindow::copyBackBuffer() 
     HRESULT hr = m_deviceContext.Get()->CreateBitmap(size, NULL, 0, properties, &copy);
 
     if (FAILED(hr)) {
-        qWarning("%s: Could not create staging bitmap: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create staging bitmap: %#lx", __FUNCTION__, hr);
         return null_result;
     }
 
     hr = copy.Get()->CopyFromBitmap(NULL, m_bitmap->bitmap(), NULL);
     if (FAILED(hr)) {
-        qWarning("%s: Could not copy from bitmap! %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not copy from bitmap! %#lx", __FUNCTION__, hr);
         return null_result;
     }
 
@@ -271,12 +276,12 @@ void QWindowsDirect2DWindow::setupBitmap()
     if (m_directRendering) {
         hr = m_swapChain->GetBuffer(0, IID_PPV_ARGS(&backBufferSurface));
         if (FAILED(hr)) {
-            qWarning("%s: Could not query backbuffer for DXGI Surface: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not query backbuffer for DXGI Surface: %#lx", __FUNCTION__, hr);
             return;
         }
     } else {
         const QRect rect = geometry();
-        CD3D11_TEXTURE2D_DESC backBufferDesc(DXGI_FORMAT_B8G8R8A8_UNORM, rect.width(), rect.height(), 1, 1);
+        CD3D11_TEXTURE2D_DESC backBufferDesc(DXGI_FORMAT_B8G8R8A8_UNORM, UINT(rect.width()), UINT(rect.height()), 1, 1);
         backBufferDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
         backBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
         ComPtr<ID3D11Texture2D> backBufferTexture;
@@ -296,7 +301,7 @@ void QWindowsDirect2DWindow::setupBitmap()
     ComPtr<ID2D1Bitmap1> backBufferBitmap;
     hr = m_deviceContext->CreateBitmapFromDxgiSurface(backBufferSurface.Get(), NULL, backBufferBitmap.GetAddressOf());
     if (FAILED(hr)) {
-        qWarning("%s: Could not create Direct2D Bitmap from DXGI Surface: %#x", __FUNCTION__, hr);
+        qWarning("%s: Could not create Direct2D Bitmap from DXGI Surface: %#lx", __FUNCTION__, hr);
         return;
     }
 

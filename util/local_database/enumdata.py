@@ -1,32 +1,27 @@
 #!/usr/bin/env python
 #############################################################################
 ##
-## Copyright (C) 2015 The Qt Company Ltd.
-## Contact: http://www.qt.io/licensing/
+## Copyright (C) 2016 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the test suite of the Qt Toolkit.
 ##
-## $QT_BEGIN_LICENSE:LGPL21$
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ## Commercial License Usage
 ## Licensees holding valid commercial Qt licenses may use this file in
 ## accordance with the commercial license agreement provided with the
 ## Software or, alternatively, in accordance with the terms contained in
 ## a written agreement between you and The Qt Company. For licensing terms
-## and conditions see http://www.qt.io/terms-conditions. For further
-## information use the contact form at http://www.qt.io/contact-us.
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
 ##
-## GNU Lesser General Public License Usage
-## Alternatively, this file may be used under the terms of the GNU Lesser
-## General Public License version 2.1 or version 3 as published by the Free
-## Software Foundation and appearing in the file LICENSE.LGPLv21 and
-## LICENSE.LGPLv3 included in the packaging of this file. Please review the
-## following information to ensure the GNU Lesser General Public License
-## requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-## http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-##
-## As a special exception, The Qt Company gives you certain additional
-## rights. These rights are described in The Qt Company LGPL Exception
-## version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
 ##
 ## $QT_END_LICENSE$
 ##
@@ -376,7 +371,27 @@ language_list = {
     336 : [ "Bassa",              "bsq" ],
     337 : [ "Mono",               "mru" ],
     338 : [ "Tedim Chin",         "ctd" ],
-    339 : [ "Maithili",           "mai" ]
+    339 : [ "Maithili",           "mai" ],
+    340 : [ "Ahom",               "aho" ],
+    341 : [ "American Sign Language", "ase" ],
+    342 : [ "Ardhamagadhi Prakrit", "pka" ],
+    343 : [ "Bhojpuri",           "bho" ],
+    344 : [ "Hieroglyphic Luwian", "hlu" ],
+    345 : [ "Literary Chinese",   "lzh" ],
+    346 : [ "Mazanderani",        "mzn" ],
+    347 : [ "Mru",                "mro" ],
+    348 : [ "Newari",             "new" ],
+    349 : [ "Northern Luri",      "lrc" ],
+    350 : [ "Palauan",            "pau" ],
+    351 : [ "Papiamento",         "pap" ],
+    352 : [ "Saraiki",            "skr" ],
+    353 : [ "Tokelau",            "tkl" ],
+    354 : [ "Tok Pisin",          "tpi" ],
+    355 : [ "Tuvalu",             "tvl" ],
+    356 : [ "UncodedLanguages",   "mis" ],
+    357 : [ "Cantonese",          "yue" ],
+    358 : [ "Osage",              "osa" ],
+    359 : [ "Tangut",             "txg" ]
 }
 
 country_list = {
@@ -637,7 +652,9 @@ country_list = {
     254 : [ "SouthSudan",                               "SS"  ],
     255 : [ "Bonaire",                                  "BQ"  ],
     256 : [ "SintMaarten",                              "SX"  ],
-    257 : [ "Kosovo",                                   "XK"  ]
+    257 : [ "Kosovo",                                   "XK"  ],
+    258 : [ "European Union",                           "EU"  ],
+    259 : [ "Outlying Oceania",                         "QO"  ]
 }
 
 script_list = {
@@ -768,10 +785,21 @@ script_list = {
     124 : [ "Siddham",                "Sidd" ],
     125 : [ "Khudawadi",              "Sind" ],
     126 : [ "Tirhuta",                "Tirh" ],
-    127 : [ "Varang Kshiti",          "Wara" ]
-
-#    ### : [ "Blissymbols",            "Blis" ],
-#    ### : [ "Naxi Geba",              "Nkgb" ],
+    127 : [ "Varang Kshiti",          "Wara" ],
+    128 : [ "Ahom",                   "Ahom" ],
+    129 : [ "Anatolian Hieroglyphs",  "Hluw" ],
+    130 : [ "Hatran",                 "Hatr" ],
+    131 : [ "Multani",                "Mult" ],
+    132 : [ "Old Hungarian",          "Hung" ],
+    133 : [ "SignWriting",            "Sgnw" ],
+    134 : [ "Adlam",                  "Adlm" ],
+    135 : [ "Bhaiksuki",              "Bhks" ],
+    136 : [ "Marchen",                "Marc" ],
+    137 : [ "Newa",                   "Newa" ],
+    138 : [ "Osage",                  "Osge" ],
+    139 : [ "Tangut",                 "Tang" ],
+    140 : [ "Han With Bopomofo",      "Hanb" ],
+    141 : [ "Jamo",                   "Jamo" ]
 }
 
 def countryCodeToId(code):

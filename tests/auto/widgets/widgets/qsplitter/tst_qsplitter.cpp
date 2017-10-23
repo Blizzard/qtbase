@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -82,6 +77,11 @@ private slots:
     void rubberBandNotInSplitter();
     void saveAndRestoreStateOfNotYetShownSplitter();
     void saveAndRestoreHandleWidth();
+    void replaceWidget_data();
+    void replaceWidget();
+    void replaceWidgetWithSplitterChild_data();
+    void replaceWidgetWithSplitterChild();
+    void handleMinimumWidth();
 
     // task-specific tests below me:
     void task187373_addAbstractScrollAreas();
@@ -650,8 +650,199 @@ public:
     MyFriendlySplitter(QWidget *parent = 0) : QSplitter(parent) {}
     void setRubberBand(int pos) { QSplitter::setRubberBand(pos); }
 
+    void moveSplitter(int pos, int index) { QSplitter::moveSplitter(pos, index); }
+
     friend class tst_QSplitter;
 };
+
+class EventCounterSpy : public QObject
+{
+public:
+    EventCounterSpy(QWidget *parentWidget) : QObject(parentWidget)
+    { }
+
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        // Watch for events in the parent widget and all its children
+        if (watched == parent() || watched->parent() == parent()) {
+            if (event->type() == QEvent::Resize)
+                resizeCount++;
+            else if (event->type() == QEvent::Paint)
+                paintCount++;
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+    int resizeCount = 0;
+    int paintCount = 0;
+};
+
+void tst_QSplitter::replaceWidget_data()
+{
+    QTest::addColumn<int>("index");
+    QTest::addColumn<bool>("visible");
+    QTest::addColumn<bool>("collapsed");
+
+    QTest::newRow("negative index") << -1 << true << false;
+    QTest::newRow("index too large") << 80 << true << false;
+    QTest::newRow("visible, not collapsed") << 3 << true << false;
+    QTest::newRow("visible, collapsed") << 3 << true << true;
+    QTest::newRow("not visible, not collapsed") << 3 << false << false;
+    QTest::newRow("not visible, collapsed") << 3 << false << true;
+}
+
+void tst_QSplitter::replaceWidget()
+{
+    QFETCH(int, index);
+    QFETCH(bool, visible);
+    QFETCH(bool, collapsed);
+
+    // Setup
+    MyFriendlySplitter sp;
+    const int count = 7;
+    for (int i = 0; i < count; i++) {
+        // We use labels instead of plain widgets to
+        // make it easier to fix eventual regressions.
+        QLabel *w = new QLabel(QString::asprintf("WIDGET #%d", i));
+        sp.addWidget(w);
+    }
+    sp.setWindowTitle(QString::asprintf("index %d, visible %d, collapsed %d", index, visible, collapsed));
+    sp.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&sp));
+
+    // Configure splitter
+    QWidget *oldWidget = sp.widget(index);
+    const QRect oldGeom = oldWidget ? oldWidget->geometry() : QRect();
+    if (oldWidget) {
+        // Collapse first, then hide, if necessary
+        if (collapsed) {
+            sp.setCollapsible(index, true);
+            sp.moveSplitter(oldWidget->x() + 1, index + 1);
+        }
+        if (!visible)
+            oldWidget->hide();
+    }
+
+    // Replace widget
+    QTest::qWait(100); // Flush event queue
+    const QList<int> sizes = sp.sizes();
+    // Shorter label: The important thing is to ensure we can set
+    // the same size on the new widget. Because of QLabel's sizing
+    // constraints (they can expand but not shrink) the easiest is
+    // to set a shorter label.
+    QLabel *newWidget = new QLabel(QLatin1String("<b>NEW</b>"));
+
+    EventCounterSpy *ef = new EventCounterSpy(&sp);
+    qApp->installEventFilter(ef);
+    const QWidget *res = sp.replaceWidget(index, newWidget);
+    QTest::qWait(100); // Give visibility and resizing some time
+    qApp->removeEventFilter(ef);
+
+    // Check
+    if (index < 0 || index >= count) {
+        QVERIFY(!res);
+        QVERIFY(!newWidget->parentWidget());
+        QCOMPARE(ef->resizeCount, 0);
+        QCOMPARE(ef->paintCount, 0);
+    } else {
+        QCOMPARE(res, oldWidget);
+        QVERIFY(!res->parentWidget());
+        QVERIFY(!res->isVisible());
+        QCOMPARE(newWidget->parentWidget(), &sp);
+        QCOMPARE(newWidget->isVisible(), visible);
+        if (visible && !collapsed)
+            QCOMPARE(newWidget->geometry(), oldGeom);
+        QCOMPARE(newWidget->size().isEmpty(), !visible || collapsed);
+        const int expectedResizeCount = visible ? 1 : 0; // new widget only
+        const int expectedPaintCount = visible && !collapsed ? 2 : 0; // splitter and new widget
+        QCOMPARE(ef->resizeCount, expectedResizeCount);
+        QCOMPARE(ef->paintCount, expectedPaintCount);
+        delete res;
+    }
+    QCOMPARE(sp.count(), count);
+    QCOMPARE(sp.sizes(), sizes);
+}
+
+void tst_QSplitter::replaceWidgetWithSplitterChild_data()
+{
+    QTest::addColumn<int>("srcIndex");
+    QTest::addColumn<int>("dstIndex");
+
+    QTest::newRow("replace with null widget") << -2 << 3;
+    QTest::newRow("replace with itself") << 3 << 3;
+    QTest::newRow("replace with sibling, after recalc") << 1 << 4;
+    QTest::newRow("replace with sibling, before recalc") << -1 << 4;
+}
+
+void tst_QSplitter::replaceWidgetWithSplitterChild()
+{
+    QFETCH(int, srcIndex);
+    QFETCH(int, dstIndex);
+
+    // Setup
+    MyFriendlySplitter sp;
+    const int count = 7;
+    for (int i = 0; i < count; i++) {
+        // We use labels instead of plain widgets to
+        // make it easier to fix eventual regressions.
+        QLabel *w = new QLabel(QString::asprintf("WIDGET #%d", i));
+        sp.addWidget(w);
+    }
+    sp.setWindowTitle(QLatin1String(QTest::currentTestFunction()) + QLatin1Char(' ') + QLatin1String(QTest::currentDataTag()));
+    sp.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&sp));
+
+    QTest::qWait(100); // Flush event queue before new widget creation
+    const QList<int> sizes = sp.sizes();
+    QWidget *sibling = srcIndex == -1 ? (new QLabel("<b>NEW</b>", &sp)) : sp.widget(srcIndex);
+
+    EventCounterSpy *ef = new EventCounterSpy(&sp);
+    qApp->installEventFilter(ef);
+    const QWidget *res = sp.replaceWidget(dstIndex, sibling);
+    QTest::qWait(100); // Give visibility and resizing some time
+    qApp->removeEventFilter(ef);
+
+    QVERIFY(!res);
+    if (srcIndex == -1) {
+        // Create and replace before recalc. The sibling is scheduled to be
+        // added after replaceWidget(), when QSplitter receives a child event.
+        QVERIFY(ef->resizeCount > 0);
+        QVERIFY(ef->paintCount > 0);
+        QCOMPARE(sp.count(), count + 1);
+        QCOMPARE(sp.sizes().mid(0, count), sizes);
+        QCOMPARE(sp.sizes().last(), sibling->width());
+    } else {
+        // No-op for the rest
+        QCOMPARE(ef->resizeCount, 0);
+        QCOMPARE(ef->paintCount, 0);
+        QCOMPARE(sp.count(), count);
+        QCOMPARE(sp.sizes(), sizes);
+    }
+}
+
+void tst_QSplitter::handleMinimumWidth()
+{
+    MyFriendlySplitter split;
+    split.addWidget(new QLabel("Number Wan"));
+    split.addWidget(new QLabel("Number Too"));
+
+    split.show();
+    QTest::qWaitForWindowExposed(&split);
+    for (int i = 0; i < 10; i++) {
+        split.setHandleWidth(i);
+        QTest::qWait(100); // resizing
+        QCOMPARE(split.handle(1)->width(), qMax(4 + (i & 1), i));
+    }
+
+    split.setOrientation(Qt::Vertical);
+    QTest::qWait(100);
+    for (int i = 0; i < 10; i++) {
+        split.setHandleWidth(i);
+        QTest::qWait(100); // resizing
+        QCOMPARE(split.handle(1)->height(), qMax(4 + (i & 1), i));
+    }
+}
 
 void tst_QSplitter::rubberBandNotInSplitter()
 {
@@ -678,9 +869,9 @@ void tst_QSplitter::task187373_addAbstractScrollAreas_data()
     classNames << QLatin1String("QTreeView");
 
     foreach (QString className, classNames) {
-        QTest::newRow(qPrintable(QString("%1 1").arg(className))) << className << false << true;
-        QTest::newRow(qPrintable(QString("%1 2").arg(className))) << className << true << false;
-        QTest::newRow(qPrintable(QString("%1 3").arg(className))) << className << true << true;
+        QTest::newRow(qPrintable(className + QLatin1String(" 1"))) << className << false << true;
+        QTest::newRow(qPrintable(className + QLatin1String(" 2"))) << className << true << false;
+        QTest::newRow(qPrintable(className + QLatin1String(" 3"))) << className << true << true;
     }
 }
 

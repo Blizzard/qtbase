@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -64,6 +59,7 @@
 #include <qsortfilterproxymodel.h>
 #include <qdebug.h>
 #include <qscreen.h>
+#include <qshortcut.h>
 
 #include "qcommonstyle.h"
 #include "qstyleoption.h"
@@ -73,8 +69,6 @@
 #include "../../../shared/platformclipboard.h"
 #include "../../../shared/platforminputcontext.h"
 #include <private/qinputmethod_p.h>
-
-#include "../../../qtest-config.h"
 
 QT_BEGIN_NAMESPACE
 class QPainter;
@@ -131,14 +125,13 @@ public:
     enum EventStates { Press, Release, Click };
 
     tst_QLineEdit();
-    virtual ~tst_QLineEdit();
 
-public slots:
+private slots:
     void initTestCase();
     void cleanupTestCase();
     void init();
     void cleanup();
-private slots:
+
     void getSetCheck();
     void experimental();
 
@@ -154,6 +147,7 @@ private slots:
 
     void keypress_inputMask_data();
     void keypress_inputMask();
+    void keypress_inputMethod_inputMask();
 
     void inputMaskAndValidator_data();
     void inputMaskAndValidator();
@@ -257,7 +251,7 @@ private slots:
 
     void noTextEditedOnClear();
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void cursor();
 #endif
 
@@ -267,7 +261,7 @@ private slots:
     // task-specific tests:
     void task180999_focus();
     void task174640_editingFinished();
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     void task198789_currentCompletion();
     void task210502_caseInsensitiveInlineCompletion();
 #endif
@@ -301,6 +295,8 @@ private slots:
     void inputMethodQueryImHints_data();
     void inputMethodQueryImHints();
 
+    void inputMethodUpdate();
+
     void undoRedoAndEchoModes_data();
     void undoRedoAndEchoModes();
 
@@ -312,6 +308,12 @@ private slots:
     void shouldShowPlaceholderText_data();
     void shouldShowPlaceholderText();
     void QTBUG1266_setInputMaskEmittingTextEdited();
+
+    void shortcutOverrideOnReadonlyLineEdit_data();
+    void shortcutOverrideOnReadonlyLineEdit();
+    void QTBUG59957_clearButtonLeftmostAction();
+
+    void QTBUG_60319_setInputMaskCheckImSurroundingText();
 
 protected slots:
     void editingFinished();
@@ -326,6 +328,7 @@ private:
     // keyClicks(..) is moved to QtTestCase
     void psKeyClick(QWidget *target, Qt::Key key, Qt::KeyboardModifiers pressState = 0);
     void psKeyClick(QTestEventList &keys, Qt::Key key, Qt::KeyboardModifiers pressState = 0);
+    bool unselectingWithLeftOrRightChangesCursorPosition();
     QLineEdit *ensureTestWidget();
 
     bool validInput;
@@ -375,10 +378,6 @@ tst_QLineEdit::tst_QLineEdit() : validInput(false), m_testWidget(0), m_keyboardS
             || m_keyboardScheme == QPlatformTheme::CdeKeyboardScheme) {
         m_keyboardScheme = QPlatformTheme::X11KeyboardScheme;
     }
-}
-
-tst_QLineEdit::~tst_QLineEdit()
-{
 }
 
 QLineEdit *tst_QLineEdit::ensureTestWidget()
@@ -719,8 +718,8 @@ void tst_QLineEdit::clearInputMask()
 {
     QLineEdit *testWidget = ensureTestWidget();
     testWidget->setInputMask("000.000.000.000");
-    QVERIFY(testWidget->inputMask() != QString::null);
-    testWidget->setInputMask(QString::null);
+    QVERIFY(!testWidget->inputMask().isNull());
+    testWidget->setInputMask(QString());
     QCOMPARE(testWidget->inputMask(), QString());
 }
 
@@ -807,6 +806,37 @@ void tst_QLineEdit::keypress_inputMask()
     QCOMPARE(testWidget->displayText(), expectedDisplayText);
 }
 
+void tst_QLineEdit::keypress_inputMethod_inputMask()
+{
+    // Similar to the keypress_inputMask test, but this is done solely via
+    // input methods
+    QLineEdit *testWidget = ensureTestWidget();
+    testWidget->setInputMask("AA.AA.AA");
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 3);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.."));
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 6);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.EE."));
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("EE");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QCOMPARE(testWidget->cursorPosition(), 8);
+    QCOMPARE(testWidget->text(), QStringLiteral("EE.EE.EE"));
+}
 
 void tst_QLineEdit::hasAcceptableInputMask_data()
 {
@@ -1320,9 +1350,10 @@ void tst_QLineEdit::undo_keypressevents_data()
 
         // unselect any current selection
         keys.addKeyClick(Qt::Key_Right);
-#if defined Q_OS_WIN || defined Q_OS_QNX //Windows and QNX do not jump to the beginning of the selection
-        keys.addKeyClick(Qt::Key_Left);
-#endif
+
+        // If previous right changed cursor position, go back left
+        if (unselectingWithLeftOrRightChangesCursorPosition())
+            keys.addKeyClick(Qt::Key_Left);
 
         // selecting '12'
         keys.addKeyClick(Qt::Key_Right, Qt::ShiftModifier);
@@ -2245,6 +2276,7 @@ void tst_QLineEdit::deleteSelectedText()
     edit.setText(text);
     edit.selectAll();
 
+#ifndef QT_NO_CONTEXTMENU
     QMenu *menu = edit.createStandardContextMenu();
     for (int i = 0; i < menu->actions().count(); ++i) {
         QAction *current = menu->actions().at(i);
@@ -2253,6 +2285,7 @@ void tst_QLineEdit::deleteSelectedText()
             QVERIFY(edit.text().isEmpty());
         }
     }
+#endif // QT_NO_CONTEXTMENU
 
 }
 
@@ -2281,7 +2314,7 @@ void tst_QLineEdit::textChangedAndTextEdited()
 
     changed_count = 0;
     edited_count = 0;
-    changed_string = QString::null;
+    changed_string.clear();
 
     testWidget->setText("foo");
     QCOMPARE(changed_count, 1);
@@ -2290,7 +2323,7 @@ void tst_QLineEdit::textChangedAndTextEdited()
 
     changed_count = 0;
     edited_count = 0;
-    changed_string = QString::null;
+    changed_string.clear();
 
     testWidget->setText("");
     QCOMPARE(changed_count, 1);
@@ -2888,6 +2921,11 @@ void tst_QLineEdit::insert()
     QCOMPARE(testWidget->text(), QString("No Crash! This is a nice test"));
 }
 
+static inline QByteArray selectionTestName(int start, int length)
+{
+    return "selection start: " + QByteArray::number(start) + " length: " + QByteArray::number(length);
+}
+
 void tst_QLineEdit::setSelection_data()
 {
     QTest::addColumn<QString>("text");
@@ -2901,39 +2939,39 @@ void tst_QLineEdit::setSelection_data()
     int start, length, pos;
 
     start = 0; length = 1; pos = 1;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("A") << true;
 
     start = 0; length = 2; pos = 2;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("Ab") << true;
 
     start = 0; length = 4; pos = 4;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("Abc ") << true;
 
     start = -1; length = 0; pos = text.length();
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString() << false;
 
     start = 34; length = 1; pos = 35;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("z") << true;
 
     start = 34; length = 2; pos = 35;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("z") << true;
 
     start = 34; length = -1; pos = 33;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("y") << true;
 
     start = 1; length = -2; pos = 0;
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString("A") << true;
 
     start = -1; length = -1; pos = text.length();
-    QTest::newRow(QString("selection start: %1 length: %2").arg(start).arg(length).toLatin1())
+    QTest::newRow(selectionTestName(start, length).constData())
         << text << start << length << pos << QString() << false;
 }
 
@@ -3102,14 +3140,23 @@ void tst_QLineEdit::inputMaskAndValidator()
 
 void tst_QLineEdit::maxLengthAndInputMask()
 {
-    // Really a test for #30447
     QLineEdit *testWidget = ensureTestWidget();
     QVERIFY(testWidget->inputMask().isNull());
     testWidget->setMaxLength(10);
     QCOMPARE(testWidget->maxLength(), 10);
-    testWidget->setInputMask(QString::null);
+    testWidget->setInputMask(QString());
     QVERIFY(testWidget->inputMask().isNull());
     QCOMPARE(testWidget->maxLength(), 10);
+
+    testWidget->setInputMask("XXXX");
+    QCOMPARE(testWidget->maxLength(), 4);
+
+    testWidget->setMaxLength(15);
+    QCOMPARE(testWidget->maxLength(), 4);
+
+    // 8 \ => raw string with 4 \ => input mask with 2 \ => maxLength = 2
+    testWidget->setInputMask("\\\\\\\\");
+    QCOMPARE(testWidget->maxLength(), 2);
 }
 
 
@@ -3296,14 +3343,11 @@ void tst_QLineEdit::leftKeyOnSelectedText()
     QCOMPARE(testWidget->cursorPosition(), 2);
     QCOMPARE(testWidget->selectedText(), QString("23"));
     QTest::keyClick(testWidget, Qt::Key_Left);
-#if defined Q_OS_WIN || defined Q_OS_QNX
-    QCOMPARE(testWidget->cursorPosition(), 1);
-#else
-    // Selection is cleared ands cursor remains at position 2.
-    // X11 used to behave like window prior to 4.2. Changes caused by QKeySequence
-    // resulted in an inadvertant change in behavior
-    QCOMPARE(testWidget->cursorPosition(), 2);
-#endif
+
+    if (unselectingWithLeftOrRightChangesCursorPosition())
+        QCOMPARE(testWidget->cursorPosition(), 1);
+    else
+        QCOMPARE(testWidget->cursorPosition(), 2);
 }
 
 void tst_QLineEdit::inlineCompletion()
@@ -3314,7 +3358,7 @@ void tst_QLineEdit::inlineCompletion()
     QStandardItem *root = model->invisibleRootItem();
     QStandardItem *items[5];
     for (int i = 0; i < 5; i++) {
-        items[i] = new QStandardItem(QString("item%1").arg(i));
+        items[i] = new QStandardItem(QLatin1String("item") + QString::number(i));
         if ((i+2)%2 == 0) { // disable 0,2,4
             items[i]->setFlags(items[i]->flags() & ~Qt::ItemIsEnabled);
         }
@@ -3483,7 +3527,7 @@ void tst_QLineEdit::textMargin()
     QTRY_COMPARE(testWidget.cursorPosition(), cursorPosition);
 }
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QLineEdit::cursor()
 {
     QLineEdit *testWidget = ensureTestWidget();
@@ -3586,7 +3630,7 @@ void tst_QLineEdit::task174640_editingFinished()
     QCOMPARE(editingFinishedSpy.count(), 1);
 }
 
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
 class task198789_Widget : public QWidget
 {
     Q_OBJECT
@@ -3645,7 +3689,7 @@ void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
     QCOMPARE(lineEdit.text(), completion);
 }
 
-#endif // QT_NO_COMPLETER
+#endif // QT_CONFIG(completer)
 
 
 void tst_QLineEdit::task229938_dontEmitChangedWhenTextIsNotChanged()
@@ -4185,6 +4229,57 @@ void tst_QLineEdit::inputMethodQueryImHints()
     QCOMPARE(static_cast<Qt::InputMethodHints>(value.toInt()), hints);
 }
 
+void tst_QLineEdit::inputMethodUpdate()
+{
+    QLineEdit *testWidget = ensureTestWidget();
+
+    centerOnScreen(testWidget);
+    testWidget->show();
+    QVERIFY(QTest::qWaitForWindowExposed(testWidget));
+
+    testWidget->setText("");
+    testWidget->activateWindow();
+    testWidget->setFocus();
+    QTRY_VERIFY(testWidget->hasFocus());
+    QTRY_COMPARE(qApp->focusObject(), testWidget);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, 0, 1, QVariant());
+        QInputMethodEvent event("preedit text", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        QInputMethodEvent event("", attributes);
+        event.setCommitString("preedit text");
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+    QCOMPARE(testWidget->text(), QString("preedit text"));
+
+    m_platformInputContext.m_updateCallCount = 0;
+    {
+        QList<QInputMethodEvent::Attribute> attributes;
+        attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Selection, 0, 0, QVariant());
+        QInputMethodEvent event("", attributes);
+        QApplication::sendEvent(testWidget, &event);
+    }
+    QVERIFY(m_platformInputContext.m_updateCallCount >= 1);
+}
+
 void tst_QLineEdit::undoRedoAndEchoModes_data()
 {
     QTest::addColumn<int>("echoMode");
@@ -4502,6 +4597,116 @@ void tst_QLineEdit::QTBUG1266_setInputMaskEmittingTextEdited()
     lineEdit.setInputMask("AAAA");
     lineEdit.setInputMask(QString());
     QCOMPARE(spy.count(), 0);
+}
+
+void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit_data()
+{
+    QTest::addColumn<QKeySequence>("keySequence");
+    QTest::addColumn<bool>("shouldBeHandledByQLineEdit");
+
+    QTest::newRow("Copy") << QKeySequence(QKeySequence::Copy) << true;
+    QTest::newRow("MoveToNextChar") << QKeySequence(QKeySequence::MoveToNextChar) << true;
+    QTest::newRow("SelectAll") << QKeySequence(QKeySequence::SelectAll) << true;
+    QTest::newRow("Right press") << QKeySequence(Qt::Key_Right) << true;
+    QTest::newRow("Left press") << QKeySequence(Qt::Key_Left) << true;
+
+    QTest::newRow("Paste") << QKeySequence(QKeySequence::Paste) << false;
+    QTest::newRow("Paste") << QKeySequence(QKeySequence::Cut) << false;
+    QTest::newRow("Undo") << QKeySequence(QKeySequence::Undo) << false;
+    QTest::newRow("Redo") << QKeySequence(QKeySequence::Redo) << false;
+
+    QTest::newRow("a") << QKeySequence(Qt::Key_A) << false;
+    QTest::newRow("b") << QKeySequence(Qt::Key_B) << false;
+    QTest::newRow("c") << QKeySequence(Qt::Key_C) << false;
+    QTest::newRow("x") << QKeySequence(Qt::Key_X) << false;
+    QTest::newRow("X") << QKeySequence(Qt::ShiftModifier + Qt::Key_X) << false;
+
+    QTest::newRow("Alt+Home") << QKeySequence(Qt::AltModifier + Qt::Key_Home) << false;
+}
+
+void tst_QLineEdit::shortcutOverrideOnReadonlyLineEdit()
+{
+    QFETCH(QKeySequence, keySequence);
+    QFETCH(bool, shouldBeHandledByQLineEdit);
+
+    QWidget widget;
+
+    QShortcut *shortcut = new QShortcut(keySequence, &widget);
+    QSignalSpy spy(shortcut, &QShortcut::activated);
+    QVERIFY(spy.isValid());
+
+    QLineEdit *lineEdit = new QLineEdit(QStringLiteral("Test"), &widget);
+    lineEdit->setReadOnly(true);
+    lineEdit->setFocus();
+
+    widget.show();
+
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    const int keySequenceCount = keySequence.count();
+    for (int i = 0; i < keySequenceCount; ++i) {
+        const uint key = keySequence[i];
+        QTest::keyClick(lineEdit,
+                        Qt::Key(key & ~Qt::KeyboardModifierMask),
+                        Qt::KeyboardModifier(key & Qt::KeyboardModifierMask));
+    }
+
+    const int activationCount = shouldBeHandledByQLineEdit ? 0 : 1;
+    QCOMPARE(spy.count(), activationCount);
+}
+
+void tst_QLineEdit::QTBUG59957_clearButtonLeftmostAction()
+{
+#ifndef QT_BUILD_INTERNAL
+    QSKIP("This test requires a developer build");
+#else
+    QLineEdit lineEdit;
+    lineEdit.setClearButtonEnabled(true);
+
+    auto clearButton = lineEdit.findChild<QLineEditIconButton *>();
+    QVERIFY(clearButton);
+
+    QPixmap pixmap(16, 16);
+    lineEdit.addAction(QIcon(pixmap), QLineEdit::TrailingPosition);
+    lineEdit.addAction(QIcon(pixmap), QLineEdit::TrailingPosition);
+
+    lineEdit.show();
+
+    const auto buttons = lineEdit.findChildren<QLineEditIconButton *>();
+    for (const auto button : buttons) {
+        if (button == clearButton)
+            continue;
+        QVERIFY(clearButton->x() < button->x());
+    }
+#endif // QT_BUILD_INTERNAL
+}
+
+bool tst_QLineEdit::unselectingWithLeftOrRightChangesCursorPosition()
+{
+#if defined Q_OS_WIN || defined Q_OS_QNX //Windows and QNX do not jump to the beginning of the selection
+    return true;
+#endif
+    // Platforms minimal/offscreen also need left after unselecting with right
+    if (!QGuiApplication::platformName().compare("minimal", Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare("offscreen", Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    // Selection is cleared ands cursor remains at previous position.
+    // X11 used to behave like window prior to 4.2. Changes caused by QKeySequence
+    // resulted in an inadvertant change in behavior
+    return false;
+}
+
+void tst_QLineEdit::QTBUG_60319_setInputMaskCheckImSurroundingText()
+{
+    QLineEdit *testWidget = ensureTestWidget();
+    QString mask("+000(000)-000-00-00");
+    testWidget->setInputMask(mask);
+    testWidget->setCursorPosition(mask.length());
+    QString surroundingText = testWidget->inputMethodQuery(Qt::ImSurroundingText).toString();
+    int cursorPosition = testWidget->inputMethodQuery(Qt::ImCursorPosition).toInt();
+    QCOMPARE(surroundingText.length(), cursorPosition);
 }
 
 QTEST_MAIN(tst_QLineEdit)

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -57,6 +63,7 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
     \class QLoggingCategory
     \inmodule QtCore
     \since 5.2
+    \threadsafe
 
     \brief The QLoggingCategory class represents a category, or 'area' in the
     logging infrastructure.
@@ -88,6 +95,9 @@ static void setBoolLane(QBasicAtomicInt *atomic, bool enable, int shift)
        \li Avoid the category names \c{debug}, \c{info}, \c{warning}, and \c{critical}.
        \li Category names starting with \c{qt} are reserved for Qt modules.
     \endlist
+
+    QLoggingCategory objects implicitly defined by Q_LOGGING_CATEGORY()
+    are created on first use in a thread-safe manner.
 
     \section1 Checking Category Configuration
 
@@ -324,12 +334,11 @@ bool QLoggingCategory::isEnabled(QtMsgType msgtype) const
 /*!
     Changes the message type \a type for the category to \a enable.
 
-    \note Changes only affect the current QLoggingCategory object, and won't
-    change the settings of other objects for the same category name.
-    Use either \l setFilterRules() or \l installFilter() to change the
-    configuration globally.
+    This method is meant to be used only from inside a filter
+    installed by \l installFilter(). See \l {Configuring Categories} for
+    an overview on how to configure categories globally.
 
-    \note \c QtFatalMsg cannot be changed. It will always return \c true.
+    \note \c QtFatalMsg cannot be changed. It will always remain \c true.
 */
 void QLoggingCategory::setEnabled(QtMsgType type, bool enable)
 {
@@ -401,8 +410,8 @@ QLoggingCategory *QLoggingCategory::defaultCategory()
     filter is free to change the respective category configuration with
     \l setEnabled().
 
-    The filter might be called concurrently from different threads, and
-    therefore has to be reentrant.
+    The filter might be called from different threads, but never concurrently.
+    The filter shall not call any static functions of QLoggingCategory.
 
     Example:
     \snippet qloggingcategory/main.cpp 21
@@ -452,6 +461,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if debug output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qDebug()
 */
 
@@ -470,6 +481,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \note Arguments might not be processed if debug output for the category is
     not enabled, so do not rely on any side effects.
+
+    \note Using the macro is thread-safe.
 
     \sa qDebug()
 */
@@ -493,6 +506,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if debug output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qInfo()
 */
 
@@ -511,6 +526,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \note Arguments might not be processed if debug output for the category is
     not enabled, so do not rely on any side effects.
+
+    \note Using the macro is thread-safe.
 
     \sa qInfo()
 */
@@ -534,6 +551,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if warning output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qWarning()
 */
 
@@ -552,6 +571,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \note Arguments might not be processed if warning output for the category is
     not enabled, so do not rely on any side effects.
+
+    \note Using the macro is thread-safe.
 
     \sa qWarning()
 */
@@ -575,6 +596,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \note Arguments are not processed if critical output for the category is not
     enabled, so do not rely on any side effects.
 
+    \note Using the macro is thread-safe.
+
     \sa qCritical()
 */
 
@@ -593,6 +616,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
 
     \note Arguments might not be processed if critical output for the category
     is not enabled, so do not rely on any side effects.
+
+    \note Using the macro is thread-safe.
 
     \sa qCritical()
 */
@@ -618,7 +643,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     \a string identifier. By default, all message types are enabled.
 
     Only one translation unit in a library or executable can define a category
-    with a specific name.
+    with a specific name. The implicitly defined QLoggingCategory object is
+    created on first use, in a thread-safe manner.
 
     This macro must be used outside of a class or method.
 */
@@ -634,7 +660,8 @@ void QLoggingCategory::setFilterRules(const QString &rules)
     and more severe are enabled, types with a lower severity are disabled.
 
     Only one translation unit in a library or executable can define a category
-    with a specific name.
+    with a specific name. The implicitly defined QLoggingCategory object is
+    created on first use, in a thread-safe manner.
 
     This macro must be used outside of a class or method. It is only defined
     if variadic macros are supported.

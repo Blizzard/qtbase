@@ -1,31 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,12 +36,24 @@
 #include <qdebug.h>
 #include <qregexp.h>
 #include <qdir.h>
+#include <qdiriterator.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#if defined(Q_OS_UNIX)
+#include <errno.h>
+#include <unistd.h>
+#endif
+
+#ifdef Q_OS_WIN
+#  include <qt_windows.h>
+#endif
+
+using namespace QMakeInternal;
 
 QT_BEGIN_NAMESPACE
 
@@ -142,7 +150,7 @@ static int doSed(int argc, char **argv)
     }
     if (inFiles.isEmpty())
         inFiles << "-";
-    foreach (const char *inFile, inFiles) {
+    for (const char *inFile : qAsConst(inFiles)) {
         FILE *f;
         if (!strcmp(inFile, "-")) {
             f = stdin;
@@ -232,18 +240,158 @@ static int doLink(int argc, char **argv)
     return 0;
 }
 
+#endif
+
+static int installFile(const QString &source, const QString &target, bool exe = false)
+{
+    QFile sourceFile(source);
+    QFile targetFile(target);
+    if (targetFile.exists()) {
+#ifdef Q_OS_WIN
+        targetFile.setPermissions(targetFile.permissions() | QFile::WriteUser);
+#endif
+        QFile::remove(target);
+    } else {
+        QDir::root().mkpath(QFileInfo(target).absolutePath());
+    }
+
+    if (!sourceFile.copy(target)) {
+        fprintf(stderr, "Error copying %s to %s: %s\n", source.toLatin1().constData(), qPrintable(target), qPrintable(sourceFile.errorString()));
+        return 3;
+    }
+
+    if (exe) {
+        if (!targetFile.setPermissions(sourceFile.permissions() | QFileDevice::ExeOwner | QFileDevice::ExeUser |
+                                       QFileDevice::ExeGroup | QFileDevice::ExeOther)) {
+            fprintf(stderr, "Error setting execute permissions on %s: %s\n",
+                    qPrintable(target), qPrintable(targetFile.errorString()));
+            return 3;
+        }
+    }
+
+    // Copy file times
+    QString error;
+#ifdef Q_OS_WIN
+    const QFile::Permissions permissions = targetFile.permissions();
+    const bool readOnly = !(permissions & QFile::WriteUser);
+    if (readOnly)
+        targetFile.setPermissions(permissions | QFile::WriteUser);
+#endif
+    if (!IoUtils::touchFile(target, sourceFile.fileName(), &error)) {
+        fprintf(stderr, "%s", qPrintable(error));
+        return 3;
+    }
+#ifdef Q_OS_WIN
+    if (readOnly)
+        targetFile.setPermissions(permissions);
+#endif
+    return 0;
+}
+
+static int installFileOrDirectory(const QString &source, const QString &target)
+{
+    QFileInfo fi(source);
+    if (false) {
+#if defined(Q_OS_UNIX)
+    } else if (fi.isSymLink()) {
+        QString linkTarget;
+        if (!IoUtils::readLinkTarget(fi.absoluteFilePath(), &linkTarget)) {
+            fprintf(stderr, "Could not read link %s: %s\n", qPrintable(fi.absoluteFilePath()), strerror(errno));
+            return 3;
+        }
+        QFile::remove(target);
+        if (::symlink(linkTarget.toLocal8Bit().constData(), target.toLocal8Bit().constData()) < 0) {
+            fprintf(stderr, "Could not create link: %s\n", strerror(errno));
+            return 3;
+        }
+#endif
+    } else if (fi.isDir()) {
+        QDir::current().mkpath(target);
+
+        QDirIterator it(source, QDir::AllEntries | QDir::NoDotAndDotDot);
+        while (it.hasNext()) {
+            it.next();
+            const QFileInfo &entry = it.fileInfo();
+            const QString &entryTarget = target + QDir::separator() + entry.fileName();
+
+            const int recursionResult = installFileOrDirectory(entry.filePath(), entryTarget);
+            if (recursionResult != 0)
+                return recursionResult;
+        }
+    } else {
+        const int fileCopyResult = installFile(source, target);
+        if (fileCopyResult != 0)
+            return fileCopyResult;
+    }
+    return 0;
+}
+
+static int doQInstall(int argc, char **argv)
+{
+    bool installExecutable = false;
+    if (argc == 3 && !strcmp(argv[0], "-exe")) {
+        installExecutable = true;
+        --argc;
+        ++argv;
+    }
+
+    if (argc != 2 && !installExecutable) {
+        fprintf(stderr, "Error: usage: [-exe] source target\n");
+        return 3;
+    }
+
+    const QString source = QString::fromLocal8Bit(argv[0]);
+    const QString target = QString::fromLocal8Bit(argv[1]);
+
+    if (installExecutable)
+        return installFile(source, target, /*exe=*/true);
+    return installFileOrDirectory(source, target);
+}
+
+
 static int doInstall(int argc, char **argv)
 {
     if (!argc) {
         fprintf(stderr, "Error: -install requires further arguments\n");
         return 3;
     }
+#ifdef Q_OS_WIN
     if (!strcmp(argv[0], "sed"))
         return doSed(argc - 1, argv + 1);
     if (!strcmp(argv[0], "ln"))
         return doLink(argc - 1, argv + 1);
+#endif
+    if (!strcmp(argv[0], "qinstall"))
+        return doQInstall(argc - 1, argv + 1);
     fprintf(stderr, "Error: unrecognized -install subcommand '%s'\n", argv[0]);
     return 3;
+}
+
+
+#ifdef Q_OS_WIN
+
+static int dumpMacros(const wchar_t *cmdline)
+{
+    // from http://stackoverflow.com/questions/3665537/how-to-find-out-cl-exes-built-in-macros
+    int argc;
+    wchar_t **argv = CommandLineToArgvW(cmdline, &argc);
+    if (!argv)
+        return 2;
+    for (int i = 0; i < argc; ++i) {
+        if (argv[i][0] != L'-' || argv[i][1] != 'D')
+            continue;
+
+        wchar_t *value = wcschr(argv[i], L'=');
+        if (value) {
+            *value = 0;
+            ++value;
+        } else {
+            // point to the NUL at the end, so we don't print anything
+            value = argv[i] + wcslen(argv[i]);
+        }
+        wprintf(L"#define %Ls %Ls\n", argv[i] + 2, value);
+    }
+    return 0;
 }
 
 #endif // Q_OS_WIN
@@ -276,10 +424,19 @@ int runQMake(int argc, char **argv)
     // This is particularly important for things like QtCreator and scripted builds.
     setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
-#ifdef Q_OS_WIN
     // Workaround for inferior/missing command line tools on Windows: make our own!
     if (argc >= 2 && !strcmp(argv[1], "-install"))
         return doInstall(argc - 2, argv + 2);
+
+#ifdef Q_OS_WIN
+    {
+        // Support running as Visual C++'s compiler
+        const wchar_t *cmdline = _wgetenv(L"MSC_CMD_FLAGS");
+        if (!cmdline || !*cmdline)
+            cmdline = _wgetenv(L"MSC_IDE_FLAGS");
+        if (cmdline && *cmdline)
+            return dumpMacros(cmdline);
+    }
 #endif
 
     QMakeVfs vfs;

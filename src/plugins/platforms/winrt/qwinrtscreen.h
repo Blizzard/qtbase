@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +52,7 @@ namespace ABI {
             namespace Core {
                 struct IAutomationProviderRequestedEventArgs;
                 struct ICharacterReceivedEventArgs;
+                struct ICorePointerRedirector;
                 struct ICoreWindow;
                 struct ICoreWindowEventArgs;
                 struct IKeyEventArgs;
@@ -80,31 +84,39 @@ class QTouchDevice;
 class QWinRTCursor;
 class QWinRTInputContext;
 class QWinRTScreenPrivate;
+class QWinRTWindow;
 class QWinRTScreen : public QPlatformScreen
 {
 public:
     explicit QWinRTScreen();
     ~QWinRTScreen();
 
-    QRect geometry() const Q_DECL_OVERRIDE;
-    QRect availableGeometry() const Q_DECL_OVERRIDE;
-    int depth() const Q_DECL_OVERRIDE;
-    QImage::Format format() const Q_DECL_OVERRIDE;
-    QSizeF physicalSize() const Q_DECL_OVERRIDE;
-    QDpi logicalDpi() const Q_DECL_OVERRIDE;
-    qreal pixelDensity() const Q_DECL_OVERRIDE;
+    QRect geometry() const override;
+    QRect availableGeometry() const override;
+    int depth() const override;
+    QImage::Format format() const override;
+    QSizeF physicalSize() const override;
+    QDpi logicalDpi() const override;
+    qreal pixelDensity() const override;
     qreal scaleFactor() const;
-    QPlatformCursor *cursor() const Q_DECL_OVERRIDE;
+    QPlatformCursor *cursor() const override;
     Qt::KeyboardModifiers keyboardModifiers() const;
 
-    Qt::ScreenOrientation nativeOrientation() const Q_DECL_OVERRIDE;
-    Qt::ScreenOrientation orientation() const Q_DECL_OVERRIDE;
+    Qt::ScreenOrientation nativeOrientation() const override;
+    Qt::ScreenOrientation orientation() const override;
 
     QWindow *topWindow() const;
+    QWindow *windowAt(const QPoint &pos);
     void addWindow(QWindow *window);
     void removeWindow(QWindow *window);
     void raise(QWindow *window);
     void lower(QWindow *window);
+
+    bool setMouseGrabWindow(QWinRTWindow *window, bool grab);
+    QWinRTWindow* mouseGrabWindow() const;
+
+    bool setKeyboardGrabWindow(QWinRTWindow *window, bool grab);
+    QWinRTWindow* keyboardGrabWindow() const;
 
     void updateWindowTitle(const QString &title);
 
@@ -112,6 +124,9 @@ public:
     ABI::Windows::UI::Xaml::IDependencyObject *canvas() const;
 
     void initialize();
+
+    void setCursorRect(const QRectF &cursorRect);
+    void setKeyboardRect(const QRectF &keyboardRect);
 
 private:
     void handleExpose();
@@ -135,8 +150,10 @@ private:
 #else
     HRESULT onWindowSizeChanged(ABI::Windows::UI::Core::ICoreWindow *, ABI::Windows::UI::Core::IWindowSizeChangedEventArgs *);
 #endif
+    HRESULT onRedirectReleased(ABI::Windows::UI::Core::ICorePointerRedirector *, ABI::Windows::UI::Core::IPointerEventArgs *);
 
     QScopedPointer<QWinRTScreenPrivate> d_ptr;
+    QRectF mCursorRect;
     Q_DECLARE_PRIVATE(QWinRTScreen)
 };
 

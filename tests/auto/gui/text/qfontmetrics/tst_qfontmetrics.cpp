@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,13 +39,6 @@ class tst_QFontMetrics : public QObject
 {
 Q_OBJECT
 
-public:
-    tst_QFontMetrics();
-    virtual ~tst_QFontMetrics();
-
-public slots:
-    void init();
-    void cleanup();
 private slots:
     void same();
     void metrics();
@@ -67,24 +55,6 @@ private slots:
     void mnemonicTextWidth();
     void leadingBelowLine();
 };
-
-tst_QFontMetrics::tst_QFontMetrics()
-
-{
-}
-
-tst_QFontMetrics::~tst_QFontMetrics()
-{
-
-}
-
-void tst_QFontMetrics::init()
-{
-}
-
-void tst_QFontMetrics::cleanup()
-{
-}
 
 void tst_QFontMetrics::same()
 {
@@ -232,36 +202,36 @@ void tst_QFontMetrics::bypassShaping()
     QCOMPARE(textWidth, charsWidth);
 }
 
-template<class FontMetrics> void elidedMultiLength_helper()
+template<class FontMetrics, typename PrimitiveType> void elidedMultiLength_helper()
 {
     QString text1 = QLatin1String("Long Text 1\x9cShorter\x9csmall");
     QString text1_long = "Long Text 1";
     QString text1_short = "Shorter";
     QString text1_small = "small";
     FontMetrics fm = FontMetrics(QFont());
-    int width_long = fm.size(0, text1_long).width();
+    PrimitiveType width_long = fm.size(0, text1_long).width();
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, 8000), text1_long);
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_long + 1), text1_long);
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_long - 1), text1_short);
-    int width_short = fm.size(0, text1_short).width();
+    PrimitiveType width_short = fm.size(0, text1_short).width();
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_short + 1), text1_short);
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_short - 1), text1_small);
 
     // Not even wide enough for "small" - should use ellipsis
     QChar ellipsisChar(0x2026);
     QString text1_el = QString::fromLatin1("s") + ellipsisChar;
-    int width_small = fm.width(text1_el);
+    PrimitiveType width_small = fm.width(text1_el);
     QCOMPARE(fm.elidedText(text1,Qt::ElideRight, width_small + 1), text1_el);
 }
 
 void tst_QFontMetrics::elidedMultiLength()
 {
-    elidedMultiLength_helper<QFontMetrics>();
+    elidedMultiLength_helper<QFontMetrics, int>();
 }
 
 void tst_QFontMetrics::elidedMultiLengthF()
 {
-    elidedMultiLength_helper<QFontMetricsF>();
+    elidedMultiLength_helper<QFontMetricsF, qreal>();
 }
 
 void tst_QFontMetrics::inFontUcs4()

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,8 +55,9 @@ class QWindowsDirect2DBitmapPrivate
 {
 public:
     QWindowsDirect2DBitmapPrivate(ID2D1DeviceContext *dc = 0, ID2D1Bitmap1 *bm = 0)
-        : bitmap(bm)
-        , deviceContext(new QWindowsDirect2DDeviceContext(dc))
+        : deviceContext(new QWindowsDirect2DDeviceContext(dc))
+        , bitmap(bm)
+
     {
         deviceContext->get()->SetTarget(bm);
     }
@@ -74,16 +81,16 @@ public:
         bitmap.Reset();
 
         D2D1_SIZE_U size = {
-            width, height
+            UINT32(width), UINT32(height)
         };
 
-        HRESULT hr = deviceContext->get()->CreateBitmap(size, data, pitch,
+        HRESULT hr = deviceContext->get()->CreateBitmap(size, data, UINT32(pitch),
                                                         bitmapProperties(),
                                                         bitmap.ReleaseAndGetAddressOf());
         if (SUCCEEDED(hr))
             deviceContext->get()->SetTarget(bitmap.Get());
         else
-            qWarning("%s: Could not create bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not create bitmap: %#lx", __FUNCTION__, hr);
 
         return SUCCEEDED(hr);
     }
@@ -101,28 +108,28 @@ public:
         D2D1_BITMAP_PROPERTIES1 properties = bitmapProperties();
         properties.bitmapOptions = D2D1_BITMAP_OPTIONS_CANNOT_DRAW | D2D1_BITMAP_OPTIONS_CPU_READ;
 
-        hr = deviceContext->get()->CreateBitmap(size, NULL, NULL,
+        hr = deviceContext->get()->CreateBitmap(size, NULL, 0,
                                                 properties, &mappingCopy);
         if (FAILED(hr)) {
-            qWarning("%s: Could not create bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not create bitmap: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         hr = mappingCopy->CopyFromBitmap(NULL, bitmap.Get(), NULL);
         if (FAILED(hr)) {
-            qWarning("%s: Could not copy from bitmap: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not copy from bitmap: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         D2D1_MAPPED_RECT mappedRect;
         hr = mappingCopy->Map(D2D1_MAP_OPTIONS_READ, &mappedRect);
         if (FAILED(hr)) {
-            qWarning("%s: Could not map: %#x", __FUNCTION__, hr);
+            qWarning("%s: Could not map: %#lx", __FUNCTION__, hr);
             return QImage();
         }
 
         return QImage(static_cast<const uchar *>(mappedRect.bits),
-                      size.width, size.height, mappedRect.pitch,
+                      int(size.width), int(size.height), int(mappedRect.pitch),
                       QImage::Format_ARGB32_Premultiplied).copy(rect);
     }
 
@@ -191,7 +198,7 @@ QSize QWindowsDirect2DBitmap::size() const
     Q_D(const QWindowsDirect2DBitmap);
 
     D2D1_SIZE_U size = d->bitmap->GetPixelSize();
-    return QSize(size.width, size.height);
+    return QSize(int(size.width), int(size.height));
 }
 
 QT_END_NAMESPACE

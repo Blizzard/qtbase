@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -64,7 +74,7 @@ public:
         setFlag(QGraphicsItem::ItemClipsToShape, true);
     }
 
-    QRectF boundingRect() const Q_DECL_OVERRIDE
+    QRectF boundingRect() const override
     {
         // here we only want the size of the children and not the size of the children of the children...
         qreal halfpw = m_pen.widthF() / 2;
@@ -75,7 +85,7 @@ public:
         return rect;
     }
 
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) Q_DECL_OVERRIDE
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override
     {
         Q_UNUSED(option);
         Q_UNUSED(widget);
@@ -104,7 +114,7 @@ public:
         : QGraphicsObject(parent)
     { }
 
-    QRectF boundingRect() const Q_DECL_OVERRIDE
+    QRectF boundingRect() const override
     {
         QRectF rect;
         foreach (QGraphicsItem *item, childItems())
@@ -112,7 +122,7 @@ public:
         return rect;
     }
 
-    void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*) Q_DECL_OVERRIDE
+    void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *) override
     { }
 };
 
@@ -140,7 +150,7 @@ public:
         return m_viewport;
     }
 
-    bool event(QEvent *e) Q_DECL_OVERRIDE
+    bool event(QEvent *e) override
     {
         switch (e->type()) {
 // ![2]
@@ -169,7 +179,7 @@ public:
         return QGraphicsObject::event(e);
     }
 
-    bool sceneEvent(QEvent *e) Q_DECL_OVERRIDE
+    bool sceneEvent(QEvent *e) override
     {
         switch (e->type()) {
         case QEvent::TouchBegin: {
@@ -194,12 +204,12 @@ public:
         return QGraphicsObject::sceneEvent(e);
     }
 
-    QRectF boundingRect() const Q_DECL_OVERRIDE
+    QRectF boundingRect() const override
     {
         return QRectF(0, 0, m_size.width() + 3, m_size.height());
     }
 
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) Q_DECL_OVERRIDE
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override
     {
         Q_UNUSED(option);
         Q_UNUSED(widget);
@@ -265,7 +275,7 @@ public:
 
 
 protected:
-    void resizeEvent(QResizeEvent *e) Q_DECL_OVERRIDE
+    void resizeEvent(QResizeEvent *e) override
     {
         // resize the scene according to our own size to prevent scrolling
         m_scene->setSceneRect(0, 0, m_view->viewport()->width(), m_view->viewport()->height());

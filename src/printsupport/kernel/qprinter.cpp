@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,7 +55,9 @@
 #include "qprintengine_pdf_p.h"
 
 #include <qpicture.h>
+#if QT_CONFIG(printpreviewwidget)
 #include <private/qpaintengine_preview_p.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -138,7 +146,7 @@ void QPrinterPrivate::initEngines(QPrinter::OutputFormat format, const QPrinterI
     }
 
     if (outputFormat == QPrinter::NativeFormat) {
-        printEngine = ps->createNativePrintEngine(printerMode);
+        printEngine = ps->createNativePrintEngine(printerMode, printerName);
         paintEngine = ps->createPaintEngine(printEngine, printerMode);
     } else {
         QPdfPrintEngine *pdfEngine = new QPdfPrintEngine(printerMode);
@@ -148,7 +156,6 @@ void QPrinterPrivate::initEngines(QPrinter::OutputFormat format, const QPrinterI
 
     use_default_engine = true;
     had_default_engines = true;
-    setProperty(QPrintEngine::PPK_PrinterName, printerName);
     validPrinter = true;
 }
 
@@ -160,7 +167,8 @@ void QPrinterPrivate::changeEngines(QPrinter::OutputFormat format, const QPrinte
     initEngines(format, printer);
 
     if (oldPrintEngine) {
-        foreach (QPrintEngine::PrintEnginePropertyKey key, m_properties) {
+        const auto properties = m_properties; // take a copy: setProperty() below modifies m_properties
+        for (const auto &key : properties) {
             QVariant prop;
             // PPK_NumberOfCopies need special treatmeant since it in most cases
             // will return 1, disregarding the actual value that was set
@@ -178,7 +186,7 @@ void QPrinterPrivate::changeEngines(QPrinter::OutputFormat format, const QPrinte
         delete oldPrintEngine;
 }
 
-#ifndef QT_NO_PRINTPREVIEWWIDGET
+#if QT_CONFIG(printpreviewwidget)
 QList<const QPicture *> QPrinterPrivate::previewPages() const
 {
     if (previewEngine)
@@ -203,7 +211,7 @@ void QPrinterPrivate::setPreviewMode(bool enable)
         use_default_engine = had_default_engines;
     }
 }
-#endif // QT_NO_PRINTPREVIEWWIDGET
+#endif // QT_CONFIG(printpreviewwidget)
 
 void QPrinterPrivate::setProperty(QPrintEngine::PrintEnginePropertyKey key, const QVariant &value)
 {
@@ -442,143 +450,17 @@ public:
 */
 
 /*!
-    \enum QPrinter::PaperSize
+    \typedef QPrinter::PaperSize
     \since 4.4
+
+    typdef for the enum QPagedPaintDevice::PageSize.
 
     This enum type specifies what paper size QPrinter should use.
     QPrinter does not check that the paper size is available; it just
     uses this information, together with QPrinter::Orientation and
     QPrinter::setFullPage(), to determine the printable area.
 
-    The defined sizes (with setFullPage(true)) are:
-
-    \value A0 841 x 1189 mm
-    \value A1 594 x 841 mm
-    \value A2 420 x 594 mm
-    \value A3 297 x 420 mm
-    \value A4 210 x 297 mm, 8.26 x 11.69 inches
-    \value A5 148 x 210 mm
-    \value A6 105 x 148 mm
-    \value A7 74 x 105 mm
-    \value A8 52 x 74 mm
-    \value A9 37 x 52 mm
-    \value B0 1000 x 1414 mm
-    \value B1 707 x 1000 mm
-    \value B2 500 x 707 mm
-    \value B3 353 x 500 mm
-    \value B4 250 x 353 mm
-    \value B5 176 x 250 mm, 6.93 x 9.84 inches
-    \value B6 125 x 176 mm
-    \value B7 88 x 125 mm
-    \value B8 62 x 88 mm
-    \value B9 33 x 62 mm
-    \value B10 31 x 44 mm
-    \value C5E 163 x 229 mm
-    \value Comm10E 105 x 241 mm, U.S. Common 10 Envelope
-    \value DLE 110 x 220 mm
-    \value Executive 7.5 x 10 inches, 190.5 x 254 mm
-    \value Folio 210 x 330 mm
-    \value Ledger 431.8 x 279.4 mm
-    \value Legal 8.5 x 14 inches, 215.9 x 355.6 mm
-    \value Letter 8.5 x 11 inches, 215.9 x 279.4 mm
-    \value Tabloid 279.4 x 431.8 mm
-    \value Custom Unknown, or a user defined size.
-    \value A10
-    \value A3Extra
-    \value A4Extra
-    \value A4Plus
-    \value A4Small
-    \value A5Extra
-    \value B5Extra
-    \value JisB0
-    \value JisB1
-    \value JisB2
-    \value JisB3
-    \value JisB4
-    \value JisB5
-    \value JisB6,
-    \value JisB7
-    \value JisB8
-    \value JisB9
-    \value JisB10
-    \value AnsiA = Letter
-    \value AnsiB = Ledger
-    \value AnsiC
-    \value AnsiD
-    \value AnsiE
-    \value LegalExtra
-    \value LetterExtra
-    \value LetterPlus
-    \value LetterSmall
-    \value TabloidExtra
-    \value ArchA
-    \value ArchB
-    \value ArchC
-    \value ArchD
-    \value ArchE
-    \value Imperial7x9
-    \value Imperial8x10
-    \value Imperial9x11
-    \value Imperial9x12
-    \value Imperial10x11
-    \value Imperial10x13
-    \value Imperial10x14
-    \value Imperial12x11
-    \value Imperial15x11
-    \value ExecutiveStandard
-    \value Note
-    \value Quarto
-    \value Statement
-    \value SuperA
-    \value SuperB
-    \value Postcard
-    \value DoublePostcard
-    \value Prc16K
-    \value Prc32K
-    \value Prc32KBig
-    \value FanFoldUS
-    \value FanFoldGerman
-    \value FanFoldGermanLegal
-    \value EnvelopeB4
-    \value EnvelopeB5
-    \value EnvelopeB6
-    \value EnvelopeC0
-    \value EnvelopeC1
-    \value EnvelopeC2
-    \value EnvelopeC3
-    \value EnvelopeC4
-    \value EnvelopeC5 = C5E
-    \value EnvelopeC6
-    \value EnvelopeC65
-    \value EnvelopeC7
-    \value EnvelopeDL = DLE
-    \value Envelope9
-    \value Envelope10 = Comm10E
-    \value Envelope11
-    \value Envelope12
-    \value Envelope14
-    \value EnvelopeMonarch
-    \value EnvelopePersonal
-    \value EnvelopeChou3
-    \value EnvelopeChou4
-    \value EnvelopeInvite
-    \value EnvelopeItalian
-    \value EnvelopeKaku2
-    \value EnvelopeKaku3
-    \value EnvelopePrc1
-    \value EnvelopePrc2
-    \value EnvelopePrc3
-    \value EnvelopePrc4
-    \value EnvelopePrc5
-    \value EnvelopePrc6
-    \value EnvelopePrc7
-    \value EnvelopePrc8
-    \value EnvelopePrc9
-    \value EnvelopePrc10
-    \value EnvelopeYou4
-    \value LastPageSize = EnvelopeYou4
-    \omitvalue NPageSize
-    \omitvalue NPaperSize
+    The defined sizes (with setFullPage(true)) are found in QPagedPaintDevice.
 
     With setFullPage(false) (the default), the metrics will be a bit
     smaller; how much depends on the printer in use.
@@ -695,7 +577,7 @@ QPrinter::QPrinter(const QPrinterInfo& printer, PrinterMode mode)
 
 void QPrinterPrivate::init(const QPrinterInfo &printer, QPrinter::PrinterMode mode)
 {
-    if (!QCoreApplication::instance()) {
+    if (Q_UNLIKELY(!QCoreApplication::instance())) {
         qFatal("QPrinter: Must construct a QCoreApplication before a QPrinter");
         return;
     }
@@ -742,7 +624,7 @@ QPrinter::~QPrinter()
     Q_D(QPrinter);
     if (d->use_default_engine)
         delete d->printEngine;
-#ifndef QT_NO_PRINTPREVIEWWIDGET
+#if QT_CONFIG(printpreviewwidget)
     delete d->previewEngine;
 #endif
 }
@@ -1025,7 +907,7 @@ void QPrinter::setCreator(const QString &creator)
 }
 
 // Defined in QPagedPaintDevice but non-virtual, add QPrinter specific doc here
-#ifdef Q_QDOC
+#ifdef Q_CLANG_QDOC
 /*!
     \fn bool QPrinter::setPageLayout(const QPageLayout &newLayout)
     \since 5.3
@@ -1939,13 +1821,12 @@ int QPrinter::winPageSize() const
 QList<int> QPrinter::supportedResolutions() const
 {
     Q_D(const QPrinter);
-    QList<QVariant> varlist
+    const QList<QVariant> varlist
         = d->printEngine->property(QPrintEngine::PPK_SupportedResolutions).toList();
     QList<int> intlist;
-    const int numSupportedResolutions = varlist.size();
-    intlist.reserve(numSupportedResolutions);
-    for (int i = 0; i < numSupportedResolutions; ++i)
-        intlist << varlist.at(i).toInt();
+    intlist.reserve(varlist.size());
+    for (auto var : varlist)
+        intlist << var.toInt();
     return intlist;
 }
 
@@ -1991,7 +1872,7 @@ QPrinter::PrinterState QPrinter::printerState() const
     return d->printEngine->printerState();
 }
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
 /*!
     Returns the supported paper sizes for this printer.
 
@@ -2008,10 +1889,11 @@ QList<QPrinter::PaperSource> QPrinter::supportedPaperSources() const
     Q_D(const QPrinter);
     QVariant v = d->printEngine->property(QPrintEngine::PPK_PaperSources);
 
-    QList<QVariant> variant_list = v.toList();
+    const QList<QVariant> variant_list = v.toList();
     QList<QPrinter::PaperSource> int_list;
-    for (int i=0; i<variant_list.size(); ++i)
-        int_list << (QPrinter::PaperSource) variant_list.at(i).toInt();
+    int_list.reserve(variant_list.size());
+    for (const auto &variant : variant_list)
+        int_list << QPrinter::PaperSource(variant.toInt());
 
     return int_list;
 }
@@ -2128,7 +2010,7 @@ int QPrinter::toPage() const
 void QPrinter::setFromTo(int from, int to)
 {
     if (from > to) {
-        qWarning() << "QPrinter::setFromTo: 'from' must be less than or equal to 'to'";
+        qWarning("QPrinter::setFromTo: 'from' must be less than or equal to 'to'");
         from = to;
     }
     d->fromPage = from;
@@ -2319,4 +2201,8 @@ QPrinter::PrintRange QPrinter::printRange() const
 
 QT_END_NAMESPACE
 
+#elif defined(Q_OS_WINRT)
+QT_BEGIN_NAMESPACE
+bool Q_PRINTSUPPORT_EXPORT qt_winrt_export_lib_creation_variable;
+QT_END_NAMESPACE
 #endif // QT_NO_PRINTER

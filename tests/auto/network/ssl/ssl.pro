@@ -1,4 +1,6 @@
 TEMPLATE=subdirs
+QT_FOR_CONFIG += network
+
 SUBDIRS=\
    qsslcertificate \
    qsslcipher \
@@ -6,8 +8,8 @@ SUBDIRS=\
    qsslerror \
    qsslkey \
 
-contains(QT_CONFIG, ssl) | contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
-    contains(QT_CONFIG, private_tests) {
+qtConfig(ssl) {
+    qtConfig(private_tests) {
         SUBDIRS += \
             qsslsocket \
             qsslsocket_onDemandCertificates_member \
@@ -19,8 +21,9 @@ winrt: SUBDIRS -= \
    qsslsocket_onDemandCertificates_member \
    qsslsocket_onDemandCertificates_static \
 
-contains(QT_CONFIG, ssl) | contains(QT_CONFIG, openssl) | contains(QT_CONFIG, openssl-linked) {
-    contains(QT_CONFIG, private_tests) {
-        SUBDIRS += qasn1element
+qtConfig(ssl) {
+    qtConfig(private_tests) {
+        SUBDIRS += qasn1element \
+                   qssldiffiehellmanparameters
     }
 }

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +32,7 @@
 #include <qdir.h>
 #include <qfile.h>
 #include <qfileinfo.h>
+#include <qhashfunctions.h>
 #include <qtextstream.h>
 #include <qatomic.h>
 #include <qglobal.h>
@@ -54,9 +50,9 @@ QT_BEGIN_NAMESPACE
 
 void dumpRecursive(const QDir &dir, QTextStream &out)
 {
-    QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot
-                                              | QDir::NoSymLinks);
-    foreach (const QFileInfo &entry, entries) {
+    const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot
+                                                    | QDir::NoSymLinks);
+    for (const QFileInfo &entry : entries) {
         if (entry.isDir()) {
             dumpRecursive(entry.filePath(), out);
         } else {
@@ -158,6 +154,9 @@ int runRcc(int argc, char *argv[])
     QCommandLineOption projectOption(QStringLiteral("project"), QStringLiteral("Output a resource file containing all files from the current directory."));
     parser.addOption(projectOption);
 
+    QCommandLineOption formatVersionOption(QStringLiteral("format-version"), QStringLiteral("The RCC format version to write"), QStringLiteral("number"));
+    parser.addOption(formatVersionOption);
+
     parser.addPositionalArgument(QStringLiteral("inputs"), QStringLiteral("Input files (*.qrc)."));
 
 
@@ -165,7 +164,19 @@ int runRcc(int argc, char *argv[])
     parser.process(app);
 
     QString errorMsg;
-    RCCResourceLibrary library;
+
+    quint8 formatVersion = 2;
+    if (parser.isSet(formatVersionOption)) {
+        bool ok = false;
+        formatVersion = parser.value(formatVersionOption).toUInt(&ok);
+        if (!ok) {
+            errorMsg = QLatin1String("Invalid format version specified");
+        } else if (formatVersion != 1 && formatVersion != 2) {
+            errorMsg = QLatin1String("Unsupported format version specified");
+        }
+    }
+
+    RCCResourceLibrary library(formatVersion);
     if (parser.isSet(nameOption))
         library.setInitName(parser.value(nameOption));
     if (parser.isSet(rootOption)) {
@@ -199,7 +210,7 @@ int runRcc(int argc, char *argv[])
     const bool projectRequested = parser.isSet(projectOption);
     const QStringList filenamesIn = parser.positionalArguments();
 
-    foreach (const QString &file, filenamesIn) {
+    for (const QString &file : filenamesIn) {
         if (file == QLatin1String("-"))
             continue;
         else if (!QFile::exists(file)) {
@@ -266,7 +277,8 @@ int runRcc(int argc, char *argv[])
     } else {
         out.setFileName(outFilename);
         if (!out.open(mode)) {
-            const QString msg = QString::fromLatin1("Unable to open %1 for writing: %2\n").arg(outFilename).arg(out.errorString());
+            const QString msg = QString::fromLatin1("Unable to open %1 for writing: %2\n")
+                                .arg(outFilename, out.errorString());
             errorDevice.write(msg.toUtf8());
             return 1;
         }
@@ -287,7 +299,7 @@ int runRcc(int argc, char *argv[])
         temp.setFileName(tempFilename);
         if (!temp.open(QIODevice::ReadOnly)) {
             const QString msg = QString::fromUtf8("Unable to open temporary file %1 for reading: %2\n")
-                    .arg(outFilename).arg(out.errorString());
+                    .arg(outFilename, out.errorString());
             errorDevice.write(msg.toUtf8());
             return 1;
         }
@@ -301,16 +313,17 @@ int runRcc(int argc, char *argv[])
     return 0;
 }
 
-Q_CORE_EXPORT extern QBasicAtomicInt qt_qhash_seed; // from qhash.cpp
-
 QT_END_NAMESPACE
 
 int main(int argc, char *argv[])
 {
     // rcc uses a QHash to store files in the resource system.
     // we must force a certain hash order when testing or tst_rcc will fail, see QTBUG-25078
-    if (!qEnvironmentVariableIsEmpty("QT_RCC_TEST") && !qt_qhash_seed.testAndSetRelaxed(-1, 0))
-        qFatal("Cannot force QHash seed for testing as requested");
+    if (Q_UNLIKELY(!qEnvironmentVariableIsEmpty("QT_RCC_TEST"))) {
+        qSetGlobalQHashSeed(0);
+        if (qGlobalQHashSeed() != 0)
+            qFatal("Cannot force QHash seed for testing as requested");
+    }
 
     return QT_PREPEND_NAMESPACE(runRcc)(argc, argv);
 }

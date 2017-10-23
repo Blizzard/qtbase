@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,11 +39,11 @@
 
 #include "qwindowsbackingstore.h"
 #include "qwindowswindow.h"
-#include "qwindowsnativeimage.h"
 #include "qwindowscontext.h"
 
 #include <QtGui/QWindow>
 #include <QtGui/QPainter>
+#include <QtFontDatabaseSupport/private/qwindowsnativeimage_p.h>
 #include <private/qhighdpiscaling_p.h>
 #include <private/qimage_p.h>
 
@@ -78,9 +84,9 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
     const QRect br = region.boundingRect();
     if (QWindowsContext::verbose > 1)
         qCDebug(lcQpaBackingStore) << __FUNCTION__ << this << window << offset << br;
-    QWindowsWindow *rw = QWindowsWindow::baseWindowOf(window);
+    QWindowsWindow *rw = QWindowsWindow::windowsWindowOf(window);
+    Q_ASSERT(rw);
 
-#ifndef Q_OS_WINCE
     const bool hasAlpha = rw->format().hasAlpha();
     const Qt::WindowFlags flags = window->flags();
     if ((flags & Qt::FramelessWindowHint) && QWindowsWindow::setWindowLayered(rw->handle(), flags, hasAlpha, rw->opacity()) && hasAlpha) {
@@ -94,21 +100,16 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
         POINT ptDst = {r.x(), r.y()};
         POINT ptSrc = {0, 0};
         BLENDFUNCTION blend = {AC_SRC_OVER, 0, BYTE(qRound(255.0 * rw->opacity())), AC_SRC_ALPHA};
-        if (QWindowsContext::user32dll.updateLayeredWindowIndirect) {
-            RECT dirty = {dirtyRect.x(), dirtyRect.y(),
-                dirtyRect.x() + dirtyRect.width(), dirtyRect.y() + dirtyRect.height()};
-            UPDATELAYEREDWINDOWINFO info = {sizeof(info), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA, &dirty};
-            const BOOL result = QWindowsContext::user32dll.updateLayeredWindowIndirect(rw->handle(), &info);
-            if (!result)
-                qErrnoWarning("UpdateLayeredWindowIndirect failed for ptDst=(%d, %d),"
-                              " size=(%dx%d), dirty=(%dx%d %d, %d)", r.x(), r.y(),
-                              r.width(), r.height(), dirtyRect.width(), dirtyRect.height(),
-                              dirtyRect.x(), dirtyRect.y());
-        } else {
-            QWindowsContext::user32dll.updateLayeredWindow(rw->handle(), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA);
-        }
+        RECT dirty = {dirtyRect.x(), dirtyRect.y(),
+                      dirtyRect.x() + dirtyRect.width(), dirtyRect.y() + dirtyRect.height()};
+        UPDATELAYEREDWINDOWINFO info = {sizeof(info), NULL, &ptDst, &size, m_image->hdc(), &ptSrc, 0, &blend, ULW_ALPHA, &dirty};
+        const BOOL result = UpdateLayeredWindowIndirect(rw->handle(), &info);
+        if (!result)
+            qErrnoWarning("UpdateLayeredWindowIndirect failed for ptDst=(%d, %d),"
+                          " size=(%dx%d), dirty=(%dx%d %d, %d)", r.x(), r.y(),
+                          r.width(), r.height(), dirtyRect.width(), dirtyRect.height(),
+                          dirtyRect.x(), dirtyRect.y());
     } else {
-#endif
         const HDC dc = rw->getDC();
         if (!dc) {
             qErrnoWarning("%s: GetDC failed", __FUNCTION__);
@@ -122,9 +123,7 @@ void QWindowsBackingStore::flush(QWindow *window, const QRegion &region,
                 qErrnoWarning(int(lastError), "%s: BitBlt failed", __FUNCTION__);
         }
         rw->releaseDC();
-#ifndef Q_OS_WINCE
     }
-#endif
 
     // Write image for debug purposes.
     if (QWindowsContext::verbose > 2 && lcQpaBackingStore().isDebugEnabled()) {
@@ -168,7 +167,7 @@ void QWindowsBackingStore::resize(const QSize &size, const QRegion &region)
             staticRegion &= QRect(0, 0, newimg.width(), newimg.height());
             QPainter painter(&newimg);
             painter.setCompositionMode(QPainter::CompositionMode_Source);
-            foreach (const QRect &rect, staticRegion.rects())
+            for (const QRect &rect : staticRegion)
                 painter.drawImage(rect, oldimg, rect);
         }
 
@@ -183,10 +182,9 @@ bool QWindowsBackingStore::scroll(const QRegion &area, int dx, int dy)
     if (m_image.isNull() || m_image->image().isNull())
         return false;
 
-    const QVector<QRect> rects = area.rects();
     const QPoint offset(dx, dy);
-    for (int i = 0; i < rects.size(); ++i)
-        qt_scrollRectInImage(m_image->image(), rects.at(i), offset);
+    for (const QRect &rect : area)
+        qt_scrollRectInImage(m_image->image(), rect, offset);
 
     return true;
 }
@@ -200,7 +198,7 @@ void QWindowsBackingStore::beginPaint(const QRegion &region)
         QPainter p(&m_image->image());
         p.setCompositionMode(QPainter::CompositionMode_Source);
         const QColor blank = Qt::transparent;
-        foreach (const QRect &r, region.rects())
+        for (const QRect &r : region)
             p.fillRect(r, blank);
     }
 }
@@ -212,8 +210,6 @@ HDC QWindowsBackingStore::getDC() const
     return 0;
 }
 
-#ifndef QT_NO_OPENGL
-
 QImage QWindowsBackingStore::toImage() const
 {
     if (m_image.isNull()) {
@@ -222,7 +218,5 @@ QImage QWindowsBackingStore::toImage() const
     }
     return m_image.data()->image();
 }
-
-#endif // !QT_NO_OPENGL
 
 QT_END_NAMESPACE

@@ -1,32 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,8 +29,10 @@
 
 #include <qdebug.h>
 #include <qglobal.h>
-#include <QtCore/QProcess>
-#include <QtTest/QtTest>
+#if QT_CONFIG(process)
+# include <QtCore/QProcess>
+#endif
+#include <QtTest/QTest>
 
 class tst_qmessagehandler : public QObject
 {
@@ -103,11 +100,11 @@ tst_qmessagehandler::tst_qmessagehandler()
 
 void tst_qmessagehandler::initTestCase()
 {
+#if QT_CONFIG(process)
     m_appDir = QFINDTESTDATA("app");
     QVERIFY2(!m_appDir.isEmpty(), qPrintable(
         QString::fromLatin1("Couldn't find helper app dir starting from %1.").arg(QDir::currentPath())));
 
-#ifndef QT_NO_PROCESS
     m_baseEnvironment = QProcess::systemEnvironment();
     for (int i = 0; i < m_baseEnvironment.count(); ++i) {
         if (m_baseEnvironment.at(i).startsWith("QT_MESSAGE_PATTERN=")) {
@@ -115,7 +112,7 @@ void tst_qmessagehandler::initTestCase()
             break;
         }
     }
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 void tst_qmessagehandler::cleanup()
@@ -725,16 +722,16 @@ void tst_qmessagehandler::qMessagePattern_data()
 
     // %{file} is tricky because of shadow builds
     QTest::newRow("basic") << "%{type} %{appname} %{line} %{function} %{message}" << true << (QList<QByteArray>()
-            << "debug  44 T::T static constructor"
+            << "debug  39 T::T static constructor"
             //  we can't be sure whether the QT_MESSAGE_PATTERN is already destructed
             << "static destructor"
-            << "debug tst_qlogging 65 MyClass::myFunction from_a_function 34"
-            << "debug tst_qlogging 75 main qDebug"
-            << "info tst_qlogging 76 main qInfo"
-            << "warning tst_qlogging 77 main qWarning"
-            << "critical tst_qlogging 78 main qCritical"
-            << "warning tst_qlogging 81 main qDebug with category"
-            << "debug tst_qlogging 85 main qDebug2");
+            << "debug tst_qlogging 60 MyClass::myFunction from_a_function 34"
+            << "debug tst_qlogging 70 main qDebug"
+            << "info tst_qlogging 71 main qInfo"
+            << "warning tst_qlogging 72 main qWarning"
+            << "critical tst_qlogging 73 main qCritical"
+            << "warning tst_qlogging 76 main qDebug with category"
+            << "debug tst_qlogging 80 main qDebug2");
 
 
     QTest::newRow("invalid") << "PREFIX: %{unknown} %{message}" << false << (QList<QByteArray>()
@@ -818,7 +815,7 @@ void tst_qmessagehandler::qMessagePattern_data()
 
 void tst_qmessagehandler::qMessagePattern()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
     QFETCH(QString, pattern);
@@ -832,7 +829,7 @@ void tst_qmessagehandler::qMessagePattern()
     // test QT_MESSAGE_PATTERN
     //
     QStringList environment = m_baseEnvironment;
-    environment.prepend("QT_MESSAGE_PATTERN=\"" + pattern + "\"");
+    environment.prepend("QT_MESSAGE_PATTERN=\"" + pattern + QLatin1Char('"'));
     process.setEnvironment(environment);
 
     process.start(appExe);
@@ -846,7 +843,7 @@ void tst_qmessagehandler::qMessagePattern()
     QVERIFY(!output.isEmpty());
     QCOMPARE(!output.contains("QT_MESSAGE_PATTERN"), valid);
 
-    foreach (const QByteArray &e, expected) {
+    for (const QByteArray &e : qAsConst(expected)) {
         if (!output.contains(e)) {
             qDebug() << output;
             qDebug() << "expected: " << e;
@@ -860,7 +857,7 @@ void tst_qmessagehandler::qMessagePattern()
 
 void tst_qmessagehandler::setMessagePattern()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
 
@@ -897,7 +894,7 @@ void tst_qmessagehandler::setMessagePattern()
     output.replace("\r\n", "\n");
 #endif
     QCOMPARE(QString::fromLatin1(output), QString::fromLatin1(expected));
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 Q_DECLARE_METATYPE(QtMsgType)

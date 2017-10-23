@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +32,7 @@
 
 #include <qfile.h>
 #include <qdir.h>
+#include <qhashfunctions.h>
 #include <qtextstream.h>
 #include <qtextcodec.h>
 #include <qcoreapplication.h>
@@ -44,11 +40,10 @@
 #include <qcommandlineparser.h>
 
 QT_BEGIN_NAMESPACE
-extern Q_CORE_EXPORT QBasicAtomicInt qt_qhash_seed;
 
 int runUic(int argc, char *argv[])
 {
-    qt_qhash_seed.testAndSetRelaxed(-1, 0); // set the hash seed to 0 if it wasn't set yet
+    qSetGlobalQHashSeed(0);    // set the hash seed to 0
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationVersion(QString::fromLatin1(QT_VERSION_STR));
@@ -100,6 +95,10 @@ int runUic(int argc, char *argv[])
     generatorOption.setValueName(QStringLiteral("java|cpp"));
     parser.addOption(generatorOption);
 
+    QCommandLineOption idBasedOption(QStringLiteral("idbased"));
+    idBasedOption.setDescription(QStringLiteral("Use id based function for i18n"));
+    parser.addOption(idBasedOption);
+
     parser.addPositionalArgument(QStringLiteral("[uifile]"), QStringLiteral("Input file (*.ui), otherwise stdin."));
 
     parser.process(app);
@@ -108,6 +107,7 @@ int runUic(int argc, char *argv[])
     driver.option().outputFile = parser.value(outputOption);
     driver.option().headerProtection = !parser.isSet(noProtOption);
     driver.option().implicitIncludes = !parser.isSet(noImplicitIncludesOption);
+    driver.option().idBased = parser.isSet(idBasedOption);
     driver.option().postfix = parser.value(postfixOption);
     driver.option().translateFunction = parser.value(translateOption);
     driver.option().includeFile = parser.value(includeOption);
@@ -115,7 +115,7 @@ int runUic(int argc, char *argv[])
 
     QString inputFile;
     if (!parser.positionalArguments().isEmpty())
-        inputFile = parser.positionalArguments().first();
+        inputFile = parser.positionalArguments().at(0);
     else // reading from stdin
         driver.option().headerProtection = false;
 
@@ -132,7 +132,9 @@ int runUic(int argc, char *argv[])
             return 1;
         }
         out = new QTextStream(&f);
+#ifndef QT_NO_TEXTCODEC
         out->setCodec(QTextCodec::codecForName("UTF-8"));
+#endif
     }
 
     bool rtn = driver.uic(inputFile, out);

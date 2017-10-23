@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qcalendarwidget.h"
-
-#ifndef QT_NO_CALENDARWIDGET
 
 #include <qabstractitemmodel.h>
 #include <qitemdelegate.h>
@@ -52,6 +56,8 @@
 #include <qapplication.h>
 #include <qbasictimer.h>
 #include <qstylepainter.h>
+
+#include <vector>
 
 QT_BEGIN_NAMESPACE
 
@@ -205,10 +211,9 @@ QString QCalendarDayValidator::text(const QDate &date, int repeat) const
         return formatNumber(date.day(), 2);
     } else if (repeat == 3) {
         return m_locale.dayName(date.dayOfWeek(), QLocale::ShortFormat);
-    } else if (repeat >= 4) {
+    } else /* repeat >= 4 */ {
         return m_locale.dayName(date.dayOfWeek(), QLocale::LongFormat);
     }
-    return QString();
 }
 
 //////////////////////////////////
@@ -423,6 +428,17 @@ QString QCalendarYearValidator::text(const QDate &date, int repeat) const
 
 ///////////////////////////////////
 
+struct SectionToken {
+    Q_DECL_CONSTEXPR SectionToken(QCalendarDateSectionValidator *v, int rep)
+        : validator(v), repeat(rep) {}
+
+    QCalendarDateSectionValidator *validator;
+    int repeat;
+};
+} // unnamed namespace
+Q_DECLARE_TYPEINFO(SectionToken, Q_PRIMITIVE_TYPE);
+namespace {
+
 class QCalendarDateValidator
 {
 public:
@@ -438,13 +454,6 @@ public:
     void setLocale(const QLocale &locale);
 
 private:
-
-    struct SectionToken {
-        SectionToken(QCalendarDateSectionValidator *val, int rep) : validator(val), repeat(rep) {}
-        QCalendarDateSectionValidator *validator;
-        int repeat;
-    };
-
     void toNextToken();
     void toPreviousToken();
     void applyToDate();
@@ -453,12 +462,12 @@ private:
     void clear();
 
     QStringList m_separators;
-    QList<SectionToken *> m_tokens;
+    std::vector<SectionToken> m_tokens;
     QCalendarYearValidator m_yearValidator;
     QCalendarMonthValidator m_monthValidator;
     QCalendarDayValidator m_dayValidator;
 
-    SectionToken *m_currentToken;
+    int m_currentToken;
 
     QDate m_initialDate;
     QDate m_currentDate;
@@ -467,7 +476,7 @@ private:
 };
 
 QCalendarDateValidator::QCalendarDateValidator()
-    : m_currentToken(Q_NULLPTR),
+    : m_currentToken(-1),
       m_initialDate(QDate::currentDate()),
       m_currentDate(m_initialDate),
       m_lastSectionMove(QCalendarDateSectionValidator::ThisSection)
@@ -510,17 +519,16 @@ void QCalendarDateValidator::setInitialDate(const QDate &date)
 QString QCalendarDateValidator::currentText() const
 {
     QString str;
-    QStringListIterator itSep(m_separators);
-    QListIterator<SectionToken *> itTok(m_tokens);
-    while (itSep.hasNext()) {
-        str += itSep.next();
-        if (itTok.hasNext()) {
-            SectionToken *token = itTok.next();
-            QCalendarDateSectionValidator *validator = token->validator;
-            if (m_currentToken == token)
-                str += validator->text();
+    const int numSeps = m_separators.size();
+    const int numTokens = int(m_tokens.size());
+    for (int i = 0; i < numSeps; ++i) {
+        str += m_separators.at(i);
+        if (i < numTokens) {
+            const SectionToken &token = m_tokens[i];
+            if (i == m_currentToken)
+                str += token.validator->text();
             else
-                str += validator->text(m_currentDate, token->repeat);
+                str += token.validator->text(m_currentDate, token.repeat);
         }
     }
     return str;
@@ -528,14 +536,10 @@ QString QCalendarDateValidator::currentText() const
 
 void QCalendarDateValidator::clear()
 {
-    QListIterator<SectionToken *> it(m_tokens);
-    while (it.hasNext())
-        delete it.next();
-
     m_tokens.clear();
     m_separators.clear();
 
-    m_currentToken = 0;
+    m_currentToken = -1;
 }
 
 void QCalendarDateValidator::setFormat(const QString &format)
@@ -547,7 +551,7 @@ void QCalendarDateValidator::setFormat(const QString &format)
     bool quoting = false;
     QString separator;
     while (pos < format.size()) {
-        QString mid = format.mid(pos);
+        const QStringRef mid = format.midRef(pos);
         int offset = 1;
 
         if (mid.startsWith(quote)) {
@@ -558,25 +562,25 @@ void QCalendarDateValidator::setFormat(const QString &format)
                 separator += nextChar;
                 quoting = false;
             } else {
-                SectionToken *token = 0;
+                QCalendarDateSectionValidator *validator = 0;
                 if (nextChar == QLatin1Char('d')) {
                     offset = qMin(4, countRepeat(format, pos));
-                    token = new SectionToken(&m_dayValidator, offset);
+                    validator = &m_dayValidator;
                 } else if (nextChar == QLatin1Char('M')) {
                     offset = qMin(4, countRepeat(format, pos));
-                    token = new SectionToken(&m_monthValidator, offset);
+                    validator = &m_monthValidator;
                 } else if (nextChar == QLatin1Char('y')) {
                     offset = qMin(4, countRepeat(format, pos));
-                    token = new SectionToken(&m_yearValidator, offset);
+                    validator = &m_yearValidator;
                 } else {
                     separator += nextChar;
                 }
-                if (token) {
-                    m_tokens.append(token);
+                if (validator) {
+                    m_tokens.push_back(SectionToken(validator, offset));
                     m_separators.append(separator);
                     separator = QString();
-                    if (!m_currentToken)
-                        m_currentToken = token;
+                    if (m_currentToken < 0)
+                        m_currentToken = int(m_tokens.size()) - 1;
 
                 }
             }
@@ -595,29 +599,23 @@ void QCalendarDateValidator::applyToDate()
 
 void QCalendarDateValidator::toNextToken()
 {
-    const int idx = m_tokens.indexOf(m_currentToken);
-    if (idx == -1)
+    if (m_currentToken < 0)
         return;
-    if (idx + 1 >= m_tokens.count())
-        m_currentToken = m_tokens.first();
-    else
-        m_currentToken = m_tokens.at(idx + 1);
+    ++m_currentToken;
+    m_currentToken %= m_tokens.size();
 }
 
 void QCalendarDateValidator::toPreviousToken()
 {
-    const int idx = m_tokens.indexOf(m_currentToken);
-    if (idx == -1)
+    if (m_currentToken < 0)
         return;
-    if (idx - 1 < 0)
-        m_currentToken = m_tokens.last();
-    else
-        m_currentToken = m_tokens.at(idx - 1);
+    --m_currentToken;
+    m_currentToken %= m_tokens.size();
 }
 
 void QCalendarDateValidator::handleKeyEvent(QKeyEvent *keyEvent)
 {
-    if (!m_currentToken)
+    if (m_currentToken < 0)
         return;
 
     int key = keyEvent->key();
@@ -630,7 +628,7 @@ void QCalendarDateValidator::handleKeyEvent(QKeyEvent *keyEvent)
     else if (key == Qt::Key_Left)
         toPreviousToken();
 
-    m_lastSectionMove = m_currentToken->validator->handleKey(key);
+    m_lastSectionMove = m_tokens[m_currentToken].validator->handleKey(key);
 
     applyToDate();
     if (m_lastSectionMove == QCalendarDateSectionValidator::NextSection)
@@ -765,13 +763,15 @@ bool QCalendarTextNavigator::eventFilter(QObject *o, QEvent *e)
     if (m_widget) {
         if (e->type() == QEvent::KeyPress || e->type() == QEvent::KeyRelease) {
             QKeyEvent* ke = (QKeyEvent*)e;
-            if ((ke->text().length() > 0 && ke->text()[0].isPrint()) || m_dateFrame) {
+            if ((ke->text().length() > 0 && ke->text().at(0).isPrint()) || m_dateFrame) {
                 if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter || ke->key() == Qt::Key_Select) {
                     applyDate();
                     emit editingFinished();
                     removeDateLabel();
+#if QT_CONFIG(shortcut)
                 } else if (ke->matches(QKeySequence::Cancel)) {
                     removeDateLabel();
+#endif
                 } else if (e->type() == QEvent::KeyPress) {
                     createDateLabel();
                     m_dateValidator->handleKeyEvent(ke);
@@ -814,6 +814,46 @@ void QCalendarTextNavigator::setDateEditAcceptDelay(int delay)
 }
 
 class QCalendarView;
+
+// a small helper class that replaces a QMap<Qt::DayOfWeek, T>,
+// but requires T to have a member-swap and a default constructor
+// which should be cheap (no memory allocations)
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_MSVC(4351) // "new behavior: elements of array ... will be default initialized"
+
+template <typename T>
+class StaticDayOfWeekAssociativeArray {
+    bool contained[7];
+    T data[7];
+
+    static Q_DECL_CONSTEXPR int day2idx(Qt::DayOfWeek day) Q_DECL_NOTHROW { return int(day) - 1; } // alt: day % 7
+public:
+    Q_DECL_CONSTEXPR StaticDayOfWeekAssociativeArray() Q_DECL_NOEXCEPT_EXPR(noexcept(T()))
+#ifdef Q_COMPILER_CONSTEXPR
+        : contained{}, data{}   // arrays require uniform initialization
+#else
+        : contained(), data()
+#endif
+    {}
+
+    Q_DECL_CONSTEXPR bool contains(Qt::DayOfWeek day) const Q_DECL_NOTHROW { return contained[day2idx(day)]; }
+    Q_DECL_CONSTEXPR const T &value(Qt::DayOfWeek day) const Q_DECL_NOTHROW { return data[day2idx(day)]; }
+
+    Q_DECL_RELAXED_CONSTEXPR T &operator[](Qt::DayOfWeek day) Q_DECL_NOTHROW
+    {
+        const int idx = day2idx(day);
+        contained[idx] = true;
+        return data[idx];
+    }
+
+    Q_DECL_RELAXED_CONSTEXPR void insert(Qt::DayOfWeek day, T v) Q_DECL_NOTHROW
+    {
+        operator[](day).swap(v);
+    }
+};
+
+QT_WARNING_POP
 
 class QCalendarModel : public QAbstractTableModel
 {
@@ -893,7 +933,7 @@ public:
     Qt::DayOfWeek m_firstDay;
     QCalendarWidget::HorizontalHeaderFormat m_horizontalHeaderFormat;
     bool m_weekNumbersShown;
-    QMap<Qt::DayOfWeek, QTextCharFormat> m_dayFormats;
+    StaticDayOfWeekAssociativeArray<QTextCharFormat> m_dayFormats;
     QMap<QDate, QTextCharFormat> m_dateFormats;
     QTextCharFormat m_headerFormat;
     QCalendarView *m_view;
@@ -920,7 +960,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
     void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent(QWheelEvent *event) Q_DECL_OVERRIDE;
 #endif
     void keyPressEvent(QKeyEvent *event) Q_DECL_OVERRIDE;
@@ -1375,7 +1415,7 @@ void QCalendarView::keyPressEvent(QKeyEvent *event)
     QTableView::keyPressEvent(event);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QCalendarView::wheelEvent(QWheelEvent *event)
 {
     const int numDegrees = event->delta() / 8;
@@ -1543,7 +1583,7 @@ protected:
     {
         Q_UNUSED(e)
 
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
         QStyleOptionToolButton opt;
         initStyleOption(&opt);
 
@@ -2881,7 +2921,7 @@ void QCalendarWidget::setDateEditAcceptDelay(int delay)
 */
 void QCalendarWidget::updateCell(const QDate &date)
 {
-    if (!date.isValid()) {
+    if (Q_UNLIKELY(!date.isValid())) {
         qWarning("QCalendarWidget::updateCell: Invalid date");
         return;
     }
@@ -2994,6 +3034,7 @@ bool QCalendarWidget::event(QEvent *event)
     switch (event->type()) {
         case QEvent::LayoutDirectionChange:
             d->updateButtonIcons();
+            break;
         case QEvent::LocaleChange:
             d->m_model->setFirstColumnDay(locale().firstDayOfWeek());
             d->cachedSizeHint = QSize();
@@ -3071,12 +3112,14 @@ void QCalendarWidget::resizeEvent(QResizeEvent * event)
 */
 void QCalendarWidget::keyPressEvent(QKeyEvent * event)
 {
+#if QT_CONFIG(shortcut)
     Q_D(QCalendarWidget);
     if (d->yearEdit->isVisible()&& event->matches(QKeySequence::Cancel)) {
         d->yearEdit->setValue(yearShown());
         d->_q_yearEditingFinished();
         return;
     }
+#endif
     QWidget::keyPressEvent(event);
 }
 
@@ -3084,5 +3127,3 @@ QT_END_NAMESPACE
 
 #include "qcalendarwidget.moc"
 #include "moc_qcalendarwidget.cpp"
-
-#endif //QT_NO_CALENDARWIDGET

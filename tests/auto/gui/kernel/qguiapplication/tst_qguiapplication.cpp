@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -63,6 +58,7 @@ private slots:
     void initTestCase();
     void cleanup();
     void displayName();
+    void desktopFileName();
     void firstWindowTitle();
     void windowIcon();
     void focusObject();
@@ -74,6 +70,8 @@ private slots:
     void palette();
     void modalWindow();
     void quitOnLastWindowClosed();
+    void quitOnLastWindowClosedMulti();
+    void dontQuitOnLastWindowClosed();
     void genericPluginsAndWindowSystemEvents();
     void layoutDirection();
     void globalShareContext();
@@ -110,11 +108,44 @@ void tst_QGuiApplication::displayName()
     int argc = 1;
     char *argv[] = { const_cast<char*>("tst_qguiapplication") };
     QGuiApplication app(argc, argv);
+    QSignalSpy spy(&app, &QGuiApplication::applicationDisplayNameChanged);
+
     QCOMPARE(::qAppName(), QString::fromLatin1("tst_qguiapplication"));
     QCOMPARE(QGuiApplication::applicationName(), QString::fromLatin1("tst_qguiapplication"));
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("tst_qguiapplication"));
+
+    QGuiApplication::setApplicationName("The Core Application");
+    QCOMPARE(QGuiApplication::applicationName(), QString::fromLatin1("The Core Application"));
+    QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The Core Application"));
+    QCOMPARE(spy.count(), 1);
+
     QGuiApplication::setApplicationDisplayName("The GUI Application");
     QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application"));
+    QCOMPARE(spy.count(), 2);
+
+    QGuiApplication::setApplicationName("The Core Application 2");
+    QCOMPARE(QGuiApplication::applicationName(), QString::fromLatin1("The Core Application 2"));
+    QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application"));
+    QCOMPARE(spy.count(), 2);
+
+    QGuiApplication::setApplicationDisplayName("The GUI Application 2");
+    QCOMPARE(QGuiApplication::applicationDisplayName(), QString::fromLatin1("The GUI Application 2"));
+    QCOMPARE(spy.count(), 3);
+}
+
+void tst_QGuiApplication::desktopFileName()
+{
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+    QGuiApplication app(argc, argv);
+
+    QCOMPARE(QGuiApplication::desktopFileName(), QString());
+
+    QGuiApplication::setDesktopFileName("io.qt.QGuiApplication.desktop");
+    QCOMPARE(QGuiApplication::desktopFileName(), QString::fromLatin1("io.qt.QGuiApplication.desktop"));
+
+    QGuiApplication::setDesktopFileName(QString());
+    QCOMPARE(QGuiApplication::desktopFileName(), QString());
 }
 
 void tst_QGuiApplication::firstWindowTitle()
@@ -762,107 +793,111 @@ void tst_QGuiApplication::modalWindow()
 
 void tst_QGuiApplication::quitOnLastWindowClosed()
 {
-    {
-        int argc = 0;
-        QGuiApplication app(argc, 0);
-        const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
+    int argc = 0;
+    QGuiApplication app(argc, 0);
+    const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
 
-        QTimer timer;
-        timer.setInterval(100);
+    QTimer timer;
+    timer.setInterval(100);
 
-        QSignalSpy spy(&app, SIGNAL(aboutToQuit()));
-        QSignalSpy spy2(&timer, SIGNAL(timeout()));
+    QSignalSpy spyAboutToQuit(&app, &QCoreApplication::aboutToQuit);
+    QSignalSpy spyTimeout(&timer, &QTimer::timeout);
 
-        QWindow mainWindow;
-        mainWindow.setTitle(QStringLiteral("quitOnLastWindowClosedMainWindow"));
-        mainWindow.resize(windowSize, windowSize);
-        mainWindow.setFramePosition(QPoint(screenGeometry.left() + spacing, screenGeometry.top() + spacing));
+    QWindow mainWindow;
+    mainWindow.setTitle(QStringLiteral("quitOnLastWindowClosedMainWindow"));
+    mainWindow.resize(windowSize, windowSize);
+    mainWindow.setFramePosition(QPoint(screenGeometry.left() + spacing, screenGeometry.top() + spacing));
 
-        QWindow dialog;
-        dialog.setTransientParent(&mainWindow);
-        dialog.setTitle(QStringLiteral("quitOnLastWindowClosedDialog"));
-        dialog.resize(windowSize, windowSize);
-        dialog.setFramePosition(QPoint(screenGeometry.left() + 2 * spacing + windowSize, screenGeometry.top() + spacing));
+    QWindow dialog;
+    dialog.setTransientParent(&mainWindow);
+    dialog.setTitle(QStringLiteral("quitOnLastWindowClosedDialog"));
+    dialog.resize(windowSize, windowSize);
+    dialog.setFramePosition(QPoint(screenGeometry.left() + 2 * spacing + windowSize, screenGeometry.top() + spacing));
 
-        QVERIFY(app.quitOnLastWindowClosed());
+    QVERIFY(app.quitOnLastWindowClosed());
 
-        mainWindow.show();
-        dialog.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    mainWindow.show();
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
 
-        timer.start();
-        QTimer::singleShot(1000, &mainWindow, SLOT(close())); // This should quit the application
-        QTimer::singleShot(2000, &app, SLOT(quit()));        // This makes sure we quit even if it didn't
+    timer.start();
+    QTimer::singleShot(1000, &mainWindow, &QWindow::close); // This should quit the application
+    QTimer::singleShot(2000, &app, QCoreApplication::quit);  // This makes sure we quit even if it didn't
 
-        app.exec();
+    app.exec();
 
-        QCOMPARE(spy.count(), 1);
-        QVERIFY(spy2.count() < 15);      // Should be around 10 if closing caused the quit
-    }
-    {
-        int argc = 0;
-        QGuiApplication app(argc, 0);
-        const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
+    QCOMPARE(spyAboutToQuit.count(), 1);
+    // Should be around 10 if closing caused the quit
+    QVERIFY2(spyTimeout.count() < 15, QByteArray::number(spyTimeout.count()).constData());
+}
 
-        QTimer timer;
-        timer.setInterval(100);
+void tst_QGuiApplication::quitOnLastWindowClosedMulti()
+{
+    int argc = 0;
+    QGuiApplication app(argc, 0);
+    const QRect screenGeometry = QGuiApplication::primaryScreen()->availableVirtualGeometry();
 
-        QSignalSpy spy(&app, SIGNAL(aboutToQuit()));
-        QSignalSpy spy2(&timer, SIGNAL(timeout()));
+    QTimer timer;
+    timer.setInterval(100);
 
-        QWindow mainWindow;
-        mainWindow.setTitle(QStringLiteral("quitOnLastWindowClosedMainWindow"));
-        mainWindow.resize(windowSize, windowSize);
-        mainWindow.setFramePosition(QPoint(screenGeometry.left() + spacing, screenGeometry.top() + spacing));
+    QSignalSpy spyAboutToQuit(&app, &QCoreApplication::aboutToQuit);
+    QSignalSpy spyTimeout(&timer, &QTimer::timeout);
 
-        QWindow dialog;
-        dialog.setTitle(QStringLiteral("quitOnLastWindowClosedDialog"));
-        dialog.resize(windowSize, windowSize);
-        dialog.setFramePosition(QPoint(screenGeometry.left() + 2 * spacing + windowSize, screenGeometry.top() + spacing));
+    QWindow mainWindow;
+    mainWindow.setTitle(QStringLiteral("quitOnLastWindowClosedMultiMainWindow"));
+    mainWindow.resize(windowSize, windowSize);
+    mainWindow.setFramePosition(QPoint(screenGeometry.left() + spacing, screenGeometry.top() + spacing));
 
-        QVERIFY(!dialog.transientParent());
-        QVERIFY(app.quitOnLastWindowClosed());
+    QWindow dialog;
+    dialog.setTitle(QStringLiteral("quitOnLastWindowClosedMultiDialog"));
+    dialog.resize(windowSize, windowSize);
+    dialog.setFramePosition(QPoint(screenGeometry.left() + 2 * spacing + windowSize, screenGeometry.top() + spacing));
 
-        mainWindow.show();
-        dialog.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    QVERIFY(!dialog.transientParent());
+    QVERIFY(app.quitOnLastWindowClosed());
 
-        timer.start();
-        QTimer::singleShot(1000, &mainWindow, SLOT(close())); // This should not quit the application
-        QTimer::singleShot(2000, &app, SLOT(quit()));
+    mainWindow.show();
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
 
-        app.exec();
+    timer.start();
+    QTimer::singleShot(1000, &mainWindow, &QWindow::close); // This should not quit the application
+    QTimer::singleShot(2000, &app, &QCoreApplication::quit);
 
-        QCOMPARE(spy.count(), 1);
-        QVERIFY(spy2.count() > 15);      // Should be around 20 if closing did not cause the quit
-    }
-    {
-        int argc = 0;
-        QGuiApplication app(argc, 0);
-        app.setQuitOnLastWindowClosed(false);
+    app.exec();
 
-        QTimer timer;
-        timer.setInterval(2000);
-        timer.setSingleShot(true);
-        QObject::connect(&timer, SIGNAL(timeout()), &app, SLOT(quit()));
+    QCOMPARE(spyAboutToQuit.count(), 1);
+    // Should be around 20 if closing did not cause the quit
+    QVERIFY2(spyTimeout.count() > 15, QByteArray::number(spyTimeout.count()).constData());
+}
 
-        QSignalSpy spy(&app, SIGNAL(lastWindowClosed()));
-        QSignalSpy spy2(&timer, SIGNAL(timeout()));
+void tst_QGuiApplication::dontQuitOnLastWindowClosed()
+{
+    int argc = 0;
+    QGuiApplication app(argc, 0);
+    app.setQuitOnLastWindowClosed(false);
 
-        QPointer<QWindow> mainWindow = new QWindow;
+    QTimer timer;
+    timer.setInterval(2000);
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &app, &QCoreApplication::quit);
 
-        mainWindow->show();
+    QSignalSpy spyLastWindowClosed(&app, &QGuiApplication::lastWindowClosed);
+    QSignalSpy spyTimeout(&timer, &QTimer::timeout);
 
-        QTimer::singleShot(1000, mainWindow, SLOT(close())); // This should not quit the application
-        timer.start();
+    QScopedPointer<QWindow> mainWindow(new QWindow);
 
-        app.exec();
+    mainWindow->show();
 
-        QCOMPARE(spy2.count(), 1); // quit timer fired
-        QCOMPARE(spy.count(), 1); // lastWindowClosed emitted
+    QTimer::singleShot(1000, mainWindow.data(), &QWindow::close); // This should not quit the application
+    timer.start();
 
-        app.setQuitOnLastWindowClosed(true); // restore underlying static to default value
-   }
+    app.exec();
+
+    app.setQuitOnLastWindowClosed(true); // restore underlying static to default value
+
+    QCOMPARE(spyTimeout.count(), 1); // quit timer fired
+    QCOMPARE(spyLastWindowClosed.count(), 1); // lastWindowClosed emitted
 }
 
 static Qt::ScreenOrientation testOrientationToSend = Qt::PrimaryOrientation;

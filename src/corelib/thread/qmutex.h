@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,10 +44,17 @@
 #include <QtCore/qatomic.h>
 #include <new>
 
+#if QT_HAS_INCLUDE(<chrono>)
+#  include <chrono>
+#  include <limits>
+#endif
+
+class tst_QMutex;
+
 QT_BEGIN_NAMESPACE
 
 
-#if !defined(QT_NO_THREAD) && !defined(Q_QDOC)
+#if !defined(QT_NO_THREAD) || defined(Q_CLANG_QDOC)
 
 #ifdef Q_OS_LINUX
 # define QT_MUTEX_LOCK_NOEXCEPT Q_DECL_NOTHROW
@@ -54,11 +67,13 @@ class QMutexData;
 class Q_CORE_EXPORT QBasicMutex
 {
 public:
+    // BasicLockable concept
     inline void lock() QT_MUTEX_LOCK_NOEXCEPT {
         if (!fastTryLock())
             lockInternal();
     }
 
+    // BasicLockable concept
     inline void unlock() Q_DECL_NOTHROW {
         Q_ASSERT(d_ptr.load()); //mutex must be locked
         if (!fastTryUnlock())
@@ -69,7 +84,11 @@ public:
         return fastTryLock();
     }
 
-    bool isRecursive(); //### Qt6: mark const
+    // Lockable concept
+    bool try_lock() Q_DECL_NOTHROW { return tryLock(); }
+
+    bool isRecursive() Q_DECL_NOTHROW; //### Qt6: remove me
+    bool isRecursive() const Q_DECL_NOTHROW;
 
 private:
     inline bool fastTryLock() Q_DECL_NOTHROW {
@@ -98,26 +117,79 @@ private:
     friend class QMutexData;
 };
 
-class Q_CORE_EXPORT QMutex : public QBasicMutex {
+class Q_CORE_EXPORT QMutex : public QBasicMutex
+{
 public:
     enum RecursionMode { NonRecursive, Recursive };
     explicit QMutex(RecursionMode mode = NonRecursive);
     ~QMutex();
 
+    // BasicLockable concept
     void lock() QT_MUTEX_LOCK_NOEXCEPT;
     bool tryLock(int timeout = 0) QT_MUTEX_LOCK_NOEXCEPT;
+    // BasicLockable concept
     void unlock() Q_DECL_NOTHROW;
 
-    using QBasicMutex::isRecursive;
+    // Lockable concept
+    bool try_lock() QT_MUTEX_LOCK_NOEXCEPT { return tryLock(); }
+
+#if QT_HAS_INCLUDE(<chrono>)
+    // TimedLockable concept
+    template <class Rep, class Period>
+    bool try_lock_for(std::chrono::duration<Rep, Period> duration)
+    {
+        return tryLock(convertToMilliseconds(duration));
+    }
+
+    // TimedLockable concept
+    template<class Clock, class Duration>
+    bool try_lock_until(std::chrono::time_point<Clock, Duration> timePoint)
+    {
+        // Implemented in terms of try_lock_for to honor the similar
+        // requirement in N4606 § 30.4.1.3 [thread.timedmutex.requirements]/12.
+
+        return try_lock_for(timePoint - Clock::now());
+    }
+#endif
+
+    bool isRecursive() const Q_DECL_NOTHROW
+    { return QBasicMutex::isRecursive(); }
 
 private:
     Q_DISABLE_COPY(QMutex)
     friend class QMutexLocker;
+    friend class ::tst_QMutex;
+
+#if QT_HAS_INCLUDE(<chrono>)
+    template<class Rep, class Period>
+    static int convertToMilliseconds(std::chrono::duration<Rep, Period> duration)
+    {
+        // N4606 § 30.4.1.3.5 [thread.timedmutex.requirements] specifies that a
+        // duration less than or equal to duration.zero() shall result in a
+        // try_lock, unlike QMutex's tryLock with a negative duration which
+        // results in a lock.
+
+        if (duration <= duration.zero())
+            return 0;
+
+        // when converting from 'duration' to milliseconds, make sure that
+        // the result is not shorter than 'duration':
+        std::chrono::milliseconds wait = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+        if (wait < duration)
+            wait += std::chrono::milliseconds(1);
+        Q_ASSERT(wait >= duration);
+        const auto ms = wait.count();
+        const auto maxInt = (std::numeric_limits<int>::max)();
+
+        return ms < maxInt ? int(ms) : maxInt;
+    }
+#endif
 };
 
 class Q_CORE_EXPORT QMutexLocker
 {
 public:
+#ifndef Q_CLANG_QDOC
     inline explicit QMutexLocker(QBasicMutex *m) QT_MUTEX_LOCK_NOEXCEPT
     {
         Q_ASSERT_X((reinterpret_cast<quintptr>(m) & quintptr(1u)) == quintptr(0),
@@ -129,6 +201,9 @@ public:
             val |= 1;
         }
     }
+#else
+    QMutexLocker(QMutex *) { }
+#endif
     inline ~QMutexLocker() { unlock(); }
 
     inline void unlock() Q_DECL_NOTHROW
@@ -169,7 +244,7 @@ private:
     quintptr val;
 };
 
-#else // QT_NO_THREAD or Q_QDOC
+#else // QT_NO_THREAD && !Q_CLANG_QDOC
 
 class Q_CORE_EXPORT QMutex
 {
@@ -180,8 +255,25 @@ public:
 
     inline void lock() Q_DECL_NOTHROW {}
     inline bool tryLock(int timeout = 0) Q_DECL_NOTHROW { Q_UNUSED(timeout); return true; }
+    inline bool try_lock() Q_DECL_NOTHROW { return true; }
     inline void unlock() Q_DECL_NOTHROW {}
-    inline bool isRecursive() Q_DECL_NOTHROW { return true; }
+    inline bool isRecursive() const Q_DECL_NOTHROW { return true; }
+
+#if QT_HAS_INCLUDE(<chrono>)
+    template <class Rep, class Period>
+    inline bool try_lock_for(std::chrono::duration<Rep, Period> duration) Q_DECL_NOTHROW
+    {
+        Q_UNUSED(duration);
+        return true;
+    }
+
+    template<class Clock, class Duration>
+    inline bool try_lock_until(std::chrono::time_point<Clock, Duration> timePoint) Q_DECL_NOTHROW
+    {
+        Q_UNUSED(timePoint);
+        return true;
+    }
+#endif
 
 private:
     Q_DISABLE_COPY(QMutex)
@@ -203,7 +295,7 @@ private:
 
 typedef QMutex QBasicMutex;
 
-#endif // QT_NO_THREAD or Q_QDOC
+#endif // QT_NO_THREAD && !Q_CLANG_QDOC
 
 QT_END_NAMESPACE
 

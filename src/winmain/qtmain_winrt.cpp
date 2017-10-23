@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Windows main function of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -49,19 +59,7 @@
   entry point within the newly created GUI thread.
 */
 
-#if _MSC_VER < 1900
-#include <new.h>
-
-typedef struct
-{
-    int newmode;
-} _startupinfo;
-#endif // _MSC_VER < 1900
-
 extern "C" {
-#if _MSC_VER < 1900
-    int __getmainargs(int *argc, char ***argv, char ***env, int expandWildcards, _startupinfo *info);
-#endif
     int main(int, char **);
 }
 
@@ -92,7 +90,6 @@ typedef ITypedEventHandler<CoreApplicationView *, Activation::IActivatedEventArg
 static QtMessageHandler defaultMessageHandler;
 static void devMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
-#ifndef Q_OS_WINPHONE
     static HANDLE shmem = 0;
     static HANDLE event = 0;
     if (!shmem)
@@ -100,13 +97,17 @@ static void devMessageHandler(QtMsgType type, const QMessageLogContext &context,
     if (!event)
         event = CreateEventEx(NULL, L"qdebug-event", 0, EVENT_ALL_ACCESS);
 
+    Q_ASSERT_X(shmem, Q_FUNC_INFO, "Could not create file mapping");
+    Q_ASSERT_X(event, Q_FUNC_INFO, "Could not create debug event");
+
     void *data = MapViewOfFileFromApp(shmem, FILE_MAP_WRITE, 0, 4096);
+    Q_ASSERT_X(data, Q_FUNC_INFO, "Could not map file");
+
     memset(data, quint32(type), sizeof(quint32));
     memcpy_s(static_cast<quint32 *>(data) + 1, 4096 - sizeof(quint32),
              message.data(), (message.length() + 1) * sizeof(wchar_t));
     UnmapViewOfFile(data);
     SetEvent(event);
-#endif // !Q_OS_WINPHONE
     defaultMessageHandler(type, context, message);
 }
 
@@ -169,6 +170,7 @@ public:
             app->core->Exit();
             return res;
         }, this, CREATE_SUSPENDED, nullptr);
+        Q_ASSERT_X(mainThread, Q_FUNC_INFO, "Could not create Qt main thread");
 
         HRESULT hr;
         ComPtr<Xaml::IApplicationStatics> appStatics;
@@ -188,11 +190,18 @@ public:
 
 private:
     HRESULT activatedLaunch(IInspectable *activateArgs) {
+        // Check if an application instance is already running
+        // This is mostly needed for Windows Phone and file pickers
+        QAbstractEventDispatcher *dispatcher = QCoreApplication::eventDispatcher();
+        if (dispatcher) {
+            QCoreApplication::postEvent(dispatcher, new QActivationEvent(activateArgs));
+            return S_OK;
+        }
+
         QCoreApplication *app = QCoreApplication::instance();
 
         // Check whether the app already runs
         if (!app) {
-#if _MSC_VER >= 1900
             // I*EventArgs have no launch arguments, hence we
             // need to prepend the application binary manually
             wchar_t fn[513];
@@ -200,7 +209,6 @@ private:
 
             if (SUCCEEDED(res))
                 args.prepend(QString::fromWCharArray(fn, res).toUtf8().data());
-#endif _MSC_VER >= 1900
 
             ResumeThread(mainThread);
 
@@ -228,7 +236,6 @@ private:
 
     HRESULT __stdcall OnLaunched(ILaunchActivatedEventArgs *launchArgs) Q_DECL_OVERRIDE
     {
-#if _MSC_VER >= 1900
         ComPtr<IPrelaunchActivatedEventArgs> preArgs;
         HRESULT hr = launchArgs->QueryInterface(preArgs.GetAddressOf());
         if (SUCCEEDED(hr)) {
@@ -239,7 +246,7 @@ private:
         }
 
         commandLine = QString::fromWCharArray(GetCommandLine()).toUtf8();
-#endif
+
         HString launchCommandLine;
         launchArgs->get_Arguments(launchCommandLine.GetAddressOf());
         if (launchCommandLine.IsValid()) {
@@ -288,7 +295,7 @@ private:
 
         bool develMode = false;
         bool debugWait = false;
-        foreach (const char *arg, args) {
+        for (const char *arg : args) {
             if (strcmp(arg, "-qdevel") == 0)
                 develMode = true;
             if (strcmp(arg, "-qdebug") == 0)
@@ -297,7 +304,7 @@ private:
         if (develMode) {
             // Write a PID file to help runner
             const QString pidFileName = QDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
-                    .absoluteFilePath(QString::number(uint(GetCurrentProcessId())) + QStringLiteral(".pid"));
+                    .absoluteFilePath(QString::asprintf("%u.pid", uint(GetCurrentProcessId())));
             CREATEFILE2_EXTENDED_PARAMETERS params = {
                 sizeof(CREATEFILE2_EXTENDED_PARAMETERS),
                 FILE_ATTRIBUTE_NORMAL
@@ -305,9 +312,7 @@ private:
             pidFile = CreateFile2(reinterpret_cast<LPCWSTR>(pidFileName.utf16()),
                         GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS, &params);
             // Install the develMode message handler
-#ifndef Q_OS_WINPHONE
             defaultMessageHandler = qInstallMessageHandler(devMessageHandler);
-#endif
         }
         // Wait for debugger before continuing
         if (debugWait) {
@@ -372,11 +377,6 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
     int argc = 0;
     char **argv = 0, **env = 0;
-#if _MSC_VER < 1900
-    _startupinfo info = { _query_new_mode() };
-    if (int init = __getmainargs(&argc, &argv, &env, false, &info))
-        return init;
-#endif // _MSC_VER >= 1900
     for (int i = 0; env && env[i]; ++i) {
         QByteArray var(env[i]);
         int split = var.indexOf('=');

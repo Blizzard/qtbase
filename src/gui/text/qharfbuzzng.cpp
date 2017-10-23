@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2013 Konstantin Ritt
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -416,18 +422,52 @@ hb_unicode_funcs_t *hb_qt_get_unicode_funcs()
 
 // Font routines
 
+#if HB_VERSION_ATLEAST(1, 1, 3)
 static hb_bool_t
-_hb_qt_font_get_glyph(hb_font_t * /*font*/, void *font_data,
-                      hb_codepoint_t unicode, hb_codepoint_t /*variation_selector*/,
-                      hb_codepoint_t *glyph,
-                      void * /*user_data*/)
+_hb_qt_get_font_h_extents(hb_font_t * /*font*/, void *font_data,
+                          hb_font_extents_t *metrics,
+                          void * /*user_data*/)
+{
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
+    Q_ASSERT(fe);
+
+    metrics->ascender = fe->ascent().value();
+    metrics->descender = fe->descent().value();
+    metrics->line_gap = fe->leading().value();
+
+    return true;
+}
+#endif
+
+#if HB_VERSION_ATLEAST(1, 2, 3)
+static hb_bool_t
+_hb_qt_font_get_nominal_glyph(hb_font_t * /*font*/, void *font_data,
+                              hb_codepoint_t unicode,
+                              hb_codepoint_t *glyph,
+                              void * /*user_data*/)
 {
     QFontEngine *fe = static_cast<QFontEngine *>(font_data);
     Q_ASSERT(fe);
 
     *glyph = fe->glyphIndex(unicode);
 
-    return true;
+    return *glyph != 0;
+}
+#endif
+
+static hb_bool_t
+_hb_qt_font_get_variation_glyph(hb_font_t * /*font*/, void *font_data,
+                                hb_codepoint_t unicode, hb_codepoint_t /*variation_selector*/,
+                                hb_codepoint_t *glyph,
+                                void * /*user_data*/)
+{
+    QFontEngine *fe = static_cast<QFontEngine *>(font_data);
+    Q_ASSERT(fe);
+
+    // ### TODO add support for variation selectors
+    *glyph = fe->glyphIndex(unicode);
+
+    return *glyph != 0;
 }
 
 static hb_position_t
@@ -450,15 +490,7 @@ _hb_qt_font_get_glyph_h_advance(hb_font_t *font, void *font_data,
     return advance.value();
 }
 
-static hb_position_t
-_hb_qt_font_get_glyph_v_advance(hb_font_t * /*font*/, void * /*font_data*/,
-                                hb_codepoint_t /*glyph*/,
-                                void * /*user_data*/)
-{
-    qCritical("hb_qt_font_get_glyph_v_advance: vertical writing isn't supported!");
-    return 0;
-}
-
+#if !HB_VERSION_ATLEAST(1, 1, 2)
 static hb_bool_t
 _hb_qt_font_get_glyph_h_origin(hb_font_t * /*font*/, void * /*font_data*/,
                                hb_codepoint_t /*glyph*/,
@@ -467,16 +499,7 @@ _hb_qt_font_get_glyph_h_origin(hb_font_t * /*font*/, void * /*font_data*/,
 {
     return true; // we always work in the horizontal coordinates
 }
-
-static hb_bool_t
-_hb_qt_font_get_glyph_v_origin(hb_font_t * /*font*/, void * /*font_data*/,
-                               hb_codepoint_t /*glyph*/,
-                               hb_position_t * /*x*/, hb_position_t * /*y*/,
-                               void * /*user_data*/)
-{
-    qCritical("hb_qt_get_glyph_v_origin: vertical writing isn't supported!");
-    return false;
-}
+#endif
 
 static hb_position_t
 _hb_qt_font_get_glyph_h_kerning(hb_font_t *font, void *font_data,
@@ -497,15 +520,6 @@ _hb_qt_font_get_glyph_h_kerning(hb_font_t *font, void *font_data,
     fe->doKerning(&g, QFontEngine::ShaperFlags(hb_qt_font_get_use_design_metrics(font)));
 
     return advance.value();
-}
-
-static hb_position_t
-_hb_qt_font_get_glyph_v_kerning(hb_font_t * /*font*/, void * /*font_data*/,
-                                hb_codepoint_t /*first_glyph*/, hb_codepoint_t /*second_glyph*/,
-                                void * /*user_data*/)
-{
-    qCritical("hb_qt_get_glyph_v_kerning: vertical writing isn't supported!");
-    return 0;
 }
 
 static hb_bool_t
@@ -548,29 +562,6 @@ _hb_qt_font_get_glyph_contour_point(hb_font_t * /*font*/, void *font_data,
     return false;
 }
 
-static hb_bool_t
-_hb_qt_font_get_glyph_name(hb_font_t * /*font*/, void * /*font_data*/,
-                           hb_codepoint_t /*glyph*/,
-                           char *name, unsigned int size,
-                           void * /*user_data*/)
-{
-    qCritical("hb_qt_font_get_glyph_name: not implemented!");
-    if (size)
-        *name = '\0';
-    return false;
-}
-
-static hb_bool_t
-_hb_qt_font_get_glyph_from_name(hb_font_t * /*font*/, void * /*font_data*/,
-                                const char * /*name*/, int /*len*/,
-                                hb_codepoint_t *glyph,
-                                void * /*user_data*/)
-{
-    qCritical("hb_qt_font_get_glyph_from_name: not implemented!");
-    *glyph = 0;
-    return false;
-}
-
 
 static hb_user_data_key_t _useDesignMetricsKey;
 
@@ -589,17 +580,25 @@ struct _hb_qt_font_funcs_t {
     _hb_qt_font_funcs_t()
     {
         funcs = hb_font_funcs_create();
-        hb_font_funcs_set_glyph_func(funcs, _hb_qt_font_get_glyph, NULL, NULL);
+
+#if HB_VERSION_ATLEAST(1, 1, 3)
+        hb_font_funcs_set_font_h_extents_func(funcs, _hb_qt_get_font_h_extents, NULL, NULL);
+#endif
+#if HB_VERSION_ATLEAST(1, 2, 3)
+        hb_font_funcs_set_nominal_glyph_func(funcs, _hb_qt_font_get_nominal_glyph, NULL, NULL);
+        hb_font_funcs_set_variation_glyph_func(funcs, _hb_qt_font_get_variation_glyph, NULL, NULL);
+#else
+        hb_font_funcs_set_glyph_func(funcs, _hb_qt_font_get_variation_glyph, NULL, NULL);
+#endif
         hb_font_funcs_set_glyph_h_advance_func(funcs, _hb_qt_font_get_glyph_h_advance, NULL, NULL);
-        hb_font_funcs_set_glyph_v_advance_func(funcs, _hb_qt_font_get_glyph_v_advance, NULL, NULL);
+#if !HB_VERSION_ATLEAST(1, 1, 2)
         hb_font_funcs_set_glyph_h_origin_func(funcs, _hb_qt_font_get_glyph_h_origin, NULL, NULL);
-        hb_font_funcs_set_glyph_v_origin_func(funcs, _hb_qt_font_get_glyph_v_origin, NULL, NULL);
+#endif
         hb_font_funcs_set_glyph_h_kerning_func(funcs, _hb_qt_font_get_glyph_h_kerning, NULL, NULL);
-        hb_font_funcs_set_glyph_v_kerning_func(funcs, _hb_qt_font_get_glyph_v_kerning, NULL, NULL);
         hb_font_funcs_set_glyph_extents_func(funcs, _hb_qt_font_get_glyph_extents, NULL, NULL);
         hb_font_funcs_set_glyph_contour_point_func(funcs, _hb_qt_font_get_glyph_contour_point, NULL, NULL);
-        hb_font_funcs_set_glyph_name_func(funcs, _hb_qt_font_get_glyph_name, NULL, NULL);
-        hb_font_funcs_set_glyph_from_name_func(funcs, _hb_qt_font_get_glyph_from_name, NULL, NULL);
+
+        hb_font_funcs_make_immutable(funcs);
     }
     ~_hb_qt_font_funcs_t()
     {
@@ -672,14 +671,10 @@ hb_face_t *hb_qt_face_get_for_engine(QFontEngine *fe)
 {
     Q_ASSERT(fe && fe->type() != QFontEngine::Multi);
 
-    if (Q_UNLIKELY(!fe->face_)) {
-        fe->face_ = _hb_qt_face_create(fe);
-        if (Q_UNLIKELY(!fe->face_))
-            return NULL;
-        fe->face_destroy_func = _hb_qt_face_release;
-    }
+    if (Q_UNLIKELY(!fe->face_))
+        fe->face_ = QFontEngine::Holder(_hb_qt_face_create(fe), _hb_qt_face_release);
 
-    return static_cast<hb_face_t *>(fe->face_);
+    return static_cast<hb_face_t *>(fe->face_.get());
 }
 
 
@@ -722,14 +717,10 @@ hb_font_t *hb_qt_font_get_for_engine(QFontEngine *fe)
 {
     Q_ASSERT(fe && fe->type() != QFontEngine::Multi);
 
-    if (Q_UNLIKELY(!fe->font_)) {
-        fe->font_ = _hb_qt_font_create(fe);
-        if (Q_UNLIKELY(!fe->font_))
-            return NULL;
-        fe->font_destroy_func = _hb_qt_font_release;
-    }
+    if (Q_UNLIKELY(!fe->font_))
+        fe->font_ = QFontEngine::Holder(_hb_qt_font_create(fe), _hb_qt_font_release);
 
-    return static_cast<hb_font_t *>(fe->font_);
+    return static_cast<hb_font_t *>(fe->font_.get());
 }
 
 QT_END_NAMESPACE

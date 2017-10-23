@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB).
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -75,7 +81,8 @@ QOpenGLTexturePrivate::QOpenGLTexturePrivate(QOpenGLTexture::Target textureTarge
       textureView(false),
       autoGenerateMipMaps(true),
       storageAllocated(false),
-      texFuncs(0)
+      texFuncs(0),
+      functions(0)
 {
     dimensions[0] = dimensions[1] = dimensions[2] = 1;
 
@@ -159,6 +166,7 @@ bool QOpenGLTexturePrivate::create()
         return false;
     }
     context = ctx;
+    functions = ctx->functions();
 
     // Resolve any functions we will need based upon context version and create the texture
     initializeOpenGLFunctions();
@@ -171,7 +179,7 @@ bool QOpenGLTexturePrivate::create()
         feature = static_cast<QOpenGLTexture::Feature>(feature << 1);
     }
 
-    texFuncs->glGenTextures(1, &textureId);
+    functions->glGenTextures(1, &textureId);
     return textureId != 0;
 }
 
@@ -188,9 +196,10 @@ void QOpenGLTexturePrivate::destroy()
         return;
     }
 
-    texFuncs->glDeleteTextures(1, &textureId);
+    functions->glDeleteTextures(1, &textureId);
 
     context = 0;
+    functions = 0;
     textureId = 0;
     format = QOpenGLTexture::NoFormat;
     formatClass = QOpenGLTexture::NoFormatClass;
@@ -225,17 +234,17 @@ void QOpenGLTexturePrivate::destroy()
 
 void QOpenGLTexturePrivate::bind()
 {
-    texFuncs->glBindTexture(target, textureId);
+    functions->glBindTexture(target, textureId);
 }
 
 void QOpenGLTexturePrivate::bind(uint unit, QOpenGLTexture::TextureUnitReset reset)
 {
     GLint oldTextureUnit = 0;
     if (reset == QOpenGLTexture::ResetTextureUnit)
-        texFuncs->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
+        functions->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
 
     texFuncs->glActiveTexture(GL_TEXTURE0 + unit);
-    texFuncs->glBindTexture(target, textureId);
+    functions->glBindTexture(target, textureId);
 
     if (reset == QOpenGLTexture::ResetTextureUnit)
         texFuncs->glActiveTexture(GL_TEXTURE0 + oldTextureUnit);
@@ -243,17 +252,17 @@ void QOpenGLTexturePrivate::bind(uint unit, QOpenGLTexture::TextureUnitReset res
 
 void QOpenGLTexturePrivate::release()
 {
-    texFuncs->glBindTexture(target, 0);
+    functions->glBindTexture(target, 0);
 }
 
 void QOpenGLTexturePrivate::release(uint unit, QOpenGLTexture::TextureUnitReset reset)
 {
     GLint oldTextureUnit = 0;
     if (reset == QOpenGLTexture::ResetTextureUnit)
-        texFuncs->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
+        functions->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
 
     texFuncs->glActiveTexture(GL_TEXTURE0 + unit);
-    texFuncs->glBindTexture(target, 0);
+    functions->glBindTexture(target, 0);
 
     if (reset == QOpenGLTexture::ResetTextureUnit)
         texFuncs->glActiveTexture(GL_TEXTURE0 + oldTextureUnit);
@@ -262,18 +271,18 @@ void QOpenGLTexturePrivate::release(uint unit, QOpenGLTexture::TextureUnitReset 
 bool QOpenGLTexturePrivate::isBound() const
 {
     GLint boundTextureId = 0;
-    texFuncs->glGetIntegerv(bindingTarget, &boundTextureId);
+    functions->glGetIntegerv(bindingTarget, &boundTextureId);
     return (static_cast<GLuint>(boundTextureId) == textureId);
 }
 
 bool QOpenGLTexturePrivate::isBound(uint unit) const
 {
     GLint oldTextureUnit = 0;
-    texFuncs->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
+    functions->glGetIntegerv(GL_ACTIVE_TEXTURE, &oldTextureUnit);
 
     GLint boundTextureId = 0;
     texFuncs->glActiveTexture(GL_TEXTURE0 + unit);
-    texFuncs->glGetIntegerv(bindingTarget, &boundTextureId);
+    functions->glGetIntegerv(bindingTarget, &boundTextureId);
     bool result = (static_cast<GLuint>(boundTextureId) == textureId);
 
     texFuncs->glActiveTexture(GL_TEXTURE0 + oldTextureUnit);
@@ -401,6 +410,34 @@ static bool isSizedTextureFormat(QOpenGLTexture::TextureFormat internalFormat)
     case QOpenGLTexture::SRGB8_PunchThrough_Alpha1_ETC2:
     case QOpenGLTexture::RGBA8_ETC2_EAC:
     case QOpenGLTexture::SRGB8_Alpha8_ETC2_EAC:
+    case QOpenGLTexture::RGBA_ASTC_4x4:
+    case QOpenGLTexture::RGBA_ASTC_5x4:
+    case QOpenGLTexture::RGBA_ASTC_5x5:
+    case QOpenGLTexture::RGBA_ASTC_6x5:
+    case QOpenGLTexture::RGBA_ASTC_6x6:
+    case QOpenGLTexture::RGBA_ASTC_8x5:
+    case QOpenGLTexture::RGBA_ASTC_8x6:
+    case QOpenGLTexture::RGBA_ASTC_8x8:
+    case QOpenGLTexture::RGBA_ASTC_10x5:
+    case QOpenGLTexture::RGBA_ASTC_10x6:
+    case QOpenGLTexture::RGBA_ASTC_10x8:
+    case QOpenGLTexture::RGBA_ASTC_10x10:
+    case QOpenGLTexture::RGBA_ASTC_12x10:
+    case QOpenGLTexture::RGBA_ASTC_12x12:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_4x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x12:
         return true;
 
     case QOpenGLTexture::RGB8_ETC1:
@@ -694,6 +731,36 @@ static QOpenGLTexture::PixelFormat pixelFormatCompatibleWithInternalFormat(QOpen
     case QOpenGLTexture::SRGB8_Alpha8_ETC2_EAC:
         return QOpenGLTexture::RGBA;
 
+    case QOpenGLTexture::RGBA_ASTC_4x4:
+    case QOpenGLTexture::RGBA_ASTC_5x4:
+    case QOpenGLTexture::RGBA_ASTC_5x5:
+    case QOpenGLTexture::RGBA_ASTC_6x5:
+    case QOpenGLTexture::RGBA_ASTC_6x6:
+    case QOpenGLTexture::RGBA_ASTC_8x5:
+    case QOpenGLTexture::RGBA_ASTC_8x6:
+    case QOpenGLTexture::RGBA_ASTC_8x8:
+    case QOpenGLTexture::RGBA_ASTC_10x5:
+    case QOpenGLTexture::RGBA_ASTC_10x6:
+    case QOpenGLTexture::RGBA_ASTC_10x8:
+    case QOpenGLTexture::RGBA_ASTC_10x10:
+    case QOpenGLTexture::RGBA_ASTC_12x10:
+    case QOpenGLTexture::RGBA_ASTC_12x12:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_4x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x12:
+        return QOpenGLTexture::RGBA;
+
     case QOpenGLTexture::DepthFormat:
         return QOpenGLTexture::Depth;
 
@@ -850,6 +917,34 @@ static QOpenGLTexture::PixelType pixelTypeCompatibleWithInternalFormat(QOpenGLTe
     case QOpenGLTexture::RGBA8_ETC2_EAC:
     case QOpenGLTexture::SRGB8_Alpha8_ETC2_EAC:
     case QOpenGLTexture::RGB8_ETC1:
+    case QOpenGLTexture::RGBA_ASTC_4x4:
+    case QOpenGLTexture::RGBA_ASTC_5x4:
+    case QOpenGLTexture::RGBA_ASTC_5x5:
+    case QOpenGLTexture::RGBA_ASTC_6x5:
+    case QOpenGLTexture::RGBA_ASTC_6x6:
+    case QOpenGLTexture::RGBA_ASTC_8x5:
+    case QOpenGLTexture::RGBA_ASTC_8x6:
+    case QOpenGLTexture::RGBA_ASTC_8x8:
+    case QOpenGLTexture::RGBA_ASTC_10x5:
+    case QOpenGLTexture::RGBA_ASTC_10x6:
+    case QOpenGLTexture::RGBA_ASTC_10x8:
+    case QOpenGLTexture::RGBA_ASTC_10x10:
+    case QOpenGLTexture::RGBA_ASTC_12x10:
+    case QOpenGLTexture::RGBA_ASTC_12x12:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_4x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x12:
         return QOpenGLTexture::UInt8;
 
     case QOpenGLTexture::DepthFormat:
@@ -968,6 +1063,34 @@ static bool isCompressedFormat(QOpenGLTexture::TextureFormat internalFormat)
     case QOpenGLTexture::RGBA8_ETC2_EAC:
     case QOpenGLTexture::SRGB8_Alpha8_ETC2_EAC:
     case QOpenGLTexture::RGB8_ETC1:
+    case QOpenGLTexture::RGBA_ASTC_4x4:
+    case QOpenGLTexture::RGBA_ASTC_5x4:
+    case QOpenGLTexture::RGBA_ASTC_5x5:
+    case QOpenGLTexture::RGBA_ASTC_6x5:
+    case QOpenGLTexture::RGBA_ASTC_6x6:
+    case QOpenGLTexture::RGBA_ASTC_8x5:
+    case QOpenGLTexture::RGBA_ASTC_8x6:
+    case QOpenGLTexture::RGBA_ASTC_8x8:
+    case QOpenGLTexture::RGBA_ASTC_10x5:
+    case QOpenGLTexture::RGBA_ASTC_10x6:
+    case QOpenGLTexture::RGBA_ASTC_10x8:
+    case QOpenGLTexture::RGBA_ASTC_10x10:
+    case QOpenGLTexture::RGBA_ASTC_12x10:
+    case QOpenGLTexture::RGBA_ASTC_12x12:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_4x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x12:
         return true;
 
     case QOpenGLTexture::DepthFormat:
@@ -1228,7 +1351,7 @@ void QOpenGLTexturePrivate::allocateImmutableStorage()
     storageAllocated = true;
 }
 
-void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::CubeMapFace cubeFace,
+void QOpenGLTexturePrivate::setData(int mipLevel, int layer, int layerCount, QOpenGLTexture::CubeMapFace cubeFace,
                                     QOpenGLTexture::PixelFormat sourceFormat, QOpenGLTexture::PixelType sourceType,
                                     const void *data, const QOpenGLPixelTransferOptions * const options)
 {
@@ -1236,6 +1359,7 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
     case QOpenGLTexture::Target1D:
         Q_UNUSED(layer);
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         texFuncs->glTextureSubImage1D(textureId, target, bindingTarget, mipLevel,
                                       0, mipLevelSize( mipLevel, dimensions[0] ),
                                       sourceFormat, sourceType, data, options);
@@ -1246,13 +1370,14 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
         texFuncs->glTextureSubImage2D(textureId, target, bindingTarget, mipLevel,
                                       0, layer,
                                       mipLevelSize(mipLevel, dimensions[0]),
-                                      1,
+                                      layerCount,
                                       sourceFormat, sourceType, data, options);
         break;
 
     case QOpenGLTexture::Target2D:
         Q_UNUSED(layer);
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         texFuncs->glTextureSubImage2D(textureId, target, bindingTarget, mipLevel,
                                       0, 0,
                                       mipLevelSize(mipLevel, dimensions[0]),
@@ -1266,12 +1391,13 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
                                       0, 0, layer,
                                       mipLevelSize(mipLevel, dimensions[0]),
                                       mipLevelSize(mipLevel, dimensions[1]),
-                                      1,
+                                      layerCount,
                                       sourceFormat, sourceType, data, options);
         break;
 
     case QOpenGLTexture::Target3D:
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         texFuncs->glTextureSubImage3D(textureId, target, bindingTarget, mipLevel,
                                       0, 0, layer,
                                       mipLevelSize(mipLevel, dimensions[0]),
@@ -1282,6 +1408,7 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
 
     case QOpenGLTexture::TargetCubeMap:
         Q_UNUSED(layer);
+        Q_UNUSED(layerCount);
         texFuncs->glTextureSubImage2D(textureId, cubeFace, bindingTarget, mipLevel,
                                       0, 0,
                                       mipLevelSize(mipLevel, dimensions[0]),
@@ -1296,7 +1423,7 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
                                       0, 0, layerFace,
                                       mipLevelSize(mipLevel, dimensions[0]),
                                       mipLevelSize(mipLevel, dimensions[1]),
-                                      1,
+                                      layerCount,
                                       sourceFormat, sourceType, data, options);
         break;
     }
@@ -1305,6 +1432,7 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
         Q_UNUSED(mipLevel);
         Q_UNUSED(layer);
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         texFuncs->glTextureSubImage2D(textureId, target, bindingTarget, 0,
                                       0, 0,
                                       dimensions[0],
@@ -1327,7 +1455,8 @@ void QOpenGLTexturePrivate::setData(int mipLevel, int layer, QOpenGLTexture::Cub
     }
 }
 
-void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTexture::CubeMapFace cubeFace,
+void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, int layerCount,
+                                              QOpenGLTexture::CubeMapFace cubeFace,
                                               int dataSize, const void *data,
                                               const QOpenGLPixelTransferOptions * const options)
 {
@@ -1342,6 +1471,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
     case QOpenGLTexture::Target1D:
         Q_UNUSED(layer);
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         if (needsFullSpec) {
             texFuncs->glCompressedTextureImage1D(textureId, target, bindingTarget, mipLevel,
                                                  format,
@@ -1360,7 +1490,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
             texFuncs->glCompressedTextureSubImage2D(textureId, target, bindingTarget, mipLevel,
                                                     0, layer,
                                                     mipLevelSize(mipLevel, dimensions[0]),
-                                                    1,
+                                                    layerCount,
                                                     format, dataSize, data, options);
         }
         break;
@@ -1368,6 +1498,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
     case QOpenGLTexture::Target2D:
         Q_UNUSED(layer);
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         if (needsFullSpec) {
             texFuncs->glCompressedTextureImage2D(textureId, target, bindingTarget, mipLevel,
                                                  format,
@@ -1390,13 +1521,14 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
                                                     0, 0, layer,
                                                     mipLevelSize(mipLevel, dimensions[0]),
                                                     mipLevelSize(mipLevel, dimensions[1]),
-                                                    1,
+                                                    layerCount,
                                                     format, dataSize, data, options);
         }
         break;
 
     case QOpenGLTexture::Target3D:
         Q_UNUSED(cubeFace);
+        Q_UNUSED(layerCount);
         if (needsFullSpec) {
             texFuncs->glCompressedTextureImage3D(textureId, target, bindingTarget, mipLevel,
                                                  format,
@@ -1416,6 +1548,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
 
     case QOpenGLTexture::TargetCubeMap:
         Q_UNUSED(layer);
+        Q_UNUSED(layerCount);
         if (needsFullSpec) {
             texFuncs->glCompressedTextureImage2D(textureId, cubeFace, bindingTarget, mipLevel,
                                                  format,
@@ -1439,7 +1572,7 @@ void QOpenGLTexturePrivate::setCompressedData(int mipLevel, int layer, QOpenGLTe
                                                     0, 0, layerFace,
                                                     mipLevelSize(mipLevel, dimensions[0]),
                                                     mipLevelSize(mipLevel, dimensions[1]),
-                                                    1,
+                                                    layerCount,
                                                     format, dataSize, data, options);
         }
         break;
@@ -2028,6 +2161,34 @@ QOpenGLTexture *QOpenGLTexturePrivate::createTextureView(QOpenGLTexture::Target 
     \value RGBA8_ETC2_EAC Equivalent to GL_COMPRESSED_RGBA8_ETC2_EAC
     \value SRGB8_Alpha8_ETC2_EAC Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
     \value RGB8_ETC1 Equivalent to GL_ETC1_RGB8_OES
+    \value RGBA_ASTC_4x4 Equivalent to GL_COMPRESSED_RGBA_ASTC_4x4_KHR
+    \value RGBA_ASTC_5x4 Equivalent to GL_COMPRESSED_RGBA_ASTC_5x4_KHR
+    \value RGBA_ASTC_5x5 Equivalent to GL_COMPRESSED_RGBA_ASTC_5x5_KHR
+    \value RGBA_ASTC_6x5 Equivalent to GL_COMPRESSED_RGBA_ASTC_6x5_KHR
+    \value RGBA_ASTC_6x6 Equivalent to GL_COMPRESSED_RGBA_ASTC_6x6_KHR
+    \value RGBA_ASTC_8x5 Equivalent to GL_COMPRESSED_RGBA_ASTC_8x5_KHR
+    \value RGBA_ASTC_8x6 Equivalent to GL_COMPRESSED_RGBA_ASTC_8x6_KHR
+    \value RGBA_ASTC_8x8 Equivalent to GL_COMPRESSED_RGBA_ASTC_8x8_KHR
+    \value RGBA_ASTC_10x5 Equivalent to GL_COMPRESSED_RGBA_ASTC_10x5_KHR
+    \value RGBA_ASTC_10x6 Equivalent to GL_COMPRESSED_RGBA_ASTC_10x6_KHR
+    \value RGBA_ASTC_10x8 Equivalent to GL_COMPRESSED_RGBA_ASTC_10x8_KHR
+    \value RGBA_ASTC_10x10 Equivalent to GL_COMPRESSED_RGBA_ASTC_10x10_KHR
+    \value RGBA_ASTC_12x10 Equivalent to GL_COMPRESSED_RGBA_ASTC_12x10_KHR
+    \value RGBA_ASTC_12x12 Equivalent to GL_COMPRESSED_RGBA_ASTC_12x12_KHR
+    \value SRGB8_Alpha8_ASTC_4x4 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR
+    \value SRGB8_Alpha8_ASTC_5x4 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR
+    \value SRGB8_Alpha8_ASTC_5x5 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR
+    \value SRGB8_Alpha8_ASTC_6x5 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR
+    \value SRGB8_Alpha8_ASTC_6x6 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR
+    \value SRGB8_Alpha8_ASTC_8x5 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR
+    \value SRGB8_Alpha8_ASTC_8x6 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR
+    \value SRGB8_Alpha8_ASTC_8x8 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR
+    \value SRGB8_Alpha8_ASTC_10x5 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x5_KHR
+    \value SRGB8_Alpha8_ASTC_10x6 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x6_KHR
+    \value SRGB8_Alpha8_ASTC_10x8 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR
+    \value SRGB8_Alpha8_ASTC_10x10 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x10_KHR
+    \value SRGB8_Alpha8_ASTC_12x10 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR
+    \value SRGB8_Alpha8_ASTC_12x12 Equivalent to GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR
 
     \value SRGB8 Equivalent to GL_SRGB8
     \value SRGB8_Alpha8 Equivalent to GL_SRGB8_ALPHA8
@@ -2207,7 +2368,7 @@ QOpenGLTexture::QOpenGLTexture(Target target)
     OpenGL context.
 */
 QOpenGLTexture::QOpenGLTexture(const QImage& image, MipMapGeneration genMipMaps)
-    : d_ptr(new QOpenGLTexturePrivate(QOpenGLTexture::Target2D, this))
+    : QOpenGLTexture(QOpenGLTexture::Target2D)
 {
     setData(image, genMipMaps);
 }
@@ -2583,6 +2744,34 @@ void QOpenGLTexture::setFormat(TextureFormat format)
     case RGBAFormat:
     case LuminanceFormat:
     case LuminanceAlphaFormat:
+    case QOpenGLTexture::RGBA_ASTC_4x4:
+    case QOpenGLTexture::RGBA_ASTC_5x4:
+    case QOpenGLTexture::RGBA_ASTC_5x5:
+    case QOpenGLTexture::RGBA_ASTC_6x5:
+    case QOpenGLTexture::RGBA_ASTC_6x6:
+    case QOpenGLTexture::RGBA_ASTC_8x5:
+    case QOpenGLTexture::RGBA_ASTC_8x6:
+    case QOpenGLTexture::RGBA_ASTC_8x8:
+    case QOpenGLTexture::RGBA_ASTC_10x5:
+    case QOpenGLTexture::RGBA_ASTC_10x6:
+    case QOpenGLTexture::RGBA_ASTC_10x8:
+    case QOpenGLTexture::RGBA_ASTC_10x10:
+    case QOpenGLTexture::RGBA_ASTC_12x10:
+    case QOpenGLTexture::RGBA_ASTC_12x12:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_4x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x4:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_5x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_6x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_8x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x5:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x6:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x8:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_10x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x10:
+    case QOpenGLTexture::SRGB8_Alpha8_ASTC_12x12:
         d->formatClass = FormatClass_Unique;
         break;
     }
@@ -3107,7 +3296,26 @@ void QOpenGLTexture::setData(int mipLevel, int layer, CubeMapFace cubeFace,
                  "To do so call allocateStorage() before this function");
         return;
     }
-    d->setData(mipLevel, layer, cubeFace, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, layer, 1, cubeFace, sourceFormat, sourceType, data, options);
+}
+
+/*!
+    \since 5.9
+    \overload
+
+    Parameter \a layerCount is the number of layers in a texture array
+    that are being uploaded/populated by this call.
+*/
+void QOpenGLTexture::setData(int mipLevel, int layer, int layerCount, QOpenGLTexture::CubeMapFace cubeFace, QOpenGLTexture::PixelFormat sourceFormat, QOpenGLTexture::PixelType sourceType, const void *data, const QOpenGLPixelTransferOptions * const options)
+{
+    Q_D(QOpenGLTexture);
+    Q_ASSERT(d->textureId);
+    if (!isStorageAllocated()) {
+        qWarning("Cannot set data on a texture that does not have storage allocated.\n"
+                 "To do so call allocateStorage() before this function");
+        return;
+    }
+    d->setData(mipLevel, layer, layerCount, cubeFace, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3120,7 +3328,7 @@ void QOpenGLTexture::setData(int mipLevel, int layer,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(mipLevel, layer, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, layer, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3133,7 +3341,7 @@ void QOpenGLTexture::setData(int mipLevel,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(mipLevel, 0, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, 0, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3145,7 +3353,7 @@ void QOpenGLTexture::setData(PixelFormat sourceFormat, PixelType sourceType,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(0, 0, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(0, 0, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 
 #if QT_DEPRECATED_SINCE(5, 3)
@@ -3166,7 +3374,7 @@ void QOpenGLTexture::setData(int mipLevel, int layer, CubeMapFace cubeFace,
                  "To do so call allocateStorage() before this function");
         return;
     }
-    d->setData(mipLevel, layer, cubeFace, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, layer, 1, cubeFace, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3179,7 +3387,7 @@ void QOpenGLTexture::setData(int mipLevel, int layer,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(mipLevel, layer, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, layer, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3192,7 +3400,7 @@ void QOpenGLTexture::setData(int mipLevel,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(mipLevel, 0, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(mipLevel, 0, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 
 /*!
@@ -3204,7 +3412,7 @@ void QOpenGLTexture::setData(PixelFormat sourceFormat, PixelType sourceType,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setData(0, 0, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
+    d->setData(0, 0, 1, QOpenGLTexture::CubeMapPositiveX, sourceFormat, sourceType, data, options);
 }
 #endif
 
@@ -3265,7 +3473,26 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int layer, CubeMapFace cube
                  "To do so call allocateStorage() before this function");
         return;
     }
-    d->setCompressedData(mipLevel, layer, cubeFace, dataSize, data, options);
+    d->setCompressedData(mipLevel, layer, 1, cubeFace, dataSize, data, options);
+}
+
+/*!
+    \since 5.9
+    \overload
+
+    Parameter \a layerCount is the number of layers in a texture array
+    that are being uploaded/populated by this call.
+*/
+void QOpenGLTexture::setCompressedData(int mipLevel, int layer, int layerCount, QOpenGLTexture::CubeMapFace cubeFace, int dataSize, const void *data, const QOpenGLPixelTransferOptions * const options)
+{
+    Q_D(QOpenGLTexture);
+    Q_ASSERT(d->textureId);
+    if (!isStorageAllocated()) {
+        qWarning("Cannot set data on a texture that does not have storage allocated.\n"
+                 "To do so call allocateStorage() before this function");
+        return;
+    }
+    d->setCompressedData(mipLevel, layer, layerCount, cubeFace, dataSize, data, options);
 }
 
 /*!
@@ -3276,7 +3503,7 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int layer, int dataSize, co
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(mipLevel, layer, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(mipLevel, layer, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 
 /*!
@@ -3287,7 +3514,7 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int dataSize, const void *d
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(mipLevel, 0, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(mipLevel, 0, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 
 /*!
@@ -3298,7 +3525,7 @@ void QOpenGLTexture::setCompressedData(int dataSize, const void *data,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(0, 0, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(0, 0, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 
 #if QT_DEPRECATED_SINCE(5, 3)
@@ -3317,7 +3544,7 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int layer, CubeMapFace cube
                  "To do so call allocateStorage() before this function");
         return;
     }
-    d->setCompressedData(mipLevel, layer, cubeFace, dataSize, data, options);
+    d->setCompressedData(mipLevel, layer, 1, cubeFace, dataSize, data, options);
 }
 
 /*!
@@ -3329,7 +3556,7 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int layer, int dataSize, vo
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(mipLevel, layer, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(mipLevel, layer, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 
 /*!
@@ -3341,7 +3568,7 @@ void QOpenGLTexture::setCompressedData(int mipLevel, int dataSize, void *data,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(mipLevel, 0, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(mipLevel, 0, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 
 /*!
@@ -3353,7 +3580,7 @@ void QOpenGLTexture::setCompressedData(int dataSize, void *data,
 {
     Q_D(QOpenGLTexture);
     Q_ASSERT(d->textureId);
-    d->setCompressedData(0, 0, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
+    d->setCompressedData(0, 0, 1, QOpenGLTexture::CubeMapPositiveX, dataSize, data, options);
 }
 #endif
 
@@ -3464,7 +3691,7 @@ bool QOpenGLTexture::hasFeature(Feature feature)
         const char *renderer = reinterpret_cast<const char *>(ctx->functions()->glGetString(GL_RENDERER));
         switch (feature) {
         case ImmutableStorage:
-            supported = (f.version() >= qMakePair(3, 0) || ctx->hasExtension(QByteArrayLiteral("EXT_texture_storage")))
+            supported = (f.version() >= qMakePair(3, 0) || ctx->hasExtension(QByteArrayLiteral("GL_EXT_texture_storage")))
                 && !(renderer && strstr(renderer, "Mali")); // do not use on Mali: QTBUG-45106
             break;
 
@@ -4101,27 +4328,8 @@ QOpenGLTexture::WrapMode QOpenGLTexture::wrapMode(QOpenGLTexture::CoordinateDire
 */
 void QOpenGLTexture::setBorderColor(QColor color)
 {
-#if !defined(QT_OPENGL_ES_2)
-    if (!QOpenGLContext::currentContext()->isOpenGLES()) {
-        Q_D(QOpenGLTexture);
-        d->create();
-        Q_ASSERT(d->texFuncs);
-        Q_ASSERT(d->textureId);
-        float values[4];
-        values[0] = color.redF();
-        values[1] = color.greenF();
-        values[2] = color.blueF();
-        values[3] = color.alphaF();
-        d->borderColor.clear();
-        for (int i = 0; i < 4; ++i)
-            d->borderColor.append(QVariant(values[i]));
-        d->texFuncs->glTextureParameterfv(d->textureId, d->target, d->bindingTarget, GL_TEXTURE_BORDER_COLOR, values);
-        return;
-    }
-#else
-    Q_UNUSED(color);
-#endif
-    qWarning("QOpenGLTexture: Border color is not supported");
+    setBorderColor(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
+                   static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
 }
 
 /*!

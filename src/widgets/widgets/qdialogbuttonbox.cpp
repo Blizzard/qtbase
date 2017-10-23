@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -282,13 +288,8 @@ void QDialogButtonBoxPrivate::layoutButtons()
         }
             break;
         case QPlatformDialogHelper::AlternateRole:
-            {
-                if (acceptRoleList.size() < 2)
-                    break;
-                QList<QAbstractButton *> list = acceptRoleList;
-                list.removeFirst();
-                addButtonsToLayout(list, reverse);
-            }
+            if (acceptRoleList.size() > 1)
+                addButtonsToLayout(acceptRoleList.mid(1), reverse);
             break;
         case QPlatformDialogHelper::DestructiveRole:
             {
@@ -405,19 +406,15 @@ QPushButton *QDialogButtonBoxPrivate::createButton(QDialogButtonBox::StandardBut
         button->setStyle(style);
     standardButtonHash.insert(button, sbutton);
     QPlatformDialogHelper::ButtonRole role = QPlatformDialogHelper::buttonRole(static_cast<QPlatformDialogHelper::StandardButton>(sbutton));
-    if (role != QPlatformDialogHelper::InvalidRole) {
-        addButton(button, static_cast<QDialogButtonBox::ButtonRole>(role), doLayout);
-    } else {
+    if (Q_UNLIKELY(role == QPlatformDialogHelper::InvalidRole))
         qWarning("QDialogButtonBox::createButton: Invalid ButtonRole, button not added");
-    }
-
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
-    // Since mnemonics is off by default on Mac, we add a Cmd-D
-    // shortcut here to e.g. make the "Don't Save" button work nativly:
-    if (sbutton == QDialogButtonBox::Discard)
-        button->setShortcut(QKeySequence(QLatin1String("Ctrl+D")));
+    else
+        addButton(button, static_cast<QDialogButtonBox::ButtonRole>(role), doLayout);
+#if QT_CONFIG(shortcut)
+    const QKeySequence standardShortcut = QGuiApplicationPrivate::platformTheme()->standardButtonShortcut(sbutton);
+    if (!standardShortcut.isEmpty())
+        button->setShortcut(standardShortcut);
 #endif
-
     return button;
 }
 
@@ -462,9 +459,8 @@ void QDialogButtonBoxPrivate::retranslateStrings()
     \sa orientation, addButton()
 */
 QDialogButtonBox::QDialogButtonBox(QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(Qt::Horizontal), parent, 0)
+    : QDialogButtonBox(Qt::Horizontal, parent)
 {
-    d_func()->initLayout();
 }
 
 /*!
@@ -487,10 +483,8 @@ QDialogButtonBox::QDialogButtonBox(Qt::Orientation orientation, QWidget *parent)
     \sa orientation, addButton()
 */
 QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(Qt::Horizontal), parent, 0)
+    : QDialogButtonBox(buttons, Qt::Horizontal, parent)
 {
-    d_func()->initLayout();
-    d_func()->createStandardButtons(buttons);
 }
 
 /*!
@@ -501,9 +495,8 @@ QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, QWidget *parent)
 */
 QDialogButtonBox::QDialogButtonBox(StandardButtons buttons, Qt::Orientation orientation,
                                    QWidget *parent)
-    : QWidget(*new QDialogButtonBoxPrivate(orientation), parent, 0)
+    : QDialogButtonBox(orientation, parent)
 {
-    d_func()->initLayout();
     d_func()->createStandardButtons(buttons);
 }
 
@@ -720,8 +713,7 @@ void QDialogButtonBox::removeButton(QAbstractButton *button)
         return;
 
     // Remove it from the standard button hash first and then from the roles
-    if (QPushButton *pushButton = qobject_cast<QPushButton *>(button))
-        d->standardButtonHash.remove(pushButton);
+    d->standardButtonHash.remove(reinterpret_cast<QPushButton *>(button));
     for (int i = 0; i < NRoles; ++i) {
         QList<QAbstractButton *> &list = d->buttonLists[i];
         for (int j = 0; j < list.count(); ++j) {
@@ -753,7 +745,7 @@ void QDialogButtonBox::removeButton(QAbstractButton *button)
 void QDialogButtonBox::addButton(QAbstractButton *button, ButtonRole role)
 {
     Q_D(QDialogButtonBox);
-    if (role <= InvalidRole || role >= NRoles) {
+    if (Q_UNLIKELY(role <= InvalidRole || role >= NRoles)) {
         qWarning("QDialogButtonBox::addButton: Invalid ButtonRole, button not added");
         return;
     }
@@ -772,7 +764,7 @@ void QDialogButtonBox::addButton(QAbstractButton *button, ButtonRole role)
 QPushButton *QDialogButtonBox::addButton(const QString &text, ButtonRole role)
 {
     Q_D(QDialogButtonBox);
-    if (role <= InvalidRole || role >= NRoles) {
+    if (Q_UNLIKELY(role <= InvalidRole || role >= NRoles)) {
         qWarning("QDialogButtonBox::addButton: Invalid ButtonRole, button not added");
         return 0;
     }
@@ -887,7 +879,7 @@ void QDialogButtonBoxPrivate::_q_handleButtonDestroyed()
     Q_Q(QDialogButtonBox);
     if (QObject *object = q->sender()) {
         QBoolBlocker skippy(internalRemove);
-        q->removeButton(static_cast<QAbstractButton *>(object));
+        q->removeButton(reinterpret_cast<QAbstractButton *>(object));
     }
 }
 
@@ -964,7 +956,8 @@ bool QDialogButtonBox::event(QEvent *event)
                 break;
         }
 
-        foreach (QPushButton *pb, (dialog ? dialog : this)->findChildren<QPushButton *>()) {
+        const auto pbs = (dialog ? dialog : this)->findChildren<QPushButton *>();
+        for (QPushButton *pb : pbs) {
             if (pb->isDefault() && pb != firstAcceptButton) {
                 hasDefault = true;
                 break;

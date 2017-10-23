@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -82,16 +82,40 @@
     \title Qt Creator: Using Version Control Systems
 */
 /*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-bazaar.html
+    \title Qt Creator: Using Bazaar
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-clearcase.html
+    \title Qt Creator: Using ClearCase
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-cvs.html
+    \title Qt Creator: Using CVS
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-git.html
+    \title Qt Creator: Using Git
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-mercurial.html
+    \title Qt Creator: Using Mercurial
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-perforce.html
+    \title Qt Creator: Using Perforce
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-vcs-subversion.html
+    \title Qt Creator: Using Subversion
+*/
+/*!
     \externalpage http://doc.qt.io/qtcreator/creator-keyboard-shortcuts.html
     \title Qt Creator: Keyboard Shortcuts
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/quick-screens.html
     \title Qt Creator: Creating Screens
-*/
-/*!
-    \externalpage http://doc.qt.io/qtcreator/creator-qtquick-designer-extensions.html
-    \title Qt Creator: Using Qt Quick Designer Extensions
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/qmldesigner-pathview-editor.html
@@ -267,7 +291,7 @@
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-connecting-mobile.html
-    \title Qt Creator: Connecting Mobile Devices
+    \title Qt Creator: Connecting Devices
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-usability.html
@@ -295,7 +319,7 @@
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-deployment.html
-    \title Qt Creator: Deploying to Mobile Devices
+    \title Qt Creator: Deploying to Devices
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-tutorials.html
@@ -377,7 +401,7 @@
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-project-cmake.html
-    \title Qt Creator: Setting Up a CMake Project
+    \title Qt Creator: Setting Up CMake
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-targets.html
@@ -389,7 +413,7 @@
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-project-qbs.html
-    \title Qt Creator: Setting Up a Qbs Project
+    \title Qt Creator: Setting Up Qbs
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-project-creating.html
@@ -495,22 +519,16 @@
     \externalpage http://doc.qt.io/qtcreator/creator-beautifier.html
     \title Qt Creator: Beautifying Source Code
 */
-/*!
-    \externalpage http://doc.qt.io/qtcreator/creator-developing-winrt.html
-    \title Qt Creator: Connecting Windows Runtime Devices
-*/
+
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-clang-codemodel.html
-    \title Qt Creator: Parsing C++ Files
+    \title Qt Creator: Parsing C++ Files with the Clang Code Model
 */
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-quick-ui-forms.html
     \title Qt Creator: Qt Quick UI Forms
 */
-/*!
-    \externalpage http://doc.qt.io/qtcreator/qtcreator-uiforms-example.html
-    \title Qt Creator: Using Qt Quick UI Forms
-*/
+
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-clang-static-analyzer.html
     \title Qt Creator: Using Clang Static Analyzer
@@ -522,4 +540,12 @@
 /*!
     \externalpage http://doc.qt.io/qtcreator/creator-autotest.html
     \title Qt Creator: Running Autotests
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-project-creating.html#creating-c-classes
+    \title Qt Creator: Creating C++ Classes
+*/
+/*!
+    \externalpage http://doc.qt.io/qtcreator/creator-writing-program.html
+    \title Creating a Qt Widget Based Application
 */

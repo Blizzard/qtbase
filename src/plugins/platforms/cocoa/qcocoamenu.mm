@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2012 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author James Turner <james.turner@kdab.com>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -66,11 +72,6 @@ NSString *qt_mac_removePrivateUnicode(NSString* string)
             return [NSString stringWithCharacters:characters.data() length:len];
     }
     return string;
-}
-
-static inline QCocoaMenuLoader *getMenuLoader()
-{
-    return [NSApp QT_MANGLE_NAMESPACE(qt_qcocoamenuLoader)];
 }
 
 QT_END_NAMESPACE
@@ -146,7 +147,11 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaMenuDelegate);
 - (void) itemFired:(NSMenuItem*) item
 {
     QCocoaMenuItem *cocoaItem = reinterpret_cast<QCocoaMenuItem *>([item tag]);
-    QScopedLoopLevelCounter loopLevelCounter(QGuiApplicationPrivate::instance()->threadData);
+    // Menu-holding items also get a target to play nicely
+    // with NSMenuValidation but should not trigger.
+    if (cocoaItem->menu())
+        return;
+    QScopedScopeLevelCounter scopeLevelCounter(QGuiApplicationPrivate::instance()->threadData);
     QGuiApplicationPrivate::modifier_buttons = [QNSView convertKeyModifiers:[NSEvent modifierFlags]];
     static QMetaMethod activatedSignal = QMetaMethod::fromSignal(&QCocoaMenuItem::activated);
     activatedSignal.invoke(cocoaItem, Qt::QueuedConnection);
@@ -155,7 +160,8 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QCocoaMenuDelegate);
 - (BOOL)validateMenuItem:(NSMenuItem*)menuItem
 {
     QCocoaMenuItem *cocoaItem = reinterpret_cast<QCocoaMenuItem *>(menuItem.tag);
-    if (!cocoaItem)
+    // Menu-holding items are always enabled, as it's conventional in Cocoa
+    if (!cocoaItem || cocoaItem->menu())
         return YES;
 
     return cocoaItem->isEnabled();
@@ -254,6 +260,7 @@ QT_BEGIN_NAMESPACE
 QCocoaMenu::QCocoaMenu() :
     m_attachedItem(0),
     m_tag(0),
+    m_updateTimer(0),
     m_enabled(true),
     m_parentEnabled(true),
     m_visible(true),
@@ -284,7 +291,7 @@ void QCocoaMenu::setText(const QString &text)
 {
     QMacAutoReleasePool pool;
     QString stripped = qt_mac_removeAmpersandEscapes(text);
-    [m_nativeMenu setTitle:QCFString::toNSString(stripped)];
+    [m_nativeMenu setTitle:stripped.toNSString()];
 }
 
 void QCocoaMenu::setMinimumWidth(int width)
@@ -295,7 +302,7 @@ void QCocoaMenu::setMinimumWidth(int width)
 void QCocoaMenu::setFont(const QFont &font)
 {
     if (font.resolve()) {
-        NSFont *customMenuFont = [NSFont fontWithName:QCFString::toNSString(font.family())
+        NSFont *customMenuFont = [NSFont fontWithName:font.family().toNSString()
                                   size:font.pointSize()];
         m_nativeMenu.font = customMenuFont;
     }
@@ -321,15 +328,23 @@ void QCocoaMenu::insertMenuItem(QPlatformMenuItem *menuItem, QPlatformMenuItem *
     }
 
     insertNative(cocoaItem, beforeItem);
+
+    // Empty menus on a menubar are hidden by default. If the menu gets
+    // added to the menubar before it contains any item, we need to sync.
+    if (isVisible() && attachedItem().hidden) {
+        if (auto *mb = qobject_cast<QCocoaMenuBar *>(menuParent()))
+            mb->syncMenu(this);
+    }
 }
 
 void QCocoaMenu::insertNative(QCocoaMenuItem *item, QCocoaMenuItem *beforeItem)
 {
-    item->nsItem().target = m_nativeMenu.delegate;
-    if (!item->menu())
-        [item->nsItem() setAction:@selector(itemFired:)];
-    else if (isOpen() && item->nsItem()) // Someone's adding new items after aboutToShow() was emitted
-        item->menu()->setAttachedItem(item->nsItem());
+    NSMenuItem *nativeItem = item->nsItem();
+    nativeItem.target = m_nativeMenu.delegate;
+    nativeItem.action = @selector(itemFired:);
+    // Someone's adding new items after aboutToShow() was emitted
+    if (isOpen() && nativeItem && item->menu())
+        item->menu()->setAttachedItem(nativeItem);
 
     item->setParentEnabled(isEnabled());
 
@@ -342,15 +357,20 @@ void QCocoaMenu::insertNative(QCocoaMenuItem *item, QCocoaMenuItem *beforeItem)
         beforeItem = itemOrNull(m_menuItems.indexOf(beforeItem) + 1);
     }
 
+    if (nativeItem.menu) {
+        qWarning() << "Menu item" << item->text() << "already in menu" << QString::fromNSString(nativeItem.menu.title);
+        return;
+    }
+
     if (beforeItem) {
         if (beforeItem->isMerged()) {
             qWarning("No non-merged before menu item found");
             return;
         }
-        NSUInteger nativeIndex = [m_nativeMenu indexOfItem:beforeItem->nsItem()];
-        [m_nativeMenu insertItem: item->nsItem() atIndex: nativeIndex];
+        const NSInteger nativeIndex = [m_nativeMenu indexOfItem:beforeItem->nsItem()];
+        [m_nativeMenu insertItem:nativeItem atIndex:nativeIndex];
     } else {
-        [m_nativeMenu addItem: item->nsItem()];
+        [m_nativeMenu addItem:nativeItem];
     }
     item->setMenuParent(this);
 }
@@ -398,6 +418,21 @@ QCocoaMenuItem *QCocoaMenu::itemOrNull(int index) const
     return m_menuItems.at(index);
 }
 
+void QCocoaMenu::scheduleUpdate()
+{
+    if (!m_updateTimer)
+        m_updateTimer = startTimer(0);
+}
+
+void QCocoaMenu::timerEvent(QTimerEvent *e)
+{
+    if (e->timerId() == m_updateTimer) {
+        killTimer(m_updateTimer);
+        m_updateTimer = 0;
+        [m_nativeMenu update];
+    }
+}
+
 void QCocoaMenu::syncMenuItem(QPlatformMenuItem *menuItem)
 {
     QMacAutoReleasePool pool;
@@ -407,9 +442,8 @@ void QCocoaMenu::syncMenuItem(QPlatformMenuItem *menuItem)
         return;
     }
 
-    bool wasMerged = cocoaItem->isMerged();
-    NSMenu *oldMenu = wasMerged ? [getMenuLoader() applicationMenu] : m_nativeMenu;
-    NSMenuItem *oldItem = [oldMenu itemWithTag:(NSInteger) cocoaItem];
+    const bool wasMerged = cocoaItem->isMerged();
+    NSMenuItem *oldItem = cocoaItem->nsItem();
 
     if (cocoaItem->sync() != oldItem) {
         // native item was changed for some reason
@@ -424,6 +458,10 @@ void QCocoaMenu::syncMenuItem(QPlatformMenuItem *menuItem)
 
         QCocoaMenuItem* beforeItem = itemOrNull(m_menuItems.indexOf(cocoaItem) + 1);
         insertNative(cocoaItem, beforeItem);
+    } else {
+        // Schedule NSMenuValidation to kick in. This is needed e.g.
+        // when an item's enabled state changes after menuWillOpen:
+        scheduleUpdate();
     }
 }
 
@@ -494,7 +532,7 @@ void QCocoaMenu::showPopup(const QWindow *parentWindow, const QRect &targetRect,
 
     QPoint pos =  QPoint(targetRect.left(), targetRect.top() + targetRect.height());
     QCocoaWindow *cocoaWindow = parentWindow ? static_cast<QCocoaWindow *>(parentWindow->handle()) : 0;
-    NSView *view = cocoaWindow ? cocoaWindow->contentView() : nil;
+    NSView *view = cocoaWindow ? cocoaWindow->view() : nil;
     NSMenuItem *nsItem = item ? ((QCocoaMenuItem *)item)->nsItem() : nil;
 
     QScreen *screen = 0;
@@ -566,8 +604,8 @@ void QCocoaMenu::showPopup(const QWindow *parentWindow, const QRect &targetRect,
 
     // The calls above block, and also swallow any mouse release event,
     // so we need to clear any mouse button that triggered the menu popup.
-    if ([view isKindOfClass:[QNSView class]])
-        [(QNSView *)view resetMouseButtons];
+    if (!cocoaWindow->isForeignWindow())
+        [qnsview_cast(view) resetMouseButtons];
 }
 
 void QCocoaMenu::dismiss()

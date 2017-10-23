@@ -1,31 +1,26 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure@kde.org>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -455,6 +450,13 @@ void tst_QCommandLineParser::testSingleDashWordOptionModes_data()
                                << QStringList("abc") << QStringList("val");
     QTest::newRow("implicitlylong_with_space") << QCommandLineParser::ParseAsCompactedShortOptions << (QStringList() << "-c" << "val")
                                << QStringList("c") << QStringList("val");
+
+    QTest::newRow("forceshort_detached") << QCommandLineParser::ParseAsLongOptions << (QStringList() << "-I" << "45")
+                               << QStringList("I") << QStringList("45");
+    QTest::newRow("forceshort_attached") << QCommandLineParser::ParseAsLongOptions << (QStringList() << "-I46")
+                               << QStringList("I") << QStringList("46");
+    QTest::newRow("forceshort_mixed") << QCommandLineParser::ParseAsLongOptions << (QStringList() << "-I45" << "-nn")
+                               << (QStringList() << "I" << "nn") << QStringList("45");
 }
 
 void tst_QCommandLineParser::testSingleDashWordOptionModes()
@@ -473,6 +475,10 @@ void tst_QCommandLineParser::testSingleDashWordOptionModes()
     parser.addOption(QCommandLineOption("b", QStringLiteral("b option.")));
     parser.addOption(QCommandLineOption(QStringList() << "c" << "abc", QStringLiteral("c option."), QStringLiteral("value")));
     parser.addOption(QCommandLineOption("nn", QStringLiteral("nn option.")));
+    QCommandLineOption forceShort(QStringLiteral("I"), QStringLiteral("always short option"),
+                                  QStringLiteral("path"), QStringLiteral("default"));
+    forceShort.setFlags(QCommandLineOption::ShortOptionStyle);
+    parser.addOption(forceShort);
     QVERIFY(parser.parse(commandLine));
     QCOMPARE(parser.optionNames(), expectedOptionNames);
     for (int i = 0; i < expectedOptionValues.count(); ++i)
@@ -503,13 +509,10 @@ void tst_QCommandLineParser::testCpp11StyleInitialization()
 
 void tst_QCommandLineParser::testVersionOption()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
-#ifdef Q_OS_WINCE
-    QSKIP("Reading and writing to a process is not supported on Qt/CE");
-#endif
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+#if defined(Q_OS_ANDROID)
     QSKIP("Deploying executable applications to file system on Android not supported.");
 #endif
 
@@ -523,7 +526,7 @@ void tst_QCommandLineParser::testVersionOption()
     output.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
 #endif
     QCOMPARE(output, QString("qcommandlineparser_test_helper 1.0\n"));
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 static const char expectedOptionsHelp[] =
@@ -572,13 +575,10 @@ void tst_QCommandLineParser::testHelpOption_data()
 
 void tst_QCommandLineParser::testHelpOption()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
 #else
-#ifdef Q_OS_WINCE
-    QSKIP("Reading and writing to a process is not supported on Qt/CE");
-#endif
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+#if defined(Q_OS_ANDROID)
     QSKIP("Deploying executable applications to file system on Android not supported.");
 #endif
 
@@ -618,14 +618,14 @@ void tst_QCommandLineParser::testHelpOption()
     expectedResizeHelp.replace("testhelper/", "testhelper\\");
 #endif
     QCOMPARE(output, QString(expectedResizeHelp));
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 void tst_QCommandLineParser::testQuoteEscaping()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("This test requires QProcess support");
-#elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+#elif defined(Q_OS_ANDROID)
     QSKIP("Deploying executable applications to file system on Android not supported.");
 #else
     QCoreApplication app(empty_argc, empty_argv);
@@ -644,7 +644,7 @@ void tst_QCommandLineParser::testQuoteEscaping()
     QVERIFY2(output.contains("KEY1=\"VALUE1\""), qPrintable(output));
     QVERIFY2(output.contains("QTBUG-15379=C:\\path\\'file.ext"), qPrintable(output));
     QVERIFY2(output.contains("QTBUG-30628=C:\\temp\\'file'.ext"), qPrintable(output));
-#endif // !QT_NO_PROCESS
+#endif // QT_CONFIG(process)
 }
 
 QTEST_APPLESS_MAIN(tst_QCommandLineParser)

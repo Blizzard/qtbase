@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -492,9 +492,9 @@
     \section1 Inheritance
 
     In classic CSS, when font and color of an item is not explicitly set,
-    it gets automatically inherited from the parent. When using Qt Style Sheets,
-    a widget does \b{not} automatically inherit its font and color setting
-    from its parent widget.
+    it gets automatically inherited from the parent. By default, when using
+    Qt Style Sheets, a widget does \b{not} automatically inherit its font
+    and color setting from its parent widget.
 
     For example, consider a QPushButton inside a QGroupBox:
 
@@ -507,8 +507,22 @@
 
     \snippet code/doc_src_stylesheet.cpp 25
 
-    In contrast, setting a font and propagate using QWidget::setFont() and
+    In contrast, setting a font and palette using QWidget::setFont() and
     QWidget::setPalette() propagates to child widgets.
+
+    If you would prefer that the font and palette propagate to child widgets,
+    you can set the Qt::AA_UseStyleSheetPropagationInWidgetStyles flag, like
+    this:
+
+    Usage:
+    \snippet code/doc_src_stylesheet.cpp 96
+
+    When the widget-style font and palette propagation is enabled, font and
+    palette changes made through Qt Style Sheets will behave as though the
+    user had manually called the corresponding QWidget::setPalette() and
+    QWidget::setFont() methods on all of the QWidgets targeted by the style
+    sheet.  If this would have caused propagation in C++, it will cause
+    propagation in style sheets and visa versa.
 
     \section1 Widgets Inside C++ Namespaces
 
@@ -3889,6 +3903,12 @@
     The corner widget can be customized using the following style sheet
 
     \snippet code/doc_src_stylesheet.qdoc 150
+
+    The QTableView's checkbox indicator can also be customized. In the
+    following snippet the indicator \c background-color in unchecked state is
+    customized:
+
+    \snippet code/doc_src_stylesheet.qdoc 161
 
     \section2 Customizing QToolBar
 

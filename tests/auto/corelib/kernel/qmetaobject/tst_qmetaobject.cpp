@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -136,6 +131,22 @@ namespace MyNamespace {
         MyEnum m_enum;
         MyFlags m_flags;
     };
+
+    // Test inherits
+    class MyClassSubclass : public MyClass
+    {
+        Q_OBJECT
+    };
+
+    class MyClassSubclass2 : public MyClass2
+    {
+        Q_OBJECT
+    };
+
+    class MyClass2Subclass : public MyClass
+    {
+        Q_OBJECT
+    };
 }
 
 
@@ -195,6 +206,7 @@ private slots:
     void invokeMetaConstructor();
     void invokeTypedefTypes();
     void invokeException();
+    void invokeQueuedAutoRegister();
     void qtMetaObjectInheritance();
     void normalizedSignature_data();
     void normalizedSignature();
@@ -226,6 +238,9 @@ private slots:
     void signalIndex_data();
     void signalIndex();
     void enumDebugStream();
+
+    void inherits_data();
+    void inherits();
 
 signals:
     void value6Changed();
@@ -363,6 +378,7 @@ class QtTestObject: public QObject
 
 public:
     QtTestObject();
+    QtTestObject(const QString &s) : slotResult(s) {}
     Q_INVOKABLE QtTestObject(QObject *parent);
 
 public slots:
@@ -400,6 +416,15 @@ public slots:
         throw ObjectException();
 #endif
         return s2;
+    }
+
+    void slotWithRegistrableArgument(QtTestObject *o1, QPointer<QtTestObject> o2,
+                                     QSharedPointer<QtTestObject> o3, QWeakPointer<QtTestObject> o4,
+                                     QVector<QtTestObject *> o5, QList<QtTestObject *> o6)
+    {
+        slotResult = QLatin1String("slotWithRegistrableArgument:") + o1->slotResult + o2->slotResult
+            + o3->slotResult + o4.data()->slotResult + QString::number(o5.size())
+            + QString::number(o6.size());
     }
 
 signals:
@@ -811,7 +836,7 @@ void tst_QMetaObject::invokeBlockingQueuedMetaMember()
 
 void tst_QMetaObject::qtMetaObjectInheritance()
 {
-    QVERIFY(QObject::staticMetaObject.superClass() == 0);
+    QVERIFY(!QObject::staticMetaObject.superClass());
     QCOMPARE(QSortFilterProxyModel::staticMetaObject.indexOfEnumerator("Qt::CaseSensitivity"), -1);
     QCOMPARE(QSortFilterProxyModel::staticMetaObject.indexOfEnumerator("CaseSensitivity"), -1);
     int indexOfSortCaseSensitivity = QSortFilterProxyModel::staticMetaObject.indexOfProperty("sortCaseSensitivity");
@@ -878,7 +903,7 @@ void tst_QMetaObject::invokeMetaConstructor()
     const QMetaObject *mo = &QtTestObject::staticMetaObject;
     {
         QObject *obj = mo->newInstance();
-        QVERIFY(obj == 0);
+        QVERIFY(!obj);
     }
     {
         QtTestObject obj;
@@ -928,6 +953,24 @@ void tst_QMetaObject::invokeException()
 #else
     QSKIP("Needs exceptions");
 #endif
+}
+
+void tst_QMetaObject::invokeQueuedAutoRegister()
+{
+    QtTestObject obj;
+
+    auto shared = QSharedPointer<QtTestObject>::create(QStringLiteral("myShared-"));
+
+    QVERIFY(QMetaObject::invokeMethod(
+        &obj, "slotWithRegistrableArgument", Qt::QueuedConnection,
+        Q_ARG(QtTestObject *, shared.data()), Q_ARG(QPointer<QtTestObject>, shared.data()),
+        Q_ARG(QSharedPointer<QtTestObject>, shared), Q_ARG(QWeakPointer<QtTestObject>, shared),
+        Q_ARG(QVector<QtTestObject *>, QVector<QtTestObject *>()),
+        Q_ARG(QList<QtTestObject *>, QList<QtTestObject *>())));
+    QVERIFY(obj.slotResult.isEmpty());
+    qApp->processEvents(QEventLoop::AllEvents);
+    QCOMPARE(obj.slotResult,
+             QString("slotWithRegistrableArgument:myShared-myShared-myShared-myShared-00"));
 }
 
 void tst_QMetaObject::normalizedSignature_data()
@@ -1428,6 +1471,35 @@ void tst_QMetaObject::enumDebugStream()
     MyNamespace::MyClass::MyFlags f2 = MyNamespace::MyClass::MyFlag2 | MyNamespace::MyClass::MyFlag3;
     QTest::ignoreMessage(QtDebugMsg, "QFlags<MyNamespace::MyClass::MyFlags>(MyFlag1) QFlags<MyNamespace::MyClass::MyFlags>(MyFlag2|MyFlag3)");
     qDebug() << f1 << f2;
+}
+
+void tst_QMetaObject::inherits_data()
+{
+    QTest::addColumn<const QMetaObject *>("derivedMetaObject");
+    QTest::addColumn<const QMetaObject *>("baseMetaObject");
+    QTest::addColumn<bool>("inheritsResult");
+
+    QTest::newRow("MyClass inherits QObject")
+        << &MyNamespace::MyClass::staticMetaObject << &QObject::staticMetaObject << true;
+    QTest::newRow("QObject inherits MyClass")
+        << &QObject::staticMetaObject << &MyNamespace::MyClass::staticMetaObject << false;
+    QTest::newRow("MyClass inherits MyClass")
+        << &MyNamespace::MyClass::staticMetaObject << &MyNamespace::MyClass::staticMetaObject << true;
+    QTest::newRow("MyClassSubclass inherits QObject")
+        << &MyNamespace::MyClassSubclass::staticMetaObject << &QObject::staticMetaObject << true;
+    QTest::newRow("MyClassSubclass2 inherits QObject")
+        << &MyNamespace::MyClassSubclass2::staticMetaObject << &QObject::staticMetaObject << true;
+    QTest::newRow("MyClassSubclass2 inherits MyClass2")
+        << &MyNamespace::MyClassSubclass2::staticMetaObject << &MyNamespace::MyClass2Subclass::staticMetaObject << false;
+}
+
+void tst_QMetaObject::inherits()
+{
+    QFETCH(const QMetaObject *, derivedMetaObject);
+    QFETCH(const QMetaObject *, baseMetaObject);
+    QFETCH(bool, inheritsResult);
+
+    QCOMPARE(derivedMetaObject->inherits(baseMetaObject), inheritsResult);
 }
 
 QTEST_MAIN(tst_QMetaObject)

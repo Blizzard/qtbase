@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -726,8 +732,6 @@
 
 #include "qgraphicsitem.h"
 
-#ifndef QT_NO_GRAPHICSVIEW
-
 #include "qgraphicsscene.h"
 #include "qgraphicsscene_p.h"
 #include "qgraphicssceneevent.h"
@@ -750,7 +754,9 @@
 #include <QtWidgets/qstyleoption.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qinputmethod.h>
+#if QT_CONFIG(graphicseffect)
 #include <QtWidgets/qgraphicseffect.h>
+#endif
 
 #include <private/qgraphicsitem_p.h>
 #include <private/qgraphicswidget_p.h>
@@ -808,6 +814,85 @@ static QPainterPath qt_graphicsItem_shapeFromPath(const QPainterPath &path, cons
     QPainterPath p = ps.createStroke(path);
     p.addPath(path);
     return p;
+}
+
+/*!
+    \internal
+*/
+QGraphicsItemPrivate::QGraphicsItemPrivate()
+    : z(0),
+      opacity(1.),
+      scene(nullptr),
+      parent(nullptr),
+      transformData(nullptr),
+      graphicsEffect(nullptr),
+      index(-1),
+      siblingIndex(-1),
+      itemDepth(-1),
+      focusProxy(nullptr),
+      subFocusItem(nullptr),
+      focusScopeItem(nullptr),
+      imHints(Qt::ImhNone),
+      panelModality(QGraphicsItem::NonModal),
+      acceptedMouseButtons(0x1f),
+      visible(true),
+      explicitlyHidden(false),
+      enabled(true),
+      explicitlyDisabled(false),
+      selected(false),
+      acceptsHover(false),
+      acceptDrops(false),
+      isMemberOfGroup(false),
+      handlesChildEvents(false),
+      itemDiscovered(false),
+      hasCursor(false),
+      ancestorFlags(0),
+      cacheMode(0),
+      hasBoundingRegionGranularity(false),
+      isWidget(false),
+      dirty(false),
+      dirtyChildren(false),
+      localCollisionHack(false),
+      inSetPosHelper(false),
+      needSortChildren(false),
+      allChildrenDirty(false),
+      fullUpdatePending(false),
+      flags(0),
+      paintedViewBoundingRectsNeedRepaint(false),
+      dirtySceneTransform(true),
+      geometryChanged(true),
+      inDestructor(false),
+      isObject(false),
+      ignoreVisible(false),
+      ignoreOpacity(false),
+      acceptTouchEvents(false),
+      acceptedTouchBeginEvent(false),
+      filtersDescendantEvents(false),
+      sceneTransformTranslateOnly(false),
+      notifyBoundingRectChanged(false),
+      notifyInvalidated(false),
+      mouseSetsFocus(true),
+      explicitActivate(false),
+      wantsActive(false),
+      holesInSiblingIndex(false),
+      sequentialOrdering(true),
+      updateDueToGraphicsEffect(false),
+      scenePosDescendants(false),
+      pendingPolish(false),
+      mayHaveChildWithGraphicsEffect(false),
+      isDeclarativeItem(false),
+      sendParentChangeNotification(false),
+      dirtyChildrenBoundingRect(true),
+      globalStackingOrder(-1),
+      q_ptr(nullptr)
+{
+}
+
+/*!
+    \internal
+*/
+QGraphicsItemPrivate::~QGraphicsItemPrivate()
+{
 }
 
 /*!
@@ -1354,9 +1439,8 @@ void QGraphicsItemPrivate::initStyleOption(QStyleOptionGraphicsItem *option, con
         // Determine the item's exposed area
         option->exposedRect = QRectF();
         const QTransform reverseMap = worldTransform.inverted();
-        const QVector<QRect> exposedRects(exposedRegion.rects());
-        for (int i = 0; i < exposedRects.size(); ++i) {
-            option->exposedRect |= reverseMap.mapRect(QRectF(exposedRects.at(i)));
+        for (const QRect &exposedRect : exposedRegion) {
+            option->exposedRect |= reverseMap.mapRect(QRectF(exposedRect));
             if (option->exposedRect.contains(brect))
                 break;
         }
@@ -1373,12 +1457,9 @@ void QGraphicsItemCache::purge()
 {
     QPixmapCache::remove(key);
     key = QPixmapCache::Key();
-    QMutableHashIterator<QPaintDevice *, DeviceData> it(deviceData);
-    while (it.hasNext()) {
-        DeviceData &data = it.next().value();
+    const auto &constDeviceData = deviceData; // avoid detach
+    for (const auto &data : constDeviceData)
         QPixmapCache::remove(data.key);
-        data.cacheIndent = QPoint();
-    }
     deviceData.clear();
     allExposed = true;
     exposed.clear();
@@ -1443,7 +1524,8 @@ QGraphicsItem::~QGraphicsItem()
     if (d_ptr->isObject && !d_ptr->gestureContext.isEmpty()) {
         QGraphicsObject *o = static_cast<QGraphicsObject *>(this);
         if (QGestureManager *manager = QGestureManager::instance()) {
-            foreach (Qt::GestureType type, d_ptr->gestureContext.keys())
+            const auto types  = d_ptr->gestureContext.keys(); // FIXME: iterate over the map directly?
+            for (Qt::GestureType type : types)
                 manager->cleanupCachedGestures(o, type);
         }
     }
@@ -1476,9 +1558,9 @@ QGraphicsItem::~QGraphicsItem()
         setParentItem(0);
     }
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     delete d_ptr->graphicsEffect;
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
     if (d_ptr->transformData) {
         for(int i = 0; i < d_ptr->transformData->graphicsTransforms.size(); ++i) {
             QGraphicsTransform *t = d_ptr->transformData->graphicsTransforms.at(i);
@@ -2069,7 +2151,7 @@ bool QGraphicsItem::isBlockedByModalPanel(QGraphicsItem **blockingPanel) const
     if (!blockingPanel)
         blockingPanel = &dummy;
 
-    QGraphicsScenePrivate *scene_d = d_ptr->scene->d_func();
+    const QGraphicsScenePrivate *scene_d = d_ptr->scene->d_func();
     if (scene_d->modalPanels.isEmpty())
         return false;
 
@@ -2167,11 +2249,13 @@ void QGraphicsItem::setCursor(const QCursor &cursor)
     d_ptr->hasCursor = 1;
     if (d_ptr->scene) {
         d_ptr->scene->d_func()->allItemsUseDefaultCursor = false;
-        foreach (QGraphicsView *view, d_ptr->scene->views()) {
+        const auto views = d_ptr->scene->views();
+        for (QGraphicsView *view : views) {
             view->viewport()->setMouseTracking(true);
             // Note: Some of this logic is duplicated in QGraphicsView's mouse events.
             if (view->underMouse()) {
-                foreach (QGraphicsItem *itemUnderCursor, view->items(view->mapFromGlobal(QCursor::pos()))) {
+                const auto itemsUnderCursor = view->items(view->mapFromGlobal(QCursor::pos()));
+                for (QGraphicsItem *itemUnderCursor : itemsUnderCursor) {
                     if (itemUnderCursor->hasCursor()) {
                         QMetaObject::invokeMethod(view, "_q_setViewportCursor",
                                                   Q_ARG(QCursor, itemUnderCursor->cursor()));
@@ -2210,7 +2294,8 @@ void QGraphicsItem::unsetCursor()
     d_ptr->unsetExtra(QGraphicsItemPrivate::ExtraCursor);
     d_ptr->hasCursor = 0;
     if (d_ptr->scene) {
-        foreach (QGraphicsView *view, d_ptr->scene->views()) {
+        const auto views = d_ptr->scene->views();
+        for (QGraphicsView *view : views) {
             if (view->underMouse() && view->itemAt(view->mapFromGlobal(QCursor::pos())) == this) {
                 QMetaObject::invokeMethod(view, "_q_unsetViewportCursor");
                 break;
@@ -2298,9 +2383,9 @@ void QGraphicsItemPrivate::setVisibleHelper(bool newVisible, bool explicitly,
         if (c)
             c->purge();
         if (scene) {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
             invalidateParentGraphicsEffectsRecursively();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
             scene->d_func()->markDirty(q_ptr, QRectF(), /*invalidateChildren=*/false, /*force=*/true);
         }
     }
@@ -2747,11 +2832,11 @@ void QGraphicsItem::setOpacity(qreal opacity)
 
     // Update.
     if (d_ptr->scene) {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
         d_ptr->invalidateParentGraphicsEffectsRecursively();
         if (!(d_ptr->flags & ItemDoesntPropagateOpacityToChildren))
             d_ptr->invalidateChildGraphicsEffectsRecursively(QGraphicsItemPrivate::OpacityChanged);
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
         d_ptr->scene->d_func()->markDirty(this, QRectF(),
                                           /*invalidateChildren=*/true,
                                           /*force=*/false,
@@ -2769,7 +2854,7 @@ void QGraphicsItem::setOpacity(qreal opacity)
 
     \since 4.6
 */
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 QGraphicsEffect *QGraphicsItem::graphicsEffect() const
 {
     return d_ptr->graphicsEffect;
@@ -2811,11 +2896,11 @@ void QGraphicsItem::setGraphicsEffect(QGraphicsEffect *effect)
         prepareGeometryChange();
     }
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 void QGraphicsItemPrivate::updateChildWithGraphicsEffectFlagRecursively()
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     QGraphicsItemPrivate *itemPrivate = this;
     do {
         // parent chain already notified?
@@ -2838,7 +2923,7 @@ void QGraphicsItemPrivate::updateChildWithGraphicsEffectFlagRecursively()
 */
 QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     Q_Q(const QGraphicsItem);
     QGraphicsEffect *effect = graphicsEffect;
     if (scene && effect && effect->isEnabled()) {
@@ -2846,14 +2931,15 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
             return effect->boundingRectFor(rect);
         QRectF sceneRect = q->mapRectToScene(rect);
         QRectF sceneEffectRect;
-        foreach (QGraphicsView *view, scene->views()) {
+        const auto views = scene->views();
+        for (QGraphicsView *view : views) {
             QRectF deviceRect = view->d_func()->mapRectFromScene(sceneRect);
             QRect deviceEffectRect = effect->boundingRectFor(deviceRect).toAlignedRect();
             sceneEffectRect |= view->d_func()->mapRectToScene(deviceEffectRect);
         }
         return q->mapRectFromScene(sceneEffectRect);
     }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
     return rect;
 }
 
@@ -2869,7 +2955,7 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(const QRectF &rect) const
 */
 QRectF QGraphicsItemPrivate::effectiveBoundingRect(QGraphicsItem *topMostEffectItem) const
 {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     Q_Q(const QGraphicsItem);
     QRectF brect = effectiveBoundingRect(q_ptr->boundingRect());
     if (ancestorFlags & QGraphicsItemPrivate::AncestorClipsChildren
@@ -2894,9 +2980,10 @@ QRectF QGraphicsItemPrivate::effectiveBoundingRect(QGraphicsItem *topMostEffectI
     }
 
     return brect;
-#else //QT_NO_GRAPHICSEFFECT
+#else //QT_CONFIG(graphicseffect)
+    Q_UNUSED(topMostEffectItem);
     return q_ptr->boundingRect();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 }
 
@@ -4430,7 +4517,7 @@ void QGraphicsItem::setMatrix(const QMatrix &matrix, bool combine)
     otherwise, \a matrix \e replaces the current matrix. \a combine is false
     by default.
 
-    To simplify interation with items using a transformed view, QGraphicsItem
+    To simplify interaction with items using a transformed view, QGraphicsItem
     provides mapTo... and mapFrom... functions that can translate between
     items' and the scene's coordinates. For example, you can call mapToScene()
     to map an item coordiate to a scene coordinate, or mapFromScene() to map
@@ -5140,7 +5227,8 @@ bool QGraphicsItem::isObscured(const QRectF &rect) const
     QRectF br = boundingRect();
     QRectF testRect = rect.isNull() ? br : rect;
 
-    foreach (QGraphicsItem *item, d->scene->items(mapToScene(br), Qt::IntersectsItemBoundingRect)) {
+    const auto items = d->scene->items(mapToScene(br), Qt::IntersectsItemBoundingRect);
+    for (QGraphicsItem *item : items) {
         if (item == this)
             break;
         if (qt_QGraphicsItem_isObscured(this, item, testRect))
@@ -5262,7 +5350,7 @@ QRegion QGraphicsItem::boundingRegion(const QTransform &itemToDeviceTransform) c
     QTransform unscale = QTransform::fromScale(1 / granularity, 1 / granularity);
     QRegion r;
     QBitmap colorMask = QBitmap::fromImage(mask.createMaskFromColor(0));
-    foreach (const QRect &rect, QRegion( colorMask ).rects()) {
+    for (const QRect &rect : QRegion(colorMask)) {
         QRect xrect = unscale.mapRect(rect).translated(deviceRect.topLeft() - QPoint(pad, pad));
         r += xrect.adjusted(-1, -1, 1, 1) & deviceRect;
     }
@@ -5397,7 +5485,7 @@ int QGraphicsItemPrivate::depth() const
 /*!
     \internal
 */
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 void QGraphicsItemPrivate::invalidateParentGraphicsEffectsRecursively()
 {
     QGraphicsItemPrivate *itemPrivate = this;
@@ -5428,7 +5516,7 @@ void QGraphicsItemPrivate::invalidateChildGraphicsEffectsRecursively(QGraphicsIt
         childPrivate->invalidateChildGraphicsEffectsRecursively(reason);
     }
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 /*!
     \internal
@@ -5710,9 +5798,9 @@ void QGraphicsItem::update(const QRectF &rect)
         return;
 
     // Make sure we notify effects about invalidated source.
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     d_ptr->invalidateParentGraphicsEffectsRecursively();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
     if (CacheMode(d_ptr->cacheMode) != NoCache) {
         // Invalidate cache.
@@ -5826,9 +5914,8 @@ void QGraphicsItem::scroll(qreal dx, qreal dy, const QRectF &rect)
     // Append newly exposed areas. Note that the exposed region is currently
     // in pixmap coordinates, so we have to translate it to item coordinates.
     exposed.translate(cache->boundingRect.topLeft());
-    const QVector<QRect> exposedRects = exposed.rects();
-    for (int i = 0; i < exposedRects.size(); ++i)
-        cache->exposed += exposedRects.at(i);
+    for (const QRect &exposedRect : exposed)
+        cache->exposed += exposedRect;
 
     // Trigger update. This will redraw the newly exposed area and make sure
     // the pixmap is re-blitted in case there are overlapping items.
@@ -6510,7 +6597,7 @@ QGraphicsItem *QGraphicsItem::commonAncestorItem(const QGraphicsItem *other) con
 }
 
 /*!
-    \since 4,4
+    \since 4.4
     Returns \c true if this item is currently under the mouse cursor in one of
     the views; otherwise, false is returned.
 
@@ -6523,7 +6610,8 @@ bool QGraphicsItem::isUnderMouse() const
         return false;
 
     QPoint cursorPos = QCursor::pos();
-    foreach (QGraphicsView *view, d->scene->views()) {
+    const auto views = d->scene->views();
+    for (QGraphicsView *view : views) {
         if (contains(mapFromScene(view->mapToScene(view->mapFromGlobal(cursorPos)))))
             return true;
     }
@@ -7104,9 +7192,6 @@ void QGraphicsItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     }
 }
 
-/*!
-    obsolete
-*/
 bool _qt_movableAncestorIsSelected(const QGraphicsItem *item)
 {
     const QGraphicsItem *parent = item->parentItem();
@@ -7405,7 +7490,7 @@ void QGraphicsItem::setInputMethodHints(Qt::InputMethodHints hints)
 */
 void QGraphicsItem::updateMicroFocus()
 {
-#if !defined(QT_NO_IM) && defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if !defined(QT_NO_IM) && 0 /* Used to be included in Qt4 for Q_WS_X11 */
     if (QWidget *fw = QApplication::focusWidget()) {
         if (scene()) {
             for (int i = 0 ; i < scene()->views().count() ; ++i) {
@@ -9483,7 +9568,7 @@ public:
                 shape = qt_regionToPath(QRegion(mask).translated(offset.toPoint()));
                 break;
             }
-            // FALL THROUGH
+            Q_FALLTHROUGH();
         }
         case QGraphicsPixmapItem::BoundingRectShape:
             shape.addRect(QRectF(offset.x(), offset.y(), pixmap.width(), pixmap.height()));
@@ -11140,7 +11225,7 @@ int QGraphicsItemGroup::type() const
     return Type;
 }
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 QRectF QGraphicsItemEffectSourcePrivate::boundingRect(Qt::CoordinateSystem system) const
 {
     const bool deviceCoordinates = (system == Qt::DeviceCoordinates);
@@ -11281,7 +11366,7 @@ QPixmap QGraphicsItemEffectSourcePrivate::pixmap(Qt::CoordinateSystem system, QP
 
     return pixmap;
 }
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 #ifndef QT_NO_DEBUG_STREAM
 static void formatGraphicsItemHelper(QDebug debug, const QGraphicsItem *item)
@@ -11548,5 +11633,3 @@ QDebug operator<<(QDebug debug, QGraphicsItem::GraphicsItemFlags flags)
 QT_END_NAMESPACE
 
 #include "moc_qgraphicsitem.cpp"
-
-#endif // QT_NO_GRAPHICSVIEW

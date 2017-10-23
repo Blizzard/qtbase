@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,11 +40,11 @@
 #include "qsidebar_p.h"
 #include "qfilesystemmodel.h"
 
-#ifndef QT_NO_FILEDIALOG
-
 #include <qaction.h>
 #include <qurl.h>
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
 #include <qmimedata.h>
 #include <qevent.h>
 #include <qdebug.h>
@@ -103,9 +109,9 @@ Qt::ItemFlags QUrlModel::flags(const QModelIndex &index) const
 QMimeData *QUrlModel::mimeData(const QModelIndexList &indexes) const
 {
     QList<QUrl> list;
-    for (int i = 0; i < indexes.count(); ++i) {
-        if (indexes.at(i).column() == 0)
-           list.append(indexes.at(i).data(UrlRole).toUrl());
+    for (const auto &index : indexes) {
+        if (index.column() == 0)
+           list.append(index.data(UrlRole).toUrl());
     }
     QMimeData *data = new QMimeData();
     data->setUrls(list);
@@ -121,12 +127,12 @@ QMimeData *QUrlModel::mimeData(const QModelIndexList &indexes) const
 */
 bool QUrlModel::canDrop(QDragEnterEvent *event)
 {
-    if (!event->mimeData()->formats().contains(mimeTypes().first()))
+    if (!event->mimeData()->formats().contains(mimeTypes().constFirst()))
         return false;
 
     const QList<QUrl> list = event->mimeData()->urls();
-    for (int i = 0; i < list.count(); ++i) {
-        QModelIndex idx = fileSystemModel->index(list.at(0).toLocalFile());
+    for (const auto &url : list) {
+        const QModelIndex idx = fileSystemModel->index(url.toLocalFile());
         if (!fileSystemModel->isDir(idx))
             return false;
     }
@@ -139,7 +145,7 @@ bool QUrlModel::canDrop(QDragEnterEvent *event)
 bool QUrlModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
                                  int row, int column, const QModelIndex &parent)
 {
-    if (!data->formats().contains(mimeTypes().first()))
+    if (!data->formats().contains(mimeTypes().constFirst()))
         return false;
     Q_UNUSED(action);
     Q_UNUSED(column);
@@ -268,7 +274,7 @@ void QUrlModel::addUrls(const QList<QUrl> &list, int row, bool move)
             continue;
         insertRows(row, 1);
         setUrl(index(row, 0), url, idx);
-        watching.append(qMakePair(idx, cleanUrl));
+        watching.append({idx, cleanUrl});
     }
 }
 
@@ -320,7 +326,7 @@ void QUrlModel::dataChanged(const QModelIndex &topLeft, const QModelIndex &botto
 {
     QModelIndex parent = topLeft.parent();
     for (int i = 0; i < watching.count(); ++i) {
-        QModelIndex index = watching.at(i).first;
+        QModelIndex index = watching.at(i).index;
         if (index.model() && topLeft.model()) {
             Q_ASSERT(index.model() == topLeft.model());
         }
@@ -329,7 +335,7 @@ void QUrlModel::dataChanged(const QModelIndex &topLeft, const QModelIndex &botto
             && index.column() >= topLeft.column()
             && index.column() <= bottomRight.column()
             && index.parent() == parent) {
-                changed(watching.at(i).second);
+                changed(watching.at(i).path);
         }
     }
 }
@@ -343,12 +349,12 @@ void QUrlModel::layoutChanged()
     const int numPaths = watching.count();
     paths.reserve(numPaths);
     for (int i = 0; i < numPaths; ++i)
-        paths.append(watching.at(i).second);
+        paths.append(watching.at(i).path);
     watching.clear();
     for (int i = 0; i < numPaths; ++i) {
         QString path = paths.at(i);
         QModelIndex newIndex = fileSystemModel->index(path);
-        watching.append(QPair<QModelIndex, QString>(newIndex, path));
+        watching.append({newIndex, path});
         if (newIndex.isValid())
             changed(path);
      }
@@ -431,7 +437,7 @@ void QSidebar::selectUrl(const QUrl &url)
             this, SLOT(clicked(QModelIndex)));
 }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
     \internal
 
@@ -450,7 +456,7 @@ void QSidebar::showContextMenu(const QPoint &position)
     if (actions.count() > 0)
         QMenu::exec(actions, mapToGlobal(position));
 }
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 /*!
     \internal
@@ -512,5 +518,3 @@ bool QSidebar::event(QEvent * event)
 QT_END_NAMESPACE
 
 #include "moc_qsidebar_p.cpp"
-
-#endif

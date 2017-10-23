@@ -24,14 +24,16 @@ win32:CONFIG(shared, static|shared) {
 }
 
 tool_plugin {
-    !build_pass:contains(QT_CONFIG, debug_and_release): CONFIG += release
+    !build_pass:qtConfig(debug_and_release): CONFIG += release
 } else:if(win32|mac):!macx-xcode {
-    contains(QT_CONFIG, simulator_and_device): CONFIG += iphonesimulator_and_iphoneos
-    contains(QT_CONFIG, debug_and_release): CONFIG += debug_and_release
-    contains(QT_CONFIG, build_all): CONFIG += build_all
+    qtConfig(debug_and_release): CONFIG += debug_and_release
+    qtConfig(build_all): CONFIG += build_all
 }
 
 CONFIG += relative_qt_rpath  # Qt's plugins should be relocatable
+
+# Qt libraries should only use Application Extension safe APIs
+darwin:!no_app_extension_api_only: CONFIG += app_extension_api_only
 
 CONFIG(static, static|shared)|prefix_build {
     isEmpty(MODULE): MODULE = $$basename(TARGET)
@@ -45,12 +47,16 @@ CONFIG(static, static|shared)|prefix_build {
     MODULE_FWD_PRI = $$mod_work_pfx/qt_plugin_$${MODULE}.pri
 
     !build_pass {
+        qt_plugin_deps = $$QT $$QT_PRIVATE
+        qt_plugin_deps = s,-private$,_private,g
+
         MODULE_PRI_CONT = \
             "QT_PLUGIN.$${MODULE}.TYPE = $$PLUGIN_TYPE" \
             "QT_PLUGIN.$${MODULE}.EXTENDS =$$join(PLUGIN_EXTENDS, " ", " ")" \
+            "QT_PLUGIN.$${MODULE}.DEPENDS = $$qt_plugin_deps" \
             "QT_PLUGIN.$${MODULE}.CLASS_NAME = $$PLUGIN_CLASS_NAME" \
             "QT_PLUGINS += $$MODULE"
-        write_file($$MODULE_PRI, MODULE_PRI_CONT)|error("Aborting.")
+        write_file($$MODULE_PRI, MODULE_PRI_CONT)|error()
         MODULE_PRI_FILES = $$MODULE_PRI
 
         force_independent {
@@ -59,7 +65,7 @@ CONFIG(static, static|shared)|prefix_build {
             MODULE_FWD_PRI_CONT = \
                 "QT_PLUGIN.$${MODULE}.PATH = $$MODULE_BASE_OUTDIR/plugins" \
                 "include($$MODULE_PRI)"
-            write_file($$MODULE_FWD_PRI, MODULE_FWD_PRI_CONT)|error("Aborting.")
+            write_file($$MODULE_FWD_PRI, MODULE_FWD_PRI_CONT)|error()
             touch($$MODULE_FWD_PRI, $$MODULE_PRI)
             MODULE_PRI_FILES += $$MODULE_FWD_PRI
 
@@ -92,5 +98,4 @@ CONFIG += create_cmake
 load(qt_targets)
 load(qt_common)
 
-wince: LIBS += $$QMAKE_LIBS_GUI
 QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF

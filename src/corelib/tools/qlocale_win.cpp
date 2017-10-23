@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,9 +44,6 @@
 #include "qstringlist.h"
 #include "qvariant.h"
 #include "qdatetime.h"
-
-#include "private/qsystemlibrary_p.h"
-
 #include "qdebug.h"
 
 #ifdef Q_OS_WIN
@@ -53,20 +57,20 @@
 #include <wrl.h>
 #include <windows.foundation.h>
 #include <windows.foundation.collections.h>
-#include <windows.globalization.h>
+#include <windows.system.userprofile.h>
 #endif // Q_OS_WINRT
 
 QT_BEGIN_NAMESPACE
 
 #ifndef Q_OS_WINRT
 static QByteArray getWinLocaleName(LCID id = LOCALE_USER_DEFAULT);
-static const char *winLangCodeToIsoName(int code);
 static QString winIso639LangName(LCID id = LOCALE_USER_DEFAULT);
 static QString winIso3116CtryName(LCID id = LOCALE_USER_DEFAULT);
 #else // !Q_OS_WINRT
 using namespace Microsoft::WRL;
 using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::Foundation;
+using namespace ABI::Windows::System::UserProfile;
 
 static QByteArray getWinLocaleName(LPWSTR id = LOCALE_NAME_USER_DEFAULT);
 static const char *winLangCodeToIsoName(int code);
@@ -593,62 +597,45 @@ QVariant QSystemLocalePrivate::toCurrencyString(const QSystemLocale::CurrencyToS
 
 QVariant QSystemLocalePrivate::uiLanguages()
 {
-    if (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA) {
-        typedef BOOL (WINAPI *GetUserPreferredUILanguagesFunc) (
-                    DWORD dwFlags,
-                    PULONG pulNumLanguages,
-                    PWSTR pwszLanguagesBuffer,
-                    PULONG pcchLanguagesBuffer);
-        static GetUserPreferredUILanguagesFunc GetUserPreferredUILanguages_ptr = 0;
 #ifndef Q_OS_WINRT
-        if (!GetUserPreferredUILanguages_ptr) {
-            QSystemLibrary lib(QLatin1String("kernel32"));
-            if (lib.load())
-                GetUserPreferredUILanguages_ptr = (GetUserPreferredUILanguagesFunc)lib.resolve("GetUserPreferredUILanguages");
-        }
-#endif // !Q_OS_WINRT
-        if (GetUserPreferredUILanguages_ptr) {
-            unsigned long cnt = 0;
-            QVarLengthArray<wchar_t, 64> buf(64);
-            unsigned long size = buf.size();
-            if (!GetUserPreferredUILanguages_ptr(MUI_LANGUAGE_NAME, &cnt, buf.data(), &size)) {
-                size = 0;
-                if (GetLastError() == ERROR_INSUFFICIENT_BUFFER &&
-                    GetUserPreferredUILanguages_ptr(MUI_LANGUAGE_NAME, &cnt, NULL, &size)) {
-                    buf.resize(size);
-                    if (!GetUserPreferredUILanguages_ptr(MUI_LANGUAGE_NAME, &cnt, buf.data(), &size))
-                        return QStringList();
-                }
-            }
-            QStringList result;
-            result.reserve(cnt);
-            const wchar_t *str = buf.constData();
-            for (; cnt > 0; --cnt) {
-                QString s = QString::fromWCharArray(str);
-                if (s.isEmpty())
-                    break; // something is wrong
-                result.append(s);
-                str += s.size()+1;
-            }
-            return result;
+    unsigned long cnt = 0;
+    QVarLengthArray<wchar_t, 64> buf(64);
+#  if !defined(QT_BOOTSTRAPPED) && !defined(QT_BUILD_QMAKE) // Not present in MinGW 4.9/bootstrap builds.
+    unsigned long size = buf.size();
+    if (!GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &cnt, buf.data(), &size)) {
+        size = 0;
+        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER &&
+                GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &cnt, NULL, &size)) {
+            buf.resize(size);
+            if (!GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &cnt, buf.data(), &size))
+                return QStringList();
         }
     }
-
-#ifndef Q_OS_WINRT
-    // old Windows before Vista
-    return QStringList(QString::fromLatin1(winLangCodeToIsoName(GetUserDefaultUILanguage())));
+#  endif // !QT_BOOTSTRAPPED && !QT_BUILD_QMAKE
+    QStringList result;
+    result.reserve(cnt);
+    const wchar_t *str = buf.constData();
+    for (; cnt > 0; --cnt) {
+        QString s = QString::fromWCharArray(str);
+        if (s.isEmpty())
+            break; // something is wrong
+        result.append(s);
+        str += s.size() + 1;
+    }
+    return result;
 #else // !Q_OS_WINRT
     QStringList result;
-    ComPtr<ABI::Windows::Globalization::IApplicationLanguagesStatics> appLanguagesStatics;
-    if (FAILED(GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Globalization_ApplicationLanguages).Get(), &appLanguagesStatics))) {
+
+    ComPtr<IGlobalizationPreferencesStatics> preferences;
+    HRESULT hr = GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_System_UserProfile_GlobalizationPreferences).Get(), &preferences);
+    if (FAILED(hr)) {
         qWarning("Could not obtain ApplicationLanguagesStatic");
         return QStringList();
     }
 
     ComPtr<ABI::Windows::Foundation::Collections::IVectorView<HSTRING> > languageList;
-    // Languages is a ranked list of "long names" (e.g. en-US) of preferred languages, which matches
-    // languages from the manifest with languages from the user's system.
-    HRESULT hr = appLanguagesStatics->get_Languages(&languageList);
+    // Languages is a ranked list of "long names" (e.g. en-US) of preferred languages
+    hr = preferences->get_Languages(&languageList);
     Q_ASSERT_SUCCEEDED(hr);
     unsigned int size;
     hr = languageList->get_Size(&size);
@@ -661,36 +648,6 @@ QVariant QSystemLocalePrivate::uiLanguages()
         UINT32 length;
         PCWSTR rawString = language.GetRawBuffer(&length);
         result << QString::fromWCharArray(rawString, length);
-    }
-
-    // ManifestLanguages covers all languages given in the manifest and uses short names (like "en").
-    hr = appLanguagesStatics->get_ManifestLanguages(&languageList);
-    Q_ASSERT_SUCCEEDED(hr);
-    hr = languageList->get_Size(&size);
-    Q_ASSERT_SUCCEEDED(hr);
-    for (unsigned int i = 0; i < size; ++i) {
-        HString language;
-        hr = languageList->GetAt(i, language.GetAddressOf());
-        Q_ASSERT_SUCCEEDED(hr);
-        UINT32 length;
-        PCWSTR rawString = language.GetRawBuffer(&length);
-        const QString qLanguage = QString::fromWCharArray(rawString, length);
-        bool found = false;
-        // Since ApplicationLanguages:::Languages uses long names, we compare the "pre-dash" part of
-        // the language and filter it out, if it is already covered by a more specialized form.
-        foreach (const QString &lang, result) {
-            int dashIndex = lang.indexOf('-');
-            // There will not be any long name after the first short name was found, so we can stop.
-            if (dashIndex == -1)
-                break;
-
-            if (lang.leftRef(dashIndex) == qLanguage) {
-                found = true;
-                break;
-            }
-        }
-        if (!found)
-            result << qLanguage;
     }
 
     return result;
@@ -734,7 +691,7 @@ QString QSystemLocalePrivate::winToQtFormat(const QString &sys_fmt)
             if (text == QLatin1String("'"))
                 result += QLatin1String("''");
             else
-                result += QString(QLatin1Char('\'') + text + QLatin1Char('\''));
+                result += QLatin1Char('\'') + text + QLatin1Char('\'');
             continue;
         }
 
@@ -1080,7 +1037,7 @@ static QString winIso639LangName(LPWSTR id)
     if (!lang_code.isEmpty()) {
         const char *endptr;
         bool ok;
-        QByteArray latin1_lang_code = lang_code.toLatin1();
+        QByteArray latin1_lang_code = std::move(lang_code).toLatin1();
         int i = qstrtoull(latin1_lang_code, &endptr, 16, &ok);
         if (ok && *endptr == '\0') {
             switch (i) {
@@ -1153,29 +1110,22 @@ static QByteArray getWinLocaleName(LPWSTR id)
         }
     }
 
-#if defined(Q_OS_WINCE)
-    result = winLangCodeToIsoName(id != LOCALE_USER_DEFAULT ? id : GetUserDefaultLCID());
-#else // !Q_OS_WINCE
-#  ifndef Q_OS_WINRT
+#ifndef Q_OS_WINRT
     if (id == LOCALE_USER_DEFAULT)
         id = GetUserDefaultLCID();
-#  else // !Q_OS_WINRT
+#else // !Q_OS_WINRT
     WCHAR lcName[LOCALE_NAME_MAX_LENGTH];
     if (QString::fromWCharArray(id) == QString::fromWCharArray(LOCALE_NAME_USER_DEFAULT)) {
         GetUserDefaultLocaleName(lcName, LOCALE_NAME_MAX_LENGTH);
         id = lcName;
     }
-#  endif // Q_OS_WINRT
-    QString resultuage = winIso639LangName(id);
+#endif // Q_OS_WINRT
+    QString resultusage = winIso639LangName(id);
     QString country = winIso3116CtryName(id);
-    result = resultuage.toLatin1();
-    if (!country.isEmpty()) {
-        result += '_';
-        result += country.toLatin1();
-    }
-#endif // !Q_OS_WINCE
+    if (!country.isEmpty())
+        resultusage += QLatin1Char('_') + country;
 
-    return result;
+    return std::move(resultusage).toLatin1();
 }
 
 Q_CORE_EXPORT QLocale qt_localeFromLCID(LCID id)

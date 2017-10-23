@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #ifndef QAPPLICATION_H
 #define QAPPLICATION_H
 
+#include <QtWidgets/qtwidgetsglobal.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtGui/qwindowdefs.h>
 #include <QtCore/qpoint.h>
@@ -69,7 +76,7 @@ class Q_WIDGETS_EXPORT QApplication : public QGuiApplication
     Q_PROPERTY(int cursorFlashTime READ cursorFlashTime WRITE setCursorFlashTime)
     Q_PROPERTY(int doubleClickInterval  READ doubleClickInterval WRITE setDoubleClickInterval)
     Q_PROPERTY(int keyboardInputInterval READ keyboardInputInterval WRITE setKeyboardInputInterval)
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     Q_PROPERTY(int wheelScrollLines  READ wheelScrollLines WRITE setWheelScrollLines)
 #endif
     Q_PROPERTY(QSize globalStrut READ globalStrut WRITE setGlobalStrut)
@@ -77,9 +84,6 @@ class Q_WIDGETS_EXPORT QApplication : public QGuiApplication
     Q_PROPERTY(int startDragDistance  READ startDragDistance WRITE setStartDragDistance)
 #ifndef QT_NO_STYLE_STYLESHEET
     Q_PROPERTY(QString styleSheet READ styleSheet WRITE setStyleSheet)
-#endif
-#ifdef Q_OS_WINCE
-    Q_PROPERTY(int autoMaximizeThreshold READ autoMaximizeThreshold WRITE setAutoMaximizeThreshold)
 #endif
     Q_PROPERTY(bool autoSipEnabled READ autoSipEnabled WRITE setAutoSipEnabled)
 
@@ -95,8 +99,10 @@ public:
     static void setStyle(QStyle*);
     static QStyle *setStyle(const QString&);
     enum ColorSpec { NormalColor=0, CustomColor=1, ManyColor=2 };
-    static int colorSpec();
-    static void setColorSpec(int);
+#if QT_DEPRECATED_SINCE(5, 8)
+    QT_DEPRECATED static int colorSpec();
+    QT_DEPRECATED static void setColorSpec(int);
+#endif // QT_DEPRECATED_SINCE(5, 8)
 #if QT_DEPRECATED_SINCE(5, 0)
     QT_DEPRECATED static inline void setGraphicsSystem(const QString &) {}
 #endif
@@ -148,7 +154,7 @@ public:
     static void setKeyboardInputInterval(int);
     static int keyboardInputInterval();
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     static void setWheelScrollLines(int);
     static int wheelScrollLines();
 #endif
@@ -188,10 +194,6 @@ public:
 public Q_SLOTS:
 #ifndef QT_NO_STYLE_STYLESHEET
     void setStyleSheet(const QString& sheet);
-#endif
-#ifdef Q_OS_WINCE
-    void setAutoMaximizeThreshold(const int threshold);
-    int autoMaximizeThreshold() const;
 #endif
     void setAutoSipEnabled(const bool enabled);
     bool autoSipEnabled() const;

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QGraphicsWidget>
 #include <private/qobject_p.h>
 
@@ -52,7 +59,9 @@
 #include "qgraphicsanchorlayout.h"
 #include "qgraph_p.h"
 #include "qsimplex_p.h"
-#ifndef QT_NO_GRAPHICSVIEW
+
+QT_REQUIRE_CONFIG(graphicsview);
+
 QT_BEGIN_NAMESPACE
 
 /*
@@ -253,7 +262,7 @@ inline QString AnchorVertex::toString() const
 {
     if (m_type == Pair) {
         const AnchorVertexPair *vp = static_cast<const AnchorVertexPair *>(this);
-        return QString::fromLatin1("(%1, %2)").arg(vp->m_first->toString()).arg(vp->m_second->toString());
+        return QString::fromLatin1("(%1, %2)").arg(vp->m_first->toString(), vp->m_second->toString());
     } else if (!m_item) {
         return QString::fromLatin1("NULL_%1").arg(quintptr(this));
     }
@@ -485,7 +494,11 @@ public:
     void constraintsFromPaths(Orientation orientation);
     void updateAnchorSizes(Orientation orientation);
     QList<QSimplexConstraint *> constraintsFromSizeHints(const QList<AnchorData *> &anchors);
-    QList<QList<QSimplexConstraint *> > getGraphParts(Orientation orientation);
+    struct GraphParts {
+        QList<QSimplexConstraint *> trunkConstraints;
+        QList<QSimplexConstraint *> nonTrunkConstraints;
+    };
+    GraphParts getGraphParts(Orientation orientation);
     void identifyFloatItems(const QSet<AnchorData *> &visited, Orientation orientation);
     void identifyNonFloatItems_helper(const AnchorData *ad, QSet<QGraphicsLayoutItem *> *nonFloatingItemsIdentifiedSoFar);
 
@@ -522,7 +535,7 @@ public:
 
     // Linear Programming solver methods
     bool solveMinMax(const QList<QSimplexConstraint *> &constraints,
-                     GraphPath path, qreal *min, qreal *max);
+                     const GraphPath &path, qreal *min, qreal *max);
     bool solvePreferred(const QList<QSimplexConstraint *> &constraints,
                         const QList<AnchorData *> &variables);
     bool hasConflicts() const;
@@ -568,7 +581,7 @@ public:
     bool graphHasConflicts[2];
     QSet<QGraphicsLayoutItem *> m_floatItems[2];
 
-#if defined(QT_DEBUG) || defined(Q_AUTOTEST_EXPORT)
+#if defined(QT_DEBUG) || defined(QT_BUILD_INTERNAL)
     bool lastCalculationUsedSimplex[2];
 #endif
 
@@ -580,6 +593,5 @@ public:
 };
 
 QT_END_NAMESPACE
-#endif //QT_NO_GRAPHICSVIEW
 
 #endif

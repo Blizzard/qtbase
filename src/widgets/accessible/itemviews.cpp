@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,16 +40,22 @@
 #include "itemviews_p.h"
 
 #include <qheaderview.h>
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(treeview)
 #include <qtreeview.h>
-#include <private/qtreewidget_p.h>
+#include <private/qtreeview_p.h>
+#endif
+#include <private/qwidget_p.h>
 
 #ifndef QT_NO_ACCESSIBILITY
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_ITEMVIEWS
 /*
 Implementation of the IAccessible2 table2 interface. Much simpler than
 the other table interfaces since there is only the main table and cells:
@@ -75,13 +87,22 @@ QAccessibleTable::QAccessibleTable(QWidget *w)
 {
     Q_ASSERT(view());
 
+#if QT_CONFIG(tableview)
     if (qobject_cast<const QTableView*>(view())) {
         m_role = QAccessible::Table;
-    } else if (qobject_cast<const QTreeView*>(view())) {
+    } else
+#endif
+#if QT_CONFIG(treeview)
+    if (qobject_cast<const QTreeView*>(view())) {
         m_role = QAccessible::Tree;
-    } else if (qobject_cast<const QListView*>(view())) {
+    } else
+#endif
+#if QT_CONFIG(listview)
+    if (qobject_cast<const QListView*>(view())) {
         m_role = QAccessible::List;
-    } else {
+    } else
+#endif
+    {
         // is this our best guess?
         m_role = QAccessible::Table;
     }
@@ -102,11 +123,11 @@ QHeaderView *QAccessibleTable::horizontalHeader() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view())) {
         header = tv->horizontalHeader();
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view())) {
         header = tv->header();
 #endif
@@ -118,7 +139,7 @@ QHeaderView *QAccessibleTable::verticalHeader() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view())) {
         header = tv->verticalHeader();
 #endif
@@ -132,7 +153,7 @@ QAccessibleInterface *QAccessibleTable::cellAt(int row, int column) const
         return 0;
     Q_ASSERT(role() != QAccessible::Tree);
     QModelIndex index = view()->model()->index(row, column, view()->rootIndex());
-    if (!index.isValid()) {
+    if (Q_UNLIKELY(!index.isValid())) {
         qWarning() << "QAccessibleTable::cellAt: invalid index: " << index << " for " << view();
         return 0;
     }
@@ -295,6 +316,7 @@ bool QAccessibleTable::selectColumn(int column)
     case QAbstractItemView::SingleSelection:
         if (view()->selectionBehavior() != QAbstractItemView::SelectColumns && rowCount() > 1)
             return false;
+        Q_FALLTHROUGH();
     case QAbstractItemView::ContiguousSelection:
         if ((!column || !view()->selectionModel()->isColumnSelected(column - 1, view()->rootIndex()))
             && !view()->selectionModel()->isColumnSelected(column + 1, view()->rootIndex()))
@@ -471,10 +493,9 @@ QAccessibleInterface *QAccessibleTable::child(int logicalIndex) const
     if (!view()->model())
         return 0;
 
-    if (childToId.contains(logicalIndex)) {
-        QAccessible::Id id = childToId.value(logicalIndex);
-        return QAccessible::accessibleInterface(id);
-    }
+    auto id = childToId.constFind(logicalIndex);
+    if (id != childToId.constEnd())
+        return QAccessible::accessibleInterface(id.value());
 
     int vHeader = verticalHeader() ? 1 : 0;
     int hHeader = horizontalHeader() ? 1 : 0;
@@ -505,8 +526,8 @@ QAccessibleInterface *QAccessibleTable::child(int logicalIndex) const
 
     if (!iface) {
         QModelIndex index = view()->model()->index(row, column, view()->rootIndex());
-        if (!index.isValid()) {
-            qWarning() << "QAccessibleTable::child: Invalid index at: " << row << column;
+        if (Q_UNLIKELY(!index.isValid())) {
+            qWarning("QAccessibleTable::child: Invalid index at: %d %d", row, column);
             return 0;
         }
         iface = new QAccessibleTableCell(view(), index, cellRole());
@@ -550,20 +571,8 @@ void QAccessibleTable::modelChange(QAccessibleTableModelChangeEvent *event)
             QAccessible::Id id = iter.value();
             QAccessibleInterface *iface = QAccessible::accessibleInterface(id);
             Q_ASSERT(iface);
-            if (iface->role() == QAccessible::Cell || iface->role() == QAccessible::ListItem) {
-                Q_ASSERT(iface->tableCellInterface());
-                QAccessibleTableCell *cell = static_cast<QAccessibleTableCell*>(iface->tableCellInterface());
-                if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsInserted
-                        && cell->m_index.row() >= event->firstRow()) {
-                    int newRow = cell->m_index.row() + newRows;
-                    cell->m_index = cell->m_index.sibling(newRow, cell->m_index.column());
-                } else if (event->modelChangeType() == QAccessibleTableModelChangeEvent::ColumnsInserted
-                        && cell->m_index.column() >= event->firstColumn()) {
-                    int newColumn = cell->m_index.column() + newColumns;
-                    cell->m_index = cell->m_index.sibling(cell->m_index.row(), newColumn);
-                }
-            } else if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsInserted
-                       && iface->role() == QAccessible::RowHeader) {
+            if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsInserted
+                && iface->role() == QAccessible::RowHeader) {
                 QAccessibleTableHeaderCell *cell = static_cast<QAccessibleTableHeaderCell*>(iface);
                 if (cell->index >= event->firstRow()) {
                     cell->index += newRows;
@@ -602,27 +611,11 @@ void QAccessibleTable::modelChange(QAccessibleTableModelChangeEvent *event)
             if (iface->role() == QAccessible::Cell || iface->role() == QAccessible::ListItem) {
                 Q_ASSERT(iface->tableCellInterface());
                 QAccessibleTableCell *cell = static_cast<QAccessibleTableCell*>(iface->tableCellInterface());
-                if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsRemoved) {
-                    if (cell->m_index.row() < event->firstRow()) {
-                        newCache.insert(indexOfChild(cell), id);
-                    } else if (cell->m_index.row() > event->lastRow()) {
-                        int newRow = cell->m_index.row() - deletedRows;
-                        cell->m_index = cell->m_index.sibling(newRow, cell->m_index.column());
-                        newCache.insert(indexOfChild(cell), id);
-                    } else {
-                        QAccessible::deleteAccessibleInterface(id);
-                    }
-                } else if (event->modelChangeType() == QAccessibleTableModelChangeEvent::ColumnsRemoved) {
-                    if (cell->m_index.column() < event->firstColumn()) {
-                        newCache.insert(indexOfChild(cell), id);
-                    } else if (cell->m_index.column() > event->lastColumn()) {
-                        int newColumn = cell->m_index.column() - deletedColumns;
-                        cell->m_index = cell->m_index.sibling(cell->m_index.row(), newColumn);
-                        newCache.insert(indexOfChild(cell), id);
-                    } else {
-                        QAccessible::deleteAccessibleInterface(id);
-                    }
-                }
+                // Since it is a QPersistentModelIndex, we only need to check if it is valid
+                if (cell->m_index.isValid())
+                    newCache.insert(indexOfChild(cell), id);
+                else
+                    QAccessible::deleteAccessibleInterface(id);
             } else if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsRemoved
                        && iface->role() == QAccessible::RowHeader) {
                 QAccessibleTableHeaderCell *cell = static_cast<QAccessibleTableHeaderCell*>(iface);
@@ -658,6 +651,8 @@ void QAccessibleTable::modelChange(QAccessibleTableModelChangeEvent *event)
     }
 }
 
+#if QT_CONFIG(treeview)
+
 // TREE VIEW
 
 QModelIndex QAccessibleTree::indexFromLogical(int row, int column) const
@@ -666,7 +661,7 @@ QModelIndex QAccessibleTree::indexFromLogical(int row, int column) const
         return QModelIndex();
 
     const QTreeView *treeView = qobject_cast<const QTreeView*>(view());
-    if ((row < 0) || (column < 0) || (treeView->d_func()->viewItems.count() <= row)) {
+    if (Q_UNLIKELY(row < 0 || column < 0 || treeView->d_func()->viewItems.count() <= row)) {
         qWarning() << "QAccessibleTree::indexFromLogical: invalid index: " << row << column << " for " << treeView;
         return QModelIndex();
     }
@@ -707,7 +702,6 @@ int QAccessibleTree::childCount() const
     int hHeader = horizontalHeader() ? 1 : 0;
     return (treeView->d_func()->viewItems.count() + hHeader)* view()->model()->columnCount();
 }
-
 
 QAccessibleInterface *QAccessibleTree::child(int logicalIndex) const
 {
@@ -776,8 +770,8 @@ int QAccessibleTree::indexOfChild(const QAccessibleInterface *iface) const
 QAccessibleInterface *QAccessibleTree::cellAt(int row, int column) const
 {
     QModelIndex index = indexFromLogical(row, column);
-    if (!index.isValid()) {
-        qWarning() << "Requested invalid tree cell: " << row << column;
+    if (Q_UNLIKELY(!index.isValid())) {
+        qWarning("Requested invalid tree cell: %d %d", row, column);
         return 0;
     }
     const QTreeView *treeView = qobject_cast<const QTreeView*>(view());
@@ -830,12 +824,14 @@ bool QAccessibleTree::selectRow(int row)
     return true;
 }
 
+#endif // QT_CONFIG(treeview)
+
 // TABLE CELL
 
 QAccessibleTableCell::QAccessibleTableCell(QAbstractItemView *view_, const QModelIndex &index_, QAccessible::Role role_)
     : /* QAccessibleSimpleEditableTextInterface(this), */ view(view_), m_index(index_), m_role(role_)
 {
-    if (!index_.isValid())
+    if (Q_UNLIKELY(!index_.isValid()))
         qWarning() << "QAccessibleTableCell::QAccessibleTableCell with invalid index: " << index_;
 }
 
@@ -876,11 +872,11 @@ QHeaderView *QAccessibleTableCell::horizontalHeader() const
     QHeaderView *header = 0;
 
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         header = tv->horizontalHeader();
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
@@ -892,7 +888,7 @@ QHeaderView *QAccessibleTableCell::horizontalHeader() const
 QHeaderView *QAccessibleTableCell::verticalHeader() const
 {
     QHeaderView *header = 0;
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     if (const QTableView *tv = qobject_cast<const QTableView*>(view))
         header = tv->verticalHeader();
 #endif
@@ -906,12 +902,14 @@ int QAccessibleTableCell::columnIndex() const
 
 int QAccessibleTableCell::rowIndex() const
 {
+#if QT_CONFIG(treeview)
     if (role() == QAccessible::TreeItem) {
        const QTreeView *treeView = qobject_cast<const QTreeView*>(view);
        Q_ASSERT(treeView);
        int row = treeView->d_func()->viewIndex(m_index);
        return row;
     }
+#endif
     return m_index.row();
 }
 
@@ -1040,6 +1038,7 @@ QAccessible::State QAccessibleTableCell::state() const
         if (view->selectionMode() == QAbstractItemView::ExtendedSelection)
             st.extSelectable = true;
     }
+#if QT_CONFIG(treeview)
     if (m_role == QAccessible::TreeItem) {
         const QTreeView *treeView = qobject_cast<const QTreeView*>(view);
         if (treeView->model()->hasChildren(m_index))
@@ -1047,6 +1046,7 @@ QAccessible::State QAccessibleTableCell::state() const
         if (treeView->isExpanded(m_index))
             st.expanded = true;
     }
+#endif
     return st;
 }
 
@@ -1131,7 +1131,7 @@ QRect QAccessibleTableHeaderCell::rect() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         if (orientation == Qt::Horizontal) {
             header = tv->horizontalHeader();
@@ -1139,7 +1139,7 @@ QRect QAccessibleTableHeaderCell::rect() const
             header = tv->verticalHeader();
         }
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
@@ -1198,7 +1198,7 @@ QHeaderView *QAccessibleTableHeaderCell::headerView() const
 {
     QHeaderView *header = 0;
     if (false) {
-#ifndef QT_NO_TABLEVIEW
+#if QT_CONFIG(tableview)
     } else if (const QTableView *tv = qobject_cast<const QTableView*>(view)) {
         if (orientation == Qt::Horizontal) {
             header = tv->horizontalHeader();
@@ -1206,15 +1206,13 @@ QHeaderView *QAccessibleTableHeaderCell::headerView() const
             header = tv->verticalHeader();
         }
 #endif
-#ifndef QT_NO_TREEVIEW
+#if QT_CONFIG(treeview)
     } else if (const QTreeView *tv = qobject_cast<const QTreeView*>(view)) {
         header = tv->header();
 #endif
     }
     return header;
 }
-
-#endif // QT_NO_ITEMVIEWS
 
 QT_END_NAMESPACE
 

@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2012 Intel Corporation
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +55,11 @@
 #ifndef QT_LINUX_FUTEX
 # error "Qt build is broken: qmutex_linux.cpp is being built but futex support is not wanted"
 #endif
+
+#ifndef FUTEX_PRIVATE_FLAG
+#  define FUTEX_PRIVATE_FLAG    0
+#endif
+
 
 QT_BEGIN_NAMESPACE
 
@@ -96,42 +107,6 @@ QT_BEGIN_NAMESPACE
  * waiting in the past. We then set the mutex to 0x0 and perform a FUTEX_WAKE.
  */
 
-static QBasicAtomicInt futexFlagSupport = Q_BASIC_ATOMIC_INITIALIZER(-1);
-
-static int checkFutexPrivateSupport()
-{
-    int value = 0;
-#if defined(FUTEX_PRIVATE_FLAG)
-    // check if the kernel supports extra futex flags
-    // FUTEX_PRIVATE_FLAG appeared in v2.6.22
-    Q_STATIC_ASSERT(FUTEX_PRIVATE_FLAG != 0x80000000);
-
-    // try an operation that has no side-effects: wake up 42 threads
-    // futex will return -1 (errno==ENOSYS) if the flag isn't supported
-    // there should be no other error conditions
-    value = syscall(__NR_futex, &futexFlagSupport,
-                    FUTEX_WAKE | FUTEX_PRIVATE_FLAG,
-                    42, 0, 0, 0);
-    if (value != -1)
-        value = FUTEX_PRIVATE_FLAG;
-    else
-        value = 0;
-
-#else
-    value = 0;
-#endif
-    futexFlagSupport.store(value);
-    return value;
-}
-
-static inline int futexFlags()
-{
-    int value = futexFlagSupport.load();
-    if (Q_LIKELY(value != -1))
-        return value;
-    return checkFutexPrivateSupport();
-}
-
 static inline int _q_futex(void *addr, int op, int val, const struct timespec *timeout) Q_DECL_NOTHROW
 {
     volatile int *int_addr = reinterpret_cast<volatile int *>(addr);
@@ -143,7 +118,7 @@ static inline int _q_futex(void *addr, int op, int val, const struct timespec *t
 
     // we use __NR_futex because some libcs (like Android's bionic) don't
     // provide SYS_futex etc.
-    return syscall(__NR_futex, int_addr, op | futexFlags(), val, timeout, addr2, val2);
+    return syscall(__NR_futex, int_addr, op | FUTEX_PRIVATE_FLAG, val, timeout, addr2, val2);
 }
 
 static inline QMutexData *dummyFutexValue()

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,7 +51,7 @@
 // We mean it.
 //
 
-#include "QtCore/qglobal.h"
+#include <QtGui/private/qtguiglobal_p.h>
 #include "QtCore/qmath.h"
 #include "QtGui/qcolor.h"
 #include "QtGui/qpainter.h"
@@ -57,6 +63,8 @@
 #endif
 #include "private/qrasterdefs_p.h"
 #include <private/qsimd_p.h>
+
+#include <QtCore/qsharedpointer.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -105,13 +113,13 @@ typedef void (*AlphamapBlitFunc)(QRasterBuffer *rasterBuffer,
                                  int x, int y, const QRgba64 &color,
                                  const uchar *bitmap,
                                  int mapWidth, int mapHeight, int mapStride,
-                                 const QClipData *clip);
+                                 const QClipData *clip, bool useGammaCorrection);
 
 typedef void (*AlphaRGBBlitFunc)(QRasterBuffer *rasterBuffer,
                                  int x, int y, const QRgba64 &color,
                                  const uint *rgbmask,
                                  int mapWidth, int mapHeight, int mapStride,
-                                 const QClipData *clip);
+                                 const QClipData *clip, bool useGammaCorrection);
 
 typedef void (*RectFillFunc)(QRasterBuffer *rasterBuffer,
                              int x, int y, int width, int height,
@@ -151,7 +159,6 @@ struct DrawHelper {
 extern SrcOverBlendFunc qBlendFunctions[QImage::NImageFormats][QImage::NImageFormats];
 extern SrcOverScaleFunc qScaleFunctions[QImage::NImageFormats][QImage::NImageFormats];
 extern SrcOverTransformFunc qTransformFunctions[QImage::NImageFormats][QImage::NImageFormats];
-extern MemRotateFunc qMemRotateFunctions[QImage::NImageFormats][3];
 
 extern DrawHelper qDrawHelper[QImage::NImageFormats];
 
@@ -329,24 +336,18 @@ struct QSpanData
         QGradientData gradient;
         QTextureData texture;
     };
+    class Pinnable {
+    protected:
+        ~Pinnable() {}
+    }; // QSharedPointer<const void> is not supported
+    QSharedPointer<const Pinnable> cachedGradient;
+
 
     void init(QRasterBuffer *rb, const QRasterPaintEngine *pe);
     void setup(const QBrush &brush, int alpha, QPainter::CompositionMode compositionMode);
     void setupMatrix(const QTransform &matrix, int bilinear);
     void initTexture(const QImage *image, int alpha, QTextureData::Type = QTextureData::Plain, const QRect &sourceRect = QRect());
     void adjustSpanMethods();
-};
-
-struct QDrawHelperGammaTables
-{
-    explicit QDrawHelperGammaTables(qreal smoothing);
-
-    void refresh(qreal smoothing);
-
-    uchar qt_pow_rgb_gamma[256];
-    uchar qt_pow_rgb_invgamma[256];
-    uint qt_pow_gamma[256];
-    uchar qt_pow_invgamma[2048];
 };
 
 static inline uint qt_gradient_clamp(const QGradientData *data, int ipos)
@@ -630,31 +631,91 @@ static Q_ALWAYS_INLINE uint BYTE_MUL(uint x, uint a) {
 }
 #endif
 
-#ifdef __SSE2__
+static Q_ALWAYS_INLINE void blend_pixel(quint32 &dst, const quint32 src)
+{
+    if (src >= 0xff000000)
+        dst = src;
+    else if (src != 0)
+        dst = src + BYTE_MUL(dst, qAlpha(~src));
+}
+
+static Q_ALWAYS_INLINE void blend_pixel(quint32 &dst, const quint32 src, const int const_alpha)
+{
+    if (src != 0) {
+        const quint32 s = BYTE_MUL(src, const_alpha);
+        dst = s + BYTE_MUL(dst, qAlpha(~s));
+    }
+}
+
+#if defined(__SSE2__)
+static Q_ALWAYS_INLINE uint interpolate_4_pixels_sse2(__m128i vt, __m128i vb, uint distx, uint disty)
+{
+    // First interpolate top and bottom pixels in parallel.
+    vt = _mm_unpacklo_epi8(vt, _mm_setzero_si128());
+    vb = _mm_unpacklo_epi8(vb, _mm_setzero_si128());
+    vt = _mm_mullo_epi16(vt, _mm_set1_epi16(256 - disty));
+    vb = _mm_mullo_epi16(vb, _mm_set1_epi16(disty));
+    __m128i vlr = _mm_add_epi16(vt, vb);
+    vlr = _mm_srli_epi16(vlr, 8);
+    // vlr now contains the result of the first two interpolate calls vlr = unpacked((xright << 64) | xleft)
+
+    // Now the last interpolate between left and right..
+    const __m128i vidistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(256 - distx), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vdistx = _mm_shufflelo_epi16(_mm_cvtsi32_si128(distx), _MM_SHUFFLE(0, 0, 0, 0));
+    const __m128i vmulx = _mm_unpacklo_epi16(vidistx, vdistx);
+    vlr = _mm_unpacklo_epi16(vlr, _mm_srli_si128(vlr, 8));
+    // vlr now contains the colors of left and right interleaved { la, ra, lr, rr, lg, rg, lb, rb }
+    vlr = _mm_madd_epi16(vlr, vmulx); // Multiply and horizontal add.
+    vlr = _mm_srli_epi32(vlr, 8);
+    vlr = _mm_packs_epi32(vlr, vlr);
+    vlr = _mm_packus_epi16(vlr, vlr);
+    return _mm_cvtsi128_si32(vlr);
+}
+
 static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
 {
-    // First interpolate right and left pixels in parallel.
-    __m128i vl = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tl), _mm_cvtsi32_si128(bl));
-    __m128i vr = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tr), _mm_cvtsi32_si128(br));
-    vl = _mm_unpacklo_epi8(vl, _mm_setzero_si128());
-    vr = _mm_unpacklo_epi8(vr, _mm_setzero_si128());
-    vl = _mm_mullo_epi16(vl, _mm_set1_epi16(256 - distx));
-    vr = _mm_mullo_epi16(vr, _mm_set1_epi16(distx));
-    __m128i vtb = _mm_add_epi16(vl, vr);
-    vtb = _mm_srli_epi16(vtb, 8);
-    // vtb now contains the result of the first two interpolate calls vtb = unpacked((xbot << 64) | xtop)
+    __m128i vt = _mm_unpacklo_epi32(_mm_cvtsi32_si128(tl), _mm_cvtsi32_si128(tr));
+    __m128i vb = _mm_unpacklo_epi32(_mm_cvtsi32_si128(bl), _mm_cvtsi32_si128(br));
+    return interpolate_4_pixels_sse2(vt, vb, distx, disty);
+}
 
-    // Now the last interpolate between top and bottom interpolations.
-    const __m128i vidisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(256 - disty), _MM_SHUFFLE(0, 0, 0, 0));
-    const __m128i vdisty = _mm_shufflelo_epi16(_mm_cvtsi32_si128(disty), _MM_SHUFFLE(0, 0, 0, 0));
-    const __m128i vmuly = _mm_unpacklo_epi16(vidisty, vdisty);
-    vtb = _mm_unpacklo_epi16(vtb, _mm_srli_si128(vtb, 8));
-    // vtb now contains the colors of top and bottom interleaved { ta, ba, tr, br, tg, bg, tb, bb }
-    vtb = _mm_madd_epi16(vtb, vmuly); // Multiply and horizontal add.
-    vtb = _mm_srli_epi32(vtb, 8);
-    vtb = _mm_packs_epi32(vtb, _mm_setzero_si128());
-    vtb = _mm_packus_epi16(vtb, _mm_setzero_si128());
-    return _mm_cvtsi128_si32(vtb);
+static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint distx, uint disty)
+{
+    __m128i vt = _mm_loadl_epi64((const __m128i*)t);
+    __m128i vb = _mm_loadl_epi64((const __m128i*)b);
+    return interpolate_4_pixels_sse2(vt, vb, distx, disty);
+}
+#elif defined(__ARM_NEON__)
+static Q_ALWAYS_INLINE uint interpolate_4_pixels_neon(uint32x2_t vt32, uint32x2_t vb32, uint distx, uint disty)
+{
+    uint16x8_t vt16 = vmovl_u8(vreinterpret_u8_u32(vt32));
+    uint16x8_t vb16 = vmovl_u8(vreinterpret_u8_u32(vb32));
+    vt16 = vmulq_n_u16(vt16, 256 - disty);
+    vt16 = vmlaq_n_u16(vt16, vb16, disty);
+    vt16 = vshrq_n_u16(vt16, 8);
+    uint16x4_t vl16 = vget_low_u16(vt16);
+    uint16x4_t vr16 = vget_high_u16(vt16);
+    vl16 = vmul_n_u16(vl16, 256 - distx);
+    vl16 = vmla_n_u16(vl16, vr16, distx);
+    vl16 = vshr_n_u16(vl16, 8);
+    uint8x8_t vr = vmovn_u16(vcombine_u16(vl16, vl16));
+    return vget_lane_u32(vreinterpret_u32_u8(vr), 0);
+}
+
+static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
+{
+    uint32x2_t vt32 = vmov_n_u32(tl);
+    uint32x2_t vb32 = vmov_n_u32(bl);
+    vt32 = vset_lane_u32(tr, vt32, 1);
+    vb32 = vset_lane_u32(br, vb32, 1);
+    return interpolate_4_pixels_neon(vt32, vb32, distx, disty);
+}
+
+static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint distx, uint disty)
+{
+    uint32x2_t vt32 = vld1_u32(t);
+    uint32x2_t vb32 = vld1_u32(b);
+    return interpolate_4_pixels_neon(vt32, vb32, distx, disty);
 }
 #else
 static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint distx, uint disty)
@@ -664,6 +725,11 @@ static inline uint interpolate_4_pixels(uint tl, uint tr, uint bl, uint br, uint
     uint xtop = INTERPOLATE_PIXEL_256(tl, idistx, tr, distx);
     uint xbot = INTERPOLATE_PIXEL_256(bl, idistx, br, distx);
     return INTERPOLATE_PIXEL_256(xtop, idisty, xbot, disty);
+}
+
+static inline uint interpolate_4_pixels(const uint t[], const uint b[], uint distx, uint disty)
+{
+    return interpolate_4_pixels(t[0], t[1], b[0], b[1], distx, disty);
 }
 #endif
 
@@ -767,13 +833,13 @@ inline void qt_memfill(T *dest, T value, int count)
     int n = (count + 7) / 8;
     switch (count & 0x07)
     {
-    case 0: do { *dest++ = value;
-    case 7:      *dest++ = value;
-    case 6:      *dest++ = value;
-    case 5:      *dest++ = value;
-    case 4:      *dest++ = value;
-    case 3:      *dest++ = value;
-    case 2:      *dest++ = value;
+    case 0: do { *dest++ = value; Q_FALLTHROUGH();
+    case 7:      *dest++ = value; Q_FALLTHROUGH();
+    case 6:      *dest++ = value; Q_FALLTHROUGH();
+    case 5:      *dest++ = value; Q_FALLTHROUGH();
+    case 4:      *dest++ = value; Q_FALLTHROUGH();
+    case 3:      *dest++ = value; Q_FALLTHROUGH();
+    case 2:      *dest++ = value; Q_FALLTHROUGH();
     case 1:      *dest++ = value;
     } while (--n > 0);
     }
@@ -809,17 +875,17 @@ do {                                          \
     int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
-    case 0: do { *--_d = *--_s;                 \
-    case 7:      *--_d = *--_s;                 \
-    case 6:      *--_d = *--_s;                 \
-    case 5:      *--_d = *--_s;                 \
-    case 4:      *--_d = *--_s;                 \
-    case 3:      *--_d = *--_s;                 \
-    case 2:      *--_d = *--_s;                 \
+    case 0: do { *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 7:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 6:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 5:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 4:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 3:      *--_d = *--_s; Q_FALLTHROUGH(); \
+    case 2:      *--_d = *--_s; Q_FALLTHROUGH(); \
     case 1:      *--_d = *--_s;                 \
     } while (--n > 0);                        \
     }                                         \
-} while (0)
+} while (false)
 
 #define QT_MEMCPY_USHORT(dest, src, length) \
 do {                                          \
@@ -829,17 +895,17 @@ do {                                          \
     int n = ((length) + 7) / 8;               \
     switch ((length) & 0x07)                  \
     {                                         \
-    case 0: do { *_d++ = *_s++;                 \
-    case 7:      *_d++ = *_s++;                 \
-    case 6:      *_d++ = *_s++;                 \
-    case 5:      *_d++ = *_s++;                 \
-    case 4:      *_d++ = *_s++;                 \
-    case 3:      *_d++ = *_s++;                 \
-    case 2:      *_d++ = *_s++;                 \
+    case 0: do { *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 7:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 6:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 5:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 4:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 3:      *_d++ = *_s++; Q_FALLTHROUGH(); \
+    case 2:      *_d++ = *_s++; Q_FALLTHROUGH(); \
     case 1:      *_d++ = *_s++;                 \
     } while (--n > 0);                        \
     }                                         \
-} while (0)
+} while (false)
 
 inline ushort qConvertRgb32To16(uint c)
 {
@@ -1117,11 +1183,15 @@ inline int comp_func_Plus_one_pixel(uint d, const uint s)
 #undef MIX
 #undef AMIX
 
-struct QPixelLayout;
+struct QDitherInfo {
+    int x;
+    int y;
+};
+
 typedef const uint *(QT_FASTCALL *ConvertFunc)(uint *buffer, const uint *src, int count,
-                                               const QPixelLayout *layout, const QRgb *clut);
+                                               const QVector<QRgb> *clut, QDitherInfo *dither);
 typedef const QRgba64 *(QT_FASTCALL *ConvertFunc64)(QRgba64 *buffer, const uint *src, int count,
-                                                    const QPixelLayout *layout, const QRgb *clut);
+                                                    const QVector<QRgb> *clut, QDitherInfo *dither);
 
 struct QPixelLayout
 {
@@ -1159,8 +1229,9 @@ typedef void (QT_FASTCALL *StorePixelsFunc)(uchar *dest, const uint *src, int in
 
 extern QPixelLayout qPixelLayouts[QImage::NImageFormats];
 extern const FetchPixelsFunc qFetchPixels[QPixelLayout::BPPCount];
-extern const StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
+extern StorePixelsFunc qStorePixels[QPixelLayout::BPPCount];
 
+extern MemRotateFunc qMemRotateFunctions[QPixelLayout::BPPCount][3];
 
 
 QT_END_NAMESPACE

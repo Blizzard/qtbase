@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,9 +42,15 @@
 
 #ifndef QT_NO_SHORTCUT
 #include <qevent.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
+#endif
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
 #include <qapplication.h>
 #include <private/qapplication_p.h>
 #include <private/qshortcutmap_p.h>
@@ -49,14 +61,14 @@
 QT_BEGIN_NAMESPACE
 
 #define QAPP_CHECK(functionName) \
-    if (!qApp) { \
+    if (Q_UNLIKELY(!qApp)) {                                            \
         qWarning("QShortcut: Initialize QApplication before calling '" functionName "'."); \
         return; \
     }
 
 
 static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidget *active_window);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 static bool correctGraphicsWidgetContext(Qt::ShortcutContext context, QGraphicsWidget *w, QWidget *active_window);
 #endif
 #ifndef QT_NO_ACTION
@@ -102,7 +114,7 @@ bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context)
         return correctActionContext(context, a, active_window);
 #endif
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QGraphicsWidget *gw = qobject_cast<QGraphicsWidget *>(object))
         return correctGraphicsWidgetContext(context, gw, active_window);
 #endif
@@ -135,9 +147,11 @@ bool qWidgetShortcutContextMatcher(QObject *object, Qt::ShortcutContext context)
 static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidget *active_window)
 {
     bool visible = w->isVisible();
-#ifdef Q_OS_MAC
-    if (!qApp->testAttribute(Qt::AA_DontUseNativeMenuBar) && qobject_cast<QMenuBar *>(w))
-        visible = true;
+#if QT_CONFIG(menubar)
+    if (QMenuBar *menuBar = qobject_cast<QMenuBar *>(w)) {
+        if (menuBar->isNativeMenuBar())
+            visible = true;
+    }
 #endif
 
     if (!visible || !w->isEnabled())
@@ -158,7 +172,7 @@ static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidge
 
     // Below is Qt::WindowShortcut context
     QWidget *tlw = w->window();
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QWExtra *topData = static_cast<QWidgetPrivate *>(QObjectPrivate::get(tlw))->extra) {
         if (topData->proxyWidget) {
             bool res = correctGraphicsWidgetContext(context, (QGraphicsWidget *)topData->proxyWidget, active_window);
@@ -194,11 +208,11 @@ static bool correctWidgetContext(Qt::ShortcutContext context, QWidget *w, QWidge
     return true;
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 static bool correctGraphicsWidgetContext(Qt::ShortcutContext context, QGraphicsWidget *w, QWidget *active_window)
 {
     bool visible = w->isVisible();
-#ifdef Q_OS_MAC
+#if defined(Q_OS_DARWIN) && QT_CONFIG(menubar)
     if (!qApp->testAttribute(Qt::AA_DontUseNativeMenuBar) && qobject_cast<QMenuBar *>(w))
         visible = true;
 #endif
@@ -264,9 +278,9 @@ static bool correctActionContext(Qt::ShortcutContext context, QAction *a, QWidge
 #endif
     for (int i = 0; i < widgets.size(); ++i) {
         QWidget *w = widgets.at(i);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         if (QMenu *menu = qobject_cast<QMenu *>(w)) {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
             // On Mac, menu item shortcuts are processed before reaching any window.
             // That means that if a menu action shortcut has not been already processed
             // (and reaches this point), then the menu item itself has been disabled.
@@ -288,7 +302,7 @@ static bool correctActionContext(Qt::ShortcutContext context, QAction *a, QWidge
                 return true;
     }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     const QList<QGraphicsWidget *> &graphicsWidgets = static_cast<QActionPrivate *>(QObjectPrivate::get(a))->graphicsWidgets;
 #if defined(DEBUG_QSHORTCUTMAP)
     if (graphicsWidgets.isEmpty())
@@ -410,7 +424,7 @@ public:
 void QShortcutPrivate::redoGrab(QShortcutMap &map)
 {
     Q_Q(QShortcut);
-    if (!parent) {
+    if (Q_UNLIKELY(!parent)) {
         qWarning("QShortcut: No widget parent defined");
         return;
     }
@@ -450,12 +464,11 @@ QShortcut::QShortcut(QWidget *parent)
 QShortcut::QShortcut(const QKeySequence &key, QWidget *parent,
                      const char *member, const char *ambiguousMember,
                      Qt::ShortcutContext context)
-    : QObject(*new QShortcutPrivate, parent)
+    : QShortcut(parent)
 {
     QAPP_CHECK("QShortcut");
 
     Q_D(QShortcut);
-    Q_ASSERT(parent != 0);
     d->sc_context = context;
     d->sc_sequence = key;
     d->redoGrab(qApp->d_func()->shortcutMap);
@@ -634,7 +647,7 @@ bool QShortcut::event(QEvent *e)
     if (d->sc_enabled && e->type() == QEvent::Shortcut) {
         QShortcutEvent *se = static_cast<QShortcutEvent *>(e);
         if (se->shortcutId() == d->sc_id && se->key() == d->sc_sequence){
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
             if (QWhatsThis::inWhatsThisMode()) {
                 QWhatsThis::showText(QCursor::pos(), d->sc_whatsthis);
                 handled = true;

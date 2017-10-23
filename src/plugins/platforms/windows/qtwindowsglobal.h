@@ -1,32 +1,38 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,10 +41,23 @@
 #ifndef QTWINDOWSGLOBAL_H
 #define QTWINDOWSGLOBAL_H
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 #include <QtCore/qnamespace.h>
-#ifdef Q_OS_WINCE
-#  include "qplatformfunctions_wince.h"
+
+#ifndef WM_DWMCOMPOSITIONCHANGED // MinGW.
+#    define WM_DWMCOMPOSITIONCHANGED 0x31E
+#endif
+
+#ifndef WM_TOUCH
+#  define WM_TOUCH 0x0240
+#endif
+
+#ifndef WM_GESTURE
+#  define WM_GESTURE 0x0119
+#endif
+
+#ifndef WM_DPICHANGED
+#  define WM_DPICHANGED 0x02E0
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -81,12 +100,14 @@ enum WindowsEventType // Simplify event types
     FocusInEvent = WindowEventFlag + 17,
     FocusOutEvent = WindowEventFlag + 18,
     WhatsThisEvent = WindowEventFlag + 19,
+    DpiChangedEvent = WindowEventFlag + 21,
     MouseEvent = MouseEventFlag + 1,
     MouseWheelEvent = MouseEventFlag + 2,
     CursorEvent = MouseEventFlag + 3,
     TouchEvent = TouchEventFlag + 1,
     NonClientMouseEvent = NonClientEventFlag + MouseEventFlag + 1,
     NonClientHitTest = NonClientEventFlag + 2,
+    NonClientCreate = NonClientEventFlag + 3,
     KeyEvent = KeyEventFlag + 1,
     KeyDownEvent = KeyEventFlag + KeyDownEventFlag + 1,
     KeyboardLayoutChangeEvent = KeyEventFlag + 2,
@@ -99,6 +120,7 @@ enum WindowsEventType // Simplify event types
     QueryEndSessionApplicationEvent = ApplicationEventFlag + 4,
     EndSessionApplicationEvent = ApplicationEventFlag + 5,
     AppCommandEvent = ApplicationEventFlag + 6,
+    DeviceChangeEvent = ApplicationEventFlag + 7,
     InputMethodStartCompositionEvent = InputMethodEventFlag + 1,
     InputMethodCompositionEvent = InputMethodEventFlag + 2,
     InputMethodEndCompositionEvent = InputMethodEventFlag + 3,
@@ -152,10 +174,8 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
     case WM_MOUSEWHEEL:
     case WM_MOUSEHWHEEL:
         return QtWindows::MouseWheelEvent;
-#ifndef Q_OS_WINCE
     case WM_WINDOWPOSCHANGING:
         return QtWindows::GeometryChangingEvent;
-#endif
     case WM_MOVE:
         return QtWindows::MoveEvent;
     case WM_SHOWWINDOW:
@@ -164,12 +184,12 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::HideEvent;
     case WM_SIZE:
         return QtWindows::ResizeEvent;
+    case WM_NCCREATE:
+        return QtWindows::NonClientCreate;
     case WM_NCCALCSIZE:
         return QtWindows::CalculateSize;
-#ifndef Q_OS_WINCE
     case WM_NCHITTEST:
         return QtWindows::NonClientHitTest;
-#endif // !Q_OS_WINCE
     case WM_GETMINMAXINFO:
         return QtWindows::QuerySizeHints;
     case WM_KEYDOWN:                        // keyboard event
@@ -237,23 +257,23 @@ inline QtWindows::WindowsEventType windowsEventType(UINT message, WPARAM wParamI
         return QtWindows::ContextMenu;
 #endif
     case WM_SYSCOMMAND:
-#ifndef Q_OS_WINCE
         if ((wParamIn & 0xfff0) == SC_CONTEXTHELP)
             return QtWindows::WhatsThisEvent;
-#endif
         break;
-#if !defined(Q_OS_WINCE) && !defined(QT_NO_SESSIONMANAGER)
     case WM_QUERYENDSESSION:
         return QtWindows::QueryEndSessionApplicationEvent;
     case WM_ENDSESSION:
         return QtWindows::EndSessionApplicationEvent;
-#endif
 #if defined(WM_APPCOMMAND)
     case WM_APPCOMMAND:
         return QtWindows::AppCommandEvent;
 #endif
     case WM_GESTURE:
         return QtWindows::GestureEvent;
+    case WM_DEVICECHANGE:
+        return QtWindows::DeviceChangeEvent;
+    case WM_DPICHANGED:
+        return QtWindows::DpiChangedEvent;
     default:
         break;
     }

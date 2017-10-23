@@ -1,31 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +41,7 @@ class tst_QStringRef : public QObject
 public slots:
     void cleanup();
 private slots:
+    void at();
     void endsWith();
     void startsWith();
     void contains();
@@ -55,6 +52,7 @@ private slots:
     void indexOf();
     void indexOf2_data();
     void indexOf2();
+    void iteration();
     void length_data();
     void length();
     void isEmpty();
@@ -83,6 +81,7 @@ private slots:
     void integer_conversion();
     void trimmed();
     void truncate();
+    void chop();
     void left();
     void right();
     void mid();
@@ -97,7 +96,7 @@ static QStringRef emptyRef()
 }
 
 #define CREATE_REF(string)                                              \
-    const QString padded = QString::fromLatin1(" %1 ").arg(string);     \
+    const QString padded = QLatin1Char(' ') + string + QLatin1Char(' ');     \
     QStringRef ref = padded.midRef(1, padded.size() - 2);
 
 typedef QList<int> IntList;
@@ -174,6 +173,16 @@ static inline double nan()
 void tst_QStringRef::cleanup()
 {
     QLocale::setDefault(QString(QLatin1Char('C')));
+}
+
+void tst_QStringRef::at()
+{
+    const QString hw = QStringLiteral("Hello World");
+    const QStringRef ref = hw.midRef(6);
+    QCOMPARE(ref.at(0), QChar('W'));
+    QCOMPARE(ref.at(4), QChar('d'));
+    QCOMPARE(ref[0], QChar('W'));
+    QCOMPARE(ref[4], QChar('d'));
 }
 
 void tst_QStringRef::length_data()
@@ -292,7 +301,7 @@ void tst_QStringRef::indexOf_data()
     QString s2;
     s2 += QChar(0x3bc);
     QTest::newRow("data58") << QString(s1) << QString(s2) << 0 << false << 3;
-    s2.prepend("C");
+    s2.prepend(QLatin1Char('C'));
     QTest::newRow("data59") << QString(s1) << QString(s2) << 0 << false << 2;
 
     QString veryBigHaystack(500, 'a');
@@ -317,8 +326,8 @@ void tst_QStringRef::indexOf()
     QFETCH(bool, bcs);
     QFETCH(int, resultpos);
 
-    const QString haystackPadded = QString::fromLatin1(" %1 ").arg(haystack);
-    const QString needlePadded = QString::fromLatin1(" %1 ").arg(needle);
+    const QString haystackPadded = QLatin1Char(' ') + haystack + QLatin1Char(' ');
+    const QString needlePadded = QLatin1Char(' ') + needle + QLatin1Char(' ');
     const QStringRef haystackRef(&haystackPadded, 1, haystack.size());
     const QStringRef needleRef(&needlePadded, 1, needle.size());
 
@@ -407,8 +416,8 @@ void tst_QStringRef::indexOf2()
     QFETCH(QString, needle);
     QFETCH(int, resultpos);
 
-    const QString haystackPadded = QString::fromLatin1(" %1 ").arg(haystack);
-    const QString needlePadded = QString::fromLatin1(" %1 ").arg(needle);
+    const QString haystackPadded = QLatin1Char(' ') + haystack + QLatin1Char(' ');
+    const QString needlePadded = QLatin1Char(' ') + needle + QLatin1Char(' ');
     const QStringRef haystackRef(&haystackPadded, 1, haystack.size());
     const QStringRef needleRef(&needlePadded, 1, needle.size());
 
@@ -437,6 +446,38 @@ void tst_QStringRef::indexOf2()
         got = haystackRef.lastIndexOf(needleRef, -1, Qt::CaseInsensitive);
         QVERIFY(got == resultpos || (resultpos >= 0 && got >= resultpos));
     }
+}
+
+void tst_QStringRef::iteration()
+{
+    QString hello = "Hello";
+    QString olleh = "olleH";
+
+    QStringRef ref(&hello);
+    QStringRef rref(&olleh);
+
+    const QStringRef &cref = ref;
+    const QStringRef &crref = rref;
+
+    QVERIFY(std::equal(  ref.begin(),   ref.end(), hello.begin()));
+    QVERIFY(std::equal( rref.begin(),  rref.end(), olleh.begin()));
+    QVERIFY(std::equal( cref.begin(),  cref.end(), hello.begin()));
+    QVERIFY(std::equal(crref.begin(), crref.end(), olleh.begin()));
+
+    QVERIFY(std::equal(  ref.cbegin(),   ref.cend(), hello.begin()));
+    QVERIFY(std::equal( rref.cbegin(),  rref.cend(), olleh.begin()));
+    QVERIFY(std::equal( cref.cbegin(),  cref.cend(), hello.begin()));
+    QVERIFY(std::equal(crref.cbegin(), crref.cend(), olleh.begin()));
+
+    QVERIFY(std::equal(  ref.rbegin(),   ref.rend(), hello.rbegin()));
+    QVERIFY(std::equal( rref.rbegin(),  rref.rend(), olleh.rbegin()));
+    QVERIFY(std::equal( cref.rbegin(),  cref.rend(), hello.rbegin()));
+    QVERIFY(std::equal(crref.rbegin(), crref.rend(), olleh.rbegin()));
+
+    QVERIFY(std::equal(  ref.crbegin(),   ref.crend(), hello.rbegin()));
+    QVERIFY(std::equal( rref.crbegin(),  rref.crend(), olleh.rbegin()));
+    QVERIFY(std::equal( cref.crbegin(),  cref.crend(), hello.rbegin()));
+    QVERIFY(std::equal(crref.crbegin(), crref.crend(), olleh.rbegin()));
 }
 
 void tst_QStringRef::lastIndexOf_data()
@@ -490,8 +531,8 @@ void tst_QStringRef::lastIndexOf()
     QFETCH(int, expected);
     QFETCH(bool, caseSensitive);
 
-    const QString haystackPadded = QString::fromLatin1(" %1 ").arg(haystack);
-    const QString needlePadded = QString::fromLatin1(" %1 ").arg(needle);
+    const QString haystackPadded = QLatin1Char(' ') + haystack + QLatin1Char(' ');
+    const QString needlePadded = QLatin1Char(' ') + needle + QLatin1Char(' ');
     const QStringRef haystackRef(&haystackPadded, 1, haystack.size());
     const QStringRef needleRef(&needlePadded, 1, needle.size());
 
@@ -1860,6 +1901,48 @@ void tst_QStringRef::truncate()
         QStringRef ref = cref;
         QVERIFY(!ref.isEmpty());
         ref.truncate(-1);
+        QVERIFY(ref.isEmpty());
+    }
+}
+
+void tst_QStringRef::chop()
+{
+    const QString originalString = QStringLiteral("OriginalString~");
+    const QStringRef cref(&originalString);
+    {
+        const int n = 1;
+        QStringRef ref = cref;
+        QString str = originalString;
+        ref.chop(n);
+        str.chop(n);
+        QCOMPARE(ref.toString(), QLatin1String("OriginalString"));
+        QCOMPARE(ref.toString(), str);
+    }
+    {
+        const int n = -1;
+        QStringRef ref = cref;
+        QString str = originalString;
+        ref.chop(n);
+        str.chop(n);
+        QCOMPARE(ref.toString(), originalString);
+        QCOMPARE(ref.toString(), str);
+    }
+    {
+        const int n = 0;
+        QStringRef ref = cref;
+        QString str = originalString;
+        ref.chop(n);
+        str.chop(n);
+        QCOMPARE(ref.toString(), originalString);
+        QCOMPARE(ref.toString(), str);
+    }
+    {
+        const int n = 1000;
+        QStringRef ref = cref;
+        QString str = originalString;
+        ref.chop(n);
+        str.chop(n);
+        QCOMPARE(ref.toString(), str);
         QVERIFY(ref.isEmpty());
     }
 }

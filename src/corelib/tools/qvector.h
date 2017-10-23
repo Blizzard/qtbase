@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -285,6 +291,7 @@ public:
 private:
     friend class QRegion; // Optimization for QRegion::rects()
 
+    // ### Qt6: remove const from int parameters
     void reallocData(const int size, const int alloc, QArrayData::AllocationOptions options = QArrayData::Default);
     void reallocData(const int sz) { reallocData(sz, d->alloc); }
     void freeData(Data *d);
@@ -303,6 +310,7 @@ private:
 // will be default-initialized
 #   pragma warning ( push )
 #   pragma warning ( disable : 4345 )
+#   pragma warning(disable : 4127) // conditional expression is constant
 #endif
 
 template <typename T>
@@ -317,10 +325,6 @@ void QVector<T>::defaultConstruct(T *from, T *to)
     }
 }
 
-#ifdef Q_CC_MSVC
-#   pragma warning ( pop )
-#endif
-
 template <typename T>
 void QVector<T>::copyConstruct(const T *srcFrom, const T *srcTo, T *dstFrom)
 {
@@ -332,11 +336,6 @@ void QVector<T>::copyConstruct(const T *srcFrom, const T *srcTo, T *dstFrom)
     }
 }
 
-#if defined(Q_CC_MSVC)
-#pragma warning( push )
-#pragma warning( disable : 4127 ) // conditional expression is constant
-#endif
-
 template <typename T>
 void QVector<T>::destruct(T *from, T *to)
 {
@@ -346,10 +345,6 @@ void QVector<T>::destruct(T *from, T *to)
         }
     }
 }
-
-#if defined(Q_CC_MSVC)
-#pragma warning( pop )
-#endif
 
 template <typename T>
 inline QVector<T>::QVector(const QVector<T> &v)
@@ -371,6 +366,10 @@ inline QVector<T>::QVector(const QVector<T> &v)
         }
     }
 }
+
+#if defined(Q_CC_MSVC)
+#pragma warning( pop )
+#endif
 
 template <typename T>
 void QVector<T>::detach()
@@ -417,7 +416,7 @@ void QVector<T>::resize(int asize)
 }
 template <typename T>
 inline void QVector<T>::clear()
-{ *this = QVector<T>(); }
+{ resize(0); }
 template <typename T>
 inline const T &QVector<T>::at(int i) const
 { Q_ASSERT_X(i >= 0 && i < d->size, "QVector<T>::at", "index out of range");
@@ -499,6 +498,11 @@ QVector<T>::QVector(int asize, const T &t)
 }
 
 #ifdef Q_COMPILER_INITIALIZER_LISTS
+# if defined(Q_CC_MSVC)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_MSVC(4127) // conditional expression is constant
+# endif // Q_CC_MSVC
+
 template <typename T>
 QVector<T>::QVector(std::initializer_list<T> args)
 {
@@ -513,7 +517,10 @@ QVector<T>::QVector(std::initializer_list<T> args)
         d = Data::sharedNull();
     }
 }
-#endif
+# if defined(Q_CC_MSVC)
+QT_WARNING_POP
+# endif // Q_CC_MSVC
+#endif // Q_COMPILER_INITALIZER_LISTS
 
 template <typename T>
 void QVector<T>::freeData(Data *x)
@@ -521,6 +528,11 @@ void QVector<T>::freeData(Data *x)
     destruct(x->begin(), x->end());
     Data::deallocate(x);
 }
+
+#if defined(Q_CC_MSVC)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_MSVC(4127) // conditional expression is constant
+#endif
 
 template <typename T>
 void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::AllocationOptions options)
@@ -547,7 +559,7 @@ void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::Allo
                 T *srcEnd = asize > d->size ? d->end() : d->begin() + asize;
                 T *dst = x->begin();
 
-                if (QTypeInfo<T>::isStatic || (isShared && QTypeInfo<T>::isComplex)) {
+                if (!QTypeInfoQuery<T>::isRelocatable || (isShared && QTypeInfo<T>::isComplex)) {
                     // we can not move the data, we need to copy construct it
                     while (srcBegin != srcEnd) {
                         new (dst++) T(*srcBegin++);
@@ -592,7 +604,7 @@ void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::Allo
     }
     if (d != x) {
         if (!d->ref.deref()) {
-            if (QTypeInfo<T>::isStatic || !aalloc || (isShared && QTypeInfo<T>::isComplex)) {
+            if (!QTypeInfoQuery<T>::isRelocatable || !aalloc || (isShared && QTypeInfo<T>::isComplex)) {
                 // data was copy constructed, we need to call destructors
                 // or if !alloc we did nothing to the old 'd'.
                 freeData(d);
@@ -612,6 +624,10 @@ void QVector<T>::reallocData(const int asize, const int aalloc, QArrayData::Allo
     Q_ASSERT(d->alloc >= uint(aalloc));
     Q_ASSERT(d->size == asize);
 }
+
+#if defined(Q_CC_MSVC)
+QT_WARNING_POP
+#endif
 
 template<typename T>
 Q_OUTOFLINE_TEMPLATE T QVector<T>::value(int i) const
@@ -686,12 +702,12 @@ typename QVector<T>::iterator QVector<T>::insert(iterator before, size_type n, c
 {
     Q_ASSERT_X(isValidIterator(before),  "QVector::insert", "The specified iterator argument 'before' is invalid");
 
-    int offset = std::distance(d->begin(), before);
+    const auto offset = std::distance(d->begin(), before);
     if (n != 0) {
         const T copy(t);
         if (!isDetached() || d->size + n > int(d->alloc))
             reallocData(d->size, d->size + n, QArrayData::Grow);
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             T *b = d->end();
             T *i = d->end() + n;
             while (i != b)
@@ -722,7 +738,7 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
     Q_ASSERT_X(isValidIterator(abegin), "QVector::erase", "The specified iterator argument 'abegin' is invalid");
     Q_ASSERT_X(isValidIterator(aend), "QVector::erase", "The specified iterator argument 'aend' is invalid");
 
-    const int itemsToErase = aend - abegin;
+    const auto itemsToErase = aend - abegin;
 
     if (!itemsToErase)
         return abegin;
@@ -731,16 +747,16 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
     Q_ASSERT(aend <= d->end());
     Q_ASSERT(abegin <= aend);
 
-    const int itemsUntouched = abegin - d->begin();
+    const auto itemsUntouched = abegin - d->begin();
 
     // FIXME we could do a proper realloc, which copy constructs only needed data.
-    // FIXME we ara about to delete data maybe it is good time to shrink?
+    // FIXME we are about to delete data - maybe it is good time to shrink?
     // FIXME the shrink is also an issue in removeLast, that is just a copy + reduce of this.
     if (d->alloc) {
         detach();
         abegin = d->begin() + itemsUntouched;
         aend = abegin + itemsToErase;
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             iterator moveBegin = abegin + itemsToErase;
             iterator moveEnd = d->end();
             while (moveBegin != moveEnd) {
@@ -754,9 +770,13 @@ typename QVector<T>::iterator QVector<T>::erase(iterator abegin, iterator aend)
             }
         } else {
             destruct(abegin, aend);
-            memmove(abegin, aend, (d->size - itemsToErase - itemsUntouched) * sizeof(T));
+            // QTBUG-53605: static_cast<void *> masks clang errors of the form
+            // error: destination for this 'memmove' call is a pointer to class containing a dynamic class
+            // FIXME maybe use std::is_polymorphic (as soon as allowed) to avoid the memmove
+            memmove(static_cast<void *>(abegin), static_cast<void *>(aend),
+                    (d->size - itemsToErase - itemsUntouched) * sizeof(T));
         }
-        d->size -= itemsToErase;
+        d->size -= int(itemsToErase);
     }
     return d->begin() + itemsUntouched;
 }
@@ -791,24 +811,28 @@ QVector<T> &QVector<T>::fill(const T &from, int asize)
 template <typename T>
 QVector<T> &QVector<T>::operator+=(const QVector &l)
 {
-    uint newSize = d->size + l.d->size;
-    const bool isTooSmall = newSize > d->alloc;
-    if (!isDetached() || isTooSmall) {
-        QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
-        reallocData(d->size, isTooSmall ? newSize : d->alloc, opt);
-    }
-
-    if (d->alloc) {
-        T *w = d->begin() + newSize;
-        T *i = l.d->end();
-        T *b = l.d->begin();
-        while (i != b) {
-            if (QTypeInfo<T>::isComplex)
-                new (--w) T(*--i);
-            else
-                *--w = *--i;
+    if (d == Data::sharedNull()) {
+        *this = l;
+    } else {
+        uint newSize = d->size + l.d->size;
+        const bool isTooSmall = newSize > d->alloc;
+        if (!isDetached() || isTooSmall) {
+            QArrayData::AllocationOptions opt(isTooSmall ? QArrayData::Grow : QArrayData::Default);
+            reallocData(d->size, isTooSmall ? newSize : d->alloc, opt);
         }
-        d->size = newSize;
+
+        if (d->alloc) {
+            T *w = d->begin() + newSize;
+            T *i = l.d->end();
+            T *b = l.d->begin();
+            while (i != b) {
+                if (QTypeInfo<T>::isComplex)
+                    new (--w) T(*--i);
+                else
+                    *--w = *--i;
+            }
+            d->size = newSize;
+        }
     }
     return *this;
 }
@@ -968,10 +992,12 @@ QT_BEGIN_INCLUDE_NAMESPACE
 #include <QtCore/qpoint.h>
 QT_END_INCLUDE_NAMESPACE
 
+#ifndef Q_TEMPLATE_EXTERN
 #if defined(QT_BUILD_CORE_LIB)
 #define Q_TEMPLATE_EXTERN
 #else
 #define Q_TEMPLATE_EXTERN extern
+#endif
 #endif
 Q_TEMPLATE_EXTERN template class Q_CORE_EXPORT QVector<QPointF>;
 Q_TEMPLATE_EXTERN template class Q_CORE_EXPORT QVector<QPoint>;

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -74,14 +74,9 @@
 
     \snippet rasterwindow/rasterwindow.cpp 1
 
-    The constructor first of all calls \l QWindow::create(). This will
-    create the window in the windowing system. Without calling create,
-    the window will not get events and will not be visible in the
-    windowing system. The call to create does not show the window. We
-    then set the geometry to be something reasonable.
-
-    Then we create the backingstore and pass it the window instance it
-    is supposed to manage.
+    In the constructor we create the backingstore and pass it the window
+    instance it is supposed to manage. We also set the initial window
+    geometry.
 
     \snippet rasterwindow/rasterwindow.cpp 2
 
@@ -143,19 +138,16 @@
     \snippet rasterwindow/rasterwindow.cpp 6
 
     We went through a few places where the window needed to repainted
-    immediately. There are some cases where this is not desierable,
+    immediately. There are some cases where this is not desirable,
     but rather let the application return to the event loop and
-    later. We acheive this by posting an even to ourself which will
-    then be delivered when the application returns to the \l
-    QGuiApplication event loop. To avoid posting new requests when one
-    is already pending, we store this state in the \c m_update_pending
-    variable.
+    schedule the repaint for later. We achieve this by requesting
+    an update, using QWindow::requestUpdate(), which will then be
+    delivered when the system is ready to repaint.
 
     \snippet rasterwindow/rasterwindow.cpp 7
 
     We reimplement the virtual \l QObject::event() function to handle
-    the update event we posted to ourselves. When the event comes in
-    we reset the pending update flag and call renderNow() to render
-    the window right away.
+    the update event. When the event comes in we call renderNow() to
+    render the window right away.
 
   */

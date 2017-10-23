@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #ifndef QWIDGET_H
 #define QWIDGET_H
 
+#include <QtWidgets/qtwidgetsglobal.h>
 #include <QtGui/qwindowdefs.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qmargins.h>
@@ -154,6 +161,7 @@ class Q_WIDGETS_EXPORT QWidget : public QObject, public QPaintDevice
     Q_PROPERTY(QCursor cursor READ cursor WRITE setCursor RESET unsetCursor)
 #endif
     Q_PROPERTY(bool mouseTracking READ hasMouseTracking WRITE setMouseTracking)
+    Q_PROPERTY(bool tabletTracking READ hasTabletTracking WRITE setTabletTracking)
     Q_PROPERTY(bool isActiveWindow READ isActiveWindow)
     Q_PROPERTY(Qt::FocusPolicy focusPolicy READ focusPolicy WRITE setFocusPolicy)
     Q_PROPERTY(bool focus READ hasFocus)
@@ -175,10 +183,10 @@ class Q_WIDGETS_EXPORT QWidget : public QObject, public QPaintDevice
     Q_PROPERTY(QString toolTip READ toolTip WRITE setToolTip)
     Q_PROPERTY(int toolTipDuration READ toolTipDuration WRITE setToolTipDuration)
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     Q_PROPERTY(QString statusTip READ statusTip WRITE setStatusTip)
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     Q_PROPERTY(QString whatsThis READ whatsThis WRITE setWhatsThis)
 #endif
 #ifndef QT_NO_ACCESSIBILITY
@@ -321,6 +329,9 @@ public:
     bool hasMouseTracking() const;
     bool underMouse() const;
 
+    void setTabletTracking(bool enable);
+    bool hasTabletTracking() const;
+
     void setMask(const QBitmap &);
     void setMask(const QRegion &);
     QRegion mask() const;
@@ -336,10 +347,10 @@ public:
 
     Q_INVOKABLE QPixmap grab(const QRect &rectangle = QRect(QPoint(0, 0), QSize(-1, -1)));
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     QGraphicsEffect *graphicsEffect() const;
     void setGraphicsEffect(QGraphicsEffect *effect);
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 #ifndef QT_NO_GESTURES
     void grabGesture(Qt::GestureType type, Qt::GestureFlags flags = Qt::GestureFlags());
@@ -375,11 +386,11 @@ public:
     void setToolTipDuration(int msec);
     int toolTipDuration() const;
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     void setStatusTip(const QString &);
     QString statusTip() const;
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     void setWhatsThis(const QString &);
     QString whatsThis() const;
 #endif
@@ -440,7 +451,7 @@ public:
     inline bool updatesEnabled() const;
     void setUpdatesEnabled(bool enable);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     QGraphicsProxyWidget *graphicsProxyWidget() const;
 #endif
 
@@ -541,11 +552,12 @@ public:
     void addAction(QAction *action);
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     void addActions(const QList<QAction*> &actions);
+    void insertActions(const QAction *before, const QList<QAction*> &actions);
 #else
     void addActions(QList<QAction*> actions);
+    void insertActions(QAction *before, QList<QAction*> actions);
 #endif
     void insertAction(QAction *before, QAction *action);
-    void insertActions(QAction *before, QList<QAction*> actions);
     void removeAction(QAction *action);
     QList<QAction*> actions() const;
 #endif
@@ -554,6 +566,7 @@ public:
 
     void setWindowFlags(Qt::WindowFlags type);
     inline Qt::WindowFlags windowFlags() const;
+    void setWindowFlag(Qt::WindowType, bool on = true);
     void overrideWindowFlags(Qt::WindowFlags type);
 
     inline Qt::WindowType windowType() const;
@@ -561,16 +574,6 @@ public:
     static QWidget *find(WId);
     inline QWidget *childAt(int x, int y) const;
     QWidget *childAt(const QPoint &p) const;
-
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
-    const QX11Info &x11Info() const;
-    Qt::HANDLE x11PictureHandle() const;
-#endif
-
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC)
-    Qt::HANDLE macQDHandle() const;
-    Qt::HANDLE macCGHandle() const;
-#endif
 
     void setAttribute(Qt::WidgetAttribute, bool on = true);
     inline bool testAttribute(Qt::WidgetAttribute) const;
@@ -610,7 +613,7 @@ protected:
     virtual void mouseReleaseEvent(QMouseEvent *event);
     virtual void mouseDoubleClickEvent(QMouseEvent *event);
     virtual void mouseMoveEvent(QMouseEvent *event);
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     virtual void wheelEvent(QWheelEvent *event);
 #endif
     virtual void keyPressEvent(QKeyEvent *event);
@@ -626,7 +629,7 @@ protected:
 #ifndef QT_NO_CONTEXTMENU
     virtual void contextMenuEvent(QContextMenuEvent *event);
 #endif
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     virtual void tabletEvent(QTabletEvent *event);
 #endif
 #ifndef QT_NO_ACTION
@@ -809,6 +812,12 @@ inline bool QWidget::hasMouseTracking() const
 
 inline bool QWidget::underMouse() const
 { return testAttribute(Qt::WA_UnderMouse); }
+
+inline void QWidget::setTabletTracking(bool enable)
+{ setAttribute(Qt::WA_TabletTracking, enable); }
+
+inline bool QWidget::hasTabletTracking() const
+{ return testAttribute(Qt::WA_TabletTracking); }
 
 inline bool QWidget::updatesEnabled() const
 { return !testAttribute(Qt::WA_UpdatesDisabled); }

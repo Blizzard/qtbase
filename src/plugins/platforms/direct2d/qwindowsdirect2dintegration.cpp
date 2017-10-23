@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,7 +50,9 @@
 #include <QtCore/QCoreApplication>
 #include <QtGui/private/qpixmap_raster_p.h>
 #include <QtGui/qpa/qwindowsysteminterface.h>
-#include <QtPlatformSupport/private/qwindowsguieventdispatcher_p.h>
+#include <QtEventDispatcherSupport/private/qwindowsguieventdispatcher_p.h>
+
+#include <QVarLengthArray>
 
 QT_BEGIN_NAMESPACE
 
@@ -68,12 +76,7 @@ public:
 class Direct2DVersion
 {
 private:
-    Direct2DVersion()
-        : partOne(0)
-        , partTwo(0)
-        , partThree(0)
-        , partFour(0)
-    {}
+    Direct2DVersion() = default;
 
     Direct2DVersion(int one, int two, int three, int four)
         : partOne(one)
@@ -100,13 +103,14 @@ public:
             if (_tcscat_s(filename, bufSize, __TEXT("\\d2d1.dll")) == 0) {
                 DWORD versionInfoSize = GetFileVersionInfoSize(filename, NULL);
                 if (versionInfoSize) {
-                    QVector<BYTE> info(versionInfoSize);
-                    if (GetFileVersionInfo(filename, NULL, versionInfoSize, info.data())) {
+                    QVarLengthArray<BYTE> info(static_cast<int>(versionInfoSize));
+                    if (GetFileVersionInfo(filename, 0, versionInfoSize, info.data())) {
                         UINT size;
                         DWORD *fi;
 
-                        if (VerQueryValue(info.constData(), __TEXT("\\"), (LPVOID *) &fi, &size) && size) {
-                            VS_FIXEDFILEINFO *verInfo = (VS_FIXEDFILEINFO *) fi;
+                        if (VerQueryValue(info.constData(), __TEXT("\\"),
+                                          reinterpret_cast<void **>(&fi), &size) && size) {
+                            const VS_FIXEDFILEINFO *verInfo = reinterpret_cast<const VS_FIXEDFILEINFO *>(fi);
                             return Direct2DVersion(HIWORD(verInfo->dwFileVersionMS),
                                                    LOWORD(verInfo->dwFileVersionMS),
                                                    HIWORD(verInfo->dwFileVersionLS),
@@ -163,7 +167,10 @@ public:
         return a - b;
     }
 
-    int partOne, partTwo, partThree, partFour;
+    int partOne = 0;
+    int partTwo = 0;
+    int partThree = 0;
+    int partFour = 0;
 };
 
 QWindowsDirect2DIntegration *QWindowsDirect2DIntegration::create(const QStringList &paramList)

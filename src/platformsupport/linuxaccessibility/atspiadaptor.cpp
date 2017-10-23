@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,7 +50,7 @@
 #ifndef QT_NO_ACCESSIBILITY
 #include "socket_interface.h"
 #include "constant_mappings_p.h"
-#include "../accessibility/qaccessiblebridgeutils_p.h"
+#include <QtAccessibilitySupport/private/qaccessiblebridgeutils_p.h>
 
 #include "application_p.h"
 /*!
@@ -772,12 +778,11 @@ void AtSpiAdaptor::updateEventListeners()
     QDBusReply<QSpiEventListenerArray> listenersReply = m_dbus->connection().call(m);
     if (listenersReply.isValid()) {
         const QSpiEventListenerArray evList = listenersReply.value();
-        Q_FOREACH (const QSpiEventListener &ev, evList) {
+        for (const QSpiEventListener &ev : evList)
             setBitFlag(ev.eventName);
-        }
         m_applicationAdaptor->sendEvents(!evList.isEmpty());
     } else {
-        qAtspiDebug() << "Could not query active accessibility event listeners.";
+        qAtspiDebug("Could not query active accessibility event listeners.");
     }
 }
 
@@ -938,7 +943,7 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
         if (sendObject || sendObject_text_changed) {
             QAccessibleInterface * iface = event->accessibleInterface();
             if (!iface || !iface->textInterface()) {
-                qAtspiDebug() << "Received text event for invalid interface.";
+                qAtspiDebug("Received text event for invalid interface.");
                 return;
             }
             QString path = pathForInterface(iface);
@@ -1024,7 +1029,7 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
         if (sendObject || sendObject_value_changed || sendObject_property_change_accessible_value) {
             QAccessibleInterface * iface = event->accessibleInterface();
             if (!iface) {
-                qWarning() << "ValueChanged event from invalid accessible.";
+                qWarning("ValueChanged event from invalid accessible.");
                 return;
             }
             if (iface->valueInterface()) {
@@ -1053,7 +1058,7 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
     case QAccessible::Selection: {
         QAccessibleInterface * iface = event->accessibleInterface();
         if (!iface) {
-            qWarning() << "Selection event from invalid accessible.";
+            qWarning("Selection event from invalid accessible.");
             return;
         }
         QString path = pathForInterface(iface);
@@ -1070,7 +1075,7 @@ void AtSpiAdaptor::notify(QAccessibleEvent *event)
             if (stateChange.checked) {
                 QAccessibleInterface * iface = event->accessibleInterface();
                 if (!iface) {
-                    qWarning() << "StateChanged event from invalid accessible.";
+                    qWarning("StateChanged event from invalid accessible.");
                     return;
                 }
                 int checked = iface->state().checked;
@@ -1393,7 +1398,7 @@ bool AtSpiAdaptor::accessibleInterface(QAccessibleInterface *interface, const QS
         sendReply(connection, message, QVariant::fromValue(
                       QDBusVariant(QVariant::fromValue(QSpiObjectReference(connection, QDBusObjectPath(path))))));
     } else if (function == QLatin1String("GetChildAtIndex")) {
-        int index = message.arguments().first().toInt();
+        const int index = message.arguments().at(0).toInt();
         if (index < 0) {
             sendReply(connection, message, QVariant::fromValue(
                           QSpiObjectReference(connection, QDBusObjectPath(ATSPI_DBUS_PATH_NULL))));
@@ -1475,7 +1480,7 @@ QStringList AtSpiAdaptor::accessibleInterfaces(QAccessibleInterface *interface) 
         }
 #ifdef ACCESSIBLE_CREATION_DEBUG
     else {
-        qAtspiDebug() << " IS NOT a component";
+        qAtspiDebug(" IS NOT a component");
     }
 #endif
     if (interface->role() == QAccessible::Application)
@@ -1502,11 +1507,10 @@ QStringList AtSpiAdaptor::accessibleInterfaces(QAccessibleInterface *interface) 
 QSpiRelationArray AtSpiAdaptor::relationSet(QAccessibleInterface *interface, const QDBusConnection &connection) const
 {
     typedef QPair<QAccessibleInterface*, QAccessible::Relation> RelationPair;
-    QVector<RelationPair> relationInterfaces;
-    relationInterfaces = interface->relations();
+    const QVector<RelationPair> relationInterfaces = interface->relations();
 
     QSpiRelationArray relations;
-    Q_FOREACH (const RelationPair &pair, relationInterfaces) {
+    for (const RelationPair &pair : relationInterfaces) {
 // FIXME: this loop seems a bit strange... "related" always have one item when we check.
 //And why is it a list, when it always have one item? And it seems to assume that the QAccessible::Relation enum maps directly to AtSpi
         QSpiObjectReferenceArray related;
@@ -1532,7 +1536,7 @@ QString AtSpiAdaptor::pathForObject(QObject *object) const
     Q_ASSERT(object);
 
     if (inheritsQAction(object)) {
-        qAtspiDebug() << "AtSpiAdaptor::pathForObject: warning: creating path with QAction as object.";
+        qAtspiDebug("AtSpiAdaptor::pathForObject: warning: creating path with QAction as object.");
     }
 
     QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(object);
@@ -1663,18 +1667,18 @@ bool AtSpiAdaptor::componentInterface(QAccessibleInterface *interface, const QSt
 //        int width = message.arguments().at(2).toInt();
 //        int height = message.arguments().at(3).toInt();
 //        uint coordinateType = message.arguments().at(4).toUInt();
-        qAtspiDebug() << "SetExtents is not implemented.";
+        qAtspiDebug("SetExtents is not implemented.");
         sendReply(connection, message, false);
     } else if (function == QLatin1String("SetPosition")) {
 //        int x = message.arguments().at(0).toInt();
 //        int y = message.arguments().at(1).toInt();
 //        uint coordinateType = message.arguments().at(2).toUInt();
-        qAtspiDebug() << "SetPosition is not implemented.";
+        qAtspiDebug("SetPosition is not implemented.");
         sendReply(connection, message, false);
     } else if (function == QLatin1String("SetSize")) {
 //        int width = message.arguments().at(0).toInt();
 //        int height = message.arguments().at(1).toInt();
-        qAtspiDebug() << "SetSize is not implemented.";
+        qAtspiDebug("SetSize is not implemented.");
         sendReply(connection, message, false);
     } else {
         qAtspiDebug() << "WARNING: AtSpiAdaptor::componentInterface does not implement " << function << message.path();
@@ -1751,24 +1755,20 @@ QSpiActionArray AtSpiAdaptor::getActions(QAccessibleInterface *interface) const
     QSpiActionArray actions;
     const QStringList actionNames = QAccessibleBridgeUtils::effectiveActionNames(interface);
     actions.reserve(actionNames.size());
-    Q_FOREACH (const QString &actionName, actionNames) {
+    for (const QString &actionName : actionNames) {
         QSpiAction action;
-        QStringList keyBindings;
 
         action.name = actionName;
         if (actionInterface) {
             action.description = actionInterface->localizedActionDescription(actionName);
-            keyBindings = actionInterface->keyBindingsForAction(actionName);
+            const QStringList keyBindings = actionInterface->keyBindingsForAction(actionName);
+            if (!keyBindings.isEmpty())
+                action.keyBinding = keyBindings.front();
         } else {
             action.description = qAccessibleLocalizedActionDescription(actionName);
         }
 
-        if (keyBindings.length() > 0)
-            action.keyBinding = keyBindings[0];
-        else
-            action.keyBinding = QString();
-
-        actions << action;
+        actions.append(std::move(action));
     }
     return actions;
 }

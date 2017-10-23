@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2015 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -52,6 +58,9 @@
 #ifdef Q_OS_BSD4
 #include <net/if_dl.h>
 #endif
+#ifdef Q_OS_INTEGRITY
+#include <sys/uio.h>
+#endif
 
 #if defined QNATIVESOCKETENGINE_DEBUG
 #include <qstring.h>
@@ -59,6 +68,11 @@
 #endif
 
 #include <netinet/tcp.h>
+#ifndef QT_NO_SCTP
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/sctp.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -107,15 +121,10 @@ static inline void qt_socket_getPortAndAddress(const qt_sockaddr *s, quint16 *po
             QHostAddress tmpAddress;
             tmpAddress.setAddress(tmp);
             *addr = tmpAddress;
-            if (s->a6.sin6_scope_id) {
-#ifndef QT_NO_IPV6IFNAME
-                char scopeid[IFNAMSIZ];
-                if (::if_indextoname(s->a6.sin6_scope_id, scopeid)) {
-                    addr->setScopeId(QLatin1String(scopeid));
-                } else
+#if QT_CONFIG(networkinterface)
+            if (s->a6.sin6_scope_id)
+                addr->setScopeId(QNetworkInterface::interfaceNameFromIndex(s->a6.sin6_scope_id));
 #endif
-                    addr->setScopeId(QString::number(s->a6.sin6_scope_id));
-            }
         }
         if (port)
             *port = ntohs(s->a6.sin6_port);
@@ -131,21 +140,6 @@ static inline void qt_socket_getPortAndAddress(const qt_sockaddr *s, quint16 *po
     }
 }
 
-// inline on purpose
-inline uint QNativeSocketEnginePrivate::scopeIdFromString(const QString &scopeid)
-{
-    if (scopeid.isEmpty())
-        return 0;
-
-    bool ok;
-    uint id = scopeid.toUInt(&ok);
-#ifndef QT_NO_IPV6IFNAME
-    if (!ok)
-        id = ::if_nametoindex(scopeid.toLatin1());
-#endif
-    return id;
-}
-
 static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
                                     QAbstractSocket::NetworkLayerProtocol socketProtocol, int &level, int &n)
 {
@@ -155,6 +149,7 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
     switch (opt) {
     case QNativeSocketEngine::NonBlockingSocketOption:  // fcntl, not setsockopt
     case QNativeSocketEngine::BindExclusively:          // not handled on Unix
+    case QNativeSocketEngine::MaxStreamsSocketOption:
         Q_UNREACHABLE();
 
     case QNativeSocketEngine::BroadcastSocketOption:
@@ -242,13 +237,28 @@ static void convertToLevelAndOption(QNativeSocketEngine::SocketOption opt,
 bool QNativeSocketEnginePrivate::createNewSocket(QAbstractSocket::SocketType socketType,
                                          QAbstractSocket::NetworkLayerProtocol &socketProtocol)
 {
-    int protocol = (socketProtocol == QAbstractSocket::IPv6Protocol || socketProtocol == QAbstractSocket::AnyIPProtocol) ? AF_INET6 : AF_INET;
+#ifndef QT_NO_SCTP
+    int protocol = (socketType == QAbstractSocket::SctpSocket) ? IPPROTO_SCTP : 0;
+#else
+    if (socketType == QAbstractSocket::SctpSocket) {
+        setError(QAbstractSocket::UnsupportedSocketOperationError,
+                 ProtocolUnsupportedErrorString);
+#if defined (QNATIVESOCKETENGINE_DEBUG)
+        qDebug("QNativeSocketEnginePrivate::createNewSocket(%d, %d): unsupported protocol",
+               socketType, socketProtocol);
+#endif
+        return false;
+    }
+    int protocol = 0;
+#endif // QT_NO_SCTP
+    int domain = (socketProtocol == QAbstractSocket::IPv6Protocol
+                  || socketProtocol == QAbstractSocket::AnyIPProtocol) ? AF_INET6 : AF_INET;
     int type = (socketType == QAbstractSocket::UdpSocket) ? SOCK_DGRAM : SOCK_STREAM;
 
-    int socket = qt_safe_socket(protocol, type, 0, O_NONBLOCK);
+    int socket = qt_safe_socket(domain, type, protocol, O_NONBLOCK);
     if (socket < 0 && socketProtocol == QAbstractSocket::AnyIPProtocol && errno == EAFNOSUPPORT) {
-        protocol = AF_INET;
-        socket = qt_safe_socket(protocol, type, 0, O_NONBLOCK);
+        domain = AF_INET;
+        socket = qt_safe_socket(domain, type, protocol, O_NONBLOCK);
         socketProtocol = QAbstractSocket::IPv4Protocol;
     }
 
@@ -304,10 +314,26 @@ int QNativeSocketEnginePrivate::option(QNativeSocketEngine::SocketOption opt) co
     if (!q->isValid())
         return -1;
 
-    // handle non-getsockopt cases first
-    if (opt == QNativeSocketEngine::BindExclusively || opt == QNativeSocketEngine::NonBlockingSocketOption
-            || opt == QNativeSocketEngine::BroadcastSocketOption)
+    // handle non-getsockopt and specific cases first
+    switch (opt) {
+    case QNativeSocketEngine::BindExclusively:
+    case QNativeSocketEngine::NonBlockingSocketOption:
+    case QNativeSocketEngine::BroadcastSocketOption:
         return -1;
+    case QNativeSocketEngine::MaxStreamsSocketOption: {
+#ifndef QT_NO_SCTP
+        sctp_initmsg sctpInitMsg;
+        QT_SOCKOPTLEN_T sctpInitMsgSize = sizeof(sctpInitMsg);
+        if (::getsockopt(socketDescriptor, SOL_SCTP, SCTP_INITMSG, &sctpInitMsg,
+                         &sctpInitMsgSize) == 0)
+            return int(qMin(sctpInitMsg.sinit_num_ostreams, sctpInitMsg.sinit_max_instreams));
+#endif
+        return -1;
+    }
+
+    default:
+        break;
+    }
 
     int n, level;
     int v = -1;
@@ -330,7 +356,7 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     if (!q->isValid())
         return false;
 
-    // handle non-setsockopt cases first
+    // handle non-setsockopt and specific cases first
     switch (opt) {
     case QNativeSocketEngine::NonBlockingSocketOption: {
         // Make the socket nonblocking.
@@ -363,6 +389,20 @@ bool QNativeSocketEnginePrivate::setOption(QNativeSocketEngine::SocketOption opt
     }
     case QNativeSocketEngine::BindExclusively:
         return true;
+
+    case QNativeSocketEngine::MaxStreamsSocketOption: {
+#ifndef QT_NO_SCTP
+        sctp_initmsg sctpInitMsg;
+        QT_SOCKOPTLEN_T sctpInitMsgSize = sizeof(sctpInitMsg);
+        if (::getsockopt(socketDescriptor, SOL_SCTP, SCTP_INITMSG, &sctpInitMsg,
+                         &sctpInitMsgSize) == 0) {
+            sctpInitMsg.sinit_num_ostreams = sctpInitMsg.sinit_max_instreams = uint16_t(v);
+            return ::setsockopt(socketDescriptor, SOL_SCTP, SCTP_INITMSG, &sctpInitMsg,
+                                sctpInitMsgSize) == 0;
+        }
+#endif
+        return false;
+    }
 
     default:
         break;
@@ -640,11 +680,17 @@ static bool multicastMembershipHelper(QNativeSocketEnginePrivate *d,
         mreq4.imr_multiaddr.s_addr = htonl(groupAddress.toIPv4Address());
 
         if (interface.isValid()) {
-            QList<QNetworkAddressEntry> addressEntries = interface.addressEntries();
-            if (!addressEntries.isEmpty()) {
-                QHostAddress firstIP = addressEntries.first().ip();
-                mreq4.imr_interface.s_addr = htonl(firstIP.toIPv4Address());
-            } else {
+            const QList<QNetworkAddressEntry> addressEntries = interface.addressEntries();
+            bool found = false;
+            for (const QNetworkAddressEntry &entry : addressEntries) {
+                const QHostAddress ip = entry.ip();
+                if (ip.protocol() == QAbstractSocket::IPv4Protocol) {
+                    mreq4.imr_interface.s_addr = htonl(ip.toIPv4Address());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
                 d->setError(QAbstractSocket::NetworkError,
                             QNativeSocketEnginePrivate::NetworkUnreachableErrorString);
                 return false;
@@ -763,14 +809,23 @@ qint64 QNativeSocketEnginePrivate::nativeBytesAvailable() const
 {
     int nbytes = 0;
     // gives shorter than true amounts on Unix domain sockets.
-    qint64 available = 0;
-    if (qt_safe_ioctl(socketDescriptor, FIONREAD, (char *) &nbytes) >= 0)
-        available = (qint64) nbytes;
+    qint64 available = -1;
+
+#if defined (SO_NREAD)
+    if (socketType == QAbstractSocket::UdpSocket) {
+        socklen_t sz = sizeof nbytes;
+        if (!::getsockopt(socketDescriptor, SOL_SOCKET, SO_NREAD, &nbytes, &sz))
+            available = nbytes;
+    }
+#endif
+
+    if (available == -1 && qt_safe_ioctl(socketDescriptor, FIONREAD, (char *) &nbytes) >= 0)
+        available = nbytes;
 
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     qDebug("QNativeSocketEnginePrivate::nativeBytesAvailable() == %lli", available);
 #endif
-    return available;
+    return available > 0 ? available : 0;
 }
 
 bool QNativeSocketEnginePrivate::nativeHasPendingDatagrams() const
@@ -834,6 +889,9 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
 #if !defined(IP_PKTINFO) && defined(IP_RECVIF) && defined(Q_OS_BSD4)
                    + CMSG_SPACE(sizeof(sockaddr_dl))
 #endif
+#ifndef QT_NO_SCTP
+                   + CMSG_SPACE(sizeof(struct sctp_sndrcvinfo))
+#endif
                    + sizeof(quintptr) - 1) / sizeof(quintptr)];
 
     struct msghdr msg;
@@ -852,7 +910,8 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
         msg.msg_name = &aa;
         msg.msg_namelen = sizeof(aa);
     }
-    if (options & (QAbstractSocketEngine::WantDatagramHopLimit | QAbstractSocketEngine::WantDatagramDestination)) {
+    if (options & (QAbstractSocketEngine::WantDatagramHopLimit | QAbstractSocketEngine::WantDatagramDestination
+                   | QAbstractSocketEngine::WantStreamNumber)) {
         msg.msg_control = cbuf;
         msg.msg_controllen = sizeof(cbuf);
     }
@@ -863,13 +922,27 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
     } while (recvResult == -1 && errno == EINTR);
 
     if (recvResult == -1) {
-        setError(QAbstractSocket::NetworkError, ReceiveDatagramErrorString);
+        switch (errno) {
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+        case EAGAIN:
+            // No datagram was available for reading
+            recvResult = -2;
+            break;
+        case ECONNREFUSED:
+            setError(QAbstractSocket::ConnectionRefusedError, ConnectionRefusedErrorString);
+            break;
+        default:
+            setError(QAbstractSocket::NetworkError, ReceiveDatagramErrorString);
+        }
         if (header)
             header->clear();
     } else if (options != QAbstractSocketEngine::WantNone) {
         Q_ASSERT(header);
         qt_socket_getPortAndAddress(&aa, &header->senderPort, &header->senderAddress);
         header->destinationPort = localPort;
+        header->endOfRecord = (msg.msg_flags & MSG_EOR) != 0;
 
         // parse the ancillary data
         struct cmsghdr *cmsgptr;
@@ -914,8 +987,18 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
             if (cmsgptr->cmsg_len == CMSG_LEN(sizeof(int))
                     && ((cmsgptr->cmsg_level == IPPROTO_IPV6 && cmsgptr->cmsg_type == IPV6_HOPLIMIT)
                         || (cmsgptr->cmsg_level == IPPROTO_IP && cmsgptr->cmsg_type == IP_TTL))) {
-                header->hopLimit = *reinterpret_cast<int *>(CMSG_DATA(cmsgptr));
+                Q_STATIC_ASSERT(sizeof(header->hopLimit) == sizeof(int));
+                memcpy(&header->hopLimit, CMSG_DATA(cmsgptr), sizeof(header->hopLimit));
             }
+
+#ifndef QT_NO_SCTP
+            if (cmsgptr->cmsg_level == IPPROTO_SCTP && cmsgptr->cmsg_type == SCTP_SNDRCV
+                && cmsgptr->cmsg_len >= CMSG_LEN(sizeof(sctp_sndrcvinfo))) {
+                sctp_sndrcvinfo *rcvInfo = reinterpret_cast<sctp_sndrcvinfo *>(CMSG_DATA(cmsgptr));
+
+                header->streamNumber = int(rcvInfo->sinfo_stream);
+            }
+#endif
         }
     }
 
@@ -928,13 +1011,17 @@ qint64 QNativeSocketEnginePrivate::nativeReceiveDatagram(char *data, qint64 maxS
            ? header->senderPort : 0, (qint64) recvResult);
 #endif
 
-    return qint64(maxSize ? recvResult : recvResult == -1 ? -1 : 0);
+    return qint64((maxSize || recvResult < 0) ? recvResult : Q_INT64_C(0));
 }
 
 qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 len, const QIpPacketHeader &header)
 {
     // we use quintptr to force the alignment
-    quintptr cbuf[(CMSG_SPACE(sizeof(struct in6_pktinfo)) + CMSG_SPACE(sizeof(int)) + sizeof(quintptr) - 1) / sizeof(quintptr)];
+    quintptr cbuf[(CMSG_SPACE(sizeof(struct in6_pktinfo)) + CMSG_SPACE(sizeof(int))
+#ifndef QT_NO_SCTP
+                   + CMSG_SPACE(sizeof(struct sctp_sndrcvinfo))
+#endif
+                   + sizeof(quintptr) - 1) / sizeof(quintptr)];
 
     struct cmsghdr *cmsgptr = reinterpret_cast<struct cmsghdr *>(cbuf);
     struct msghdr msg;
@@ -947,10 +1034,13 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
     vec.iov_len = len;
     msg.msg_iov = &vec;
     msg.msg_iovlen = 1;
-    msg.msg_name = &aa.a;
     msg.msg_control = &cbuf;
 
-    setPortAndAddress(header.destinationPort, header.destinationAddress, &aa, &msg.msg_namelen);
+    if (header.destinationPort != 0) {
+        msg.msg_name = &aa.a;
+        setPortAndAddress(header.destinationPort, header.destinationAddress,
+                          &aa, &msg.msg_namelen);
+    }
 
     if (msg.msg_namelen == sizeof(aa.a6)) {
         if (header.hopLimit != -1) {
@@ -1005,14 +1095,36 @@ qint64 QNativeSocketEnginePrivate::nativeSendDatagram(const char *data, qint64 l
 #endif
     }
 
+#ifndef QT_NO_SCTP
+    if (header.streamNumber != -1) {
+        struct sctp_sndrcvinfo *data = reinterpret_cast<sctp_sndrcvinfo *>(CMSG_DATA(cmsgptr));
+        memset(data, 0, sizeof(*data));
+        msg.msg_controllen += CMSG_SPACE(sizeof(sctp_sndrcvinfo));
+        cmsgptr->cmsg_len = CMSG_LEN(sizeof(sctp_sndrcvinfo));
+        cmsgptr->cmsg_level = IPPROTO_SCTP;
+        cmsgptr->cmsg_type =  SCTP_SNDRCV;
+        data->sinfo_stream = uint16_t(header.streamNumber);
+        cmsgptr = reinterpret_cast<cmsghdr *>(reinterpret_cast<char *>(cmsgptr) + CMSG_SPACE(sizeof(*data)));
+    }
+#endif
+
     if (msg.msg_controllen == 0)
         msg.msg_control = 0;
     ssize_t sentBytes = qt_safe_sendmsg(socketDescriptor, &msg, 0);
 
     if (sentBytes < 0) {
         switch (errno) {
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+        case EAGAIN:
+            sentBytes = -2;
+            break;
         case EMSGSIZE:
             setError(QAbstractSocket::DatagramTooLargeError, DatagramTooLargeErrorString);
+            break;
+        case ECONNRESET:
+            setError(QAbstractSocket::RemoteHostClosedError, RemoteHostClosedErrorString);
             break;
         default:
             setError(QAbstractSocket::NetworkError, SendDatagramErrorString);
@@ -1035,6 +1147,7 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
     localAddress.clear();
     peerPort = 0;
     peerAddress.clear();
+    inboundStreamCount = outboundStreamCount = 0;
 
     if (socketDescriptor == -1)
         return false;
@@ -1085,19 +1198,51 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
 #endif
 
     // Determine the remote address
-    if (!::getpeername(socketDescriptor, &sa.a, &sockAddrSize))
+    bool connected = ::getpeername(socketDescriptor, &sa.a, &sockAddrSize) == 0;
+    if (connected) {
         qt_socket_getPortAndAddress(&sa, &peerPort, &peerAddress);
+        inboundStreamCount = outboundStreamCount = 1;
+    }
 
-    // Determine the socket type (UDP/TCP)
+    // Determine the socket type (UDP/TCP/SCTP)
     int value = 0;
     QT_SOCKOPTLEN_T valueSize = sizeof(int);
     if (::getsockopt(socketDescriptor, SOL_SOCKET, SO_TYPE, &value, &valueSize) == 0) {
-        if (value == SOCK_STREAM)
-            socketType = QAbstractSocket::TcpSocket;
-        else if (value == SOCK_DGRAM)
-            socketType = QAbstractSocket::UdpSocket;
-        else
-            socketType = QAbstractSocket::UnknownSocketType;
+        if (value == SOCK_STREAM) {
+#ifndef QT_NO_SCTP
+            if (option(QNativeSocketEngine::MaxStreamsSocketOption) != -1) {
+                socketType = QAbstractSocket::SctpSocket;
+                if (connected) {
+                    sctp_status sctpStatus;
+                    QT_SOCKOPTLEN_T sctpStatusSize = sizeof(sctpStatus);
+                    sctp_event_subscribe sctpEvents;
+
+                    memset(&sctpEvents, 0, sizeof(sctpEvents));
+                    sctpEvents.sctp_data_io_event = 1;
+                    if (::getsockopt(socketDescriptor, SOL_SCTP, SCTP_STATUS, &sctpStatus,
+                                     &sctpStatusSize) == 0 &&
+                        ::setsockopt(socketDescriptor, SOL_SCTP, SCTP_EVENTS, &sctpEvents,
+                                     sizeof(sctpEvents)) == 0) {
+                        inboundStreamCount = int(sctpStatus.sstat_instrms);
+                        outboundStreamCount = int(sctpStatus.sstat_outstrms);
+                    } else {
+                        setError(QAbstractSocket::UnsupportedSocketOperationError,
+                                 InvalidSocketErrorString);
+                        return false;
+                    }
+                }
+            } else {
+                socketType = QAbstractSocket::TcpSocket;
+            }
+#else
+                socketType = QAbstractSocket::TcpSocket;
+#endif
+        } else {
+            if (value == SOCK_DGRAM)
+                socketType = QAbstractSocket::UdpSocket;
+            else
+                socketType = QAbstractSocket::UnknownSocketType;
+        }
     }
 #if defined (QNATIVESOCKETENGINE_DEBUG)
     QString socketProtocolStr = QStringLiteral("UnknownProtocol");
@@ -1107,12 +1252,13 @@ bool QNativeSocketEnginePrivate::fetchConnectionParameters()
     QString socketTypeStr = QStringLiteral("UnknownSocketType");
     if (socketType == QAbstractSocket::TcpSocket) socketTypeStr = QStringLiteral("TcpSocket");
     else if (socketType == QAbstractSocket::UdpSocket) socketTypeStr = QStringLiteral("UdpSocket");
+    else if (socketType == QAbstractSocket::SctpSocket) socketTypeStr = QStringLiteral("SctpSocket");
 
     qDebug("QNativeSocketEnginePrivate::fetchConnectionParameters() local == %s:%i,"
-           " peer == %s:%i, socket == %s - %s",
+           " peer == %s:%i, socket == %s - %s, inboundStreamCount == %i, outboundStreamCount == %i",
            localAddress.toString().toLatin1().constData(), localPort,
            peerAddress.toString().toLatin1().constData(), peerPort,socketTypeStr.toLatin1().constData(),
-           socketProtocolStr.toLatin1().constData());
+           socketProtocolStr.toLatin1().constData(), inboundStreamCount, outboundStreamCount);
 #endif
     return true;
 }
@@ -1208,99 +1354,40 @@ qint64 QNativeSocketEnginePrivate::nativeRead(char *data, qint64 maxSize)
     return qint64(r);
 }
 
-#ifdef Q_OS_BLACKBERRY
 int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool selectForRead) const
 {
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(socketDescriptor, &fds);
+    bool dummy;
+    return nativeSelect(timeout, selectForRead, !selectForRead, &dummy, &dummy);
+}
 
-    int retval;
-    QList<QSocketNotifier *> notifiers;
-    if (selectForRead) {
-        notifiers << readNotifier;
-        retval = bb_select(notifiers, socketDescriptor + 1, &fds, 0, timeout);
-    } else {
-        notifiers << writeNotifier;
-        retval = bb_select(notifiers, socketDescriptor + 1, 0, &fds, timeout);
+int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
+                       bool *selectForRead, bool *selectForWrite) const
+{
+    pollfd pfd = qt_make_pollfd(socketDescriptor, 0);
+
+    if (checkRead)
+        pfd.events |= POLLIN;
+
+    if (checkWrite)
+        pfd.events |= POLLOUT;
+
+    const int ret = qt_poll_msecs(&pfd, 1, timeout);
+
+    if (ret <= 0)
+        return ret;
+
+    if (pfd.revents & POLLNVAL) {
+        errno = EBADF;
+        return -1;
     }
 
-    return retval;
-}
+    static const short read_flags = POLLIN | POLLHUP | POLLERR;
+    static const short write_flags = POLLOUT | POLLERR;
 
-int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
-                       bool *selectForRead, bool *selectForWrite) const
-{
-    fd_set fdread;
-    FD_ZERO(&fdread);
-    if (checkRead)
-        FD_SET(socketDescriptor, &fdread);
-
-    fd_set fdwrite;
-    FD_ZERO(&fdwrite);
-    if (checkWrite)
-        FD_SET(socketDescriptor, &fdwrite);
-
-    QList<QSocketNotifier *> notifiers;
-    notifiers << readNotifier << writeNotifier;
-    int ret = bb_select(notifiers, socketDescriptor + 1, &fdread, &fdwrite, timeout);
-
-    if (ret <= 0)
-        return ret;
-    *selectForRead = FD_ISSET(socketDescriptor, &fdread);
-    *selectForWrite = FD_ISSET(socketDescriptor, &fdwrite);
+    *selectForRead = ((pfd.revents & read_flags) != 0);
+    *selectForWrite = ((pfd.revents & write_flags) != 0);
 
     return ret;
 }
-
-#else // not Q_OS_BLACKBERRY:
-
-int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool selectForRead) const
-{
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(socketDescriptor, &fds);
-
-    struct timespec tv;
-    tv.tv_sec = timeout / 1000;
-    tv.tv_nsec = (timeout % 1000) * 1000 * 1000;
-
-    int retval;
-    if (selectForRead)
-        retval = qt_safe_select(socketDescriptor + 1, &fds, 0, 0, timeout < 0 ? 0 : &tv);
-    else
-        retval = qt_safe_select(socketDescriptor + 1, 0, &fds, 0, timeout < 0 ? 0 : &tv);
-
-    return retval;
-}
-
-int QNativeSocketEnginePrivate::nativeSelect(int timeout, bool checkRead, bool checkWrite,
-                       bool *selectForRead, bool *selectForWrite) const
-{
-    fd_set fdread;
-    FD_ZERO(&fdread);
-    if (checkRead)
-        FD_SET(socketDescriptor, &fdread);
-
-    fd_set fdwrite;
-    FD_ZERO(&fdwrite);
-    if (checkWrite)
-        FD_SET(socketDescriptor, &fdwrite);
-
-    struct timespec tv;
-    tv.tv_sec = timeout / 1000;
-    tv.tv_nsec = (timeout % 1000) * 1000 * 1000;
-
-    int ret;
-    ret = qt_safe_select(socketDescriptor + 1, &fdread, &fdwrite, 0, timeout < 0 ? 0 : &tv);
-
-    if (ret <= 0)
-        return ret;
-    *selectForRead = FD_ISSET(socketDescriptor, &fdread);
-    *selectForWrite = FD_ISSET(socketDescriptor, &fdwrite);
-
-    return ret;
-}
-#endif // Q_OS_BLACKBERRY
 
 QT_END_NAMESPACE

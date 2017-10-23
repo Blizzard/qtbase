@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,9 +32,6 @@
 #include <qstringlist.h>
 
 #include <locale.h>
-#ifdef Q_OS_WINCE
-#include <windows.h> // needed for GetUserDefaultLCID
-#endif
 
 class tst_QStringList : public QObject
 {
@@ -210,13 +202,7 @@ void tst_QStringList::sort()
     list2 << "BETA" << "Gamma" << "alpha" << "beta" << "epsilon" << "gAmma" << "gamma";
     QCOMPARE( list1, list2 );
 
-#ifdef Q_OS_WINCE
-    DWORD oldLcid = GetUserDefaultLCID();
-    // Assume c locale to be english
-    SetUserDefaultLCID(MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), SORT_DEFAULT));
-#else
     char *current_locale = setlocale(LC_ALL, "C");
-#endif
     QStringList list3, list4;
     list3 << "alpha" << "beta" << "BETA" << "gamma" << "Gamma" << "gAmma" << "epsilon";
     list3.sort(Qt::CaseInsensitive);
@@ -229,11 +215,7 @@ void tst_QStringList::sort()
     QCOMPARE(list4.at(0), QString("alpha"));
     QVERIFY(list4.indexOf("epsilon") > 0);
     QVERIFY(list4.indexOf("epsilon") < (list4.count() - 1));
-#ifdef Q_OS_WINCE
-    SetUserDefaultLCID(oldLcid);
-#else
     setlocale(LC_ALL, current_locale);
-#endif
 }
 
 void tst_QStringList::replaceInStrings()
@@ -359,6 +341,7 @@ void tst_QStringList::join() const
     QFETCH(QString, expectedResult);
 
     QCOMPARE(input.join(separator), expectedResult);
+    QCOMPARE(input.join(QLatin1String(separator.toLatin1())), expectedResult);
 }
 
 void tst_QStringList::join_data() const

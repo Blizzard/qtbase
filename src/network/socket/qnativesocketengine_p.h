@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,13 +45,16 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
+
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 #include "QtNetwork/qhostaddress.h"
+#include "QtNetwork/qnetworkinterface.h"
 #include "private/qabstractsocketengine_p.h"
 #ifndef Q_OS_WIN
 #  include "qplatformdefs.h"
@@ -58,21 +68,20 @@
 QT_BEGIN_NAMESPACE
 
 #ifdef Q_OS_WIN
-#define QT_SOCKLEN_T int
-#define QT_SOCKOPTLEN_T int
+#  define QT_SOCKLEN_T int
+#  define QT_SOCKOPTLEN_T int
 
 // The following definitions are copied from the MinGW header mswsock.h which
 // was placed in the public domain. The WSASendMsg and WSARecvMsg functions
 // were introduced with Windows Vista, so some Win32 headers are lacking them.
 // There are no known versions of Windows CE or Embedded that contain them.
-#ifndef Q_OS_WINCE
 #  ifndef WSAID_WSARECVMSG
 typedef INT (WINAPI *LPFN_WSARECVMSG)(SOCKET s, LPWSAMSG lpMsg,
                                       LPDWORD lpdwNumberOfBytesRecvd,
                                       LPWSAOVERLAPPED lpOverlapped,
                                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 #    define WSAID_WSARECVMSG {0xf689d7c8,0x6f1f,0x436b,{0x8a,0x53,0xe5,0x4f,0xe3,0x51,0xc3,0x22}}
-#  endif
+#  endif // !WSAID_WSARECVMSG
 #  ifndef WSAID_WSASENDMSG
 typedef struct {
   LPWSAMSG lpMsg;
@@ -88,15 +97,24 @@ typedef INT (WSAAPI *LPFN_WSASENDMSG)(SOCKET s, LPWSAMSG lpMsg, DWORD dwFlags,
                                       LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 
 #    define WSAID_WSASENDMSG {0xa441e712,0x754f,0x43ca,{0x84,0xa7,0x0d,0xee,0x44,0xcf,0x60,0x6d}}
-#  endif
-#endif
-#endif
+#  endif // !WSAID_WSASENDMSG
+#endif // Q_OS_WIN
 
 union qt_sockaddr {
     sockaddr a;
     sockaddr_in a4;
     sockaddr_in6 a6;
 };
+
+namespace {
+namespace SetSALen {
+    template <typename T> void set(T *sa, typename std::enable_if<(&T::sa_len, true), QT_SOCKLEN_T>::type len)
+    { sa->sa_len = len; }
+    template <typename T> void set(T *sin6, typename std::enable_if<(&T::sin6_len, true), QT_SOCKLEN_T>::type len)
+    { sin6->sin6_len = len; }
+    template <typename T> void set(T *, ...) {}
+}
+}
 
 class QNativeSocketEnginePrivate;
 #ifndef QT_NO_NETWORKINTERFACE
@@ -139,13 +157,13 @@ public:
     bool setMulticastInterface(const QNetworkInterface &iface) Q_DECL_OVERRIDE;
 #endif
 
-    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader * = 0,
-                        PacketHeaderOptions = WantNone) Q_DECL_OVERRIDE;
-    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     bool hasPendingDatagrams() const Q_DECL_OVERRIDE;
     qint64 pendingDatagramSize() const Q_DECL_OVERRIDE;
 #endif // QT_NO_UDPSOCKET
 
+    qint64 readDatagram(char *data, qint64 maxlen, QIpPacketHeader * = 0,
+                        PacketHeaderOptions = WantNone) Q_DECL_OVERRIDE;
+    qint64 writeDatagram(const char *data, qint64 len, const QIpPacketHeader &) Q_DECL_OVERRIDE;
     qint64 bytesToWrite() const Q_DECL_OVERRIDE;
 
     qint64 receiveBufferSize() const;
@@ -192,7 +210,7 @@ public:
 
     QSocketNotifier *readNotifier, *writeNotifier, *exceptNotifier;
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     LPFN_WSASENDMSG sendmsg;
     LPFN_WSARECVMSG recvmsg;
 #  endif
@@ -268,7 +286,10 @@ public:
     bool checkProxy(const QHostAddress &address);
     bool fetchConnectionParameters();
 
-    static uint scopeIdFromString(const QString &scopeid);
+#if QT_CONFIG(networkinterface)
+    static uint scopeIdFromString(const QString &scopeid)
+    { return QNetworkInterface::interfaceIndexFromName(scopeid); }
+#endif
 
     /*! \internal
         Sets \a address and \a port in the \a aa sockaddr structure and the size in \a sockAddrSize.
@@ -282,17 +303,21 @@ public:
             || socketProtocol == QAbstractSocket::AnyIPProtocol) {
             memset(&aa->a6, 0, sizeof(sockaddr_in6));
             aa->a6.sin6_family = AF_INET6;
+#if QT_CONFIG(networkinterface)
             aa->a6.sin6_scope_id = scopeIdFromString(address.scopeId());
+#endif
             aa->a6.sin6_port = htons(port);
             Q_IPV6ADDR tmp = address.toIPv6Address();
             memcpy(&aa->a6.sin6_addr, &tmp, sizeof(tmp));
             *sockAddrSize = sizeof(sockaddr_in6);
+            SetSALen::set(&aa->a, sizeof(sockaddr_in6));
         } else {
             memset(&aa->a, 0, sizeof(sockaddr_in));
             aa->a4.sin_family = AF_INET;
             aa->a4.sin_port = htons(port);
             aa->a4.sin_addr.s_addr = htonl(address.toIPv4Address());
             *sockAddrSize = sizeof(sockaddr_in);
+            SetSALen::set(&aa->a, sizeof(sockaddr_in));
         }
     }
 

@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -47,6 +47,18 @@
     first and \l second. For example:
 
     \snippet code/doc_src_qpair.cpp 1
+
+    Note, however, that it is almost always preferable to define a small struct
+    to hold the result of a function with multiple return values. A struct
+    trivially generalizes to more than two values, and allows more descriptive
+    member names than \c{first} and \c{second}:
+
+    \snippet code/doc_src_qpair.cpp struct
+
+    The advent of C++11 automatic variable type deduction (\c{auto}) shifts the
+    emphasis from the type name to the name of functions and members. Thus, QPair,
+    like \c{std::pair} and \c{std::tuple}, is mostly useful in generic (template)
+    code, where defining a dedicated type is not possible.
 
     QPair's template data types (T1 and T2) must be \l{assignable
     data types}. You cannot, for example, store a QWidget as a value;

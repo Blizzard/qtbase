@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -96,7 +91,7 @@
 static QString sys_qualifiedLibraryName(const QString &fileName)
 {
     QString appDir = QCoreApplication::applicationDirPath();
-    return appDir + "/" + PREFIX + fileName + SUFFIX;
+    return appDir + QLatin1Char('/') + PREFIX + fileName + SUFFIX;
 }
 
 QT_FORWARD_DECLARE_CLASS(QLibrary)
@@ -194,7 +189,7 @@ void tst_QLibrary::load_data()
     QTest::newRow("ok (libmylib ver. 1)") << appDir + "/libmylib" <<true;
 #endif
 
-# if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)
+# if defined(Q_OS_WIN32)
     QTest::newRow( "ok01 (with suffix)" ) << appDir + "/mylib.dll" << true;
     QTest::newRow( "ok02 (with non-standard suffix)" ) << appDir + "/mylib.dl2" << true;
     QTest::newRow( "ok03 (with many dots)" ) << appDir + "/system.qt.test.mylib.dll" << true;
@@ -228,10 +223,6 @@ void tst_QLibrary::unload_data()
     QString appDir = QCoreApplication::applicationDirPath();
 
     QTest::newRow( "mylib" ) << appDir + "/mylib" << true;
-#ifdef Q_OS_MAC
-    if (QSysInfo::MacintoshVersion <= QSysInfo::MV_10_3)
-        QEXPECT_FAIL("mylib", "dlcompat cannot unload libraries", Continue);
-#endif
     QTest::newRow( "ok01" ) << appDir + "/nolib" << false;
 }
 
@@ -311,15 +302,10 @@ void tst_QLibrary::isLibrary_data()
     QTest::newRow(".sl") << QString("mylib.sl") << sl_VALID;
     QTest::newRow(".so") << QString("mylib.so") << so_VALID;
     QTest::newRow(".so+version") << QString("mylib.so.0") << so_VALID;
-
-    // special tests:
-#ifndef Q_OS_MAC
     QTest::newRow("version+.so") << QString("libc-2.7.so") << so_VALID;
     QTest::newRow("version+.so+version") << QString("liboil-0.3.so.0.1.0") << so_VALID;
-#else
-    QTest::newRow("version+.so") << QString("libc-2.7.so") << false;
-    QTest::newRow("version+.so+version") << QString("liboil-0.3.so.0.1.0") << false;
-#endif
+
+    // special tests:
 #ifdef Q_OS_MAC
     QTest::newRow("good (libmylib.1.0.0.dylib)") << QString("libmylib.1.0.0.dylib") << true;
     QTest::newRow("good (libmylib.dylib)") << QString("libmylib.dylib") << true;
@@ -351,11 +337,7 @@ void tst_QLibrary::errorString_data()
 
     QTest::newRow("bad load()") << (int)Load << QString("nosuchlib") << false << QString("Cannot load library nosuchlib: .*");
     QTest::newRow("call errorString() on QLibrary with no d-pointer (crashtest)") << (int)(Load | DontSetFileName) << QString() << false << QString("Unknown error");
-#ifdef Q_OS_WINCE
-    QTest::newRow("bad resolve") << (int)Resolve << appDir + "/mylib" << false << QString("Cannot resolve symbol \"nosuchsymbol\" in .*: .*");
-#else
     QTest::newRow("bad resolve") << (int)Resolve << appDir + "/mylib" << false << QString("Cannot resolve symbol \"nosuchsymbol\" in \\S+: .*");
-#endif
     QTest::newRow("good resolve") << (int)Resolve << appDir + "/mylib" << true << QString("Unknown error");
 
 #ifdef Q_OS_WIN
@@ -419,7 +401,7 @@ void tst_QLibrary::loadHints_data()
     QString appDir = QCoreApplication::applicationDirPath();
 
     lh |= QLibrary::ResolveAllSymbolsHint;
-# if defined(Q_OS_WIN32) || defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+# if defined(Q_OS_WIN32) || defined(Q_OS_WINRT)
     QTest::newRow( "ok01 (with suffix)" ) << appDir + "/mylib.dll" << int(lh) << true;
     QTest::newRow( "ok02 (with non-standard suffix)" ) << appDir + "/mylib.dl2" << int(lh) << true;
     QTest::newRow( "ok03 (with many dots)" ) << appDir + "/system.qt.test.mylib.dll" << int(lh) << true;
@@ -472,13 +454,8 @@ void tst_QLibrary::fileName_data()
     QTest::newRow( "ok02" ) << sys_qualifiedLibraryName(QLatin1String("mylib"))
                             << sys_qualifiedLibraryName(QLatin1String("mylib"));
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-#ifndef Q_OS_WINCE
     QTest::newRow( "ok03" ) << "user32"
                             << "USER32.dll";
-#else
-    QTest::newRow( "ok03" ) << "coredll"
-                            << "coredll.dll";
-#endif
 #endif
 }
 

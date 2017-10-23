@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -89,7 +92,7 @@ public:
         }
 
         firstDot = fileName.size();
-        for (int i = lastSeparator; i > fileName.size(); ++i) {
+        for (int i = lastSeparator; i < fileName.size(); ++i) {
             if (fileName.at(i).unicode() == '.') {
                 firstDot = i;
                 break;
@@ -150,7 +153,6 @@ static HRESULT getDestinationFolder(const QString &fileName, const QString &newF
     HRESULT hr;
     ComPtr<IAsyncOperation<StorageFolder *>> op;
     QFileInfo newFileInfo(newFileName);
-#ifndef Q_OS_WINPHONE
     QFileInfo fileInfo(fileName);
     if (fileInfo.dir() == newFileInfo.dir()) {
         ComPtr<IStorageItem2> item;
@@ -158,12 +160,7 @@ static HRESULT getDestinationFolder(const QString &fileName, const QString &newF
         Q_ASSERT_SUCCEEDED(hr);
 
         hr = item->GetParentAsync(&op);
-    } else
-#else
-    Q_UNUSED(fileName);
-    Q_UNUSED(file)
-#endif
-    {
+    } else {
         ComPtr<IStorageFolderStatics> folderFactory;
         hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Storage_StorageFolder).Get(),
                                     IID_PPV_ARGS(&folderFactory));
@@ -429,8 +426,7 @@ QDateTime QWinRTFileEngine::fileTime(FileTime type) const
         ComPtr<FileProperties::IBasicProperties> properties;
         hr = QWinRTFunctions::await(op, properties.GetAddressOf());
         RETURN_IF_FAILED("Failed to get file properties", return QDateTime());
-        hr = type == ModificationTime ? properties->get_DateModified(&dateTime)
-                                      : properties->get_ItemDate(&dateTime);
+        hr = properties->get_DateModified(&dateTime);
         RETURN_IF_FAILED("Failed to get file date", return QDateTime());
     }
         break;

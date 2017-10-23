@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -74,13 +69,11 @@ private slots:
     void showMaximized();
     void showMinimized();
     void showFullScreen();
-#ifndef Q_OS_WINCE
     void showAsTool();
     void toolDialogPosition();
-#endif
     void deleteMainDefault();
     void deleteInExec();
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     void showSizeGrip();
 #endif
     void setVisible();
@@ -242,7 +235,7 @@ void tst_QDialog::showMaximized()
 {
     QDialog dialog(0);
     dialog.setSizeGripEnabled(true);
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QSizeGrip *sizeGrip = dialog.findChild<QSizeGrip *>();
     QVERIFY(sizeGrip);
 #endif
@@ -250,14 +243,14 @@ void tst_QDialog::showMaximized()
     dialog.showMaximized();
     QVERIFY(dialog.isMaximized());
     QVERIFY(dialog.isVisible());
-#if !defined(QT_NO_SIZEGRIP) && !defined(Q_OS_MAC) && !defined(Q_OS_IRIX) && !defined(Q_OS_HPUX)
+#if QT_CONFIG(sizegrip) && !defined(Q_OS_DARWIN) && !defined(Q_OS_IRIX) && !defined(Q_OS_HPUX)
     QVERIFY(!sizeGrip->isVisible());
 #endif
 
     dialog.showNormal();
     QVERIFY(!dialog.isMaximized());
     QVERIFY(dialog.isVisible());
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QVERIFY(sizeGrip->isVisible());
 #endif
 
@@ -319,7 +312,7 @@ void tst_QDialog::showFullScreen()
 {
     QDialog dialog(0, Qt::X11BypassWindowManagerHint);
     dialog.setSizeGripEnabled(true);
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QSizeGrip *sizeGrip = dialog.findChild<QSizeGrip *>();
     QVERIFY(sizeGrip);
 #endif
@@ -327,14 +320,14 @@ void tst_QDialog::showFullScreen()
     dialog.showFullScreen();
     QVERIFY(dialog.isFullScreen());
     QVERIFY(dialog.isVisible());
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QVERIFY(!sizeGrip->isVisible());
 #endif
 
     dialog.showNormal();
     QVERIFY(!dialog.isFullScreen());
     QVERIFY(dialog.isVisible());
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
     QVERIFY(sizeGrip->isVisible());
 #endif
 
@@ -346,7 +339,7 @@ void tst_QDialog::showFullScreen()
     QVERIFY(dialog.isFullScreen());
     QVERIFY(!dialog.isVisible());
 
-    dialog.show();
+    dialog.setVisible(true);
     QVERIFY(dialog.isFullScreen());
     QVERIFY(dialog.isVisible());
 
@@ -363,8 +356,6 @@ void tst_QDialog::showFullScreen()
     QVERIFY(!dialog.isVisible());
 }
 
-// No real support for Qt::Tool on WinCE
-#ifndef Q_OS_WINCE
 void tst_QDialog::showAsTool()
 {
 #if defined(Q_OS_UNIX)
@@ -384,10 +375,7 @@ void tst_QDialog::showAsTool()
         QCOMPARE(dialog.wasActive(), false);
     }
 }
-#endif
 
-// No real support for Qt::Tool on WinCE
-#ifndef Q_OS_WINCE
 // Verify that pos() returns the same before and after show()
 // for a dialog with the Tool window type.
 void tst_QDialog::toolDialogPosition()
@@ -399,7 +387,6 @@ void tst_QDialog::toolDialogPosition()
     const QPoint afterShowPosition = dialog.pos();
     QCOMPARE(afterShowPosition, beforeShowPosition);
 }
-#endif
 
 class Dialog : public QDialog
 {
@@ -427,7 +414,7 @@ void tst_QDialog::deleteInExec()
     QCOMPARE(dialog->exec(), int(QDialog::Rejected));
 }
 
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
 // From Task 124269
 void tst_QDialog::showSizeGrip()
 {

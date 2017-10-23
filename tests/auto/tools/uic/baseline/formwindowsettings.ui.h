@@ -1,32 +1,27 @@
 /*
 *********************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the autotests of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -279,17 +274,17 @@ public:
 
     void retranslateUi(QDialog *FormWindowSettings)
     {
-        FormWindowSettings->setWindowTitle(QApplication::translate("FormWindowSettings", "Form Settings", 0));
-        layoutDefaultGroupBox->setTitle(QApplication::translate("FormWindowSettings", "Layout &Default", 0));
-        label_2->setText(QApplication::translate("FormWindowSettings", "&Spacing:", 0));
-        label->setText(QApplication::translate("FormWindowSettings", "&Margin:", 0));
-        layoutFunctionGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Layout Function", 0));
-        label_3->setText(QApplication::translate("FormWindowSettings", "Ma&rgin:", 0));
-        label_3_2->setText(QApplication::translate("FormWindowSettings", "Spa&cing:", 0));
-        pixmapFunctionGroupBox_2->setTitle(QApplication::translate("FormWindowSettings", "&Author", 0));
-        includeHintsGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Include Hints", 0));
-        pixmapFunctionGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Pixmap Function", 0));
-        gridPanel->setTitle(QApplication::translate("FormWindowSettings", "Grid", 0));
+        FormWindowSettings->setWindowTitle(QApplication::translate("FormWindowSettings", "Form Settings", Q_NULLPTR));
+        layoutDefaultGroupBox->setTitle(QApplication::translate("FormWindowSettings", "Layout &Default", Q_NULLPTR));
+        label_2->setText(QApplication::translate("FormWindowSettings", "&Spacing:", Q_NULLPTR));
+        label->setText(QApplication::translate("FormWindowSettings", "&Margin:", Q_NULLPTR));
+        layoutFunctionGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Layout Function", Q_NULLPTR));
+        label_3->setText(QApplication::translate("FormWindowSettings", "Ma&rgin:", Q_NULLPTR));
+        label_3_2->setText(QApplication::translate("FormWindowSettings", "Spa&cing:", Q_NULLPTR));
+        pixmapFunctionGroupBox_2->setTitle(QApplication::translate("FormWindowSettings", "&Author", Q_NULLPTR));
+        includeHintsGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Include Hints", Q_NULLPTR));
+        pixmapFunctionGroupBox->setTitle(QApplication::translate("FormWindowSettings", "&Pixmap Function", Q_NULLPTR));
+        gridPanel->setTitle(QApplication::translate("FormWindowSettings", "Grid", Q_NULLPTR));
     } // retranslateUi
 
 };

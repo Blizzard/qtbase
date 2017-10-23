@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qglobal.h"
-
-#ifndef QT_NO_GRAPHICSVIEW
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qnumeric.h>
@@ -46,7 +50,7 @@
 #include <QtWidgets/qstyleoption.h>
 #include <QtWidgets/QStyleOptionTitleBar>
 #include <QtWidgets/QGraphicsSceneMouseEvent>
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC) && !defined(QT_NO_STYLE_MAC)
+#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ && QT_CONFIG(style_mac)
 # include <private/qmacstyle_mac_p.h>
 #endif
 
@@ -86,6 +90,25 @@ qreal QGraphicsWidgetPrivate::titleBarHeight(const QStyleOptionTitleBar &options
 /*!
     \internal
 */
+QGraphicsWidgetPrivate::QGraphicsWidgetPrivate()
+    : margins(nullptr),
+      layout(nullptr),
+      inheritedPaletteResolveMask(0),
+      inheritedFontResolveMask(0),
+      inSetGeometry(false),
+      polished(false),
+      inSetPos(false),
+      autoFillBackground(false),
+      focusPolicy(Qt::NoFocus),
+      focusNext(nullptr),
+      focusPrev(nullptr),
+      windowFlags(),
+      windowData(nullptr),
+      setWindowFrameMargins(false),
+      windowFrameMargins(nullptr)
+{
+}
+
 QGraphicsWidgetPrivate::~QGraphicsWidgetPrivate()
 {
     // Remove any lazily allocated data
@@ -302,12 +325,11 @@ void QGraphicsWidgetPrivate::initStyleOptionTitleBar(QStyleOptionTitleBar *optio
     option->subControls = QStyle::SC_TitleBarCloseButton | QStyle::SC_TitleBarLabel | QStyle::SC_TitleBarSysMenu;
     option->activeSubControls = windowData->hoveredSubControl;
     bool isActive = q->isActiveWindow();
+    option->state.setFlag(QStyle::State_Active, isActive);
     if (isActive) {
-        option->state |= QStyle::State_Active;
         option->titleBarState = Qt::WindowActive;
         option->titleBarState |= QStyle::State_Active;
     } else {
-        option->state &= ~QStyle::State_Active;
         option->titleBarState = Qt::WindowNoState;
     }
     QFont windowTitleFont = QApplication::font("QMdiSubWindowTitleBar");
@@ -680,7 +702,7 @@ void QGraphicsWidgetPrivate::windowFrameHoverMoveEvent(QGraphicsSceneHoverEvent 
         case Qt::TitleBarArea:
             windowData->buttonRect = q->style()->subControlRect(
                 QStyle::CC_TitleBar, &bar, QStyle::SC_TitleBarCloseButton, 0);
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
             // On mac we should hover if we are in the 'area' of the buttons
             windowData->buttonRect |= q->style()->subControlRect(
                 QStyle::CC_TitleBar, &bar, QStyle::SC_TitleBarMinButton, 0);
@@ -698,6 +720,9 @@ void QGraphicsWidgetPrivate::windowFrameHoverMoveEvent(QGraphicsSceneHoverEvent 
 #ifndef QT_NO_CURSOR
     if (needsSetCursorCall)
         q->setCursor(cursorShape);
+#else
+    Q_UNUSED(needsSetCursorCall);
+    Q_UNUSED(cursorShape);
 #endif
     // update buttons if we hover over them
     windowData->hoveredSubControl = q->style()->hitTestComplexControl(QStyle::CC_TitleBar, &bar, pos.toPoint(), 0);
@@ -873,5 +898,3 @@ void QGraphicsWidgetPrivate::setGeometryFromSetPos()
 }
 
 QT_END_NAMESPACE
-
-#endif //QT_NO_GRAPHICSVIEW

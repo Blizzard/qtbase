@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,18 +41,20 @@
 #include "private/qstandardgestures_p.h"
 #include "private/qwidget_p.h"
 #include "private/qgesture_p.h"
+#if QT_CONFIG(graphicsview)
 #include "private/qgraphicsitem_p.h"
+#include "qgraphicsitem.h"
+#endif
 #include "private/qevent_p.h"
 #include "private/qapplication_p.h"
 #include "private/qwidgetwindow_p.h"
 #include "qgesture.h"
 #include "qevent.h"
-#include "qgraphicsitem.h"
 
 #ifdef Q_OS_OSX
 #include "qmacgesturerecognizer_p.h"
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN) && !defined(QT_NO_NATIVE_GESTURES)
+#if 0 /* Used to be included in Qt4 for Q_WS_WIN */ && !defined(QT_NO_NATIVE_GESTURES)
 #include "qwinnativepangesturerecognizer_win_p.h"
 #endif
 
@@ -69,7 +77,7 @@ static inline int panTouchPoints()
         const int result = qEnvironmentVariableIntValue(panTouchPointVariable, &ok);
         if (ok && result >= 1)
             return result;
-        qWarning() << "Ignoring invalid value of " << panTouchPointVariable;
+        qWarning("Ignoring invalid value of %s", panTouchPointVariable);
     }
     // Pan should use 1 finger on a touch screen and 2 fingers on touch pads etc.
     // where 1 finger movements are used for mouse event synthetization. For now,
@@ -94,7 +102,7 @@ QGestureManager::QGestureManager(QObject *parent)
     registerGestureRecognizer(new QSwipeGestureRecognizer);
     registerGestureRecognizer(new QTapGestureRecognizer);
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
   #if !defined(QT_NO_NATIVE_GESTURES)
     if (QApplicationPrivate::HasTouchSupport)
         registerGestureRecognizer(new QWinNativePanGestureRecognizer);
@@ -106,7 +114,7 @@ QGestureManager::QGestureManager(QObject *parent)
 
 QGestureManager::~QGestureManager()
 {
-    qDeleteAll(m_recognizers.values());
+    qDeleteAll(m_recognizers);
     foreach (QGestureRecognizer *recognizer, m_obsoleteGestures.keys()) {
         qDeleteAll(m_obsoleteGestures.value(recognizer));
         delete recognizer;
@@ -117,7 +125,7 @@ QGestureManager::~QGestureManager()
 Qt::GestureType QGestureManager::registerGestureRecognizer(QGestureRecognizer *recognizer)
 {
     QGesture *dummy = recognizer->create(0);
-    if (!dummy) {
+    if (Q_UNLIKELY(!dummy)) {
         qWarning("QGestureManager::registerGestureRecognizer: "
                  "the recognizer fails to create a gesture object, skipping registration.");
         return Qt::GestureType(0);
@@ -203,7 +211,7 @@ QGesture *QGestureManager::getState(QObject *object, QGestureRecognizer *recogni
             return 0;
     } else if (QGesture *g = qobject_cast<QGesture *>(object)) {
         return g;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else {
         Q_ASSERT(qobject_cast<QGraphicsObject *>(object));
         QGraphicsObject *graphicsObject = static_cast<QGraphicsObject *>(object);
@@ -213,7 +221,8 @@ QGesture *QGestureManager::getState(QObject *object, QGestureRecognizer *recogni
     }
 
     // check if the QGesture for this recognizer has already been created
-    foreach (QGesture *state, m_objectGestures.value(QGestureManager::ObjectGesture(object, type))) {
+    const auto states = m_objectGestures.value(QGestureManager::ObjectGesture(object, type));
+    for (QGesture *state : states) {
         if (m_gestureToRecognizer.value(state) == recognizer)
             return state;
     }
@@ -235,6 +244,36 @@ QGesture *QGestureManager::getState(QObject *object, QGestureRecognizer *recogni
     m_gestureOwners[state] = object;
 
     return state;
+}
+
+static bool logIgnoredEvent(QEvent::Type t)
+{
+    bool result = false;
+    switch (t) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::MouseMove:
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+    case QEvent::TouchCancel:
+    case QEvent::TouchEnd:
+    case QEvent::TabletEnterProximity:
+    case QEvent::TabletLeaveProximity:
+    case QEvent::TabletMove:
+    case QEvent::TabletPress:
+    case QEvent::TabletRelease:
+    case QEvent::GraphicsSceneMouseDoubleClick:
+    case QEvent::GraphicsSceneMousePress:
+    case QEvent::GraphicsSceneMouseRelease:
+    case QEvent::GraphicsSceneMouseMove:
+        result = true;
+        break;
+    default:
+        break;
+
+    }
+    return result;
 }
 
 bool QGestureManager::filterEventThroughContexts(const QMultiMap<QObject *,
@@ -282,10 +321,13 @@ bool QGestureManager::filterEventThroughContexts(const QMultiMap<QObject *,
                 qCDebug(lcGestureManager) << "QGestureManager:Recognizer: not gesture: " << state << event;
                 notGestures << state;
             } else if (recognizerState == QGestureRecognizer::Ignore) {
-                qCDebug(lcGestureManager) << "QGestureManager:Recognizer: ignored the event: " << state << event;
+                if (logIgnoredEvent(event->type()))
+                    qCDebug(lcGestureManager) << "QGestureManager:Recognizer: ignored the event: " << state << event;
             } else {
-                qCDebug(lcGestureManager) << "QGestureManager:Recognizer: hm, lets assume the recognizer"
+                if (logIgnoredEvent(event->type())) {
+                    qCDebug(lcGestureManager) << "QGestureManager:Recognizer: hm, lets assume the recognizer"
                         << "ignored the event: " << state << event;
+                }
             }
             if (resultHint & QGestureRecognizer::ConsumeEventHint) {
                 qCDebug(lcGestureManager) << "QGestureManager: we were asked to consume the event: "
@@ -505,7 +547,7 @@ bool QGestureManager::filterEvent(QWidget *receiver, QEvent *event)
     return contexts.isEmpty() ? false : filterEventThroughContexts(contexts, event);
 }
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
 bool QGestureManager::filterEvent(QGraphicsObject *receiver, QEvent *event)
 {
     QMap<Qt::GestureType, int> types;
@@ -640,17 +682,17 @@ void QGestureManager::deliverEvents(const QSet<QGesture *> &gestures,
         Q_ASSERT(gestureType != Qt::CustomGesture);
         Q_UNUSED(gestureType);
 
-        if (target) {
+        if (Q_UNLIKELY(!target)) {
+            qCDebug(lcGestureManager) << "QGestureManager::deliverEvent: could not find the target for gesture"
+                    << gesture->gestureType();
+            qWarning("QGestureManager::deliverEvent: could not find the target for gesture");
+            undeliveredGestures->insert(gesture);
+        } else {
             if (gesture->state() == Qt::GestureStarted) {
                 startedGestures.insert(gesture);
             } else {
                 normalStartedGestures[target].append(gesture);
             }
-        } else {
-            qCDebug(lcGestureManager) << "QGestureManager::deliverEvent: could not find the target for gesture"
-                    << gesture->gestureType();
-            qWarning("QGestureManager::deliverEvent: could not find the target for gesture");
-            undeliveredGestures->insert(gesture);
         }
     }
 
@@ -678,7 +720,8 @@ void QGestureManager::deliverEvents(const QSet<QGesture *> &gestures,
 
         QApplication::sendEvent(receiver, &event);
         bool eventAccepted = event.isAccepted();
-        foreach(QGesture *gesture, event.gestures()) {
+        const auto eventGestures = event.gestures();
+        for (QGesture *gesture : eventGestures) {
             if (eventAccepted || event.isAccepted(gesture)) {
                 QWidget *w = event.m_targetWidgets.value(gesture->gestureType(), 0);
                 Q_ASSERT(w);
@@ -704,7 +747,8 @@ void QGestureManager::deliverEvents(const QSet<QGesture *> &gestures,
             QGestureEvent event(it.value());
             QApplication::sendEvent(it.key(), &event);
             bool eventAccepted = event.isAccepted();
-            foreach (QGesture *gesture, event.gestures()) {
+            const auto eventGestures = event.gestures();
+            for (QGesture *gesture : eventGestures) {
                 if (gesture->state() == Qt::GestureStarted &&
                     (eventAccepted || event.isAccepted(gesture))) {
                     QWidget *w = event.m_targetWidgets.value(gesture->gestureType(), 0);

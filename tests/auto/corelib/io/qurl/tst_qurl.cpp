@@ -1,32 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2015 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -51,6 +46,7 @@ class tst_QUrl : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void effectiveTLDs_data();
     void effectiveTLDs();
     void getSetCheck();
@@ -182,10 +178,19 @@ private slots:
     void streaming();
     void detach();
     void testThreading();
+    void matches_data();
+    void matches();
 
 private:
     void testThreadingHelper();
+
+    QTemporaryDir m_tempDir;
 };
+
+void tst_QUrl::initTestCase()
+{
+    QVERIFY2(m_tempDir.isValid(), qPrintable(m_tempDir.errorString()));
+}
 
 // Testing get/set functions
 void tst_QUrl::getSetCheck()
@@ -233,7 +238,7 @@ void tst_QUrl::constructing()
     QVERIFY(url.isEmpty());
     QCOMPARE(url.port(), -1);
     QCOMPARE(url.toString(), QString());
-    QVERIFY(url == url);
+    QCOMPARE(url, url);
     QVERIFY(!(url < url));
 
     QUrl fromLocal = QUrl::fromLocalFile(QString());
@@ -261,7 +266,7 @@ void tst_QUrl::hashInPath()
     QCOMPARE(withHashInPath.toDisplayString(QUrl::PreferLocalFile), QString("hi%23mum.txt"));
 
     QUrl fromHashInPath = QUrl::fromEncoded(withHashInPath.toEncoded());
-    QVERIFY(withHashInPath == fromHashInPath);
+    QCOMPARE(withHashInPath, fromHashInPath);
 
     const QUrl localWithHash = QUrl::fromLocalFile("/hi#mum.txt");
     QCOMPARE(localWithHash.path(), QString::fromLatin1("/hi#mum.txt"));
@@ -291,7 +296,7 @@ void tst_QUrl::assignment()
     QUrl copy;
     copy = url;
 
-    QVERIFY(url == copy);
+    QCOMPARE(url, copy);
 }
 
 void tst_QUrl::comparison()
@@ -302,7 +307,7 @@ void tst_QUrl::comparison()
     QUrl url2("http://qt-project.org/");
     QVERIFY(url2.isValid());
 
-    QVERIFY(url1 == url2);
+    QCOMPARE(url1, url2);
     QVERIFY(!(url1 < url2));
     QVERIFY(!(url2 < url1));
     QVERIFY(url1.matches(url2, QUrl::None));
@@ -336,7 +341,7 @@ void tst_QUrl::comparison()
     url5.setEncodedQuery("a=%2a");
     QUrl url6;
     url6.setEncodedQuery("a=%2A");
-    QVERIFY(url5 == url6);
+    QCOMPARE(url5, url6);
 
     QUrl url7;
     url7.setEncodedQuery("a=C");
@@ -373,7 +378,7 @@ void tst_QUrl::comparison()
 
     QUrl hostUrl1("file:/foo");
     QUrl hostUrl2("file:///foo");
-    QVERIFY(hostUrl1 == hostUrl2);
+    QCOMPARE(hostUrl1, hostUrl2);
     QVERIFY(hostUrl1.matches(hostUrl2, QUrl::None));
     QVERIFY(hostUrl1.matches(hostUrl2, QUrl::RemoveAuthority));
 
@@ -467,7 +472,7 @@ void tst_QUrl::copying()
 
     QUrl copy(url);
 
-    QVERIFY(url == copy);
+    QCOMPARE(url, copy);
 }
 
 void tst_QUrl::setUrl()
@@ -1692,9 +1697,9 @@ void tst_QUrl::percentEncoding()
     QFETCH(QByteArray, encoded);
 
     QCOMPARE(QUrl(original).toEncoded().constData(), encoded.constData());
-    QVERIFY(QUrl::fromEncoded(QUrl(original).toEncoded()) == QUrl(original));
+    QCOMPARE(QUrl::fromEncoded(QUrl(original).toEncoded()), QUrl(original));
     QCOMPARE(QUrl::fromEncoded(QUrl(original).toEncoded()).toString(), original);
-    QVERIFY(QUrl::fromEncoded(encoded) == QUrl(original));
+    QCOMPARE(QUrl::fromEncoded(encoded), QUrl(original));
     QCOMPARE(QUrl(QUrl(original).toString()).toString(), original);
 }
 
@@ -2982,7 +2987,8 @@ void tst_QUrl::fromUserInput_data()
     int c = 0;
     while (it.hasNext()) {
         it.next();
-        QTest::newRow(QString("file-%1").arg(c++).toLatin1()) << it.filePath() << QUrl::fromLocalFile(it.filePath());
+        QTest::newRow(("file-" + QByteArray::number(c++)).constData())
+                      << it.filePath() << QUrl::fromLocalFile(it.filePath());
     }
 
     // basic latin1
@@ -3064,45 +3070,59 @@ void tst_QUrl::fromUserInputWithCwd_data()
     // Null
     QTest::newRow("null") << QString() << QString() << QUrl() << QUrl();
 
-    // Existing file
-    QDirIterator it(QDir::currentPath(), QDir::NoDotDot | QDir::AllEntries);
-    int c = 0;
-    while (it.hasNext()) {
-        it.next();
-        QUrl url = QUrl::fromLocalFile(it.filePath());
-        if (it.fileName() == QLatin1String(".")) {
-            url = QUrl::fromLocalFile(QDir::currentPath()
-#ifdef Q_OS_WINRT
-                                      + QLatin1Char('/')
-#endif
-                                      ); // fromUserInput cleans the path
-        }
-        QTest::newRow(QString("file-%1").arg(c++).toLatin1()) << it.fileName() << QDir::currentPath() << url << url;
+    // Use a tempdir with files, for testing specific file names
+    // We use canonicalPath() on the dir path because ::getcwd() canonicalizes,
+    // so we get a canonical base path for URLs with "." as working directory.
+    const QString base = QDir(m_tempDir.path()).canonicalPath();
+    QDir::setCurrent(base); // for the tests that use "." as working dir
+
+    // "."
+    {
+        const QUrl url = QUrl::fromLocalFile(base); // fromUserInput cleans the path
+        QTest::newRow("dot-in-path") << "." << base << url << url;
+        QTest::newRow("dot-in-dot") << "." << QStringLiteral(".") << url << url;
     }
+
+    // Existing files
+    for (const char *fileName : {"file.txt", "file#a.txt", "file .txt", "file.txt "
+#ifndef Q_OS_WIN
+            , "file:colon.txt"
+#endif
+            }) {
+        const QString filePath = base + '/' + fileName;
+        QFile file(filePath);
+        QVERIFY2(file.open(QIODevice::WriteOnly), qPrintable(filePath));
+        file.write("Hello world\n");
+
+        const QUrl url = QUrl::fromLocalFile(filePath);
+        QTest::newRow(fileName) << fileName << base << url << url;
+        QTest::newRow(QByteArray(fileName) + "-in-dot") << fileName << QStringLiteral(".") << url << url;
+    }
+
 #ifndef Q_OS_WINRT // WinRT cannot cd outside current / sandbox
-    QDir parent = QDir::current();
+    QDir parent(base);
     QVERIFY(parent.cdUp());
     QUrl parentUrl = QUrl::fromLocalFile(parent.path());
-    QTest::newRow("dotdot") << ".." << QDir::currentPath() << parentUrl << parentUrl;
+    QTest::newRow("dotdot") << ".." << base << parentUrl << parentUrl;
 #endif
 
-    QTest::newRow("nonexisting") << "nonexisting" << QDir::currentPath() << QUrl("http://nonexisting") << QUrl::fromLocalFile(QDir::currentPath() + "/nonexisting");
-    QTest::newRow("short-url") << "example.org" << QDir::currentPath() << QUrl("http://example.org") << QUrl::fromLocalFile(QDir::currentPath() + "/example.org");
-    QTest::newRow("full-url") << "http://example.org" << QDir::currentPath() << QUrl("http://example.org") << QUrl("http://example.org");
-    QTest::newRow("absolute") << "/doesnotexist.txt" << QDir::currentPath() << QUrl("file:///doesnotexist.txt") << QUrl("file:///doesnotexist.txt");
+    QTest::newRow("nonexisting") << "nonexisting" << base << QUrl("http://nonexisting") << QUrl::fromLocalFile(base + "/nonexisting");
+    QTest::newRow("short-url") << "example.org" << base << QUrl("http://example.org") << QUrl::fromLocalFile(base + "/example.org");
+    QTest::newRow("full-url") << "http://example.org" << base << QUrl("http://example.org") << QUrl("http://example.org");
+    QTest::newRow("absolute") << "/doesnotexist.txt" << base << QUrl("file:///doesnotexist.txt") << QUrl("file:///doesnotexist.txt");
 #ifdef Q_OS_WIN
-    QTest::newRow("windows-absolute") << "c:/doesnotexist.txt" << QDir::currentPath() << QUrl("file:///c:/doesnotexist.txt") << QUrl("file:///c:/doesnotexist.txt");
+    QTest::newRow("windows-absolute") << "c:/doesnotexist.txt" << base << QUrl("file:///c:/doesnotexist.txt") << QUrl("file:///c:/doesnotexist.txt");
 #endif
 
     // IPv4 & IPv6
     // same as fromUserInput, but needs retesting
-    QTest::newRow("ipv4-1") << "127.0.0.1" << QDir::currentPath() << QUrl("http://127.0.0.1") << QUrl::fromLocalFile(QDir::currentPath() + "/127.0.0.1");
-    QTest::newRow("ipv6-0") << "::" << QDir::currentPath() << QUrl("http://[::]") << QUrl("http://[::]");
-    QTest::newRow("ipv6-1") << "::1" << QDir::currentPath() << QUrl("http://[::1]") << QUrl("http://[::1]");
-    QTest::newRow("ipv6-2") << "1::1" << QDir::currentPath() << QUrl("http://[1::1]") << QUrl("http://[1::1]");
-    QTest::newRow("ipv6-3") << "1::" << QDir::currentPath() << QUrl("http://[1::]") << QUrl("http://[1::]");
-    QTest::newRow("ipv6-4") << "c::" << QDir::currentPath() << QUrl("http://[c::]") << QUrl("http://[c::]");
-    QTest::newRow("ipv6-5") << "c:f00:ba4::" << QDir::currentPath() << QUrl("http://[c:f00:ba4::]") << QUrl("http://[c:f00:ba4::]");
+    QTest::newRow("ipv4-1") << "127.0.0.1" << base << QUrl("http://127.0.0.1") << QUrl::fromLocalFile(base + "/127.0.0.1");
+    QTest::newRow("ipv6-0") << "::" << base << QUrl("http://[::]") << QUrl("http://[::]");
+    QTest::newRow("ipv6-1") << "::1" << base << QUrl("http://[::1]") << QUrl("http://[::1]");
+    QTest::newRow("ipv6-2") << "1::1" << base << QUrl("http://[1::1]") << QUrl("http://[1::1]");
+    QTest::newRow("ipv6-3") << "1::" << base << QUrl("http://[1::]") << QUrl("http://[1::]");
+    QTest::newRow("ipv6-4") << "c::" << base << QUrl("http://[c::]") << QUrl("http://[c::]");
+    QTest::newRow("ipv6-5") << "c:f00:ba4::" << base << QUrl("http://[c:f00:ba4::]") << QUrl("http://[c:f00:ba4::]");
 }
 
 void tst_QUrl::fromUserInputWithCwd()
@@ -3288,7 +3308,7 @@ void tst_QUrl::acceptEmptyAuthoritySegments()
     // However, file:/bar is the same as file:///bar
     QString file_triple_bar("file:///bar"), file_uni_bar("file:/bar");
 
-    QVERIFY(QUrl(file_triple_bar) == QUrl(file_uni_bar));
+    QCOMPARE(QUrl(file_triple_bar), QUrl(file_uni_bar));
 
     QCOMPARE(QUrl(file_uni_bar).toString(), file_triple_bar);
     QCOMPARE(QUrl(file_uni_bar, QUrl::StrictMode).toString(), file_triple_bar);
@@ -4021,6 +4041,54 @@ void tst_QUrl::testThreading()
         sync.addFuture(QtConcurrent::run(this, &tst_QUrl::testThreadingHelper));
     sync.waitForFinished();
     delete s_urlStorage;
+}
+
+void tst_QUrl::matches_data()
+{
+    QTest::addColumn<QString>("urlStrOne");
+    QTest::addColumn<QString>("urlStrTwo");
+    QTest::addColumn<uint>("options");
+    QTest::addColumn<bool>("matches");
+
+    QTest::newRow("matchingString-none") << "http://www.website.com/directory/?#ref"
+                                         << "http://www.website.com/directory/?#ref"
+                                         << uint(QUrl::None) << true;
+    QTest::newRow("nonMatchingString-none") << "http://www.website.com/directory/?#ref"
+                                            << "http://www.nomatch.com/directory/?#ref"
+                                            << uint(QUrl::None) << false;
+    QTest::newRow("matchingHost-removePath") << "http://www.website.com/directory"
+                                             << "http://www.website.com/differentdir"
+                                             << uint(QUrl::RemovePath) << true;
+    QTest::newRow("nonMatchingHost-removePath") << "http://www.website.com/directory"
+                                                << "http://www.different.com/differentdir"
+                                                << uint(QUrl::RemovePath) << false;
+    QTest::newRow("matchingHost-removePathAuthority") << "http://user:pass@www.website.com/directory"
+                                                      << "http://www.website.com/differentdir"
+                                                      << uint(QUrl::RemovePath | QUrl::RemoveAuthority)
+                                                      << true;
+    QTest::newRow("nonMatchingHost-removePathAuthority") << "http://user:pass@www.website.com/directory"
+                                                         << "http://user:pass@www.different.com/differentdir"
+                                                         << uint(QUrl::RemovePath | QUrl::RemoveAuthority)
+                                                         << true;
+    QTest::newRow("matchingHostAuthority-removePathAuthority")
+        << "http://user:pass@www.website.com/directory" << "http://www.website.com/differentdir"
+        << uint(QUrl::RemovePath | QUrl::RemoveAuthority) << true;
+    QTest::newRow("nonMatchingAuthority-removePathAuthority")
+        << "http://user:pass@www.website.com/directory"
+        << "http://otheruser:otherpass@www.website.com/directory"
+        << uint(QUrl::RemovePath | QUrl::RemoveAuthority) << true;
+}
+
+void tst_QUrl::matches()
+{
+    QFETCH(QString, urlStrOne);
+    QFETCH(QString, urlStrTwo);
+    QFETCH(uint, options);
+    QFETCH(bool, matches);
+
+    QUrl urlOne(urlStrOne);
+    QUrl urlTwo(urlStrTwo);
+    QCOMPARE(urlOne.matches(urlTwo, QUrl::FormattingOptions(options)), matches);
 }
 
 QTEST_MAIN(tst_QUrl)

@@ -1,31 +1,37 @@
 /****************************************************************************
  **
  ** Copyright (C) 2013 BlackBerry Limited. All rights reserved.
- ** Contact: http://www.qt.io/licensing/
+ ** Contact: https://www.qt.io/licensing/
  **
  ** This file is part of the QtCore module of the Qt Toolkit.
  **
- ** $QT_BEGIN_LICENSE:LGPL21$
+ ** $QT_BEGIN_LICENSE:LGPL$
  ** Commercial License Usage
  ** Licensees holding valid commercial Qt licenses may use this file in
  ** accordance with the commercial license agreement provided with the
  ** Software or, alternatively, in accordance with the terms contained in
  ** a written agreement between you and The Qt Company. For licensing terms
- ** and conditions see http://www.qt.io/terms-conditions. For further
- ** information use the contact form at http://www.qt.io/contact-us.
+ ** and conditions see https://www.qt.io/terms-conditions. For further
+ ** information use the contact form at https://www.qt.io/contact-us.
  **
  ** GNU Lesser General Public License Usage
  ** Alternatively, this file may be used under the terms of the GNU Lesser
- ** General Public License version 2.1 or version 3 as published by the Free
- ** Software Foundation and appearing in the file LICENSE.LGPLv21 and
- ** LICENSE.LGPLv3 included in the packaging of this file. Please review the
- ** following information to ensure the GNU Lesser General Public License
- ** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
- ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+ ** General Public License version 3 as published by the Free Software
+ ** Foundation and appearing in the file LICENSE.LGPL3 included in the
+ ** packaging of this file. Please review the following information to
+ ** ensure the GNU Lesser General Public License version 3 requirements
+ ** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
  **
- ** As a special exception, The Qt Company gives you certain additional
- ** rights. These rights are described in The Qt Company LGPL Exception
- ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+ ** GNU General Public License Usage
+ ** Alternatively, this file may be used under the terms of the GNU
+ ** General Public License version 2.0 or (at your option) the GNU General
+ ** Public license version 3 or any later version approved by the KDE Free
+ ** Qt Foundation. The licenses are as published by the Free Software
+ ** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+ ** included in the packaging of this file. Please review the following
+ ** information to ensure the GNU General Public License requirements will
+ ** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+ ** https://www.gnu.org/licenses/gpl-3.0.html.
  **
  ** $QT_END_LICENSE$
  **
@@ -66,7 +72,7 @@ public:
     {
         int fd = qt_safe_open("/pps/.all", O_RDONLY);
         if (fd == -1) {
-            qWarning() << "qppsobject.cpp: qt_safe_open failed";
+            qWarning("qppsobject.cpp: qt_safe_open failed");
             value = -1;
         }
 
@@ -108,7 +114,7 @@ QPpsAttributeMap QPpsObjectPrivate::decode(const QByteArray &rawData, bool *ok)
         // no need to check ok in this case
         attributeMap = decodeObject(&decoder, ok);
     } else {
-        qWarning() << "QPpsObjectPrivate::decode: pps_decoder_initialize failed";
+        qWarning("QPpsObjectPrivate::decode: pps_decoder_initialize failed");
         *ok = false;
     }
 
@@ -156,7 +162,7 @@ QPpsAttribute QPpsObjectPrivate::decodeString(pps_decoder_t *decoder)
     pps_decoder_error_t error = pps_decoder_get_string(decoder, 0, &value);
 
     if (error != PPS_DECODER_OK) {
-        qWarning() << "QPpsObjectPrivate::decodeString: PPS_DECODER_GET_STRING failed";
+        qWarning("QPpsObjectPrivate::decodeString: PPS_DECODER_GET_STRING failed");
         return QPpsAttribute();
     }
 
@@ -183,19 +189,19 @@ QPpsAttribute QPpsObjectPrivate::decodeNumber(pps_decoder_t *decoder)
         case PPS_DECODER_CONVERSION_FAILED:
             error = pps_decoder_get_int64(decoder, 0, &llValue);
             if (error != PPS_DECODER_OK) {
-                qWarning() << "QPpsObjectPrivate::decodeNumber: failed to decode integer";
+                qWarning("QPpsObjectPrivate::decodeNumber: failed to decode integer");
                 return QPpsAttribute();
             }
             flags = readFlags(decoder);
             return QPpsAttributePrivate::createPpsAttribute(static_cast<long long>(llValue), flags);
         default:
-            qWarning() << "QPpsObjectPrivate::decodeNumber: pps_decoder_get_int failed";
+            qWarning("QPpsObjectPrivate::decodeNumber: pps_decoder_get_int failed");
             return QPpsAttribute();
         }
     } else {
         pps_decoder_error_t error = pps_decoder_get_double(decoder, 0, &dValue);
         if (error != PPS_DECODER_OK) {
-            qWarning() << "QPpsObjectPrivate::decodeNumber: pps_decoder_get_double failed";
+            qWarning("QPpsObjectPrivate::decodeNumber: pps_decoder_get_double failed");
             return QPpsAttribute();
         }
         flags = readFlags(decoder);
@@ -209,7 +215,7 @@ QPpsAttribute QPpsObjectPrivate::decodeBool(pps_decoder_t *decoder)
     pps_decoder_error_t error = pps_decoder_get_bool(decoder, 0, &value);
 
     if (error != PPS_DECODER_OK) {
-        qWarning() << "QPpsObjectPrivate::decodeBool: pps_decoder_get_bool failed";
+        qWarning("QPpsObjectPrivate::decodeBool: pps_decoder_get_bool failed");
         return QPpsAttribute();
     }
 
@@ -272,7 +278,7 @@ QPpsAttribute QPpsObjectPrivate::decodeData(pps_decoder_t *decoder)
     case PPS_TYPE_NONE:
     case PPS_TYPE_UNKNOWN:
     default:
-        qWarning() << "QPpsObjectPrivate::decodeData: invalid pps_node_type";
+        qWarning("QPpsObjectPrivate::decodeData: invalid pps_node_type");
         return QPpsAttribute();
     }
 }
@@ -286,7 +292,7 @@ QPpsAttributeList QPpsObjectPrivate::decodeArray(pps_decoder_t *decoder, bool *o
         // Force movement to a specific index.
         pps_decoder_error_t error = pps_decoder_goto_index(decoder, i);
         if (error != PPS_DECODER_OK) {
-            qWarning() << "QPpsObjectPrivate::decodeArray: pps_decoder_goto_index failed";
+            qWarning("QPpsObjectPrivate::decodeArray: pps_decoder_goto_index failed");
             *ok = false;
             return QPpsAttributeList();
         }
@@ -313,7 +319,7 @@ QPpsAttributeMap QPpsObjectPrivate::decodeObject(pps_decoder_t *decoder, bool *o
         // Force movement to a specific index.
         pps_decoder_error_t error = pps_decoder_goto_index(decoder, i);
         if (error != PPS_DECODER_OK) {
-            qWarning() << "QPpsObjectPrivate::decodeObject: pps_decoder_goto_index failed";
+            qWarning("QPpsObjectPrivate::decodeObject: pps_decoder_goto_index failed");
             *ok = false;
             return QPpsAttributeMap();
         }
@@ -349,7 +355,8 @@ QVariant QPpsObjectPrivate::variantFromPpsAttribute(const QPpsAttribute &attribu
         return attribute.toString();
     case QPpsAttribute::Array: {
         QVariantList variantList;
-        Q_FOREACH (const QPpsAttribute &attr, attribute.toList()) {
+        const auto attrs = attribute.toList();
+        for (const QPpsAttribute &attr : attrs) {
             QVariant variant = variantFromPpsAttribute(attr);
             if (!variant.isValid())
                 return QVariantList();
@@ -361,7 +368,7 @@ QVariant QPpsObjectPrivate::variantFromPpsAttribute(const QPpsAttribute &attribu
         return variantMapFromPpsAttributeMap(attribute.toMap());
     case QPpsAttribute::None:
     default:
-        qWarning() << "QPpsObjectPrivate::variantFromPpsAttribute: invalid attribute parameter";
+        qWarning("QPpsObjectPrivate::variantFromPpsAttribute: invalid attribute parameter");
         return QVariant();
     }
 }
@@ -378,7 +385,7 @@ QByteArray QPpsObjectPrivate::encode(const QVariantMap &ppsData, bool *ok)
         // The memory will be freed when pps_encoder_cleanup is called.
         rawData = pps_encoder_buffer(&encoder);
         if (!rawData) {
-            qWarning() << "QPpsObjectPrivate::encode: pps_encoder_buffer failed";
+            qWarning("QPpsObjectPrivate::encode: pps_encoder_buffer failed");
             *ok = false;
         }
     }
@@ -390,12 +397,12 @@ QByteArray QPpsObjectPrivate::encode(const QVariantMap &ppsData, bool *ok)
 void QPpsObjectPrivate::encodeData(pps_encoder_t *encoder, const char *name, const QVariant &data,
                                    bool *ok)
 {
-    QString errorFunction;
+    const char *errorFunction;
     pps_encoder_error_t error = PPS_ENCODER_OK;
     switch (data.type()) {
     case QVariant::Bool:
         error = pps_encoder_add_bool(encoder, name, data.toBool());
-        errorFunction = QStringLiteral("pps_encoder_add_bool");
+        errorFunction = "pps_encoder_add_bool";
         break;
     // We want to support encoding uint even though libpps doesn't support it directly.
     // We can't encode uint as an int since that will lose precision (e.g. 2^31+1 can't be
@@ -404,50 +411,50 @@ void QPpsObjectPrivate::encodeData(pps_encoder_t *encoder, const char *name, con
     case QVariant::UInt:
     case QVariant::Double:
         error = pps_encoder_add_double(encoder, name, data.toDouble());
-        errorFunction = QStringLiteral("pps_encoder_add_double");
+        errorFunction = "pps_encoder_add_double";
         break;
     case QVariant::Int:
         error = pps_encoder_add_int(encoder, name, data.toInt());
-        errorFunction = QStringLiteral("pps_encoder_add_int");
+        errorFunction = "pps_encoder_add_int";
         break;
     case QVariant::LongLong:
         error = pps_encoder_add_int64(encoder, name, data.toLongLong());
-        errorFunction = QStringLiteral("pps_encoder_add_int64");
+        errorFunction = "pps_encoder_add_int64";
         break;
     case QVariant::String:
         error = pps_encoder_add_string(encoder, name, data.toString().toUtf8().constData());
-        errorFunction = QStringLiteral("pps_encoder_add_string");
+        errorFunction = "pps_encoder_add_string";
         break;
     case QVariant::List:
         error = pps_encoder_start_array(encoder, name);
-        errorFunction = QStringLiteral("pps_encoder_start_array");
+        errorFunction = "pps_encoder_start_array";
         if (error == PPS_ENCODER_OK) {
             encodeArray(encoder, data.toList(), ok);
             error = pps_encoder_end_array(encoder);
-            errorFunction = QStringLiteral("pps_encoder_end_array");
+            errorFunction = "pps_encoder_end_array";
         }
         break;
     case QVariant::Map:
         error = pps_encoder_start_object(encoder, name);
-        errorFunction = QStringLiteral("pps_encoder_start_object");
+        errorFunction = "pps_encoder_start_object";
         if (error == PPS_ENCODER_OK) {
             encodeObject(encoder, data.toMap(), ok);
             error = pps_encoder_end_object(encoder);
-            errorFunction = QStringLiteral("pps_encoder_end_object");
+            errorFunction = "pps_encoder_end_object";
         }
         break;
     case QVariant::Invalid:
         error = pps_encoder_add_null(encoder, name);
-        errorFunction = QStringLiteral("pps_encoder_add_null");
+        errorFunction = "pps_encoder_add_null";
         break;
     default:
-        qWarning() << "QPpsObjectPrivate::encodeData: the type of the parameter data is invalid";
+        qWarning("QPpsObjectPrivate::encodeData: the type of the parameter data is invalid");
         *ok = false;
         return;
     }
 
     if (error != PPS_ENCODER_OK) {
-        qWarning() << "QPpsObjectPrivate::encodeData: " << errorFunction << " failed";
+        qWarning("QPpsObjectPrivate::encodeData: %s failed", errorFunction);
         *ok = false;
     } else {
         *ok = true;
@@ -485,8 +492,7 @@ void QPpsObjectPrivate::encodeObject(pps_encoder_t *encoder, const QVariantMap &
 ///////////////////////////////////////////////////////////////////////////////
 
 QPpsObject::QPpsObject(const QString &path, QObject *parent)
-    : QObject(parent),
-      d_ptr(new QPpsObjectPrivate(path))
+    : QObject(*new QPpsObjectPrivate(path), parent)
 {
 }
 
@@ -678,7 +684,7 @@ QByteArray QPpsObject::read(bool *ok)
 
     const int maxSize = ppsMaxSize->value;
     if (maxSize == -1) {
-        qWarning() << "QPpsObject::read: maxSize is equal to -1";
+        qWarning("QPpsObject::read: maxSize is equal to -1");
         safeAssign(ok, false);
         return QByteArray();
     }

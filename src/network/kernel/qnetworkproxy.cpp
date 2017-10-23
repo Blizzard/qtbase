@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -76,7 +82,9 @@
 
     \section1 SOCKS5
 
-    The SOCKS5 support in Qt 4 is based on \l{http://www.rfc-editor.org/rfc/rfc1928.txt}{RFC 1928} and \l{http://www.rfc-editor.org/rfc/rfc1929.txt}{RFC 1929}.
+    The SOCKS5 support since Qt 4 is based on
+    \l{http://www.rfc-editor.org/rfc/rfc1928.txt}{RFC 1928} and
+    \l{http://www.rfc-editor.org/rfc/rfc1929.txt}{RFC 1929}.
     The supported authentication methods are no authentication and
     username/password authentication.  Both IPv4 and IPv6 are
     supported. Domain names are resolved through the SOCKS5 server if
@@ -206,15 +214,22 @@
     lookup on a remote host name and connect to it, as opposed to
     requiring the application to perform the name lookup and request
     connection to IP addresses only.
+
+    \value SctpTunnelingCapability Ability to open transparent, tunneled
+    SCTP connections to a remote host.
+
+    \value SctpListeningCapability Ability to create a listening socket
+    and wait for an incoming SCTP connection from a remote host.
 */
 
 #include "qnetworkproxy.h"
 
 #ifndef QT_NO_NETWORKPROXY
 
-#include "private/qnetworkproxy_p.h"
 #include "private/qnetworkrequest_p.h"
+#if QT_CONFIG(socks5)
 #include "private/qsocks5socketengine_p.h"
+#endif
 #include "private/qhttpsocketengine_p.h"
 #include "qauthenticator.h"
 #include "qdebug.h"
@@ -238,17 +253,19 @@ public:
         : mutex(QMutex::Recursive)
         , applicationLevelProxy(0)
         , applicationLevelProxyFactory(0)
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
         , socks5SocketEngineHandler(0)
 #endif
 #ifndef QT_NO_HTTP
         , httpSocketEngineHandler(0)
 #endif
-    {
 #ifdef QT_USE_SYSTEM_PROXIES
-        setApplicationProxyFactory(new QSystemConfigurationProxyFactory);
+        , useSystemProxies(true)
+#else
+        , useSystemProxies(false)
 #endif
-#ifndef QT_NO_SOCKS5
+    {
+#if QT_CONFIG(socks5)
         socks5SocketEngineHandler = new QSocks5SocketEngineHandler();
 #endif
 #ifndef QT_NO_HTTP
@@ -260,12 +277,30 @@ public:
     {
         delete applicationLevelProxy;
         delete applicationLevelProxyFactory;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
         delete socks5SocketEngineHandler;
 #endif
 #ifndef QT_NO_HTTP
         delete httpSocketEngineHandler;
 #endif
+    }
+
+    bool usesSystemConfiguration() const
+    {
+        return useSystemProxies;
+    }
+
+    void setUseSystemConfiguration(bool enable)
+    {
+        QMutexLocker lock(&mutex);
+        useSystemProxies = enable;
+
+        if (useSystemProxies) {
+            if (applicationLevelProxy)
+                *applicationLevelProxy = QNetworkProxy();
+            delete applicationLevelProxyFactory;
+            applicationLevelProxyFactory = nullptr;
+        }
     }
 
     void setApplicationProxy(const QNetworkProxy &proxy)
@@ -276,6 +311,7 @@ public:
         *applicationLevelProxy = proxy;
         delete applicationLevelProxyFactory;
         applicationLevelProxyFactory = 0;
+        useSystemProxies = false;
     }
 
     void setApplicationProxyFactory(QNetworkProxyFactory *factory)
@@ -287,11 +323,12 @@ public:
             *applicationLevelProxy = QNetworkProxy();
         delete applicationLevelProxyFactory;
         applicationLevelProxyFactory = factory;
+        useSystemProxies = false;
     }
 
     QNetworkProxy applicationProxy()
     {
-        return proxyForQuery(QNetworkProxyQuery()).first();
+        return proxyForQuery(QNetworkProxyQuery()).constFirst();
     }
 
     QList<QNetworkProxy> proxyForQuery(const QNetworkProxyQuery &query);
@@ -300,12 +337,13 @@ private:
     QMutex mutex;
     QNetworkProxy *applicationLevelProxy;
     QNetworkProxyFactory *applicationLevelProxyFactory;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
     QSocks5SocketEngineHandler *socks5SocketEngineHandler;
 #endif
 #ifndef QT_NO_HTTP
     QHttpSocketEngineHandler *httpSocketEngineHandler;
 #endif
+    bool useSystemProxies;
 };
 
 QList<QNetworkProxy> QGlobalNetworkProxy::proxyForQuery(const QNetworkProxyQuery &query)
@@ -327,10 +365,19 @@ QList<QNetworkProxy> QGlobalNetworkProxy::proxyForQuery(const QNetworkProxyQuery
 
     if (!applicationLevelProxyFactory) {
         if (applicationLevelProxy
-            && applicationLevelProxy->type() != QNetworkProxy::DefaultProxy)
+            && applicationLevelProxy->type() != QNetworkProxy::DefaultProxy) {
             result << *applicationLevelProxy;
-        else
+        } else if (useSystemProxies) {
+            result = QNetworkProxyFactory::systemProxyForQuery(query);
+
+            // Make sure NoProxy is in the list, so that QTcpServer can work:
+            // it searches for the first proxy that can has the ListeningCapability capability
+            // if none have (as is the case with HTTP proxies), it fails to bind.
+            // NoProxy allows it to fallback to the 'no proxy' case and bind.
             result << QNetworkProxy(QNetworkProxy::NoProxy);
+        } else {
+            result << QNetworkProxy(QNetworkProxy::NoProxy);
+        }
         return result;
     }
 
@@ -363,7 +410,9 @@ static QNetworkProxy::Capabilities defaultCapabilitiesForType(QNetworkProxy::Pro
         /* [QNetworkProxy::DefaultProxy] = */
         (int(QNetworkProxy::ListeningCapability) |
          int(QNetworkProxy::TunnelingCapability) |
-         int(QNetworkProxy::UdpTunnelingCapability)),
+         int(QNetworkProxy::UdpTunnelingCapability) |
+         int(QNetworkProxy::SctpTunnelingCapability) |
+         int(QNetworkProxy::SctpListeningCapability)),
         /* [QNetworkProxy::Socks5Proxy] = */
         (int(QNetworkProxy::TunnelingCapability) |
          int(QNetworkProxy::ListeningCapability) |
@@ -373,7 +422,9 @@ static QNetworkProxy::Capabilities defaultCapabilitiesForType(QNetworkProxy::Pro
         /* [QNetworkProxy::NoProxy] = */
         (int(QNetworkProxy::ListeningCapability) |
          int(QNetworkProxy::TunnelingCapability) |
-         int(QNetworkProxy::UdpTunnelingCapability)),
+         int(QNetworkProxy::UdpTunnelingCapability) |
+         int(QNetworkProxy::SctpTunnelingCapability) |
+         int(QNetworkProxy::SctpListeningCapability)),
         /* [QNetworkProxy::HttpProxy] = */
         (int(QNetworkProxy::TunnelingCapability) |
          int(QNetworkProxy::CachingCapability) |
@@ -701,7 +752,8 @@ quint16 QNetworkProxy::port() const
 
     Setting a default proxy value with this function will override the
     application proxy factory set with
-    QNetworkProxyFactory::setApplicationProxyFactory.
+    QNetworkProxyFactory::setApplicationProxyFactory, and disable the
+    use of a system proxy.
 
     \sa QNetworkProxyFactory, applicationProxy(), QAbstractSocket::setProxy(), QTcpServer::setProxy()
 */
@@ -960,6 +1012,14 @@ template<> void QSharedDataPointer<QNetworkProxyQueryPrivate>::detach()
          characteristics of the socket. The URL component is not used.
 
     \row
+      \li SctpSocket
+      \li Message-oriented sockets requesting a connection to a remote
+         server. The peer hostname and peer port match the values passed
+         to QSctpSocket::connectToHost(). The local port is usually -1,
+         indicating the socket has no preference in which port should be
+         used. The URL component is not used.
+
+    \row
       \li TcpServer
       \li Passive server sockets that listen on a port and await
          incoming connections from the network. Normally, only the
@@ -975,6 +1035,14 @@ template<> void QSharedDataPointer<QNetworkProxyQueryPrivate>::detach()
          indicate that more detailed information is present in the URL
          component. For ease of implementation, the URL's host and
          port are set as the destination address.
+
+    \row
+      \li SctpServer
+      \li Passive server sockets that listen on an SCTP port and await
+         incoming connections from the network. Normally, only the
+         local port is used, but the remote address could be used in
+         specific circumstances, for example to indicate which remote
+         host a connection is expected from. The URL component is not used.
     \endtable
 
     It should be noted that any of the criteria may be missing or
@@ -995,10 +1063,13 @@ template<> void QSharedDataPointer<QNetworkProxyQueryPrivate>::detach()
     \value TcpSocket    a normal, outgoing TCP socket
     \value UdpSocket    a datagram-based UDP socket, which could send
                         to multiple destinations
+    \value SctpSocket   a message-oriented, outgoing SCTP socket
     \value TcpServer    a TCP server that listens for incoming
                         connections from the network
     \value UrlRequest   a more complex request which involves loading
                         of a URL
+    \value SctpServer   an SCTP server that listens for incoming
+                        connections from the network
 
     \sa queryType(), setQueryType()
 */
@@ -1430,6 +1501,17 @@ QNetworkProxyFactory::~QNetworkProxyFactory()
 {
 }
 
+/*!
+    \since 5.8
+
+    Returns whether the use of platform-specific proxy settings are enabled.
+*/
+bool QNetworkProxyFactory::usesSystemConfiguration()
+{
+    if (globalNetworkProxy())
+        return globalNetworkProxy()->usesSystemConfiguration();
+    return false;
+}
 
 /*!
     \since 4.6
@@ -1437,23 +1519,16 @@ QNetworkProxyFactory::~QNetworkProxyFactory()
     Enables the use of the platform-specific proxy settings, and only those.
     See systemProxyForQuery() for more information.
 
-    Internally, this method (when called with \a enable set to true)
-    sets an application-wide proxy factory. For this reason, this method
-    is mutually exclusive with setApplicationProxyFactory(): calling
-    setApplicationProxyFactory() overrides the use of the system-wide proxy,
-    and calling setUseSystemConfiguration() overrides any
-    application proxy or proxy factory that was previously set.
+    Calling this function with \a enable set to \c true resets any proxy
+    or QNetworkProxyFactory that is already set.
 
     \note See the systemProxyForQuery() documentation for a list of
     limitations related to the use of system proxies.
 */
 void QNetworkProxyFactory::setUseSystemConfiguration(bool enable)
 {
-    if (enable) {
-        setApplicationProxyFactory(new QSystemConfigurationProxyFactory);
-    } else {
-        setApplicationProxyFactory(0);
-    }
+    if (globalNetworkProxy())
+        globalNetworkProxy()->setUseSystemConfiguration(enable);
 }
 
 /*!
@@ -1469,7 +1544,7 @@ void QNetworkProxyFactory::setUseSystemConfiguration(bool enable)
 
     If you set a proxy factory with this function, any application
     level proxies set with QNetworkProxy::setApplicationProxy will be
-    overridden.
+    overridden, and usesSystemConfiguration() will return \c{false}.
 
     \sa QNetworkProxy::setApplicationProxy(),
         QAbstractSocket::proxy(), QAbstractSocket::setProxy()
@@ -1530,12 +1605,6 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
     SOCKS server for all queries. If SOCKS isn't enabled, it will use
     the HTTPS proxy for all TcpSocket and UrlRequest queries.
 
-    On BlackBerry, this function obtains proxy settings for the default
-    configuration using system configuration. The type will be set based on
-    protocol tag "http", "https", "ftp", respectively. By default, it
-    assumes http type. Proxy username and password are also set during
-    the query using system configuration.
-
     On other systems, this function will pick up proxy settings from
     the "http_proxy" environment variable. This variable must be a URL
     using one of the following schemes: "http", "socks5" or "socks5h".
@@ -1552,10 +1621,6 @@ void QNetworkProxyFactory::setApplicationProxyFactory(QNetworkProxyFactory *fact
 
     \li On Windows platforms, this function may take several seconds to
     execute depending on the configuration of the user's system.
-
-    \li On BlackBerry, only UrlRequest and TcpSocket queries are supported. SOCKS is
-    not supported. The proxy credentials are only retrieved for the
-    default configuration.
     \endlist
 */
 
@@ -1573,10 +1638,6 @@ QList<QNetworkProxy> QNetworkProxyFactory::proxyForQuery(const QNetworkProxyQuer
 }
 
 #ifndef QT_NO_DEBUG_STREAM
-/*!
-    \since 5.0
-    Outputs a QNetworkProxy details to a debug stream
-*/
 QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
 {
     QDebugStateSaver saver(debug);
@@ -1618,7 +1679,26 @@ QDebug operator<<(QDebug debug, const QNetworkProxy &proxy)
         scaps << QStringLiteral("Caching");
     if (caps & QNetworkProxy::HostNameLookupCapability)
         scaps << QStringLiteral("NameLookup");
+    if (caps & QNetworkProxy::SctpTunnelingCapability)
+        scaps << QStringLiteral("SctpTunnel");
+    if (caps & QNetworkProxy::SctpListeningCapability)
+        scaps << QStringLiteral("SctpListen");
     debug << '[' << scaps.join(QLatin1Char(' ')) << ']';
+    return debug;
+}
+
+QDebug operator<<(QDebug debug, const QNetworkProxyQuery &proxyQuery)
+{
+    QDebugStateSaver saver(debug);
+    debug.resetFormat().nospace()
+        << "ProxyQuery("
+        << "type: " << proxyQuery.queryType()
+        << ", protocol: " << proxyQuery.protocolTag()
+        << ", peerPort: " << proxyQuery.peerPort()
+        << ", peerHostName: " << proxyQuery.peerHostName()
+        << ", localPort: " << proxyQuery.localPort()
+        << ", url: " << proxyQuery.url()
+        << ')';
     return debug;
 }
 #endif

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,6 +35,12 @@
 #include <qdir.h>
 #include <stdlib.h>
 #include <time.h>
+
+#ifdef Q_OS_WIN
+#define NULL_DEVICE "NUL"
+#else
+#define NULL_DEVICE "/dev/null"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -284,13 +285,16 @@ void MingwMakefileGenerator::writeLibsPart(QTextStream &t)
 
 void MingwMakefileGenerator::writeObjectsPart(QTextStream &t)
 {
-    if (project->values("OBJECTS").count() < var("QMAKE_LINK_OBJECT_MAX").toInt()) {
+    const ProString &objmax = project->first("QMAKE_LINK_OBJECT_MAX");
+    if (objmax.isEmpty() || project->values("OBJECTS").count() < objmax.toInt()) {
         objectsLinkLine = "$(OBJECTS)";
     } else if (project->isActiveConfig("staticlib") && project->first("TEMPLATE") == "lib") {
         QString ar_script_file = var("QMAKE_LINK_OBJECT_SCRIPT") + "." + var("TARGET");
         if (!var("BUILD_NAME").isEmpty()) {
             ar_script_file += "." + var("BUILD_NAME");
         }
+        if (!var("MAKEFILE").isEmpty())
+            ar_script_file += "." + var("MAKEFILE");
         // QMAKE_LIB is used for win32, including mingw, whereas QMAKE_AR is used on Unix.
         // Strip off any options since the ar commands will be read from file.
         QString ar_cmd = var("QMAKE_LIB").section(" ", 0, 0);
@@ -303,6 +307,8 @@ void MingwMakefileGenerator::writeObjectsPart(QTextStream &t)
         if (!var("BUILD_NAME").isEmpty()) {
             ld_script_file += "." + var("BUILD_NAME");
         }
+        if (!var("MAKEFILE").isEmpty())
+            ld_script_file += "." + var("MAKEFILE");
         createLdObjectScriptFile(ld_script_file, project->values("OBJECTS"));
         objectsLinkLine = escapeFilePath(ld_script_file);
     }
@@ -315,15 +321,21 @@ void MingwMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     t << "all: " << escapeDependencyPath(fileFixify(Option::output.fileName()))
       << ' ' << depVar("ALL_DEPS") << " $(DESTDIR_TARGET)\n\n";
     t << "$(DESTDIR_TARGET): " << depVar("PRE_TARGETDEPS") << " $(OBJECTS) " << depVar("POST_TARGETDEPS");
+    if (project->first("TEMPLATE") == "aux") {
+        t << "\n\n";
+        return;
+    }
+
     if(!project->isEmpty("QMAKE_PRE_LINK"))
         t << "\n\t" <<var("QMAKE_PRE_LINK");
     if(project->isActiveConfig("staticlib") && project->first("TEMPLATE") == "lib") {
+        t << "\n\t-$(DEL_FILE) $(DESTDIR_TARGET) 2>" NULL_DEVICE;
         if (project->values("OBJECTS").count() < var("QMAKE_LINK_OBJECT_MAX").toInt()) {
             t << "\n\t$(LIB) $(DESTDIR_TARGET) " << objectsLinkLine << " " ;
         } else {
             t << "\n\t" << objectsLinkLine << " " ;
         }
-    } else if (project->first("TEMPLATE") != "aux") {
+    } else {
         t << "\n\t$(LINKER) $(LFLAGS) " << var("QMAKE_LINK_O_FLAG") << "$(DESTDIR_TARGET) " << objectsLinkLine << "  $(LIBS)";
     }
     if(!project->isEmpty("QMAKE_POST_LINK"))

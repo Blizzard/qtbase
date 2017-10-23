@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -39,7 +42,6 @@
 #include <private/qeventdispatcher_winrt_p.h>
 
 #include <EGL/egl.h>
-#define EGL_EGLEXT_PROTOTYPES
 #include <EGL/eglext.h>
 
 #include <qfunctions_winrt.h>
@@ -48,7 +50,7 @@
 #include <QtGui/QGuiApplication>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QWindow>
-#include <QtPlatformSupport/private/qeglconvenience_p.h>
+#include <QtEglSupport/private/qeglconvenience_p.h>
 
 #include <functional>
 #include <wrl.h>
@@ -189,6 +191,11 @@ QWinRTWindow::~QWinRTWindow()
     });
     RETURN_VOID_IF_FAILED("Failed to completely destroy window resources, likely because the application is shutting down");
 
+    if (d->screen->mouseGrabWindow() == this)
+        d->screen->setMouseGrabWindow(this, false);
+    if (d->screen->keyboardGrabWindow() == this)
+        d->screen->setKeyboardGrabWindow(this, false);
+
     d->screen->removeWindow(window());
 
     if (!d->surface)
@@ -198,7 +205,7 @@ QWinRTWindow::~QWinRTWindow()
 
     EGLBoolean value = eglDestroySurface(d->display, d->surface);
     d->surface = EGL_NO_SURFACE;
-    if (value == EGL_FALSE)
+    if (Q_UNLIKELY(value == EGL_FALSE))
         qCritical("Failed to destroy EGL window surface: 0x%x", eglGetError());
 }
 
@@ -324,7 +331,6 @@ void QWinRTWindow::setWindowState(Qt::WindowState state)
     if (d->state == state)
         return;
 
-#if _MSC_VER >= 1900
     if (state == Qt::WindowFullScreen) {
         HRESULT hr;
         boolean success;
@@ -371,7 +377,6 @@ void QWinRTWindow::setWindowState(Qt::WindowState state)
             return;
         }
     }
-#endif // _MSC_VER >= 1900
 
     if (state == Qt::WindowMinimized)
         setUIElementVisibility(d->uiElement.Get(), false);
@@ -380,6 +385,24 @@ void QWinRTWindow::setWindowState(Qt::WindowState state)
         setUIElementVisibility(d->uiElement.Get(), true);
 
     d->state = state;
+}
+
+bool QWinRTWindow::setMouseGrabEnabled(bool grab)
+{
+    Q_D(QWinRTWindow);
+    if (!isActive() && grab) {
+        qWarning("%s: Not setting mouse grab for invisible window %s/'%s'",
+                 __FUNCTION__, window()->metaObject()->className(),
+                 qPrintable(window()->objectName()));
+        return false;
+    }
+    return d->screen->setMouseGrabWindow(this, grab);
+}
+
+bool QWinRTWindow::setKeyboardGrabEnabled(bool grab)
+{
+    Q_D(QWinRTWindow);
+    return d->screen->setKeyboardGrabWindow(this, grab);
 }
 
 EGLSurface QWinRTWindow::eglSurface() const
@@ -397,7 +420,7 @@ void QWinRTWindow::createEglSurface(EGLDisplay display, EGLConfig config)
             d->surface = eglCreateWindowSurface(display, config,
                                                 reinterpret_cast<EGLNativeWindowType>(winId()),
                                                 nullptr);
-            if (d->surface == EGL_NO_SURFACE)
+            if (Q_UNLIKELY(d->surface == EGL_NO_SURFACE))
                 qCritical("Failed to create EGL window surface: 0x%x", eglGetError());
             return S_OK;
         });

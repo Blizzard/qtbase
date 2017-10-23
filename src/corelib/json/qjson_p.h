@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -115,6 +122,7 @@ QT_BEGIN_NAMESPACE
     Other measurements have shown a slightly bigger binary size than a compact text
     representation where all possible whitespace was stripped out.
 */
+#define Q_DECLARE_JSONPRIVATE_TYPEINFO(Class, Flags) } Q_DECLARE_TYPEINFO(QJsonPrivate::Class, Flags); namespace QJsonPrivate {
 namespace QJsonPrivate {
 
 class Array;
@@ -141,6 +149,14 @@ public:
     bool operator >=(T i) { return qFromLittleEndian(val) >= i; }
     q_littleendian &operator +=(T i) {
         val = qToLittleEndian(qFromLittleEndian(val) + i);
+        return *this;
+    }
+    q_littleendian &operator |=(T i) {
+        val = qToLittleEndian(qFromLittleEndian(val) | i);
+        return *this;
+    }
+    q_littleendian &operator &=(T i) {
+        val = qToLittleEndian(qFromLittleEndian(val) & i);
         return *this;
     }
 };
@@ -197,6 +213,14 @@ public:
         *this = (uint(*this) - i);
         return *this;
     }
+    qle_bitfield &operator |=(uint i) {
+        *this = (uint(*this) | i);
+        return *this;
+    }
+    qle_bitfield &operator &=(uint i) {
+        *this = (uint(*this) & i);
+        return *this;
+    }
 };
 
 template<int pos, int width>
@@ -219,7 +243,7 @@ public:
         uint i = qFromLittleEndian(val);
         i <<= 32 - width - pos;
         int t = (int) i;
-        t >>= pos;
+        t >>= 32 - width;
         return t;
     }
     bool operator !() const {
@@ -299,14 +323,21 @@ class Latin1String;
 class String
 {
 public:
-    String(const char *data) { d = (Data *)data; }
+    explicit String(const char *data) { d = (Data *)data; }
 
     struct Data {
-        qle_int length;
+        qle_uint length;
         qle_ushort utf16[1];
     };
 
     Data *d;
+
+    int byteSize() const { return sizeof(uint) + sizeof(ushort) * d->length; }
+    bool isValid(int maxSize) const {
+        // Check byteSize() <= maxSize, avoiding integer overflow
+        maxSize -= sizeof(uint);
+        return maxSize >= 0 && uint(d->length) <= maxSize / sizeof(ushort);
+    }
 
     inline String &operator=(const QString &str)
     {
@@ -373,13 +404,18 @@ public:
 class Latin1String
 {
 public:
-    Latin1String(const char *data) { d = (Data *)data; }
+    explicit Latin1String(const char *data) { d = (Data *)data; }
 
     struct Data {
-        qle_short length;
+        qle_ushort length;
         char latin1[1];
     };
     Data *d;
+
+    int byteSize() const { return sizeof(ushort) + sizeof(char)*(d->length); }
+    bool isValid(int maxSize) const {
+        return byteSize() <= maxSize;
+    }
 
     inline Latin1String &operator=(const QString &str)
     {
@@ -388,7 +424,7 @@ public:
         const ushort *uc = (const ushort *)str.unicode();
         int i = 0;
 #ifdef __SSE2__
-        for ( ; i + 16 < len; i += 16) {
+        for ( ; i + 16 <= len; i += 16) {
             __m128i chunk1 = _mm_loadu_si128((__m128i*)&uc[i]); // load
             __m128i chunk2 = _mm_loadu_si128((__m128i*)&uc[i + 8]); // load
             // pack the two vector to 16 x 8bits elements
@@ -397,7 +433,7 @@ public:
         }
 #  ifdef Q_PROCESSOR_X86_64
         // we can do one more round, of 8 characters
-        if (i + 8 < len) {
+        if (i + 8 <= len) {
             __m128i chunk = _mm_loadu_si128((__m128i*)&uc[i]); // load
             // pack with itself, we'll discard the high part anyway
             chunk = _mm_packus_epi16(chunk, chunk);
@@ -414,26 +450,10 @@ public:
         return *this;
     }
 
-    inline bool operator ==(const QString &str) const {
-        return QLatin1String(d->latin1, d->length) == str;
-    }
-    inline bool operator !=(const QString &str) const {
-        return !operator ==(str);
-    }
-    inline bool operator >=(const QString &str) const {
-        return QLatin1String(d->latin1, d->length) >= str;
+    QLatin1String toQLatin1String() const Q_DECL_NOTHROW {
+        return QLatin1String(d->latin1, d->length);
     }
 
-    inline bool operator ==(const Latin1String &str) const {
-        return d->length == str.d->length && !strcmp(d->latin1, str.d->latin1);
-    }
-    inline bool operator >=(const Latin1String &str) const {
-        int l = qMin(d->length, str.d->length);
-        int val = strncmp(d->latin1, str.d->latin1, l);
-        if (!val)
-            val = d->length - str.d->length;
-        return val >= 0;
-    }
     inline bool operator<(const String &str) const
     {
         const qle_ushort *uc = (qle_ushort *) str.d->utf16;
@@ -463,6 +483,36 @@ public:
         return QString::fromLatin1(d->latin1, d->length);
     }
 };
+
+#define DEF_OP(op) \
+    inline bool operator op(Latin1String lhs, Latin1String rhs) Q_DECL_NOTHROW \
+    { \
+        return lhs.toQLatin1String() op rhs.toQLatin1String(); \
+    } \
+    inline bool operator op(QLatin1String lhs, Latin1String rhs) Q_DECL_NOTHROW \
+    { \
+        return lhs op rhs.toQLatin1String(); \
+    } \
+    inline bool operator op(Latin1String lhs, QLatin1String rhs) Q_DECL_NOTHROW \
+    { \
+        return lhs.toQLatin1String() op rhs; \
+    } \
+    inline bool operator op(const QString &lhs, Latin1String rhs) Q_DECL_NOTHROW \
+    { \
+        return lhs op rhs.toQLatin1String(); \
+    } \
+    inline bool operator op(Latin1String lhs, const QString &rhs) Q_DECL_NOTHROW \
+    { \
+        return lhs.toQLatin1String() op rhs; \
+    } \
+    /*end*/
+DEF_OP(==)
+DEF_OP(!=)
+DEF_OP(< )
+DEF_OP(> )
+DEF_OP(<=)
+DEF_OP(>=)
+#undef DEF_OP
 
 inline bool String::operator ==(const Latin1String &str) const
 {
@@ -565,9 +615,10 @@ public:
     Entry *entryAt(int i) const {
         return reinterpret_cast<Entry *>(((char *)this) + table()[i]);
     }
-    int indexOf(const QString &key, bool *exists);
+    int indexOf(const QString &key, bool *exists) const;
+    int indexOf(QLatin1String key, bool *exists) const;
 
-    bool isValid() const;
+    bool isValid(int maxSize) const;
 };
 
 
@@ -577,7 +628,7 @@ public:
     inline Value at(int i) const;
     inline Value &operator [](int i);
 
-    bool isValid() const;
+    bool isValid(int maxSize) const;
 };
 
 
@@ -612,6 +663,7 @@ public:
     static uint valueToStore(const QJsonValue &v, uint offset);
     static void copyData(const QJsonValue &v, char *dest, bool compressed);
 };
+Q_DECLARE_JSONPRIVATE_TYPEINFO(Value, Q_PRIMITIVE_TYPE)
 
 inline Value Array::at(int i) const
 {
@@ -631,12 +683,12 @@ public:
     // key
     // value data follows key
 
-    int size() const {
+    uint size() const {
         int s = sizeof(Entry);
         if (value.latinKey)
-            s += sizeof(ushort) + qFromLittleEndian(*(ushort *) ((const char *)this + sizeof(Entry)));
+            s += shallowLatin1Key().byteSize();
         else
-            s += sizeof(uint) + sizeof(ushort)*qFromLittleEndian(*(int *) ((const char *)this + sizeof(Entry)));
+            s += shallowKey().byteSize();
         return alignedSize(s);
     }
 
@@ -662,15 +714,26 @@ public:
         return shallowKey().toString();
     }
 
+    bool isValid(int maxSize) const {
+        if (maxSize < (int)sizeof(Entry))
+            return false;
+        maxSize -= sizeof(Entry);
+        if (value.latinKey)
+            return shallowLatin1Key().isValid(maxSize);
+        return shallowKey().isValid(maxSize);
+    }
+
     bool operator ==(const QString &key) const;
     inline bool operator !=(const QString &key) const { return !operator ==(key); }
     inline bool operator >=(const QString &key) const;
 
+    bool operator==(QLatin1String key) const;
+    inline bool operator!=(QLatin1String key) const { return !operator ==(key); }
+    inline bool operator>=(QLatin1String key) const;
+
     bool operator ==(const Entry &other) const;
     bool operator >=(const Entry &other) const;
 };
-
-inline bool operator!=(const Entry &lhs, const Entry &rhs) { return !(lhs == rhs); }
 
 inline bool Entry::operator >=(const QString &key) const
 {
@@ -680,7 +743,18 @@ inline bool Entry::operator >=(const QString &key) const
         return (shallowKey() >= key);
 }
 
+inline bool Entry::operator >=(QLatin1String key) const
+{
+    if (value.latinKey)
+        return shallowLatin1Key() >= key;
+    else
+        return shallowKey() >= key;
+}
+
 inline bool operator <(const QString &key, const Entry &e)
+{ return e >= key; }
+
+inline bool operator<(QLatin1String key, const Entry &e)
 { return e >= key; }
 
 

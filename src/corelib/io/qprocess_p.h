@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,9 +55,12 @@
 #include "QtCore/qprocess.h"
 #include "QtCore/qstringlist.h"
 #include "QtCore/qhash.h"
+#include "QtCore/qmap.h"
 #include "QtCore/qshareddata.h"
-#include "private/qringbuffer_p.h"
 #include "private/qiodevice_p.h"
+
+QT_REQUIRE_CONFIG(processenvironment);
+
 #ifdef Q_OS_UNIX
 #include <QtCore/private/qorderedmutexlocker_p.h>
 #endif
@@ -63,8 +73,6 @@ typedef HANDLE Q_PIPE;
 typedef int Q_PIPE;
 #define INVALID_Q_PIPE -1
 #endif
-
-#ifndef QT_NO_PROCESS
 
 QT_BEGIN_NAMESPACE
 
@@ -83,22 +91,19 @@ public:
     QProcEnvKey(const QProcEnvKey &other) : QString(other) {}
     bool operator==(const QProcEnvKey &other) const { return !compare(other, Qt::CaseInsensitive); }
 };
-inline uint qHash(const QProcEnvKey &key) { return qHash(key.toCaseFolded()); }
+
+inline bool operator<(const QProcEnvKey &a, const QProcEnvKey &b)
+{
+    // On windows use case-insensitive ordering because that is how Windows needs the environment
+    // block sorted (https://msdn.microsoft.com/en-us/library/windows/desktop/ms682009(v=vs.85).aspx)
+    return a.compare(b, Qt::CaseInsensitive) < 0;
+}
+
+Q_DECLARE_TYPEINFO(QProcEnvKey, Q_MOVABLE_TYPE);
 
 typedef QString QProcEnvValue;
 #else
-class QProcEnvKey
-{
-public:
-    QProcEnvKey() : hash(0) {}
-    explicit QProcEnvKey(const QByteArray &other) : key(other), hash(qHash(key)) {}
-    QProcEnvKey(const QProcEnvKey &other) { *this = other; }
-    bool operator==(const QProcEnvKey &other) const { return key == other.key; }
-
-    QByteArray key;
-    uint hash;
-};
-inline uint qHash(const QProcEnvKey &key) Q_DECL_NOTHROW { return key.hash; }
+using QProcEnvKey = QByteArray;
 
 class QProcEnvValue
 {
@@ -131,7 +136,6 @@ public:
 };
 Q_DECLARE_TYPEINFO(QProcEnvValue, Q_MOVABLE_TYPE);
 #endif
-Q_DECLARE_TYPEINFO(QProcEnvKey, Q_MOVABLE_TYPE);
 
 class QProcessEnvironmentPrivate: public QSharedData
 {
@@ -154,13 +158,13 @@ public:
     inline Key prepareName(const QString &name) const
     {
         Key &ent = nameMap[name];
-        if (ent.key.isEmpty())
-            ent = Key(name.toLocal8Bit());
+        if (ent.isEmpty())
+            ent = name.toLocal8Bit();
         return ent;
     }
     inline QString nameToString(const Key &name) const
     {
-        const QString sname = QString::fromLocal8Bit(name.key);
+        const QString sname = QString::fromLocal8Bit(name);
         nameMap[sname] = name;
         return sname;
     }
@@ -190,17 +194,17 @@ public:
         // do not need a lock, as they detach objects (however, we need to
         // ensure that they really detach before using prepareName()).
         MutexLocker locker(&other);
-        hash = other.hash;
+        vars = other.vars;
         nameMap = other.nameMap;
         // We need to detach our members, so that our mutex can protect them.
         // As we are being detached, they likely would be detached a moment later anyway.
-        hash.detach();
+        vars.detach();
         nameMap.detach();
     }
 #endif
 
-    typedef QHash<Key, Value> Hash;
-    Hash hash;
+    using Map = QMap<Key, Value>;
+    Map vars;
 
 #ifdef Q_OS_UNIX
     typedef QHash<QString, Key> NameHash;
@@ -226,6 +230,8 @@ template<> Q_INLINE_TEMPLATE void QSharedDataPointer<QProcessEnvironmentPrivate>
         delete d;
     d = x;
 }
+
+#if QT_CONFIG(process)
 
 class QProcessPrivate : public QIODevicePrivate
 {
@@ -283,7 +289,6 @@ public:
             QWindowsPipeWriter *writer;
         };
 #endif
-        QRingBuffer buffer;
         Q_PIPE pipe[2];
 
         unsigned type : 2;
@@ -301,7 +306,6 @@ public:
     bool _q_startupNotification();
     bool _q_processDied();
 
-    QProcess::ProcessChannel processChannel;
     QProcess::ProcessChannelMode processChannelMode;
     QProcess::InputChannelMode inputChannelMode;
     QProcess::ProcessError processError;
@@ -326,6 +330,7 @@ public:
     QStringList arguments;
 #if defined(Q_OS_WIN)
     QString nativeArguments;
+    QProcess::CreateProcessArgumentModifier modifyCreateProcessArgs;
 #endif
     QProcessEnvironment environment;
 
@@ -371,7 +376,6 @@ public:
     bool waitForReadyRead(int msecs = 30000);
     bool waitForBytesWritten(int msecs = 30000);
     bool waitForFinished(int msecs = 30000);
-    bool waitForWrite(int msecs = 30000);
 
     qint64 bytesAvailableInChannel(const Channel *channel) const;
     qint64 readFromChannel(const Channel *channel, char *data, qint64 maxlen);
@@ -380,15 +384,10 @@ public:
     void cleanup();
     void setError(QProcess::ProcessError error, const QString &description = QString());
     void setErrorAndEmit(QProcess::ProcessError error, const QString &description = QString());
-
-#ifdef Q_OS_BLACKBERRY
-    QList<QSocketNotifier *> defaultNotifiers() const;
-#endif // Q_OS_BLACKBERRY
-
 };
 
-QT_END_NAMESPACE
+#endif // QT_CONFIG(process)
 
-#endif // QT_NO_PROCESS
+QT_END_NAMESPACE
 
 #endif // QPROCESS_P_H

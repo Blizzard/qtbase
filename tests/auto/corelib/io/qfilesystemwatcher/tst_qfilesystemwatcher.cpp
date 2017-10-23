@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -78,6 +73,8 @@ private slots:
 
     void signalsEmittedAfterFileMoved();
 
+    void watchUnicodeCharacters();
+
 private:
     QString m_tempDirPattern;
 #endif // QT_NO_FILESYSTEMWATCHER
@@ -92,7 +89,7 @@ tst_QFileSystemWatcher::tst_QFileSystemWatcher()
     m_tempDirPattern += QStringLiteral("tst_qfilesystemwatcherXXXXXX");
 #endif // QT_NO_FILESYSTEMWATCHER
 
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_NO_SDK)
+#if defined(Q_OS_ANDROID)
     QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 #endif
 }
@@ -151,12 +148,7 @@ void tst_QFileSystemWatcher::basicTest()
     // resolution of the modification time is system dependent, but it's at most 1 second when using
     // the polling engine. I've heard rumors that FAT32 has a 2 second resolution. So, we have to
     // wait a bit before we can modify the file (hrmph)...
-#ifndef Q_OS_WINCE
     QTest::qWait(2000);
-#else
-    // WinCE is always a little bit slower. Give it a little bit more time
-    QTest::qWait(5000);
-#endif
 
     testFile.open(QIODevice::WriteOnly | QIODevice::Append);
     testFile.write(QByteArray("world"));
@@ -314,9 +306,6 @@ void tst_QFileSystemWatcher::watchDirectory()
     QVERIFY(temporaryDir.rmdir(testDirName));
 
     // waiting max 5 seconds for notification for directory removal to trigger
-#ifdef Q_OS_WINCE
-    QEXPECT_FAIL("poller", "Directory does not get updated on file removal(See #137910)", Abort);
-#endif
     QTRY_COMPARE(changedSpy.count(), 2);
     QCOMPARE(changedSpy.at(0).count(), 1);
     QCOMPARE(changedSpy.at(1).count(), 1);
@@ -558,9 +547,6 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
         QEXPECT_FAIL("", "See QTBUG-30943", Continue);
 #endif
     QCOMPARE(fileChangedSpyCount, 0);
-#ifdef Q_OS_WINCE
-    QEXPECT_FAIL("poller", "Directory does not get updated on file removal(See #137910)", Abort);
-#endif
     QCOMPARE(dirChangedSpy.count(), 1);
 
     dirChangedSpy.clear();
@@ -581,6 +567,10 @@ void tst_QFileSystemWatcher::watchFileAndItsDirectory()
     eventLoop.exec();
     QCOMPARE(fileChangedSpy.count(), 0);
     QCOMPARE(dirChangedSpy.count(), 1);
+
+    // QTBUG-61792, removal should succeed (bug on Windows which uses one change
+    // notification per directory).
+    QVERIFY(watcher.removePath(testDir.absolutePath()));
 
     QVERIFY(temporaryDir.rmdir(testDirName));
 }
@@ -731,9 +721,10 @@ void tst_QFileSystemWatcher::signalsEmittedAfterFileMoved()
     QString movePath = testDir.filePath("movehere");
 
     for (int i = 0; i < fileCount; ++i) {
-        QFile f(testDir.filePath(QString("test%1.txt").arg(i)));
+        const QByteArray iB = QByteArray::number(i);
+        QFile f(testDir.filePath(QLatin1String("test") + QString::fromLatin1(iB) + QLatin1String(".txt")));
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QByteArray("i am ") + QByteArray::number(i));
+        f.write(QByteArray("i am ") + iB);
         f.close();
     }
 
@@ -762,6 +753,25 @@ void tst_QFileSystemWatcher::signalsEmittedAfterFileMoved()
     QCoreApplication::processEvents();
     QVERIFY2(changedSpy.count() <= fileCount, changedSpy.receivedFilesMessage());
     QTRY_COMPARE(changedSpy.count(), fileCount);
+}
+
+void tst_QFileSystemWatcher::watchUnicodeCharacters()
+{
+    QTemporaryDir temporaryDirectory(m_tempDirPattern);
+    QVERIFY2(temporaryDirectory.isValid(), qPrintable(temporaryDirectory.errorString()));
+
+    QDir testDir(temporaryDirectory.path());
+    const QString subDir(QString::fromLatin1("caf\xe9"));
+    QVERIFY(testDir.mkdir(subDir));
+    testDir = QDir(temporaryDirectory.path() + QDir::separator() + subDir);
+
+    QFileSystemWatcher watcher;
+    QVERIFY(watcher.addPath(testDir.path()));
+
+    FileSystemWatcherSpy changedSpy(&watcher, FileSystemWatcherSpy::SpyOnDirectoryChanged);
+    QCOMPARE(changedSpy.count(), 0);
+    QVERIFY(testDir.mkdir("creme"));
+    QTRY_COMPARE(changedSpy.count(), 1);
 }
 #endif // QT_NO_FILESYSTEMWATCHER
 

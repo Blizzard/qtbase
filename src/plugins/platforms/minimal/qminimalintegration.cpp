@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,16 +44,23 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformwindow.h>
 
-#if defined(Q_OS_WIN)
-#include <QtPlatformSupport/private/qbasicfontdatabase_p.h>
-#elif defined(QT_NO_FONTCONFIG)
-#include <qpa/qplatformfontdatabase.h>
-#else
-#include <QtPlatformSupport/private/qgenericunixfontdatabase_p.h>
+#include <QtFontDatabaseSupport/private/qfreetypefontdatabase_p.h>
+#if defined(Q_OS_WINRT)
+#  include <QtFontDatabaseSupport/private/qwinrtfontdatabase_p.h>
+#elif defined(Q_OS_WIN)
+#  include <QtFontDatabaseSupport/private/qwindowsfontdatabase_p.h>
+#  if QT_CONFIG(freetype)
+#    include <QtFontDatabaseSupport/private/qwindowsfontdatabase_ft_p.h>
+#  endif
+#elif defined(Q_OS_DARWIN)
+#  include <QtFontDatabaseSupport/private/qcoretextfontdatabase_p.h>
+#elif QT_CONFIG(fontconfig)
+#  include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
+#  include <qpa/qplatformfontdatabase.h>
 #endif
 
 #if !defined(Q_OS_WIN)
-#include <QtPlatformSupport/private/qgenericunixeventdispatcher_p.h>
+#include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
 #elif defined(Q_OS_WINRT)
 #include <QtCore/private/qeventdispatcher_winrt_p.h>
 #else
@@ -56,14 +69,18 @@
 
 QT_BEGIN_NAMESPACE
 
+class QCoreTextFontEngine;
+
 static const char debugBackingStoreEnvironmentVariable[] = "QT_DEBUG_BACKINGSTORE";
 
 static inline unsigned parseOptions(const QStringList &paramList)
 {
     unsigned options = 0;
-    foreach (const QString &param, paramList) {
+    for (const QString &param : paramList) {
         if (param == QLatin1String("enable_fonts"))
             options |= QMinimalIntegration::EnableFonts;
+        else if (param == QLatin1String("freetype"))
+            options |= QMinimalIntegration::FreeTypeFontDatabase;
     }
     return options;
 }
@@ -111,12 +128,23 @@ public:
 
 QPlatformFontDatabase *QMinimalIntegration::fontDatabase() const
 {
-    if (m_options & EnableFonts) {
-#ifndef QT_NO_FONTCONFIG
-        if (!m_fontDatabase)
-            m_fontDatabase = new QGenericUnixFontDatabase;
+    if (!m_fontDatabase && (m_options & EnableFonts)) {
+#if QT_CONFIG(fontconfig)
+        m_fontDatabase = new QGenericUnixFontDatabase;
+#elif defined(Q_OS_WINRT)
+        m_fontDatabase = new QWinRTFontDatabase;
+#elif defined(Q_OS_WIN)
+        if (m_options & FreeTypeFontDatabase) {
+#  if QT_CONFIG(freetype)
+            m_fontDatabase = new QWindowsFontDatabaseFT;
+#  endif // freetype
+        } else {
+            m_fontDatabase = new QWindowsFontDatabase;
+        }
+#elif defined(Q_OS_DARWIN)
+        m_fontDatabase = new QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>;
 #else
-        return QPlatformIntegration::fontDatabase();
+        m_fontDatabase = QPlatformIntegration::fontDatabase();
 #endif
     }
     if (!m_fontDatabase)

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -57,6 +63,7 @@
 #include <private/qpainter_p.h>
 #include <private/qpainterpath_p.h>
 #include <private/qtextengine_p.h>
+#include <private/qcoregraphics_p.h>
 
 #include "qcocoahelpers.h"
 
@@ -67,87 +74,6 @@ QT_BEGIN_NAMESPACE
 /*****************************************************************************
   QCoreGraphicsPaintEngine utility functions
  *****************************************************************************/
-
-static void qt_mac_clip_cg(CGContextRef hd, const QRegion &rgn, CGAffineTransform *orig_xform)
-{
-    CGAffineTransform old_xform = CGAffineTransformIdentity;
-    if (orig_xform) { //setup xforms
-        old_xform = CGContextGetCTM(hd);
-        CGContextConcatCTM(hd, CGAffineTransformInvert(old_xform));
-        CGContextConcatCTM(hd, *orig_xform);
-    }
-
-    //do the clipping
-    CGContextBeginPath(hd);
-    if (rgn.isEmpty()) {
-        CGContextAddRect(hd, CGRectMake(0, 0, 0, 0));
-    } else {
-        QVector<QRect> rects = rgn.rects();
-        const int count = rects.size();
-        for (int i = 0; i < count; i++) {
-            const QRect &r = rects[i];
-            CGRect mac_r = CGRectMake(r.x(), r.y(), r.width(), r.height());
-            CGContextAddRect(hd, mac_r);
-        }
-    }
-    CGContextClip(hd);
-
-    if (orig_xform) {//reset xforms
-        CGContextConcatCTM(hd, CGAffineTransformInvert(CGContextGetCTM(hd)));
-        CGContextConcatCTM(hd, old_xform);
-    }
-}
-
-// Implemented for qt_mac_p.h
-QMacCGContext::QMacCGContext(QPainter *p)
-{
-    QPaintEngine *pe = p->paintEngine();
-#ifndef QT_NO_PRINTER
-    if (pe->type() == QPaintEngine::MacPrinter)
-        pe = static_cast<QMacPrintEngine*>(pe)->paintEngine();
-#endif
-    pe->syncState();
-    context = 0;
-    if (pe->type() == QPaintEngine::CoreGraphics)
-        context = static_cast<QCoreGraphicsPaintEngine*>(pe)->handle();
-
-    int devType = p->device()->devType();
-    if (pe->type() == QPaintEngine::Raster
-            && (devType == QInternal::Widget || devType == QInternal::Pixmap || devType == QInternal::Image)) {
-
-        CGColorSpaceRef colorspace = qt_mac_colorSpaceForDeviceType(pe->paintDevice());
-        uint flags = kCGImageAlphaPremultipliedFirst;
-#ifdef kCGBitmapByteOrder32Host //only needed because CGImage.h added symbols in the minor version
-        flags |= kCGBitmapByteOrder32Host;
-#endif
-        const QImage *image = (const QImage *) pe->paintDevice();
-
-        context = CGBitmapContextCreate((void *) image->bits(), image->width(), image->height(),
-                                        8, image->bytesPerLine(), colorspace, flags);
-
-        CGContextTranslateCTM(context, 0, image->height());
-        CGContextScaleCTM(context, 1, -1);
-
-        if (devType == QInternal::Widget) {
-            QRegion clip = p->paintEngine()->systemClip();
-            QTransform native = p->deviceTransform();
-
-            if (p->hasClipping()) {
-                QRegion r = p->clipRegion();
-                r.translate(native.dx(), native.dy());
-                if (clip.isEmpty())
-                    clip = r;
-                else
-                    clip &= r;
-            }
-            qt_mac_clip_cg(context, clip, 0);
-
-            CGContextTranslateCTM(context, native.dx(), native.dy());
-        }
-    } else {
-        CGContextRetain(context);
-    }
-}
 
 void qt_mac_cgimage_data_free(void *, const void *memoryToFree, size_t)
 {
@@ -450,7 +376,7 @@ static void qt_mac_draw_pattern(void *info, CGContextRef c)
             const QColor c0(0, 0, 0, 0), c1(255, 255, 255, 255);
             QPixmap pm(w*QMACPATTERN_MASK_MULTIPLIER, h*QMACPATTERN_MASK_MULTIPLIER);
             pm.fill(c0);
-            CGContextRef pm_ctx = qt_mac_cg_context(&pm);
+            QMacCGContext pm_ctx(&pm);
             CGContextSetFillColorWithColor(c, cgColorForQColor(c1, pat->pdev));
             CGRect rect = CGRectMake(0, 0, w, h);
             for (int x = 0; x < QMACPATTERN_MASK_MULTIPLIER; ++x) {
@@ -540,7 +466,8 @@ QCoreGraphicsPaintEngine::begin(QPaintDevice *pdev)
     d->cosmeticPenSize = 1;
     d->current.clipEnabled = false;
     d->pixelSize = QPoint(1,1);
-    d->hd = qt_mac_cg_context(pdev);
+    QMacCGContext ctx(pdev);
+    d->hd = CGContextRetain(ctx);
     if (d->hd) {
         d->saveGraphicsState();
         d->orig_xform = CGContextGetCTM(d->hd);

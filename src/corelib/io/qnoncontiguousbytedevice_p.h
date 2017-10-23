@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -60,10 +66,10 @@ class Q_CORE_EXPORT QNonContiguousByteDevice : public QObject
 public:
     virtual const char* readPointer(qint64 maximumLength, qint64 &len) = 0;
     virtual bool advanceReadPointer(qint64 amount) = 0;
-    virtual bool atEnd() = 0;
-    virtual qint64 pos() { return -1; }
+    virtual bool atEnd() const = 0;
+    virtual qint64 pos() const { return -1; }
     virtual bool reset() = 0;
-    virtual qint64 size() = 0;
+    virtual qint64 size() const = 0;
 
     virtual ~QNonContiguousByteDevice();
 
@@ -101,10 +107,10 @@ public:
     ~QNonContiguousByteDeviceByteArrayImpl();
     const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
     bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
-    bool atEnd() Q_DECL_OVERRIDE;
+    bool atEnd() const Q_DECL_OVERRIDE;
     bool reset() Q_DECL_OVERRIDE;
-    qint64 size() Q_DECL_OVERRIDE;
-    qint64 pos() Q_DECL_OVERRIDE;
+    qint64 size() const Q_DECL_OVERRIDE;
+    qint64 pos() const Q_DECL_OVERRIDE;
 protected:
     QByteArray* byteArray;
     qint64 currentPosition;
@@ -117,10 +123,10 @@ public:
     ~QNonContiguousByteDeviceRingBufferImpl();
     const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
     bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
-    bool atEnd() Q_DECL_OVERRIDE;
+    bool atEnd() const Q_DECL_OVERRIDE;
     bool reset() Q_DECL_OVERRIDE;
-    qint64 size() Q_DECL_OVERRIDE;
-    qint64 pos() Q_DECL_OVERRIDE;
+    qint64 size() const Q_DECL_OVERRIDE;
+    qint64 pos() const Q_DECL_OVERRIDE;
 protected:
     QSharedPointer<QRingBuffer> ringBuffer;
     qint64 currentPosition;
@@ -135,10 +141,10 @@ public:
     ~QNonContiguousByteDeviceIoDeviceImpl();
     const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
     bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
-    bool atEnd() Q_DECL_OVERRIDE;
+    bool atEnd() const Q_DECL_OVERRIDE;
     bool reset() Q_DECL_OVERRIDE;
-    qint64 size() Q_DECL_OVERRIDE;
-    qint64 pos() Q_DECL_OVERRIDE;
+    qint64 size() const Q_DECL_OVERRIDE;
+    qint64 pos() const Q_DECL_OVERRIDE;
 protected:
     QIODevice* device;
     QByteArray* currentReadBuffer;
@@ -158,9 +164,9 @@ public:
     ~QNonContiguousByteDeviceBufferImpl();
     const char* readPointer(qint64 maximumLength, qint64 &len) Q_DECL_OVERRIDE;
     bool advanceReadPointer(qint64 amount) Q_DECL_OVERRIDE;
-    bool atEnd() Q_DECL_OVERRIDE;
+    bool atEnd() const Q_DECL_OVERRIDE;
     bool reset() Q_DECL_OVERRIDE;
-    qint64 size() Q_DECL_OVERRIDE;
+    qint64 size() const Q_DECL_OVERRIDE;
 protected:
     QBuffer* buffer;
     QByteArray byteArray;

@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -64,8 +74,7 @@ MainWindow::MainWindow()
     filterCombo->addItem(tr("Monospaced"), QVariant::fromValue(QFontComboBox::MonospacedFonts));
     filterCombo->addItem(tr("Proportional"), QVariant::fromValue(QFontComboBox::ProportionalFonts));
     filterCombo->setCurrentIndex(0);
-    typedef void (QComboBox::*QComboBoxIntSignal)(int);
-    connect(filterCombo, static_cast<QComboBoxIntSignal>(&QComboBox::currentIndexChanged),
+    connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::filterChanged);
 
     QLabel *fontLabel = new QLabel(tr("Font:"));
@@ -104,10 +113,9 @@ MainWindow::MainWindow()
             this, &MainWindow::findSizes);
     connect(fontCombo, &QFontComboBox::currentFontChanged,
             characterWidget, &CharacterWidget::updateFont);
-    typedef void (QComboBox::*QComboBoxStringSignal)(const QString &);
-    connect(sizeCombo, static_cast<QComboBoxStringSignal>(&QComboBox::currentIndexChanged),
+    connect(sizeCombo, QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
             characterWidget, &CharacterWidget::updateSize);
-    connect(styleCombo, static_cast<QComboBoxStringSignal>(&QComboBox::currentIndexChanged),
+    connect(styleCombo, QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
             characterWidget, &CharacterWidget::updateStyle);
 //! [4] //! [5]
     connect(characterWidget, &CharacterWidget::characterSelected,

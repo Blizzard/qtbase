@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,18 +40,22 @@
 
 // #define DEBUG_SAVE_IMAGE
 
+static inline QImage blankSquare()
+{
+    // a "blank" square; we compare against in our testfunctions to verify
+    // that we have actually painted something
+    QPixmap pm(1000, 1000);
+    pm.fill(Qt::white);
+    return pm.toImage();
+}
+
 class tst_QStaticText: public QObject
 {
     Q_OBJECT
 public:
-    tst_QStaticText() {}
+    tst_QStaticText() : m_whiteSquare(blankSquare()) {}
 
 private slots:
-    void initTestCase();
-
-    void init();
-    void cleanup();
-
     void constructionAndDestruction();
     void drawToPoint_data();
     void drawToPoint();
@@ -97,30 +96,15 @@ private slots:
     void textDocumentColor();
 #endif
 
+    void multiLine();
+
 private:
     bool supportsTransformations() const;
 
-    QImage const    m_whiteSquare;
+    const QImage m_whiteSquare;
 };
 
 Q_DECLARE_METATYPE(QImage::Format);
-
-void tst_QStaticText::initTestCase()
-{
-    // a "blank" square; we compare against in our testfunctions to verify
-    // that we have actually painted something
-    QPixmap pm(1000, 1000);
-    pm.fill(Qt::white);
-    const_cast<QImage&>(m_whiteSquare) = pm.toImage();
-}
-
-void tst_QStaticText::init()
-{
-}
-
-void tst_QStaticText::cleanup()
-{
-}
 
 void tst_QStaticText::constructionAndDestruction()
 {
@@ -732,6 +716,7 @@ void tst_QStaticText::drawStruckOutText()
 
     QFont font;
     font.setStrikeOut(true);
+    font.setStyleStrategy(QFont::ForceIntegerMetrics);
 
     {
         QPainter p(&imageDrawText);
@@ -767,6 +752,7 @@ void tst_QStaticText::drawOverlinedText()
 
     QFont font;
     font.setOverline(true);
+    font.setStyleStrategy(QFont::ForceIntegerMetrics);
 
     {
         QPainter p(&imageDrawText);
@@ -802,6 +788,7 @@ void tst_QStaticText::drawUnderlinedText()
 
     QFont font;
     font.setUnderline(true);
+    font.setStyleStrategy(QFont::ForceIntegerMetrics);
 
     {
         QPainter p(&imageDrawText);
@@ -871,6 +858,59 @@ void tst_QStaticText::textDocumentColor()
     QCOMPARE(d->items[1].color, QColor(Qt::red));
 }
 #endif
+
+class TestPaintEngine: public QPaintEngine
+{
+public:
+    void drawTextItem(const QPointF &p, const QTextItem &) Q_DECL_OVERRIDE
+    {
+        differentVerticalPositions.insert(qRound(p.y()));
+    }
+
+    void updateState(const QPaintEngineState &) Q_DECL_OVERRIDE {}
+
+    void drawPolygon(const QPointF *, int , PolygonDrawMode ) Q_DECL_OVERRIDE {}
+
+    bool begin(QPaintDevice *) Q_DECL_OVERRIDE  { return true; }
+    bool end() Q_DECL_OVERRIDE { return true; }
+    void drawPixmap(const QRectF &, const QPixmap &, const QRectF &) Q_DECL_OVERRIDE {}
+    Type type() const Q_DECL_OVERRIDE
+    {
+        return User;
+    }
+
+    QSet<int> differentVerticalPositions;
+};
+
+class TestPixmap: public QPixmap
+{
+public:
+    TestPixmap(int w, int h) : QPixmap(w, h), testPaintEngine(new TestPaintEngine) {}
+    ~TestPixmap() { delete testPaintEngine; }
+
+    QPaintEngine *paintEngine() const
+    {
+        return testPaintEngine;
+    }
+
+    TestPaintEngine *testPaintEngine;
+};
+
+void tst_QStaticText::multiLine()
+{
+    TestPixmap pixmap(100, 100);
+
+    TestPaintEngine *paintEngine = pixmap.testPaintEngine;
+
+    {
+        QPainter p(&pixmap);
+        QStaticText text;
+        text.setText(QLatin1String("line 1") + QChar(QChar::LineSeparator) + QLatin1String("line 2"));
+        p.drawStaticText(0, 0, text);
+    }
+
+    QCOMPARE(paintEngine->differentVerticalPositions.size(), 2);
+}
 
 QTEST_MAIN(tst_QStaticText)
 #include "tst_qstatictext.moc"

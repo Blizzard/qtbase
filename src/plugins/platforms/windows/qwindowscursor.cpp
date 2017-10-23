@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -50,7 +56,7 @@
 
 static bool initResources()
 {
-#if !defined (Q_OS_WINCE) && !defined (QT_NO_IMAGEFORMAT_PNG)
+#if QT_CONFIG(imageformat_png)
     Q_INIT_RESOURCE(cursors);
 #endif
     return true;
@@ -137,7 +143,6 @@ static HCURSOR createBitmapCursor(const QImage &bbits, const QImage &mbits,
     if (hotSpot.y() < 0)
         hotSpot.setY(height / 2);
     const int n = qMax(1, width / 8);
-#if !defined(Q_OS_WINCE)
     QScopedArrayPointer<uchar> xBits(new uchar[height * n]);
     QScopedArrayPointer<uchar> xMask(new uchar[height * n]);
     int x = 0;
@@ -158,54 +163,6 @@ static HCURSOR createBitmapCursor(const QImage &bbits, const QImage &mbits,
     }
     return CreateCursor(GetModuleHandle(0), hotSpot.x(), hotSpot.y(), width, height,
                         xBits.data(), xMask.data());
-#elif defined(GWES_ICONCURS) // Q_OS_WINCE
-    // Windows CE only supports fixed cursor size.
-    int sysW = GetSystemMetrics(SM_CXCURSOR);
-    int sysH = GetSystemMetrics(SM_CYCURSOR);
-    int sysN = qMax(1, sysW / 8);
-    uchar* xBits = new uchar[sysH * sysN];
-    uchar* xMask = new uchar[sysH * sysN];
-    int x = 0;
-    for (int i = 0; i < sysH; ++i) {
-        if (i >= height) {
-            memset(&xBits[x] , 255, sysN);
-            memset(&xMask[x] ,   0, sysN);
-            x += sysN;
-        } else {
-            int fillWidth = n > sysN ? sysN : n;
-            const uchar *bits = bbits.constScanLine(i);
-            const uchar *mask = mbits.constScanLine(i);
-            for (int j = 0; j < fillWidth; ++j) {
-                uchar b = bits[j];
-                uchar m = mask[j];
-                if (invb)
-                    b ^= 0xFF;
-                if (invm)
-                    m ^= 0xFF;
-                xBits[x] = ~m;
-                xMask[x] = b ^ m;
-                ++x;
-            }
-            for (int j = fillWidth; j < sysN; ++j ) {
-                xBits[x] = 255;
-                xMask[x] = 0;
-                ++x;
-            }
-        }
-    }
-
-    HCURSOR hcurs = CreateCursor(qWinAppInst(), hotSpot.x(), hotSpot.y(), sysW, sysH,
-                                 xBits, xMask);
-    delete [] xBits;
-    delete [] xMask;
-    return hcurs;
-#else
-    Q_UNUSED(n);
-    Q_UNUSED(invm);
-    Q_UNUSED(invb);
-    Q_UNUSED(mbits);
-    return 0;
-#endif
 }
 
 // Create a cursor from image and mask of the format QImage::Format_Mono.
@@ -246,7 +203,7 @@ static QSize systemCursorSize(const QPlatformScreen *screen = Q_NULLPTR)
     return primaryScreenCursorSize;
 }
 
-#if defined (Q_OS_WINCE) || defined (QT_NO_IMAGEFORMAT_PNG)
+#if !QT_CONFIG(imageformat_png)
 
 static inline QSize standardCursorSize() { return QSize(32, 32); }
 
@@ -462,7 +419,7 @@ QWindowsCursor::PixmapCursor QWindowsCursor::customCursor(Qt::CursorShape cursor
 
     return QWindowsCursor::PixmapCursor();
 }
-#else // Q_OS_WINCE || QT_NO_IMAGEFORMAT_PNG
+#else // QT_NO_IMAGEFORMAT_PNG
 struct QWindowsCustomPngCursor {
     Qt::CursorShape shape;
     int size;
@@ -520,7 +477,7 @@ QWindowsCursor::PixmapCursor QWindowsCursor::customCursor(Qt::CursorShape cursor
                            QString::fromLatin1(bestFit->fileName));
     return PixmapCursor(rawImage, QPoint(bestFit->hotSpotX, bestFit->hotSpotY));
 }
-#endif // Q_OS_WINCE || QT_NO_IMAGEFORMAT_PNG
+#endif // !QT_NO_IMAGEFORMAT_PNG
 
 struct QWindowsStandardCursorMapping {
     Qt::CursorShape shape;
@@ -569,13 +526,8 @@ HCURSOR QWindowsCursor::createCursorFromShape(Qt::CursorShape cursorShape, const
     // Load available standard cursors from resources
     const QWindowsStandardCursorMapping *sEnd = standardCursors + sizeof(standardCursors) / sizeof(standardCursors[0]);
     for (const QWindowsStandardCursorMapping *s = standardCursors; s < sEnd; ++s) {
-        if (s->shape == cursorShape) {
-#ifndef Q_OS_WINCE
+        if (s->shape == cursorShape)
             return static_cast<HCURSOR>(LoadImage(0, s->resource, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
-#else
-            return LoadCursor(0, s->resource);
-#endif
-        }
     }
 
     qWarning("%s: Invalid cursor shape %d", __FUNCTION__, cursorShape);
@@ -643,17 +595,19 @@ QWindowsCursor::QWindowsCursor(const QPlatformScreen *screen)
 
 void QWindowsCursor::changeCursor(QCursor *cursorIn, QWindow *window)
 {
-    if (!window)
+    QWindowsWindow *platformWindow = QWindowsWindow::windowsWindowOf(window);
+    if (!platformWindow) // Desktop/Foreign window.
         return;
+
     if (!cursorIn) {
-        QWindowsWindow::baseWindowOf(window)->setCursor(CursorHandlePtr(new CursorHandle));
+        platformWindow->setCursor(CursorHandlePtr(new CursorHandle));
         return;
     }
     const CursorHandlePtr wcursor =
         cursorIn->shape() == Qt::BitmapCursor ?
         pixmapWindowCursor(*cursorIn) : standardWindowCursor(cursorIn->shape());
     if (wcursor->handle()) {
-        QWindowsWindow::baseWindowOf(window)->setCursor(wcursor);
+        platformWindow->setCursor(wcursor);
     } else {
         qWarning("%s: Unable to obtain system cursor for %d",
                  __FUNCTION__, cursorIn->shape());
@@ -669,7 +623,6 @@ QPoint QWindowsCursor::mousePosition()
 
 QWindowsCursor::CursorState QWindowsCursor::cursorState()
 {
-#ifndef Q_OS_WINCE
     enum { cursorShowing = 0x1, cursorSuppressed = 0x2 }; // Windows 8: CURSOR_SUPPRESSED
     CURSORINFO cursorInfo;
     cursorInfo.cbSize = sizeof(CURSORINFO);
@@ -679,7 +632,6 @@ QWindowsCursor::CursorState QWindowsCursor::cursorState()
         if (cursorInfo.flags & cursorSuppressed)
             return CursorSuppressed;
     }
-#endif // !Q_OS_WINCE
     return CursorHidden;
 }
 
@@ -750,7 +702,6 @@ QPixmap QWindowsCursor::dragDefaultCursor(Qt::DropAction action) const
     "...............XXXX....."};
 
     if (m_ignoreDragCursor.isNull()) {
-#if !defined (Q_OS_WINCE)
         HCURSOR cursor = LoadCursor(NULL, IDC_NO);
         ICONINFO iconInfo = {0, 0, 0, 0, 0};
         GetIconInfo(cursor, &iconInfo);
@@ -774,11 +725,23 @@ QPixmap QWindowsCursor::dragDefaultCursor(Qt::DropAction action) const
         DeleteObject(iconInfo.hbmMask);
         DeleteObject(iconInfo.hbmColor);
         DestroyCursor(cursor);
-#else // !Q_OS_WINCE
-        m_ignoreDragCursor = QPixmap(ignoreDragCursorXpmC);
-#endif // !Q_OS_WINCE
     }
     return m_ignoreDragCursor;
+}
+
+HCURSOR QWindowsCursor::hCursor(const QCursor &c) const
+{
+    const Qt::CursorShape shape = c.shape();
+    if (shape == Qt::BitmapCursor) {
+        const auto pit = m_pixmapCursorCache.constFind(QWindowsPixmapCursorCacheKey(c));
+        if (pit != m_pixmapCursorCache.constEnd())
+            return pit.value()->handle();
+    } else {
+        const auto sit = m_standardCursorCache.constFind(shape);
+        if (sit != m_standardCursorCache.constEnd())
+            return sit.value()->handle();
+    }
+    return HCURSOR(0);
 }
 
 /*!

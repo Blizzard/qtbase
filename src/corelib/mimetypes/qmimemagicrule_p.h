@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,7 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
+#include <QtCore/private/qglobal_p.h>
 
 #ifndef QT_NO_MIMETYPE
 
@@ -55,7 +61,6 @@
 
 QT_BEGIN_NAMESPACE
 
-class QMimeMagicRulePrivate;
 class QMimeMagicRule
 {
 public:
@@ -63,20 +68,29 @@ public:
 
     QMimeMagicRule(const QString &typeStr, const QByteArray &value, const QString &offsets,
                    const QByteArray &mask, QString *errorString);
-    QMimeMagicRule(const QMimeMagicRule &other);
-    ~QMimeMagicRule();
 
-    QMimeMagicRule &operator=(const QMimeMagicRule &other);
+    void swap(QMimeMagicRule &other) Q_DECL_NOTHROW
+    {
+        qSwap(m_type,          other.m_type);
+        qSwap(m_value,         other.m_value);
+        qSwap(m_startPos,      other.m_startPos);
+        qSwap(m_endPos,        other.m_endPos);
+        qSwap(m_mask,          other.m_mask);
+        qSwap(m_pattern,       other.m_pattern);
+        qSwap(m_number,        other.m_number);
+        qSwap(m_numberMask,    other.m_numberMask);
+        qSwap(m_matchFunction, other.m_matchFunction);
+    }
 
     bool operator==(const QMimeMagicRule &other) const;
 
-    Type type() const;
-    QByteArray value() const;
-    int startPos() const;
-    int endPos() const;
+    Type type() const { return m_type; }
+    QByteArray value() const { return m_value; }
+    int startPos() const { return m_startPos; }
+    int endPos() const { return m_endPos; }
     QByteArray mask() const;
 
-    bool isValid() const;
+    bool isValid() const { return m_matchFunction != Q_NULLPTR; }
 
     bool matches(const QByteArray &data) const;
 
@@ -88,9 +102,26 @@ public:
     static bool matchSubstring(const char *dataPtr, int dataSize, int rangeStart, int rangeLength, int valueLength, const char *valueData, const char *mask);
 
 private:
-    const QScopedPointer<QMimeMagicRulePrivate> d;
+    Type m_type;
+    QByteArray m_value;
+    int m_startPos;
+    int m_endPos;
+    QByteArray m_mask;
+
+    QByteArray m_pattern;
+    quint32 m_number;
+    quint32 m_numberMask;
+
+    typedef bool (QMimeMagicRule::*MatchFunction)(const QByteArray &data) const;
+    MatchFunction m_matchFunction;
+
+private:
+    // match functions
+    bool matchString(const QByteArray &data) const;
+    template <typename T>
+    bool matchNumber(const QByteArray &data) const;
 };
-Q_DECLARE_TYPEINFO(QMimeMagicRule, Q_MOVABLE_TYPE);
+Q_DECLARE_SHARED(QMimeMagicRule)
 
 QT_END_NAMESPACE
 

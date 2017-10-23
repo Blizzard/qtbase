@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +50,7 @@
 #include <qpa/qplatformfontdatabase.h>
 
 #include <QtCore/qendian.h>
+#include <QtCore/qfile.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -254,9 +261,13 @@ void QRawFont::loadFromData(const QByteArray &fontData,
    \a glyphIndex in the underlying font, using the \a transform specified.
    If the QRawFont is not valid, this function will return an invalid QImage.
 
-   If \a antialiasingType is set to QRawFont::SubPixelAntialiasing, then the resulting image will be
-   in QImage::Format_RGB32 and the RGB values of each pixel will represent the subpixel opacities of
-   the pixel in the rasterization of the glyph. Otherwise, the image will be in the format of
+   If the font is a color font, then the resulting image will contain the rendered
+   glyph at the current pixel size. In this case, the \a antialiasingType will be
+   ignored.
+
+   Otherwise, if \a antialiasingType is set to QRawFont::SubPixelAntialiasing, then the resulting image
+   will be in QImage::Format_RGB32 and the RGB values of each pixel will represent the subpixel opacities
+   of the pixel in the rasterization of the glyph. Otherwise, the image will be in the format of
    QImage::Format_Indexed8 and each pixel will contain the opacity of the pixel in the
    rasterization.
 
@@ -267,6 +278,9 @@ QImage QRawFont::alphaMapForGlyph(quint32 glyphIndex, AntialiasingType antialias
 {
     if (!d->isValid())
         return QImage();
+
+    if (d->fontEngine->glyphFormat == QFontEngine::Format_ARGB)
+        return d->fontEngine->bitmapForGlyph(glyphIndex, QFixed(), transform);
 
     if (antialiasingType == SubPixelAntialiasing)
         return d->fontEngine->alphaRGBMapForGlyph(glyphIndex, QFixed(), transform);
@@ -302,6 +316,19 @@ bool QRawFont::operator==(const QRawFont &other) const
 }
 
 /*!
+    Returns the hash value for \a font. If specified, \a seed is used
+    to initialize the hash.
+
+    \relates QRawFont
+    \since 5.8
+*/
+uint qHash(const QRawFont &font, uint seed) Q_DECL_NOTHROW
+{
+    return qHash(QRawFontPrivate::get(font)->fontEngine, seed);
+}
+
+
+/*!
     \fn bool QRawFont::operator!=(const QRawFont &other) const
 
     Returns \c true if this QRawFont is not equal to \a other. Otherwise, returns \c false.
@@ -322,6 +349,23 @@ bool QRawFont::operator==(const QRawFont &other) const
 qreal QRawFont::ascent() const
 {
     return d->isValid() ? d->fontEngine->ascent().toReal() : 0.0;
+}
+
+/*!
+   Returns the cap height of this QRawFont in pixel units.
+
+   \since 5.8
+
+   The cap height of a font is the height of a capital letter above
+   the baseline. It specifically is the height of capital letters
+   that are flat - such as H or I - as opposed to round letters such
+   as O, or pointed letters like A, both of which may display overshoot.
+
+   \sa QFontMetricsF::capHeight()
+*/
+qreal QRawFont::capHeight() const
+{
+    return d->isValid() ? d->fontEngine->capHeight().toReal() : 0.0;
 }
 
 /*!
@@ -702,13 +746,27 @@ extern int qt_script_for_writing_system(QFontDatabase::WritingSystem writingSyst
 QRawFont QRawFont::fromFont(const QFont &font, QFontDatabase::WritingSystem writingSystem)
 {
     QRawFont rawFont;
-    QFontPrivate *font_d = QFontPrivate::get(font);
+    const QFontPrivate *font_d = QFontPrivate::get(font);
     int script = qt_script_for_writing_system(writingSystem);
     QFontEngine *fe = font_d->engineForScript(script);
 
     if (fe != 0 && fe->type() == QFontEngine::Multi) {
         QFontEngineMulti *multiEngine = static_cast<QFontEngineMulti *>(fe);
         fe = multiEngine->engine(0);
+
+        if (script > QChar::Script_Latin) {
+            // keep in sync with QFontEngineMulti::loadEngine()
+            QFontDef request(multiEngine->fontDef);
+            request.styleStrategy |= QFont::NoFontMerging;
+
+            if (QFontEngine *engine = QFontDatabase::findFont(request, script)) {
+                if (request.weight > QFont::Normal)
+                    engine->fontDef.weight = request.weight;
+                if (request.style > QFont::StyleNormal)
+                    engine->fontDef.style = request.style;
+                fe = engine;
+            }
+        }
         Q_ASSERT(fe);
     }
 

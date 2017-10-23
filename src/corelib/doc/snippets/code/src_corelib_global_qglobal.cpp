@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -121,26 +131,46 @@ absoluteValue = qAbs(myValue);
 //! [10]
 
 
-//! [11]
-qreal valueA = 2.3;
-qreal valueB = 2.7;
+//! [11A]
+double valueA = 2.3;
+double valueB = 2.7;
 
 int roundedValueA = qRound(valueA);
 // roundedValueA = 2
 int roundedValueB = qRound(valueB);
 // roundedValueB = 3
-//! [11]
+//! [11A]
+
+//! [11B]
+float valueA = 2.3;
+float valueB = 2.7;
+
+int roundedValueA = qRound(valueA);
+// roundedValueA = 2
+int roundedValueB = qRound(valueB);
+// roundedValueB = 3
+//! [11B]
 
 
-//! [12]
-qreal valueA = 42949672960.3;
-qreal valueB = 42949672960.7;
+//! [12A]
+double valueA = 42949672960.3;
+double valueB = 42949672960.7;
 
 qint64 roundedValueA = qRound64(valueA);
 // roundedValueA = 42949672960
 qint64 roundedValueB = qRound64(valueB);
 // roundedValueB = 42949672961
-//! [12]
+//! [12A]
+
+//! [12B]
+float valueA = 42949672960.3;
+float valueB = 42949672960.7;
+
+qint64 roundedValueA = qRound64(valueA);
+// roundedValueA = 42949672960
+qint64 roundedValueB = qRound64(valueB);
+// roundedValueB = 42949672961
+//! [12B]
 
 
 //! [13]
@@ -439,6 +469,11 @@ qWarning("%s: %s", qUtf8Printable(key), qUtf8Printable(value));
 //! [37]
 
 
+//! [qUtf16Printable]
+qWarning("%ls: %ls", qUtf16Printable(key), qUtf16Printable(value));
+//! [qUtf16Printable]
+
+
 //! [38]
 struct Point2D
 {
@@ -562,6 +597,29 @@ struct A : public B {
 //! [51]
 template<> class QTypeInfo<A> : public QTypeInfoMerger<A, B, C, D> {};
 //! [51]
+
+//! [52]
+    struct Foo {
+        void overloadedFunction();
+        void overloadedFunction(int, QString);
+    };
+    ... qOverload<>(&Foo::overloadedFunction)
+    ... qOverload<int, QString>(&Foo::overloadedFunction)
+//! [52]
+
+//! [53]
+    ... QOverload<>::of(&Foo::overloadedFunction)
+    ... QOverload<int, QString>::of(&Foo::overloadedFunction)
+//! [53]
+
+//! [54]
+    struct Foo {
+        void overloadedFunction(int, QString);
+        void overloadedFunction(int, QString) const;
+    };
+    ... qConstOverload<int, QString>(&Foo::overloadedFunction)
+    ... qNonConstOverload<int, QString>(&Foo::overloadedFunction)
+//! [54]
 
 //! [qlikely]
     // the condition inside the "if" will be successful most of the times

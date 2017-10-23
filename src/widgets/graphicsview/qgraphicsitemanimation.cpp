@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -74,8 +80,6 @@
 */
 
 #include "qgraphicsitemanimation.h"
-
-#ifndef QT_NO_GRAPHICSVIEW
 
 #include "qgraphicsitem.h"
 
@@ -133,35 +137,35 @@ public:
     QVector<Pair> xTranslation;
     QVector<Pair> yTranslation;
 
-    qreal linearValueForStep(qreal step, QVector<Pair> *source, qreal defaultValue = 0);
+    qreal linearValueForStep(qreal step, const QVector<Pair> &source, qreal defaultValue = 0);
     void insertUniquePair(qreal step, qreal value, QVector<Pair> *binList, const char* method);
 };
 Q_DECLARE_TYPEINFO(QGraphicsItemAnimationPrivate::Pair, Q_PRIMITIVE_TYPE);
 
-qreal QGraphicsItemAnimationPrivate::linearValueForStep(qreal step, QVector<Pair> *source, qreal defaultValue)
+qreal QGraphicsItemAnimationPrivate::linearValueForStep(qreal step, const QVector<Pair> &source, qreal defaultValue)
 {
-    if (source->isEmpty())
+    if (source.isEmpty())
         return defaultValue;
     step = qMin<qreal>(qMax<qreal>(step, 0), 1);
 
     if (step == 1)
-        return source->last().value;
+        return source.back().value;
 
     qreal stepBefore = 0;
     qreal stepAfter = 1;
-    qreal valueBefore = source->first().step == 0 ? source->first().value : defaultValue;
-    qreal valueAfter = source->last().value;
+    qreal valueBefore = source.front().step == 0 ? source.front().value : defaultValue;
+    qreal valueAfter = source.back().value;
 
     // Find the closest step and value before the given step.
-    for (int i = 0; i < source->size() && step >= source->at(i).step; ++i) {
-        stepBefore = source->at(i).step;
-        valueBefore = source->at(i).value;
+    for (int i = 0; i < source.size() && step >= source[i].step; ++i) {
+        stepBefore = source[i].step;
+        valueBefore = source[i].value;
     }
 
     // Find the closest step and value after the given step.
-    for (int j = source->size() - 1; j >= 0 && step < source->at(j).step; --j) {
-        stepAfter = source->at(j).step;
-        valueAfter = source->at(j).value;
+    for (int i = source.size() - 1; i >= 0 && step < source[i].step; --i) {
+        stepAfter = source[i].step;
+        valueAfter = source[i].value;
     }
 
     // Do a simple linear interpolation.
@@ -257,8 +261,8 @@ void QGraphicsItemAnimation::setTimeLine(QTimeLine *timeLine)
 QPointF QGraphicsItemAnimation::posAt(qreal step) const
 {
     check_step_valid(step, "posAt");
-    return QPointF(d->linearValueForStep(step, &d->xPosition, d->startPos.x()),
-                   d->linearValueForStep(step, &d->yPosition, d->startPos.y()));
+    return QPointF(d->linearValueForStep(step, d->xPosition, d->startPos.x()),
+                   d->linearValueForStep(step, d->yPosition, d->startPos.y()));
 }
 
 /*!
@@ -317,7 +321,7 @@ QMatrix QGraphicsItemAnimation::matrixAt(qreal step) const
 qreal QGraphicsItemAnimation::rotationAt(qreal step) const
 {
     check_step_valid(step, "rotationAt");
-    return d->linearValueForStep(step, &d->rotation);
+    return d->linearValueForStep(step, d->rotation);
 }
 
 /*!
@@ -354,7 +358,7 @@ QList<QPair<qreal, qreal> > QGraphicsItemAnimation::rotationList() const
 qreal QGraphicsItemAnimation::xTranslationAt(qreal step) const
 {
     check_step_valid(step, "xTranslationAt");
-    return d->linearValueForStep(step, &d->xTranslation);
+    return d->linearValueForStep(step, d->xTranslation);
 }
 
 /*!
@@ -365,7 +369,7 @@ qreal QGraphicsItemAnimation::xTranslationAt(qreal step) const
 qreal QGraphicsItemAnimation::yTranslationAt(qreal step) const
 {
     check_step_valid(step, "yTranslationAt");
-    return d->linearValueForStep(step, &d->yTranslation);
+    return d->linearValueForStep(step, d->yTranslation);
 }
 
 /*!
@@ -405,7 +409,7 @@ qreal QGraphicsItemAnimation::verticalScaleAt(qreal step) const
 {
     check_step_valid(step, "verticalScaleAt");
 
-    return d->linearValueForStep(step, &d->verticalScale, 1);
+    return d->linearValueForStep(step, d->verticalScale, 1);
 }
 
 /*!
@@ -416,7 +420,7 @@ qreal QGraphicsItemAnimation::verticalScaleAt(qreal step) const
 qreal QGraphicsItemAnimation::horizontalScaleAt(qreal step) const
 {
     check_step_valid(step, "horizontalScaleAt");
-    return d->linearValueForStep(step, &d->horizontalScale, 1);
+    return d->linearValueForStep(step, d->horizontalScale, 1);
 }
 
 /*!
@@ -455,7 +459,7 @@ QList<QPair<qreal, QPointF> > QGraphicsItemAnimation::scaleList() const
 qreal QGraphicsItemAnimation::verticalShearAt(qreal step) const
 {
     check_step_valid(step, "verticalShearAt");
-    return d->linearValueForStep(step, &d->verticalShear, 0);
+    return d->linearValueForStep(step, d->verticalShear, 0);
 }
 
 /*!
@@ -466,7 +470,7 @@ qreal QGraphicsItemAnimation::verticalShearAt(qreal step) const
 qreal QGraphicsItemAnimation::horizontalShearAt(qreal step) const
 {
     check_step_valid(step, "horizontalShearAt");
-    return d->linearValueForStep(step, &d->horizontalShear, 0);
+    return d->linearValueForStep(step, d->horizontalShear, 0);
 }
 
 /*!
@@ -589,5 +593,3 @@ void QGraphicsItemAnimation::afterAnimationStep(qreal step)
 QT_END_NAMESPACE
 
 #include "moc_qgraphicsitemanimation.cpp"
-
-#endif // QT_NO_GRAPHICSVIEW

@@ -1,32 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Android port of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,8 +47,10 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.Rect;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
@@ -68,6 +77,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.ViewTreeObserver;
+import android.widget.ImageView;
+import android.widget.PopupMenu;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -79,6 +90,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
+
+import org.qtproject.qt5.android.accessibility.QtAccessibilityDelegate;
 
 public class QtActivityDelegate
 {
@@ -102,6 +115,7 @@ public class QtActivityDelegate
     private static final String STATIC_INIT_CLASSES_KEY = "static.init.classes";
     private static final String NECESSITAS_API_LEVEL_KEY = "necessitas.api.level";
     private static final String EXTRACT_STYLE_KEY = "extract.android.style";
+    private static final String EXTRACT_STYLE_MINIMAL_KEY = "extract.android.style.option";
 
     private static String m_environmentVariables = null;
     private static String m_applicationParameters = null;
@@ -118,6 +132,8 @@ public class QtActivityDelegate
     private HashMap<Integer, QtSurface> m_surfaces = null;
     private HashMap<Integer, View> m_nativeViews = null;
     private QtLayout m_layout = null;
+    private ImageView m_splashScreen = null;
+    private boolean m_splashScreenSticky = false;
     private QtEditText m_editText = null;
     private InputMethodManager m_imm = null;
     private boolean m_quitApp = true;
@@ -129,6 +145,11 @@ public class QtActivityDelegate
     private int m_portraitKeyboardHeight = 0;
     private int m_landscapeKeyboardHeight = 0;
     private int m_probeKeyboardHeightDelay = 50; // ms
+    private CursorHandle m_cursorHandle;
+    private CursorHandle m_leftSelectionHandle;
+    private CursorHandle m_rightSelectionHandle;
+    private EditMenu m_editMenu;
+    private EditPopupMenu m_editPopupMenu;
 
     public void setFullScreen(boolean enterFullScreen)
     {
@@ -140,14 +161,13 @@ public class QtActivityDelegate
             m_activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
             try {
                 if (Build.VERSION.SDK_INT >= 19) {
-                    int flags = View.class.getDeclaredField("SYSTEM_UI_FLAG_HIDE_NAVIGATION").getInt(null);
-                    flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_LAYOUT_STABLE").getInt(null);
-                    flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION").getInt(null);
-                    flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN").getInt(null);
-                    flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_FULLSCREEN").getInt(null);
+                    int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+                    flags |= View.SYSTEM_UI_FLAG_FULLSCREEN;
                     flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_IMMERSIVE_STICKY").getInt(null);
-                    Method m = View.class.getMethod("setSystemUiVisibility", int.class);
-                    m.invoke(m_activity.getWindow().getDecorView(), flags | View.INVISIBLE);
+                    m_activity.getWindow().getDecorView().setSystemUiVisibility(flags | View.INVISIBLE);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -155,15 +175,7 @@ public class QtActivityDelegate
         } else {
             m_activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
             m_activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            if (Build.VERSION.SDK_INT >= 14) {
-                try {
-                    int ui_flag_visible = View.class.getDeclaredField("SYSTEM_UI_FLAG_VISIBLE").getInt(null);
-                    Method m = View.class.getMethod("setSystemUiVisibility", int.class);
-                    m.invoke(m_activity.getWindow().getDecorView(), ui_flag_visible);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+            m_activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
         }
         m_layout.requestLayout();
     }
@@ -265,6 +277,9 @@ public class QtActivityDelegate
 
         if (m_softInputMode != 0) {
             m_activity.getWindow().setSoftInputMode(m_softInputMode);
+            final boolean softInputIsHidden = (m_softInputMode & WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN) != 0;
+            if (softInputIsHidden)
+                return;
         } else {
             if (height > visibleHeight)
                 m_activity.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -293,8 +308,7 @@ public class QtActivityDelegate
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NEXT;
             break;
         case EnterKeyPrevious:
-            if (Build.VERSION.SDK_INT > 10)
-                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_PREVIOUS;
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_PREVIOUS;
             break;
         }
 
@@ -307,7 +321,7 @@ public class QtActivityDelegate
                               | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
             }
 
-            if (Build.VERSION.SDK_INT > 10 && (inputHints & ImhHiddenText) != 0)
+            if ((inputHints & ImhHiddenText) != 0)
                 inputType |= 0x10 /* TYPE_NUMBER_VARIATION_PASSWORD */;
         } else if ((inputHints & ImhDialableCharactersOnly) != 0) {
             inputType = android.text.InputType.TYPE_CLASS_PHONE;
@@ -466,6 +480,80 @@ public class QtActivityDelegate
         m_imm.updateSelection(m_editText, selStart, selEnd, candidatesStart, candidatesEnd);
     }
 
+    // Values coming from QAndroidInputContext::CursorHandleShowMode
+    private static final int CursorHandleNotShown = 0;
+    private static final int CursorHandleShowNormal = 1;
+    private static final int CursorHandleShowSelection = 2;
+    private static final int CursorHandleShowPopup = 3;
+
+    /* called from the C++ code when the position of the cursor or selection handles needs to
+       be adjusted.
+       mode is one of QAndroidInputContext::CursorHandleShowMode
+    */
+    public void updateHandles(int mode, int x1, int y1, int x2, int y2, boolean rtl)
+    {
+        if (mode == CursorHandleNotShown) {
+            if (m_cursorHandle != null)
+                m_cursorHandle.hide();
+            if (m_rightSelectionHandle != null) {
+                m_rightSelectionHandle.hide();
+                m_leftSelectionHandle.hide();
+                m_rightSelectionHandle = null;
+                m_leftSelectionHandle = null;
+            }
+            if (m_editMenu != null)
+                m_editMenu.hide();
+            if (m_editPopupMenu != null)
+                m_editPopupMenu.hide();
+        } else if (mode == CursorHandleShowNormal || mode == CursorHandleShowPopup) {
+            if (m_cursorHandle == null) {
+                m_cursorHandle = new CursorHandle(m_activity, m_layout, QtNative.IdCursorHandle,
+                                                  android.R.attr.textSelectHandle, false);
+            }
+            m_cursorHandle.setPosition(x1, y1);
+            if (m_rightSelectionHandle != null) {
+                m_rightSelectionHandle.hide();
+                m_leftSelectionHandle.hide();
+                m_rightSelectionHandle = null;
+                m_leftSelectionHandle = null;
+            }
+        } else if (mode == CursorHandleShowSelection) {
+            if (m_rightSelectionHandle == null) {
+                m_leftSelectionHandle = new CursorHandle(m_activity, m_layout, QtNative.IdLeftHandle,
+                                                         !rtl ? android.R.attr.textSelectHandleLeft :
+                                                                android.R.attr.textSelectHandleRight,
+                                                         rtl);
+                m_rightSelectionHandle = new CursorHandle(m_activity, m_layout, QtNative.IdRightHandle,
+                                                          !rtl ? android.R.attr.textSelectHandleRight :
+                                                                 android.R.attr.textSelectHandleLeft,
+                                                          rtl);
+            }
+            m_leftSelectionHandle.setPosition(x1,y1);
+            m_rightSelectionHandle.setPosition(x2,y2);
+            if (m_cursorHandle != null)
+                m_cursorHandle.hide();
+
+            if (m_editMenu == null)
+                m_editMenu = new EditMenu(m_activity);
+            m_editMenu.show();
+        }
+
+        // show the edit popup menu
+        if (mode == CursorHandleShowPopup && (m_editMenu == null || !m_editMenu.isShown())
+                && QtNative.hasClipboardText()) {
+            if (m_editPopupMenu == null)
+                m_editPopupMenu = new EditPopupMenu(m_activity, m_layout);
+            if (y2 < m_editPopupMenu.getHeight())  {
+                // If the popup cannot be shown over the text, it must be shown under the anchors
+                y2 = y1 + 2 * m_editPopupMenu.getHeight();
+            }
+            m_editPopupMenu.setPosition(x2, y2);
+        } else if (m_editPopupMenu != null) {
+            m_editPopupMenu.hide();
+        }
+
+    }
+
     public boolean loadApplication(Activity activity, ClassLoader classLoader, Bundle loaderParams)
     {
         /// check parameters integrity
@@ -485,11 +573,19 @@ public class QtActivityDelegate
                     continue;
 
                 try {
-                    @SuppressWarnings("rawtypes")
-                    Class<?> initClass = classLoader.loadClass(className);
-                    Object staticInitDataObject = initClass.newInstance(); // create an instance
-                    Method m = initClass.getMethod("setActivity", Activity.class, Object.class);
-                    m.invoke(staticInitDataObject, m_activity, this);
+                  Class<?> initClass = classLoader.loadClass(className);
+                  Object staticInitDataObject = initClass.newInstance(); // create an instance
+                  try {
+                      Method m = initClass.getMethod("setActivity", Activity.class, Object.class);
+                      m.invoke(staticInitDataObject, m_activity, this);
+                  } catch (Exception e) {
+                  }
+
+                  try {
+                      Method m = initClass.getMethod("setContext", Context.class);
+                      m.invoke(staticInitDataObject, (Context)m_activity);
+                  } catch (Exception e) {
+                  }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -505,7 +601,8 @@ public class QtActivityDelegate
 
         if (loaderParams.containsKey(EXTRACT_STYLE_KEY)) {
             String path = loaderParams.getString(EXTRACT_STYLE_KEY);
-            new ExtractStyle(m_activity, path);
+            new ExtractStyle(m_activity, path, loaderParams.containsKey(EXTRACT_STYLE_MINIMAL_KEY) &&
+                                               loaderParams.getBoolean(EXTRACT_STYLE_MINIMAL_KEY));
         }
 
         try {
@@ -518,13 +615,7 @@ public class QtActivityDelegate
             m_super_onConfigurationChanged = m_activity.getClass().getMethod("super_onConfigurationChanged", Configuration.class);
             m_super_onActivityResult = m_activity.getClass().getMethod("super_onActivityResult", Integer.TYPE, Integer.TYPE, Intent.class);
             m_super_onWindowFocusChanged = m_activity.getClass().getMethod("super_onWindowFocusChanged", Boolean.TYPE);
-            if (Build.VERSION.SDK_INT >= 12) {
-                try {
-                    m_super_dispatchGenericMotionEvent = m_activity.getClass().getMethod("super_dispatchGenericMotionEvent", MotionEvent.class);
-                } catch (Exception e) {
-                }
-            }
-
+            m_super_dispatchGenericMotionEvent = m_activity.getClass().getMethod("super_dispatchGenericMotionEvent", MotionEvent.class);
         } catch (Exception e) {
             e.printStackTrace();
             return false;
@@ -540,10 +631,8 @@ public class QtActivityDelegate
                                               + "\tNECESSITAS_API_LEVEL=" + necessitasApiLevel
                                               + "\tHOME=" + m_activity.getFilesDir().getAbsolutePath()
                                               + "\tTMPDIR=" + m_activity.getFilesDir().getAbsolutePath();
-        if (Build.VERSION.SDK_INT < 14)
-            additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Droid Sans;Droid Sans Fallback";
-        else
-            additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Roboto;Droid Sans;Droid Sans Fallback";
+
+        additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Roboto;Droid Sans;Droid Sans Fallback";
 
         additionalEnvironmentVariables += getAppIconSize(activity);
 
@@ -628,58 +717,26 @@ public class QtActivityDelegate
     {
         // start application
         try {
-            // FIXME turn on debuggable check
-            // if the applications is debuggable and it has a native debug request
+
             Bundle extras = m_activity.getIntent().getExtras();
             if (extras != null) {
-
-                if ( /*(ai.flags&ApplicationInfo.FLAG_DEBUGGABLE) != 0
-                        &&*/ extras.containsKey("native_debug")
-                        && extras.getString("native_debug").equals("true")) {
-                    try {
-                        String packagePath =
-                            m_activity.getPackageManager().getApplicationInfo(m_activity.getPackageName(),
-                                                                              PackageManager.GET_CONFIGURATIONS).dataDir + "/";
-                        String gdbserverPath =
-                            extras.containsKey("gdbserver_path")
-                            ? extras.getString("gdbserver_path")
-                            : packagePath+"lib/gdbserver ";
-
-                        String socket =
-                            extras.containsKey("gdbserver_socket")
-                            ? extras.getString("gdbserver_socket")
-                            : "+debug-socket";
-
-                        if (!(new File(gdbserverPath)).exists())
-                            gdbserverPath += ".so";
-
-                        // start debugger
-                        m_debuggerProcess = Runtime.getRuntime().exec(gdbserverPath
-                                                                        + socket
-                                                                        + " --attach "
-                                                                        + android.os.Process.myPid(),
-                                                                      null,
-                                                                      new File(packagePath));
-                    } catch (IOException ioe) {
-                        Log.e(QtNative.QtTAG,"Can't start debugger" + ioe.getMessage());
-                    } catch (SecurityException se) {
-                        Log.e(QtNative.QtTAG,"Can't start debugger" + se.getMessage());
-                    } catch (NameNotFoundException e) {
-                        Log.e(QtNative.QtTAG,"Can't start debugger" + e.getMessage());
-                    }
-                }
-
-
                 if ( /*(ai.flags&ApplicationInfo.FLAG_DEBUGGABLE) != 0
                         &&*/ extras.containsKey("debug_ping")
                         && extras.getString("debug_ping").equals("true")) {
                     try {
+                        final String dc = "--Added-by-androiddeployqt--/debugger.command";
+                        String debuggerCommand =
+                            new BufferedReader(new InputStreamReader(m_activity.getAssets().open(dc))).readLine();
+                        String packagePath =
+                            m_activity.getPackageManager().getApplicationInfo(m_activity.getPackageName(),
+                                                                              PackageManager.GET_CONFIGURATIONS).dataDir + "/";
+
                         debugLog("extra parameters: " + extras);
                         String packageName = m_activity.getPackageName();
                         String pingFile = extras.getString("ping_file");
                         String pongFile = extras.getString("pong_file");
                         String gdbserverSocket = extras.getString("gdbserver_socket");
-                        String gdbserverCommand = extras.getString("gdbserver_command");
+                        String gdbserverCommand = packagePath + debuggerCommand + gdbserverSocket;
                         String pingSocket = extras.getString("ping_socket");
                         boolean usePing = pingFile != null;
                         boolean usePong = pongFile != null;
@@ -808,9 +865,9 @@ public class QtActivityDelegate
                         }
 
                     } catch (IOException ioe) {
-                        Log.e(QtNative.QtTAG,"Can't start debugger" + ioe.getMessage());
+                        ioe.printStackTrace();
                     } catch (SecurityException se) {
-                        Log.e(QtNative.QtTAG,"Can't start debugger" + se.getMessage());
+                        se.printStackTrace();
                     }
                 }
 
@@ -881,6 +938,22 @@ public class QtActivityDelegate
             };
         }
         m_layout = new QtLayout(m_activity, startApplication);
+
+        try {
+            ActivityInfo info = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(), PackageManager.GET_META_DATA);
+            if (info.metaData.containsKey("android.app.splash_screen_drawable")) {
+                m_splashScreenSticky = info.metaData.containsKey("android.app.splash_screen_sticky") && info.metaData.getBoolean("android.app.splash_screen_sticky");
+                int id = info.metaData.getInt("android.app.splash_screen_drawable");
+                m_splashScreen = new ImageView(m_activity);
+                m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id));
+                m_splashScreen.setScaleType(ImageView.ScaleType.FIT_XY);
+                m_splashScreen.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                m_layout.addView(m_splashScreen);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         m_editText = new QtEditText(m_activity, this);
         m_imm = (InputMethodManager)m_activity.getSystemService(Context.INPUT_METHOD_SERVICE);
         m_surfaces =  new HashMap<Integer, QtSurface>();
@@ -922,23 +995,18 @@ public class QtActivityDelegate
         });
     }
 
+    public void hideSplashScreen()
+    {
+        if (m_splashScreen == null)
+            return;
+        m_layout.removeView(m_splashScreen);
+        m_splashScreen = null;
+    }
+
+
     public void initializeAccessibility()
     {
-        // Initialize accessibility
-        try {
-            final String a11yDelegateClassName = "org.qtproject.qt5.android.accessibility.QtAccessibilityDelegate";
-            Class<?> qtDelegateClass = Class.forName(a11yDelegateClassName);
-            Constructor constructor = qtDelegateClass.getConstructor(android.app.Activity.class,
-                                                                     android.view.ViewGroup.class,
-                                                                     this.getClass());
-            Object accessibilityDelegate = constructor.newInstance(m_activity, m_layout, this);
-        } catch (ClassNotFoundException e) {
-            // Class not found is fine since we are compatible with Android API < 16, but the function will
-            // only be available with that API level.
-        } catch (Exception e) {
-            // Unknown exception means something went wrong.
-            Log.w("Qt A11y", "Unknown exception: " + e.toString());
-        }
+        new QtAccessibilityDelegate(m_activity, m_layout, this);
     }
 
     public void onWindowFocusChanged(boolean hasFocus) {
@@ -958,6 +1026,7 @@ public class QtActivityDelegate
         } catch (Exception e) {
             e.printStackTrace();
         }
+
         int rotation = m_activity.getWindowManager().getDefaultDisplay().getRotation();
         if (rotation != m_currentRotation) {
             QtNative.handleOrientationChanged(rotation, m_nativeOrientation);
@@ -970,6 +1039,7 @@ public class QtActivityDelegate
     {
         if (m_quitApp) {
             QtNative.terminateQt();
+            QtNative.setActivity(null, null);
             if (m_debuggerProcess != null)
                 m_debuggerProcess.destroy();
             System.exit(0);// FIXME remove it or find a better way
@@ -1152,17 +1222,9 @@ public class QtActivityDelegate
 
     public void resetOptionsMenu()
     {
-        if (Build.VERSION.SDK_INT > 10) {
-            try {
-                Activity.class.getMethod("invalidateOptionsMenu").invoke(m_activity);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-        else
-            if (m_optionsMenuIsVisible)
-                m_activity.closeOptionsMenu();
+        m_activity.invalidateOptionsMenu();
     }
+
     private boolean m_contextMenuVisible = false;
     public void onCreateContextMenu(ContextMenu menu,
                                     View v,
@@ -1198,15 +1260,22 @@ public class QtActivityDelegate
         m_layout.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    if (Build.VERSION.SDK_INT < 11 || w <= 0 || h <= 0) {
-                        m_activity.openContextMenu(m_layout);
-                    } else if (Build.VERSION.SDK_INT < 14) {
-                        m_layout.setLayoutParams(m_editText, new QtLayout.LayoutParams(w, h, x, y), false);
-                        QtPopupMenu.getInstance().showMenu(m_editText);
-                    } else {
-                        m_layout.setLayoutParams(m_editText, new QtLayout.LayoutParams(w, h, x, y), false);
-                        QtPopupMenu14.getInstance().showMenu(m_editText);
-                    }
+                    m_layout.setLayoutParams(m_editText, new QtLayout.LayoutParams(w, h, x, y), false);
+                    PopupMenu popup = new PopupMenu(m_activity, m_editText);
+                    QtActivityDelegate.this.onCreatePopupMenu(popup.getMenu());
+                    popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                        @Override
+                        public boolean onMenuItemClick(MenuItem menuItem) {
+                            return QtActivityDelegate.this.onContextItemSelected(menuItem);
+                        }
+                    });
+                    popup.setOnDismissListener(new PopupMenu.OnDismissListener() {
+                        @Override
+                        public void onDismiss(PopupMenu popupMenu) {
+                            QtActivityDelegate.this.onContextMenuClosed(popupMenu.getMenu());
+                        }
+                    });
+                    popup.show();
                 }
             }, 100);
     }
@@ -1216,46 +1285,14 @@ public class QtActivityDelegate
         m_activity.closeContextMenu();
     }
 
-    private boolean hasPermanentMenuKey()
-    {
-        try {
-            return Build.VERSION.SDK_INT < 11 || (Build.VERSION.SDK_INT >= 14 &&
-                    (Boolean)ViewConfiguration.class.getMethod("hasPermanentMenuKey").invoke(ViewConfiguration.get(m_activity)));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private Object getActionBar()
-    {
-        try {
-            return Activity.class.getMethod("getActionBar").invoke(m_activity);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
     private void setActionBarVisibility(boolean visible)
     {
-        if (hasPermanentMenuKey() || !visible) {
-            if (Build.VERSION.SDK_INT > 10 && getActionBar() != null) {
-                try {
-                    Class.forName("android.app.ActionBar").getMethod("hide").invoke(getActionBar());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-
-        } else {
-            if (Build.VERSION.SDK_INT > 10 && getActionBar() != null)
-                try {
-                    Class.forName("android.app.ActionBar").getMethod("show").invoke(getActionBar());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-        }
+        if (m_activity.getActionBar() == null)
+            return;
+        if (ViewConfiguration.get(m_activity).hasPermanentMenuKey() || !visible)
+            m_activity.getActionBar().hide();
+        else
+            m_activity.getActionBar().show();
     }
 
     public void insertNativeView(int id, View view, int x, int y, int w, int h) {
@@ -1311,6 +1348,8 @@ public class QtActivityDelegate
         m_layout.addView(surface, surfaceCount);
 
         m_surfaces.put(id, surface);
+        if (!m_splashScreenSticky)
+            hideSplashScreen();
     }
 
     public void setSurfaceGeometry(int id, int x, int y, int w, int h) {
@@ -1395,5 +1434,10 @@ public class QtActivityDelegate
             e.printStackTrace();
         }
         return false;
+    }
+
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    {
+        QtNative.sendRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }

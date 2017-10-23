@@ -1,32 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2012 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -655,6 +650,31 @@ void tst_QUrlInternal::ace_testsuite_data()
         << "xn--djrptm67aikb.xn--kpry57d"
         << "."
         << taiwaneseIDN;
+
+    // violations / invalids
+    QTest::newRow("invalid-punycode") << "xn--z" << "xn--z" << "xn--z" << "xn--z";
+
+    // U+00A0 NO-BREAK SPACE encodes to Punycode "6a"
+    // but it is prohibited and should have caused encoding failure
+    QTest::newRow("invalid-nameprep-prohibited") << "xn--6a" << "xn--6a" << "xn--6a" << "xn--6a";
+
+    // U+00AD SOFT HYPHEN between "a" and "b" encodes to Punycode "ab-5da"
+    // but it should have been removed in the nameprep stage
+    QTest::newRow("invalid-nameprep-maptonothing") << "xn-ab-5da" << "xn-ab-5da" << "xn-ab-5da" << "xn-ab-5da";
+
+    // U+00C1 LATIN CAPITAL LETTER A WITH ACUTE encodes to Punycode "4ba"
+    // but it should have nameprepped to lowercase first
+    QTest::newRow("invalid-nameprep-uppercase") << "xn--4ba" << "xn--4ba" << "xn--4ba" << "xn--4ba";
+
+    // U+00B5 MICRO SIGN encodes to Punycode "sba"
+    // but is should have nameprepped to NFKC U+03BC GREEK SMALL LETTER MU
+    QTest::newRow("invalid-nameprep-nonnfkc") << "xn--sba" << "xn--sba" << "xn--sba" << "xn--sba";
+
+    // U+04CF CYRILLIC SMALL LETTER PALOCHKA encodes to "s5a"
+    // but it's not in RFC 3454's allowed character list (Unicode 3.2)
+    QTest::newRow("invalid-nameprep-unassigned") << "xn--s5a" << "xn--s5a" << "xn--s5a" << "xn--s5a";
+    // same character, see QTBUG-60364
+    QTest::newRow("invalid-nameprep-unassigned2") << "xn--80ak6aa92e" << "xn--80ak6aa92e" << "xn--80ak6aa92e" << "xn--80ak6aa92e";
 }
 
 void tst_QUrlInternal::ace_testsuite()
@@ -674,6 +694,14 @@ void tst_QUrlInternal::ace_testsuite()
     if (fromace != ".")
         QCOMPARE(QUrl::fromAce(domain.toLatin1()), fromace + suffix);
     QCOMPARE(QUrl::fromAce(QUrl::toAce(domain)), unicode + suffix);
+
+    QUrl u;
+    u.setHost(domain);
+    QVERIFY(u.isValid());
+    QCOMPARE(u.host(), unicode + suffix);
+    QCOMPARE(u.host(QUrl::EncodeUnicode), toace + suffix);
+    QCOMPARE(u.toEncoded(), "//" + toace.toLatin1() + suffix);
+    QCOMPARE(u.toDisplayString(), "//" + unicode + suffix);
 
     domain = in + (suffix ? ".troll.No" : "");
     QCOMPARE(QString::fromLatin1(QUrl::toAce(domain)), toace + suffix);
@@ -1003,7 +1031,9 @@ void tst_QUrlInternal::encodingRecodeInvalidUtf8_data()
     QTest::addColumn<QString>("utf16");
 
     extern void loadInvalidUtf8Rows();
+    extern void loadNonCharactersRows();
     loadInvalidUtf8Rows();
+    loadNonCharactersRows();
 
     QTest::newRow("utf8-mix-4") << QByteArray("\xE0.A2\x80");
     QTest::newRow("utf8-mix-5") << QByteArray("\xE0\xA2.80");

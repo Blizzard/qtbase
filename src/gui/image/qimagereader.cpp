@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -141,6 +147,9 @@
 #include <private/qfactoryloader_p.h>
 #include <QMutexLocker>
 
+// for qt_getImageText
+#include <private/qimage_p.h>
+
 // image handlers
 #include <private/qbmphandler_p.h>
 #include <private/qppmhandler_p.h>
@@ -148,12 +157,6 @@
 #include <private/qxpmhandler_p.h>
 #ifndef QT_NO_IMAGEFORMAT_PNG
 #include <private/qpnghandler_p.h>
-#endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-#include <private/qjpeghandler_p.h>
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-#include <private/qgifhandler_p.h>
 #endif
 
 #include <algorithm>
@@ -168,13 +171,6 @@ Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
 enum _qt_BuiltInFormatType {
 #ifndef QT_NO_IMAGEFORMAT_PNG
     _qt_PngFormat,
-#endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-    _qt_JpgFormat,
-    _qt_JpegFormat,
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-    _qt_GifFormat,
 #endif
 #ifndef QT_NO_IMAGEFORMAT_BMP
     _qt_BmpFormat,
@@ -194,39 +190,42 @@ enum _qt_BuiltInFormatType {
     _qt_NoFormat = -1
 };
 
+#if !defined(QT_NO_IMAGEFORMAT_PPM)
+# define MAX_MT_SIZE 20
+#elif !defined(QT_NO_IMAGEFORMAT_XBM) || !defined(QT_NO_IMAGEFORMAT_XPM)
+#  define MAX_MT_SIZE 10
+#else
+#  define MAX_MT_SIZE 4
+#endif
+
 struct _qt_BuiltInFormatStruct
 {
-    const char *extension;
-    const char *mimeType;
+    char extension[4];
+    char mimeType[MAX_MT_SIZE];
 };
+
+#undef MAX_MT_SIZE
 
 static const _qt_BuiltInFormatStruct _qt_BuiltInFormats[] = {
 #ifndef QT_NO_IMAGEFORMAT_PNG
-    {"png", "image/png"},
-#endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-    {"jpg", "image/jpeg"},
-    {"jpeg", "image/jpeg"},
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-    {"gif", "image/gif"},
+    {"png", "png"},
 #endif
 #ifndef QT_NO_IMAGEFORMAT_BMP
-    {"bmp", "image/bmp"},
+    {"bmp", "bmp"},
 #endif
 #ifndef QT_NO_IMAGEFORMAT_PPM
-    {"ppm", "image/x-portable-pixmap"},
-    {"pgm", "image/x-portable-graymap"},
-    {"pbm", "image/x-portable-bitmap"},
+    {"ppm", "x-portable-pixmap"},
+    {"pgm", "x-portable-graymap"},
+    {"pbm", "x-portable-bitmap"},
 #endif
 #ifndef QT_NO_IMAGEFORMAT_XBM
-    {"xbm", "image/x-xbitmap"},
+    {"xbm", "x-xbitmap"},
 #endif
 #ifndef QT_NO_IMAGEFORMAT_XPM
-    {"xpm", "image/x-xpixmap"},
+    {"xpm", "x-xpixmap"},
 #endif
-    {"", ""}
 };
+Q_STATIC_ASSERT(_qt_NumFormats == sizeof _qt_BuiltInFormats / sizeof *_qt_BuiltInFormats);
 
 static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                                                 const QByteArray &format,
@@ -351,14 +350,6 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
         } else if (testFormat == "png") {
             handler = new QPngHandler;
 #endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-        } else if (testFormat == "jpg" || testFormat == "jpeg") {
-            handler = new QJpegHandler;
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-        } else if (testFormat == "gif") {
-            handler = new QGifHandler;
-#endif
 #ifndef QT_NO_IMAGEFORMAT_BMP
         } else if (testFormat == "bmp") {
             handler = new QBmpHandler;
@@ -436,19 +427,6 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
                     handler = new QPngHandler;
                 break;
 #endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-            case _qt_JpgFormat:
-            case _qt_JpegFormat:
-                if (QJpegHandler::canRead(device))
-                    handler = new QJpegHandler;
-                break;
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-            case _qt_GifFormat:
-                if (QGifHandler::canRead(device))
-                    handler = new QGifHandler;
-                break;
-#endif
 #ifndef QT_NO_IMAGEFORMAT_BMP
             case _qt_BmpFormat:
                 if (QBmpHandler::canRead(device))
@@ -485,21 +463,22 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
 
             if (handler) {
 #ifdef QIMAGEREADER_DEBUG
-                qDebug() << "QImageReader::createReadHandler: the" << _qt_BuiltInFormats[currentFormat].extension
-                         << "built-in handler can read this data";
+                qDebug("QImageReader::createReadHandler: the %s built-in handler can read this data",
+                       _qt_BuiltInFormats[currentFormat].extension);
 #endif
                 break;
             }
 
             --numFormats;
             ++currentFormat;
-            currentFormat %= _qt_NumFormats;
+            if (currentFormat >= _qt_NumFormats)
+                currentFormat = 0;
         }
     }
 
     if (!handler) {
 #ifdef QIMAGEREADER_DEBUG
-        qDebug() << "QImageReader::createReadHandler: no handlers found. giving up.";
+        qDebug("QImageReader::createReadHandler: no handlers found. giving up.");
 #endif
         // no handler: give up.
         return 0;
@@ -601,7 +580,7 @@ bool QImageReaderPrivate::initHandler()
 
         do {
             file->setFileName(fileName + QLatin1Char('.')
-                    + QString::fromLatin1(extensions.at(currentExtension++).constData()));
+                    + QLatin1String(extensions.at(currentExtension++).constData()));
             file->open(QIODevice::ReadOnly);
         } while (!file->isOpen() && currentExtension < extensions.size());
 
@@ -627,18 +606,8 @@ bool QImageReaderPrivate::initHandler()
 */
 void QImageReaderPrivate::getText()
 {
-    if (!text.isEmpty() || (!handler && !initHandler()) || !handler->supportsOption(QImageIOHandler::Description))
-        return;
-    foreach (const QString &pair, handler->option(QImageIOHandler::Description).toString().split(
-                QLatin1String("\n\n"))) {
-        int index = pair.indexOf(QLatin1Char(':'));
-        if (index >= 0 && pair.indexOf(QLatin1Char(' ')) < index) {
-            text.insert(QLatin1String("Description"), pair.simplified());
-        } else {
-            QString key = pair.left(index);
-            text.insert(key, pair.mid(index + 2).simplified());
-        }
-    }
+    if (text.isEmpty() && (handler || initHandler()) && handler->supportsOption(QImageIOHandler::Description))
+        text = qt_getImageTextFromDescription(handler->option(QImageIOHandler::Description).toString());
 }
 
 /*!
@@ -668,12 +637,9 @@ QImageReader::QImageReader(QIODevice *device, const QByteArray &format)
     \sa setFileName()
 */
 QImageReader::QImageReader(const QString &fileName, const QByteArray &format)
-    : d(new QImageReaderPrivate(this))
+    : QImageReader(new QFile(fileName), format)
 {
-    QFile *file = new QFile(fileName);
-    d->device = file;
     d->deleteDevice = true;
-    d->format = format;
 }
 
 /*!
@@ -1144,7 +1110,7 @@ QList<QByteArray> QImageReader::supportedSubTypes() const
     if (!d->initHandler())
         return QList<QByteArray>();
 
-    if (!d->handler->supportsOption(QImageIOHandler::SupportedSubTypes))
+    if (d->handler->supportsOption(QImageIOHandler::SupportedSubTypes))
         return d->handler->option(QImageIOHandler::SupportedSubTypes).value< QList<QByteArray> >();
     return QList<QByteArray>();
 }
@@ -1196,7 +1162,7 @@ bool QImageReader::autoTransform() const
     case QImageReaderPrivate::UsePluginDefault:
         if (d->initHandler())
             return d->handler->supportsOption(QImageIOHandler::TransformedByDefault);
-        // no break
+        Q_FALLTHROUGH();
     default:
         break;
     }
@@ -1649,8 +1615,8 @@ QList<QByteArray> QImageReader::supportedMimeTypes()
 {
     QList<QByteArray> mimeTypes;
     mimeTypes.reserve(_qt_NumFormats);
-    for (int i = 0; i < _qt_NumFormats; ++i)
-        mimeTypes << _qt_BuiltInFormats[i].mimeType;
+    for (const auto &fmt : _qt_BuiltInFormats)
+        mimeTypes.append(QByteArrayLiteral("image/") + fmt.mimeType);
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
     supportedImageHandlerMimeTypes(loader(), QImageIOPlugin::CanRead, &mimeTypes);

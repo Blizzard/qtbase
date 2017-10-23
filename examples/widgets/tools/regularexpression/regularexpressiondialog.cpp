@@ -1,14 +1,24 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Copyright (C) 2015 Samuel Gaist <samuel.gaist@edeltech.ch>
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+** Copyright (C) 2016 Samuel Gaist <samuel.gaist@edeltech.ch>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -48,12 +58,14 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QSpinBox>
 #include <QPlainTextEdit>
 #include <QTreeWidget>
 
 #include <QAction>
 #include <QClipboard>
+#include <QContextMenuEvent>
 
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -64,6 +76,102 @@
 #include <QRegularExpressionMatchIterator>
 
 Q_DECLARE_METATYPE(QRegularExpression::MatchType)
+
+static QString patternToCode(QString pattern)
+{
+    pattern.replace(QLatin1String("\\"), QLatin1String("\\\\"));
+    pattern.replace(QLatin1String("\""), QLatin1String("\\\""));
+    pattern.prepend(QLatin1Char('"'));
+    pattern.append(QLatin1Char('"'));
+    return pattern;
+}
+
+static QString codeToPattern(QString code)
+{
+    for (int i = 0; i < code.size(); ++i) {
+        if (code.at(i) == QLatin1Char('\\'))
+            code.remove(i, 1);
+    }
+    if (code.startsWith(QLatin1Char('"')) && code.endsWith(QLatin1Char('"'))) {
+        code.chop(1);
+        code.remove(0, 1);
+    }
+    return code;
+}
+
+class PatternLineEdit : public QLineEdit
+{
+    Q_OBJECT
+public:
+    explicit PatternLineEdit(QWidget *parent = nullptr);
+
+private slots:
+    void copyToCode();
+    void pasteFromCode();
+    void escapeSelection();
+
+protected:
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
+private:
+    QAction *escapeSelectionAction;
+    QAction *copyToCodeAction;
+    QAction *pasteFromCodeAction;
+};
+
+PatternLineEdit::PatternLineEdit(QWidget *parent) :
+    QLineEdit(parent),
+    escapeSelectionAction(new QAction(tr("Escape Selection"), this)),
+    copyToCodeAction(new QAction(tr("Copy to Code"), this)),
+    pasteFromCodeAction(new QAction(tr("Paste from Code"), this))
+{
+    setClearButtonEnabled(true);
+    connect(escapeSelectionAction, &QAction::triggered, this, &PatternLineEdit::escapeSelection);
+    connect(copyToCodeAction, &QAction::triggered, this, &PatternLineEdit::copyToCode);
+    connect(pasteFromCodeAction, &QAction::triggered, this, &PatternLineEdit::pasteFromCode);
+#if !QT_CONFIG(clipboard)
+    copyToCodeAction->setEnabled(false);
+    pasteFromCodeAction->setEnabled(false);
+#endif
+}
+
+void PatternLineEdit::escapeSelection()
+{
+    const QString selection = selectedText();
+    const QString escapedSelection = QRegularExpression::escape(selection);
+    if (escapedSelection != selection) {
+        QString t = text();
+        t.replace(selectionStart(), selection.size(), escapedSelection);
+        setText(t);
+    }
+}
+
+void PatternLineEdit::copyToCode()
+{
+#if QT_CONFIG(clipboard)
+    QGuiApplication::clipboard()->setText(patternToCode(text()));
+#endif
+}
+
+void PatternLineEdit::pasteFromCode()
+{
+#if QT_CONFIG(clipboard)
+    setText(codeToPattern(QGuiApplication::clipboard()->text()));
+#endif
+}
+
+void PatternLineEdit::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu *menu = createStandardContextMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->addSeparator();
+    escapeSelectionAction->setEnabled(hasSelectedText());
+    menu->addAction(escapeSelectionAction);
+    menu->addSeparator();
+    menu->addAction(copyToCodeAction);
+    menu->addAction(pasteFromCodeAction);
+    menu->popup(event->globalPos());
+}
 
 RegularExpressionDialog::RegularExpressionDialog(QWidget *parent)
     : QDialog(parent)
@@ -84,10 +192,10 @@ RegularExpressionDialog::RegularExpressionDialog(QWidget *parent)
     connect(optimizeOnFirstUsageOptionCheckBox, &QCheckBox::toggled, this, &RegularExpressionDialog::refresh);
     connect(dontAutomaticallyOptimizeOptionCheckBox, &QCheckBox::toggled, this, &RegularExpressionDialog::refresh);
 
-    connect(offsetSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+    connect(offsetSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &RegularExpressionDialog::refresh);
 
-    connect(matchTypeComboBox, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+    connect(matchTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RegularExpressionDialog::refresh);
 
     connect(anchoredMatchOptionCheckBox, &QCheckBox::toggled, this, &RegularExpressionDialog::refresh);
@@ -99,6 +207,19 @@ RegularExpressionDialog::RegularExpressionDialog(QWidget *parent)
     refresh();
 }
 
+void RegularExpressionDialog::setResultUiEnabled(bool enabled)
+{
+    matchDetailsTreeWidget->setEnabled(enabled);
+    namedGroupsTreeWidget->setEnabled(enabled);
+}
+
+static void setTextColor(QWidget *widget, const QColor &color)
+{
+    QPalette palette = widget->palette();
+    palette.setColor(QPalette::Text, color);
+    widget->setPalette(palette);
+}
+
 void RegularExpressionDialog::refresh()
 {
     setUpdatesEnabled(false);
@@ -108,14 +229,32 @@ void RegularExpressionDialog::refresh()
 
     offsetSpinBox->setMaximum(qMax(0, text.length() - 1));
 
-    QString escaped = pattern;
-    escaped.replace(QLatin1String("\\"), QLatin1String("\\\\"));
-    escaped.replace(QLatin1String("\""), QLatin1String("\\\""));
-    escaped.prepend(QLatin1Char('"'));
-    escaped.append(QLatin1Char('"'));
-    escapedPatternLineEdit->setText(escaped);
+    escapedPatternLineEdit->setText(patternToCode(pattern));
+
+    setTextColor(patternLineEdit, subjectTextEdit->palette().color(QPalette::Text));
+    matchDetailsTreeWidget->clear();
+    namedGroupsTreeWidget->clear();
+    regexpStatusLabel->setText(QString());
+
+    if (pattern.isEmpty()) {
+        setResultUiEnabled(false);
+        setUpdatesEnabled(true);
+        return;
+    }
 
     QRegularExpression rx(pattern);
+    if (!rx.isValid()) {
+        setTextColor(patternLineEdit, Qt::red);
+        regexpStatusLabel->setText(tr("Invalid: syntax error at position %1 (%2)")
+                                   .arg(rx.patternErrorOffset())
+                                   .arg(rx.errorString()));
+        setResultUiEnabled(false);
+        setUpdatesEnabled(true);
+        return;
+    }
+
+    setResultUiEnabled(true);
+
     QRegularExpression::MatchType matchType = matchTypeComboBox->currentData().value<QRegularExpression::MatchType>();
     QRegularExpression::PatternOptions patternOptions = QRegularExpression::NoPatternOption;
     QRegularExpression::MatchOptions matchOptions = QRegularExpression::NoMatchOption;
@@ -146,66 +285,46 @@ void RegularExpressionDialog::refresh()
 
     rx.setPatternOptions(patternOptions);
 
-    QPalette palette = patternLineEdit->palette();
-    if (rx.isValid())
-        palette.setColor(QPalette::Text, subjectTextEdit->palette().color(QPalette::Text));
-    else
-        palette.setColor(QPalette::Text, Qt::red);
-    patternLineEdit->setPalette(palette);
+    const int capturingGroupsCount = rx.captureCount() + 1;
 
-    matchDetailsTreeWidget->clear();
-    matchDetailsTreeWidget->setEnabled(rx.isValid());
+    QRegularExpressionMatchIterator iterator = rx.globalMatch(text, offsetSpinBox->value(), matchType, matchOptions);
+    int i = 0;
 
-    if (rx.isValid()) {
-        const int capturingGroupsCount = rx.captureCount() + 1;
+    while (iterator.hasNext()) {
+        QRegularExpressionMatch match = iterator.next();
 
-        QRegularExpressionMatchIterator iterator = rx.globalMatch(text, offsetSpinBox->value(), matchType, matchOptions);
-        int i = 0;
+        QTreeWidgetItem *matchDetailTopItem = new QTreeWidgetItem(matchDetailsTreeWidget);
+        matchDetailTopItem->setText(0, QString::number(i));
 
-        while (iterator.hasNext()) {
-            QRegularExpressionMatch match = iterator.next();
-
-            QTreeWidgetItem *matchDetailTopItem = new QTreeWidgetItem(matchDetailsTreeWidget);
-            matchDetailTopItem->setText(0, QString::number(i));
-
-            for (int captureGroupIndex = 0; captureGroupIndex < capturingGroupsCount; ++captureGroupIndex) {
-                QTreeWidgetItem *matchDetailItem = new QTreeWidgetItem(matchDetailTopItem);
-                matchDetailItem->setText(1, QString::number(captureGroupIndex));
-                matchDetailItem->setText(2, match.captured(captureGroupIndex));
-            }
-
-            ++i;
+        for (int captureGroupIndex = 0; captureGroupIndex < capturingGroupsCount; ++captureGroupIndex) {
+            QTreeWidgetItem *matchDetailItem = new QTreeWidgetItem(matchDetailTopItem);
+            matchDetailItem->setText(1, QString::number(captureGroupIndex));
+            matchDetailItem->setText(2, match.captured(captureGroupIndex));
         }
+
+        ++i;
     }
 
     matchDetailsTreeWidget->expandAll();
 
-    namedGroupsTreeWidget->clear();
-    namedGroupsTreeWidget->setEnabled(rx.isValid());
+    regexpStatusLabel->setText(tr("Valid"));
 
-    if (rx.isValid()) {
-        regexpStatusLabel->setText(tr("Valid"));
+    const QStringList namedCaptureGroups = rx.namedCaptureGroups();
+    for (int i = 0; i < namedCaptureGroups.size(); ++i) {
+        const QString currentNamedCaptureGroup = namedCaptureGroups.at(i);
 
-        const QStringList namedCaptureGroups = rx.namedCaptureGroups();
-        for (int i = 0; i < namedCaptureGroups.size(); ++i) {
-            const QString currentNamedCaptureGroup = namedCaptureGroups.at(i);
-
-            QTreeWidgetItem *namedGroupItem = new QTreeWidgetItem(namedGroupsTreeWidget);
-            namedGroupItem->setText(0, QString::number(i));
-            namedGroupItem->setText(1, currentNamedCaptureGroup.isNull() ? tr("<no name>") : currentNamedCaptureGroup);
-        }
-    } else {
-        regexpStatusLabel->setText(tr("Invalid: syntax error at position %1 (%2)")
-                                   .arg(rx.patternErrorOffset())
-                                   .arg(rx.errorString()));
+        QTreeWidgetItem *namedGroupItem = new QTreeWidgetItem(namedGroupsTreeWidget);
+        namedGroupItem->setText(0, QString::number(i));
+        namedGroupItem->setText(1, currentNamedCaptureGroup.isNull() ? tr("<no name>") : currentNamedCaptureGroup);
     }
+
 
     setUpdatesEnabled(true);
 }
 
 void RegularExpressionDialog::copyEscapedPatternToClipboard()
 {
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     QClipboard *clipboard = QGuiApplication::clipboard();
     if (clipboard)
         clipboard->setText(escapedPatternLineEdit->text());
@@ -240,7 +359,7 @@ QWidget *RegularExpressionDialog::setupLeftUi()
     QLabel *regexpAndSubjectLabel = new QLabel(tr("<h3>Regular expression and text input</h3>"));
     layout->addRow(regexpAndSubjectLabel);
 
-    patternLineEdit = new QLineEdit;
+    patternLineEdit = new PatternLineEdit;
     patternLineEdit->setClearButtonEnabled(true);
     layout->addRow(tr("&Pattern:"), patternLineEdit);
 
@@ -250,7 +369,7 @@ QWidget *RegularExpressionDialog::setupLeftUi()
     palette.setBrush(QPalette::Base, palette.brush(QPalette::Disabled, QPalette::Base));
     escapedPatternLineEdit->setPalette(palette);
 
-#ifndef QT_NO_CLIPBOARD
+#if QT_CONFIG(clipboard)
     QAction *copyEscapedPatternAction = new QAction(this);
     copyEscapedPatternAction->setText(tr("Copy to clipboard"));
     copyEscapedPatternAction->setIcon(QIcon(QStringLiteral(":/images/copy.png")));
@@ -347,3 +466,5 @@ QWidget *RegularExpressionDialog::setupRightUi()
 
     return container;
 }
+
+#include "regularexpressiondialog.moc"

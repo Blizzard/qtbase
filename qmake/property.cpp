@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,38 +41,47 @@ static const struct {
     const char *name;
     QLibraryInfo::LibraryLocation loc;
     bool raw;
+    bool singular;
 } propList[] = {
-    { "QT_SYSROOT", QLibraryInfo::SysrootPath, true },
-    { "QT_INSTALL_PREFIX", QLibraryInfo::PrefixPath, false },
-    { "QT_INSTALL_ARCHDATA", QLibraryInfo::ArchDataPath, false },
-    { "QT_INSTALL_DATA", QLibraryInfo::DataPath, false },
-    { "QT_INSTALL_DOCS", QLibraryInfo::DocumentationPath, false },
-    { "QT_INSTALL_HEADERS", QLibraryInfo::HeadersPath, false },
-    { "QT_INSTALL_LIBS", QLibraryInfo::LibrariesPath, false },
-    { "QT_INSTALL_LIBEXECS", QLibraryInfo::LibraryExecutablesPath, false },
-    { "QT_INSTALL_BINS", QLibraryInfo::BinariesPath, false },
-    { "QT_INSTALL_TESTS", QLibraryInfo::TestsPath, false },
-    { "QT_INSTALL_PLUGINS", QLibraryInfo::PluginsPath, false },
-    { "QT_INSTALL_IMPORTS", QLibraryInfo::ImportsPath, false },
-    { "QT_INSTALL_QML", QLibraryInfo::Qml2ImportsPath, false },
-    { "QT_INSTALL_TRANSLATIONS", QLibraryInfo::TranslationsPath, false },
-    { "QT_INSTALL_CONFIGURATION", QLibraryInfo::SettingsPath, false },
-    { "QT_INSTALL_EXAMPLES", QLibraryInfo::ExamplesPath, false },
-    { "QT_INSTALL_DEMOS", QLibraryInfo::ExamplesPath, false }, // Just backwards compat
-    { "QT_HOST_PREFIX", QLibraryInfo::HostPrefixPath, true },
-    { "QT_HOST_DATA", QLibraryInfo::HostDataPath, true },
-    { "QT_HOST_BINS", QLibraryInfo::HostBinariesPath, true },
-    { "QT_HOST_LIBS", QLibraryInfo::HostLibrariesPath, true },
-    { "QMAKE_SPEC", QLibraryInfo::HostSpecPath, true },
-    { "QMAKE_XSPEC", QLibraryInfo::TargetSpecPath, true },
+    { "QT_SYSROOT", QLibraryInfo::SysrootPath, true, true },
+    { "QT_INSTALL_PREFIX", QLibraryInfo::PrefixPath, false, false },
+    { "QT_INSTALL_ARCHDATA", QLibraryInfo::ArchDataPath, false, false },
+    { "QT_INSTALL_DATA", QLibraryInfo::DataPath, false, false },
+    { "QT_INSTALL_DOCS", QLibraryInfo::DocumentationPath, false, false },
+    { "QT_INSTALL_HEADERS", QLibraryInfo::HeadersPath, false, false },
+    { "QT_INSTALL_LIBS", QLibraryInfo::LibrariesPath, false, false },
+    { "QT_INSTALL_LIBEXECS", QLibraryInfo::LibraryExecutablesPath, false, false },
+    { "QT_INSTALL_BINS", QLibraryInfo::BinariesPath, false, false },
+    { "QT_INSTALL_TESTS", QLibraryInfo::TestsPath, false, false },
+    { "QT_INSTALL_PLUGINS", QLibraryInfo::PluginsPath, false, false },
+    { "QT_INSTALL_IMPORTS", QLibraryInfo::ImportsPath, false, false },
+    { "QT_INSTALL_QML", QLibraryInfo::Qml2ImportsPath, false, false },
+    { "QT_INSTALL_TRANSLATIONS", QLibraryInfo::TranslationsPath, false, false },
+    { "QT_INSTALL_CONFIGURATION", QLibraryInfo::SettingsPath, false, false },
+    { "QT_INSTALL_EXAMPLES", QLibraryInfo::ExamplesPath, false, false },
+    { "QT_INSTALL_DEMOS", QLibraryInfo::ExamplesPath, false, false }, // Just backwards compat
+    { "QT_HOST_PREFIX", QLibraryInfo::HostPrefixPath, true, false },
+    { "QT_HOST_DATA", QLibraryInfo::HostDataPath, true, false },
+    { "QT_HOST_BINS", QLibraryInfo::HostBinariesPath, true, false },
+    { "QT_HOST_LIBS", QLibraryInfo::HostLibrariesPath, true, false },
+    { "QMAKE_SPEC", QLibraryInfo::HostSpecPath, true, true },
+    { "QMAKE_XSPEC", QLibraryInfo::TargetSpecPath, true, true },
 };
 
 QMakeProperty::QMakeProperty() : settings(0)
 {
+    reload();
+}
+
+void QMakeProperty::reload()
+{
+    QLibraryInfo::reload();
     for (unsigned i = 0; i < sizeof(propList)/sizeof(propList[0]); i++) {
         QString name = QString::fromLatin1(propList[i].name);
-        m_values[ProKey(name + "/src")] = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::EffectiveSourcePaths);
-        m_values[ProKey(name + "/get")] = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::EffectivePaths);
+        if (!propList[i].singular) {
+            m_values[ProKey(name + "/src")] = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::EffectiveSourcePaths);
+            m_values[ProKey(name + "/get")] = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::EffectivePaths);
+        }
         QString val = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::FinalPaths);
         if (!propList[i].raw) {
             m_values[ProKey(name + "/dev")] = QLibraryInfo::rawLocation(propList[i].loc, QLibraryInfo::DevicePaths);
@@ -144,7 +148,8 @@ QMakeProperty::exec()
     if(Option::qmake_mode == Option::QMAKE_QUERY_PROPERTY) {
         if(Option::prop::properties.isEmpty()) {
             initSettings();
-            foreach (const QString &key, settings->childKeys()) {
+            const auto keys = settings->childKeys();
+            for (const QString &key : keys) {
                 QString val = settings->value(key).toString();
                 fprintf(stdout, "%s:%s\n", qPrintable(key), qPrintable(val));
             }
@@ -155,7 +160,7 @@ QMakeProperty::exec()
 #ifdef QT_VERSION_STR
             specialProps.append("QT_VERSION");
 #endif
-            foreach (QString prop, specialProps) {
+            for (const QString &prop : qAsConst(specialProps)) {
                 ProString val = value(ProKey(prop));
                 ProString pval = value(ProKey(prop + "/raw"));
                 ProString gval = value(ProKey(prop + "/get"));

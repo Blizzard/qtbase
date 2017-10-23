@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,6 +42,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QThread>
 #include <QtCore/QHash>
+#include <QtCore/QMutex>
 #include <QtCore/qfunctions_winrt.h>
 #include <private/qabstracteventdispatcher_p.h>
 #include <private/qcoreapplication_p.h>
@@ -89,6 +96,51 @@ private:
     std::function<HRESULT()> delegate;
 };
 
+class QWorkHandler : public IWorkItemHandler
+{
+public:
+    QWorkHandler(const std::function<HRESULT()> &delegate)
+        : m_delegate(delegate)
+    {
+    }
+
+    STDMETHODIMP Invoke(ABI::Windows::Foundation::IAsyncAction *operation)
+    {
+        HRESULT res = m_delegate();
+        Q_UNUSED(operation);
+        return res;
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void FAR* FAR* ppvObj)
+    {
+        if (riid == IID_IUnknown || riid == IID_IWorkItemHandler) {
+            *ppvObj = this;
+            AddRef();
+            return NOERROR;
+        }
+        *ppvObj = NULL;
+        return ResultFromScode(E_NOINTERFACE);
+    }
+
+    STDMETHODIMP_(ULONG) AddRef(void)
+    {
+        return ++m_refs;
+    }
+
+    STDMETHODIMP_(ULONG) Release(void)
+    {
+        if (--m_refs == 0) {
+            delete this;
+            return 0;
+        }
+        return m_refs;
+    }
+
+private:
+    std::function<HRESULT()> m_delegate;
+    ULONG m_refs{0};
+};
+
 class QEventDispatcherWinRTPrivate : public QAbstractEventDispatcherPrivate
 {
     Q_DECLARE_PUBLIC(QEventDispatcherWinRT)
@@ -100,6 +152,7 @@ public:
 private:
     QHash<int, QObject *> timerIdToObject;
     QVector<WinRTTimerInfo> timerInfos;
+    mutable QMutex timerInfoLock;
     QHash<HANDLE, int> timerHandleToId;
     QHash<int, HANDLE> timerIdToHandle;
     QHash<int, HANDLE> timerIdToCancelHandle;
@@ -113,9 +166,10 @@ private:
             timerIdToHandle.insert(id, handle);
             timerIdToCancelHandle.insert(id, cancelHandle);
         }
-        timerIdToObject.insert(id, obj);
+
         const quint64 targetTime = qt_msectime() + interval;
         const WinRTTimerInfo info(id, interval, type, obj, targetTime);
+        QMutexLocker locker(&timerInfoLock);
         if (id >= timerInfos.size())
             timerInfos.resize(id + 1);
         timerInfos[id] = info;
@@ -124,6 +178,7 @@ private:
 
     bool removeTimer(int id)
     {
+        QMutexLocker locker(&timerInfoLock);
         if (id >= timerInfos.size())
             return false;
 
@@ -169,48 +224,62 @@ QEventDispatcherWinRT::~QEventDispatcherWinRT()
 HRESULT QEventDispatcherWinRT::runOnXamlThread(const std::function<HRESULT ()> &delegate, bool waitForRun)
 {
     static __declspec(thread) ICoreDispatcher *dispatcher = nullptr;
+    HRESULT hr;
     if (!dispatcher) {
-        HRESULT hr;
         ComPtr<ICoreImmersiveApplication> application;
         hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication).Get(),
                                     IID_PPV_ARGS(&application));
         ComPtr<ICoreApplicationView> view;
         hr = application->get_MainView(&view);
-        Q_ASSERT_SUCCEEDED(hr);
-        ComPtr<ICoreWindow> window;
-        hr = view->get_CoreWindow(&window);
-        Q_ASSERT_SUCCEEDED(hr);
-        if (!window) {
-            // In case the application is launched via activation
-            // there might not be a main view (eg ShareTarget).
-            // Hence iterate through the available views and try to find
-            // a dispatcher in there
-            ComPtr<IVectorView<CoreApplicationView*>> appViews;
-            hr = application->get_Views(&appViews);
+        if (SUCCEEDED(hr) && view) {
+            ComPtr<ICoreWindow> window;
+            hr = view->get_CoreWindow(&window);
             Q_ASSERT_SUCCEEDED(hr);
-            quint32 count;
-            hr = appViews->get_Size(&count);
-            Q_ASSERT_SUCCEEDED(hr);
-            for (quint32 i = 0; i < count; ++i) {
-                hr = appViews->GetAt(i, &view);
+            if (!window) {
+                // In case the application is launched via activation
+                // there might not be a main view (eg ShareTarget).
+                // Hence iterate through the available views and try to find
+                // a dispatcher in there
+                ComPtr<IVectorView<CoreApplicationView*>> appViews;
+                hr = application->get_Views(&appViews);
                 Q_ASSERT_SUCCEEDED(hr);
-                hr = view->get_CoreWindow(&window);
+                quint32 count;
+                hr = appViews->get_Size(&count);
                 Q_ASSERT_SUCCEEDED(hr);
-                if (window) {
-                    hr = window->get_Dispatcher(&dispatcher);
+                for (quint32 i = 0; i < count; ++i) {
+                    hr = appViews->GetAt(i, &view);
                     Q_ASSERT_SUCCEEDED(hr);
-                    if (dispatcher)
-                        break;
+                    hr = view->get_CoreWindow(&window);
+                    Q_ASSERT_SUCCEEDED(hr);
+                    if (window) {
+                        hr = window->get_Dispatcher(&dispatcher);
+                        Q_ASSERT_SUCCEEDED(hr);
+                        if (dispatcher)
+                            break;
+                    }
                 }
+            } else {
+                hr = window->get_Dispatcher(&dispatcher);
+                Q_ASSERT_SUCCEEDED(hr);
             }
-            Q_ASSERT(dispatcher);
-        } else {
-            hr = window->get_Dispatcher(&dispatcher);
-            Q_ASSERT_SUCCEEDED(hr);
         }
     }
 
-    HRESULT hr;
+    if (Q_UNLIKELY(!dispatcher)) {
+        // In case the application is launched in a way that has no UI and
+        // also does not allow to create one, e.g. as a background task.
+        // Features like network operations do still work, others might cause
+        // errors in that case.
+        ComPtr<IThreadPoolStatics> tpStatics;
+        hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_System_Threading_ThreadPool).Get(),
+                                    IID_PPV_ARGS(&tpStatics));
+        ComPtr<IAsyncAction> op;
+        hr = tpStatics.Get()->RunAsync(new QWorkHandler(delegate), &op);
+        if (FAILED(hr) || !waitForRun)
+            return hr;
+        return QWinRTFunctions::await(op);
+    }
+
     boolean onXamlThread;
     hr = dispatcher->get_HasThreadAccess(&onXamlThread);
     Q_ASSERT_SUCCEEDED(hr);
@@ -247,14 +316,18 @@ bool QEventDispatcherWinRT::processEvents(QEventLoop::ProcessEventsFlags flags)
             if (timerId == INTERRUPT_HANDLE)
                 break;
 
-            WinRTTimerInfo &info = d->timerInfos[timerId];
-            Q_ASSERT(info.timerId != INVALID_TIMER_ID);
+            {
+                QMutexLocker locker(&d->timerInfoLock);
 
-            QCoreApplication::postEvent(this, new QTimerEvent(timerId));
+                WinRTTimerInfo &info = d->timerInfos[timerId];
+                Q_ASSERT(info.timerId != INVALID_TIMER_ID);
 
-            // Update timer's targetTime
-            const quint64 targetTime = qt_msectime() + info.interval;
-            info.targetTime = targetTime;
+                QCoreApplication::postEvent(this, new QTimerEvent(timerId));
+
+                // Update timer's targetTime
+                const quint64 targetTime = qt_msectime() + info.interval;
+                info.targetTime = targetTime;
+            }
             waitResult = WaitForMultipleObjectsEx(timerHandles.count(), timerHandles.constData(), FALSE, 0, TRUE);
         }
         emit awake();
@@ -403,7 +476,8 @@ bool QEventDispatcherWinRT::unregisterTimers(QObject *object)
     }
 
     Q_D(QEventDispatcherWinRT);
-    foreach (int id, d->timerIdToObject.keys()) {
+    const auto timerIds = d->timerIdToObject.keys(); // ### FIXME: iterate over hash directly? But unregisterTimer() modifies the hash!
+    for (int id : timerIds) {
         if (d->timerIdToObject.value(id) == object)
             unregisterTimer(id);
     }
@@ -421,8 +495,9 @@ QList<QAbstractEventDispatcher::TimerInfo> QEventDispatcherWinRT::registeredTime
     }
 
     Q_D(const QEventDispatcherWinRT);
+    QMutexLocker locker(&d->timerInfoLock);
     QList<TimerInfo> timerInfos;
-    foreach (const WinRTTimerInfo &info, d->timerInfos) {
+    for (const WinRTTimerInfo &info : d->timerInfos) {
         if (info.object == object && info.timerId != INVALID_TIMER_ID)
             timerInfos.append(info);
     }
@@ -452,6 +527,7 @@ int QEventDispatcherWinRT::remainingTime(int timerId)
     }
 
     Q_D(QEventDispatcherWinRT);
+    QMutexLocker locker(&d->timerInfoLock);
     const WinRTTimerInfo timerInfo = d->timerInfos.at(timerId);
     if (timerInfo.timerId == INVALID_TIMER_ID) {
 #ifndef QT_NO_DEBUG
@@ -500,6 +576,9 @@ bool QEventDispatcherWinRT::event(QEvent *e)
     case QEvent::Timer: {
         QTimerEvent *timerEvent = static_cast<QTimerEvent *>(e);
         const int id = timerEvent->timerId();
+
+        QMutexLocker locker(&d->timerInfoLock);
+
         Q_ASSERT(id < d->timerInfos.size());
         WinRTTimerInfo &info = d->timerInfos[id];
         Q_ASSERT(info.timerId != INVALID_TIMER_ID);
@@ -508,15 +587,18 @@ bool QEventDispatcherWinRT::event(QEvent *e)
             break;
         info.inEvent = true;
 
+        QObject *timerObj = d->timerIdToObject.value(id);
+        locker.unlock();
+
         QTimerEvent te(id);
-        QCoreApplication::sendEvent(d->timerIdToObject.value(id), &te);
+        QCoreApplication::sendEvent(timerObj, &te);
 
-        // The timer might have been removed in the meanwhile
-        if (id >= d->timerInfos.size())
-            break;
+        locker.relock();
 
-        info = d->timerInfos[id];
-        if (info.timerId == INVALID_TIMER_ID)
+        // The timer might have been removed in the meanwhile. If the timer was
+        // the last one in the list, id is bigger than the list's size.
+        // Otherwise, the id will just be set to INVALID_TIMER_ID.
+        if (id >= d->timerInfos.size() || info.timerId == INVALID_TIMER_ID)
             break;
 
         if (info.interval == 0 && info.inEvent) {

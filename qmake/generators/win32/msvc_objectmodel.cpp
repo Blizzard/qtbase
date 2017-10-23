@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,11 +29,46 @@
 #include "msvc_objectmodel.h"
 #include "msvc_vcproj.h"
 #include "msvc_vcxproj.h"
+
+#include <ioutils.h>
+
 #include <qscopedpointer.h>
-#include <qstringlist.h>
 #include <qfileinfo.h>
 
+using namespace QMakeInternal;
+
 QT_BEGIN_NAMESPACE
+
+static DotNET vsVersionFromString(const char *versionString)
+{
+    struct VSVersionMapping
+    {
+        const char *str;
+        DotNET version;
+    };
+    static VSVersionMapping mapping[] = {
+        { "7.0", NET2002 },
+        { "7.1", NET2003 },
+        { "8.0", NET2005 },
+        { "9.0", NET2008 },
+        { "10.0", NET2010 },
+        { "11.0", NET2012 },
+        { "12.0", NET2013 },
+        { "14.0", NET2015 },
+        { "15.0", NET2017 }
+    };
+    DotNET result = NETUnknown;
+    for (const auto entry : mapping) {
+        if (strcmp(entry.str, versionString) == 0)
+            return entry.version;
+    }
+    return result;
+}
+
+DotNET vsVersionFromString(const ProString &versionString)
+{
+    return vsVersionFromString(versionString.toLatin1().constData());
+}
 
 // XML Tags ---------------------------------------------------------
 const char _Configuration[]                     = "Configuration";
@@ -920,12 +950,8 @@ bool VCCLCompilerTool::parseOption(const char* option)
                     ForceConformanceInForLoopScope = ((*c) == '-' ? _False : _True);
                 else if(fourth == 'w')
                     TreatWChar_tAsBuiltInType = ((*c) == '-' ? _False : _True);
-                else if (config->CompilerVersion >= NET2013 && strncmp(option + 4, "strictStrings", 13) == 0)
-                    AdditionalOptions += option;
-                else if (config->CompilerVersion >= NET2015 && strncmp(option + 4, "throwingNew", 11) == 0)
-                    AdditionalOptions += option;
                 else
-                    found = false;
+                    AdditionalOptions += option;
             } else {
                 found = false; break;
             }
@@ -1123,7 +1149,12 @@ bool VCCLCompilerTool::parseOption(const char* option)
         }
         found = false; break;
     case 'u':
-        UndefineAllPreprocessorDefinitions = _True;
+        if (!second)
+            UndefineAllPreprocessorDefinitions = _True;
+        else if (strcmp(option + 2, "tf-8") == 0)
+            AdditionalOptions += option;
+        else
+            found = false;
         break;
     case 'v':
         if(second == 'd' || second == 'm') {
@@ -1181,6 +1212,7 @@ VCLinkerTool::VCLinkerTool()
     :   DataExecutionPrevention(unset),
         EnableCOMDATFolding(optFoldingDefault),
         GenerateDebugInformation(unset),
+        DebugInfoOption(linkerDebugOptionNone),
         GenerateMapFile(unset),
         HeapCommitSize(-1),
         HeapReserveSize(-1),
@@ -1430,8 +1462,10 @@ bool VCLinkerTool::parseOption(const char* option)
         }else
             EnableUAC = _True;
         break;
-    case 0x3389797: // /DEBUG
+    case 0x3389797: // /DEBUG[:FASTLINK]
         GenerateDebugInformation = _True;
+        if (config->CompilerVersion >= NET2015 && strcmp(option + 7, "FASTLINK") == 0)
+            DebugInfoOption = linkerDebugOptionFastLink;
         break;
     case 0x0033896: // /DEF:filename
         ModuleDefinitionFile = option+5;
@@ -1760,10 +1794,6 @@ bool VCLinkerTool::parseOption(const char* option)
 // VCManifestTool ---------------------------------------------------
 VCManifestTool::VCManifestTool()
     : EmbedManifest(unset)
-{
-}
-
-VCManifestTool::~VCManifestTool()
 {
 }
 
@@ -2138,7 +2168,6 @@ VCPreLinkEventTool::VCPreLinkEventTool()
 
 VCConfiguration::VCConfiguration()
     :   WinRT(false),
-        WinPhone(false),
         ATLMinimizesCRunTimeLibraryUsage(unset),
         BuildBrowserInformation(unset),
         CharacterSet(charSetNotSet),
@@ -2151,7 +2180,6 @@ VCConfiguration::VCConfiguration()
     compiler.config = this;
     linker.config = this;
     idl.config = this;
-    custom.config = this;
 }
 
 // VCFilter ---------------------------------------------------------
@@ -2229,7 +2257,7 @@ void VCFilter::modifyPCHstage(QString str)
             lines << "* WARNING: All changes made in this file will be lost.";
             lines << "--------------------------------------------------------------------*/";
             lines << "#include \"" + Project->precompHFilename + "\"";
-            foreach(QString line, lines)
+            for (const QString &line : qAsConst(lines))
                 CustomBuildTool.CommandLine += "echo " + line + ">>" + toFile;
         }
         return;
@@ -2267,10 +2295,14 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
     QString inFile = info.file;
 
     // is the extracompiler rule on a file with a built in compiler?
-    const QStringList &objectMappedFile = Project->extraCompilerOutputs[inFile];
+    const QString objectMappedFile = Project->extraCompilerOutputs.value(inFile);
     bool hasBuiltIn = false;
     if (!objectMappedFile.isEmpty()) {
-        hasBuiltIn = Project->hasBuiltinCompiler(objectMappedFile.at(0));
+        hasBuiltIn = Project->hasBuiltinCompiler(objectMappedFile);
+
+        // Remove the fake file suffix we've added initially to generate correct command lines.
+        inFile.chop(Project->customBuildToolFilterFileSuffix.length());
+
 //        qDebug("*** Extra compiler file has object mapped file '%s' => '%s'", qPrintable(inFile), qPrintable(objectMappedFile.join(' ')));
     }
 
@@ -2312,7 +2344,7 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
         // compiler, too bad..
         if (hasBuiltIn) {
             out = inFile;
-            inFile = objectMappedFile.at(0);
+            inFile = objectMappedFile;
         }
 
         // Dependency for the output
@@ -2325,7 +2357,7 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
                         tmp_dep_cmd, inFile, out, MakefileGenerator::LocalShell);
             if(Project->canExecute(dep_cmd)) {
                 dep_cmd.prepend(QLatin1String("cd ")
-                                + Project->escapeFilePath(Option::fixPathToLocalOS(Option::output_dir, false))
+                                + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
                                 + QLatin1String(" && "));
                 if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
                     QString indeps;
@@ -2420,9 +2452,8 @@ bool VCFilter::addExtraCompiler(const VCFilterFile &info)
 
     // Ensure that none of the output files are also dependencies. Or else, the custom buildstep
     // will be rebuild every time, even if nothing has changed.
-    foreach(QString output, CustomBuildTool.Outputs) {
+    for (const QString &output : qAsConst(CustomBuildTool.Outputs))
         CustomBuildTool.AdditionalDependencies.removeAll(output);
-    }
 
     useCustomBuildTool = !CustomBuildTool.CommandLine.isEmpty();
     return useCustomBuildTool;
@@ -2875,7 +2906,6 @@ void VCProjectWriter::write(XmlOutput &xml, const VCConfiguration &tool)
             << attrE(_UseOfMfc, tool.UseOfMfc)
             << attrT(_WholeProgramOptimization, tool.WholeProgramOptimization);
     write(xml, tool.compiler);
-    write(xml, tool.custom);
     if (tool.ConfigurationType == typeStaticLibrary)
         write(xml, tool.librarian);
     else

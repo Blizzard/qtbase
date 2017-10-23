@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -70,7 +76,8 @@ public:
     QVarLengthArray(std::initializer_list<T> args)
         : a(Prealloc), s(0), ptr(reinterpret_cast<T *>(array))
     {
-        append(args.begin(), args.size());
+        if (args.size())
+            append(args.begin(), int(args.size()));
     }
 #endif
 
@@ -139,15 +146,35 @@ public:
     T value(int i, const T &defaultValue) const;
 
     inline void append(const T &t) {
-        if (s == a)   // i.e. s != 0
+        if (s == a) {   // i.e. s != 0
+            T copy(t);
             realloc(s, s<<1);
-        const int idx = s++;
-        if (QTypeInfo<T>::isComplex) {
-            new (ptr + idx) T(t);
+            const int idx = s++;
+            if (QTypeInfo<T>::isComplex) {
+                new (ptr + idx) T(std::move(copy));
+            } else {
+                ptr[idx] = std::move(copy);
+            }
         } else {
-            ptr[idx] = t;
+            const int idx = s++;
+            if (QTypeInfo<T>::isComplex) {
+                new (ptr + idx) T(t);
+            } else {
+                ptr[idx] = t;
+            }
         }
     }
+
+    void append(T &&t) {
+        if (s == a)
+            realloc(s, s << 1);
+        const int idx = s++;
+        if (QTypeInfo<T>::isComplex)
+            new (ptr + idx) T(std::move(t));
+        else
+            ptr[idx] = std::move(t);
+    }
+
     void append(const T *buf, int size);
     inline QVarLengthArray<T, Prealloc> &operator<<(const T &t)
     { append(t); return *this; }
@@ -201,6 +228,7 @@ public:
     // STL compatibility:
     inline bool empty() const { return isEmpty(); }
     inline void push_back(const T &t) { append(t); }
+    void push_back(T &&t) { append(std::move(t)); }
     inline void pop_back() { removeLast(); }
     inline T &front() { return first(); }
     inline const T &front() const { return first(); }
@@ -333,6 +361,7 @@ Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::realloc(int asize, int a
     int osize = s;
 
     const int copySize = qMin(asize, osize);
+    Q_ASSUME(copySize >= 0);
     if (aalloc != a) {
         if (aalloc > Prealloc) {
             T* newPtr = reinterpret_cast<T *>(malloc(aalloc * sizeof(T)));
@@ -345,7 +374,7 @@ Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::realloc(int asize, int a
             a = Prealloc;
         }
         s = 0;
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             QT_TRY {
                 // copy all the old elements
                 while (s < copySize) {
@@ -438,7 +467,7 @@ Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthA
     if (n != 0) {
         resize(s + n);
         const T copy(t);
-        if (QTypeInfo<T>::isStatic) {
+        if (!QTypeInfoQuery<T>::isRelocatable) {
             T *b = ptr + offset;
             T *j = ptr + s;
             T *i = j - n;

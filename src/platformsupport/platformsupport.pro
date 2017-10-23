@@ -1,33 +1,44 @@
-TARGET     = QtPlatformSupport
-QT         = core-private gui-private
+TEMPLATE = subdirs
+QT_FOR_CONFIG += gui-private
 
-CONFIG += static internal_module
-mac:LIBS_PRIVATE += -lz
+SUBDIRS = \
+    eventdispatchers \
+    devicediscovery \
+    fbconvenience \
+    themes
 
-DEFINES += QT_NO_CAST_FROM_ASCII
-PRECOMPILED_HEADER = ../corelib/global/qt_pch.h
+qtConfig(freetype)|darwin|win32: \
+    SUBDIRS += fontdatabases
 
-include(cglconvenience/cglconvenience.pri)
-include(eglconvenience/eglconvenience.pri)
-include(eventdispatchers/eventdispatchers.pri)
-include(fbconvenience/fbconvenience.pri)
-include(fontdatabases/fontdatabases.pri)
-include(glxconvenience/glxconvenience.pri)
-include(input/input.pri)
-include(devicediscovery/devicediscovery.pri)
-include(services/services.pri)
-include(themes/themes.pri)
-include(accessibility/accessibility.pri)
-include(linuxaccessibility/linuxaccessibility.pri)
-include(clipboard/clipboard.pri)
-include(platformcompositor/platformcompositor.pri)
-
-# dbus convenience, but not for darwin: the platform
-# plugins for these platforms do not use dbus and we
-# don't want to create a false dependency.
-!darwin: contains(QT_CONFIG, dbus) {
-    include(dbusmenu/dbusmenu.pri)
-    include(dbustray/dbustray.pri)
+qtConfig(evdev)|qtConfig(tslib)|qtConfig(libinput)|qtConfig(integrityhid) {
+    SUBDIRS += input
+    input.depends += devicediscovery
 }
 
-load(qt_module)
+unix:!darwin: \
+    SUBDIRS += services
+
+qtConfig(opengl): \
+    SUBDIRS += platformcompositor
+qtConfig(egl): \
+    SUBDIRS += eglconvenience
+qtConfig(xlib):qtConfig(opengl):!qtConfig(opengles2): \
+    SUBDIRS += glxconvenience
+qtConfig(kms): \
+    SUBDIRS += kmsconvenience
+
+qtConfig(accessibility) {
+    SUBDIRS += accessibility
+    qtConfig(accessibility-atspi-bridge) {
+        SUBDIRS += linuxaccessibility
+        linuxaccessibility.depends += accessibility
+    }
+}
+
+darwin {
+    SUBDIRS += \
+        clipboard \
+        graphics
+    macos: \
+        SUBDIRS += cglconvenience
+}

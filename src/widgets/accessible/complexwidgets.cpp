@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,23 +41,33 @@
 
 #include <qaccessible.h>
 #include <qapplication.h>
-#include <qabstractbutton.h>
 #include <qevent.h>
+#if QT_CONFIG(itemviews)
 #include <qheaderview.h>
+#endif
+#if QT_CONFIG(tabbar)
 #include <qtabbar.h>
+#include <private/qtabbar_p.h>
+#endif
+#if QT_CONFIG(combobox)
 #include <qcombobox.h>
-#include <qlistview.h>
-#include <qtableview.h>
+#endif
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtooltip.h>
+#if QT_CONFIG(whatsthis)
 #include <qwhatsthis.h>
-#include <qtreeview.h>
-#include <private/qtabbar_p.h>
+#endif
 #include <QAbstractScrollArea>
+#if QT_CONFIG(scrollarea)
 #include <QScrollArea>
+#endif
+#if QT_CONFIG(scrollbar)
 #include <QScrollBar>
+#endif
 #include <QDebug>
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -61,7 +77,7 @@ QT_BEGIN_NAMESPACE
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
   \class QAccessibleTabBar
   \brief The QAccessibleTabBar class implements the QAccessibleInterface for tab bars.
@@ -114,19 +130,30 @@ public:
     {
         if (!isValid())
             return QString();
+        QString str;
         switch (t) {
         case QAccessible::Name:
-            return qt_accStripAmp(m_parent->tabText(m_index));
+            str = m_parent->accessibleTabName(m_index);
+            if (str.isEmpty())
+                str = qt_accStripAmp(m_parent->tabText(m_index));
+            break;
         case QAccessible::Accelerator:
-            return qt_accHotKey(m_parent->tabText(m_index));
+            str = qt_accHotKey(m_parent->tabText(m_index));
+            break;
+#if QT_CONFIG(tooltip)
         case QAccessible::Description:
-            return m_parent->tabToolTip(m_index);
+            str = m_parent->tabToolTip(m_index);
+            break;
+#endif
+#if QT_CONFIG(whatsthis)
         case QAccessible::Help:
-            return m_parent->tabWhatsThis(m_index);
+            str = m_parent->tabWhatsThis(m_index);
+            break;
+#endif
         default:
             break;
         }
-        return QString();
+        return str;
     }
 
     void setText(QAccessible::Text, const QString &) Q_DECL_OVERRIDE {}
@@ -231,16 +258,21 @@ int QAccessibleTabBar::childCount() const
 QString QAccessibleTabBar::text(QAccessible::Text t) const
 {
     if (t == QAccessible::Name) {
-        return qt_accStripAmp(tabBar()->tabText(tabBar()->currentIndex()));
+        const QTabBar *tBar = tabBar();
+        int idx = tBar->currentIndex();
+        QString str = tBar->accessibleTabName(idx);
+        if (str.isEmpty())
+            str = qt_accStripAmp(tBar->tabText(idx));
+        return str;
     } else if (t == QAccessible::Accelerator) {
         return qt_accHotKey(tabBar()->tabText(tabBar()->currentIndex()));
     }
     return QString();
 }
 
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_COMBOBOX
+#if QT_CONFIG(combobox)
 /*!
   \class QAccessibleComboBox
   \brief The QAccessibleComboBox class implements the QAccessibleInterface for editable and read-only combo boxes.
@@ -358,9 +390,9 @@ QStringList QAccessibleComboBox::keyBindingsForAction(const QString &/*actionNam
     return QStringList();
 }
 
-#endif // QT_NO_COMBOBOX
+#endif // QT_CONFIG(combobox)
 
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
 // ======================= QAccessibleAbstractScrollArea =======================
 QAccessibleAbstractScrollArea::QAccessibleAbstractScrollArea(QWidget *widget)
     : QAccessibleWidget(widget, QAccessible::Client)
@@ -469,7 +501,7 @@ QAccessibleScrollArea::QAccessibleScrollArea(QWidget *widget)
 {
     Q_ASSERT(qobject_cast<QScrollArea *>(widget));
 }
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
 
 QT_END_NAMESPACE
 

@@ -1,44 +1,52 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qgroupbox.h"
-#ifndef QT_NO_GROUPBOX
+
 #include "qapplication.h"
 #include "qbitmap.h"
 #include "qdrawutil.h"
 #include "qevent.h"
 #include "qlayout.h"
+#if QT_CONFIG(radiobutton)
 #include "qradiobutton.h"
+#endif
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qstylepainter.h"
@@ -97,11 +105,7 @@ void QGroupBox::initStyleOption(QStyleOptionGroupBox *option) const
     option->activeSubControls |= d->pressedControl;
     option->subControls = QStyle::SC_GroupBoxFrame;
 
-    if (d->hover)
-        option->state |= QStyle::State_MouseOver;
-    else
-        option->state &= ~QStyle::State_MouseOver;
-
+    option->state.setFlag(QStyle::State_MouseOver, d->hover);
     if (d->flat)
         option->features |= QStyleOptionFrame::Flat;
 
@@ -141,6 +145,8 @@ void QGroupBoxPrivate::click()
     \ingroup geomanagement
     \inmodule QtWidgets
 
+    \image windows-groupbox.png
+
     A group box provides a frame, a title on top, a keyboard shortcut, and
     displays various other widgets inside itself. The keyboard shortcut moves
     keyboard focus to one of the group box's child widgets.
@@ -161,15 +167,6 @@ void QGroupBoxPrivate::click()
     QGroupBox with a layout:
 
     \snippet widgets/groupbox/window.cpp 2
-
-    \table 100%
-    \row \li \inlineimage windowsvista-groupbox.png Screenshot of a Windows Vista style group box
-         \li \inlineimage macintosh-groupbox.png Screenshot of a Macintosh style group box
-         \li \inlineimage fusion-groupbox.png Screenshot of a Fusion style group box
-    \row \li A \l{Windows Vista Style Widget Gallery}{Windows Vista style} group box.
-         \li A \l{Macintosh Style Widget Gallery}{Macintosh style} group box.
-         \li A \l{Fusion Style Widget Gallery}{Fusion style} group box.
-    \endtable
 
     \sa QButtonGroup, {Group Box Example}
 */
@@ -192,10 +189,8 @@ QGroupBox::QGroupBox(QWidget *parent)
 */
 
 QGroupBox::QGroupBox(const QString &title, QWidget *parent)
-    : QWidget(*new QGroupBoxPrivate, parent, 0)
+    : QGroupBox(parent)
 {
-    Q_D(QGroupBox);
-    d->init();
     setTitle(title);
 }
 
@@ -430,11 +425,13 @@ void QGroupBoxPrivate::_q_fixFocus(Qt::FocusReason reason)
         QWidget * w = q;
         while ((w = w->nextInFocusChain()) != q) {
             if (q->isAncestorOf(w) && (w->focusPolicy() & Qt::TabFocus) == Qt::TabFocus && w->isVisibleTo(q)) {
+#if QT_CONFIG(radiobutton)
                 if (!best && qobject_cast<QRadioButton*>(w) && ((QRadioButton*)w)->isChecked())
                     // we prefer a checked radio button or a widget that
                     // already has focus, if there is one
                     best = w;
                 else
+#endif
                     if (!candidate)
                         // but we'll accept anything that takes focus
                         candidate = w;
@@ -653,9 +650,7 @@ void QGroupBox::setChecked(bool b)
 void QGroupBoxPrivate::_q_setChildrenEnabled(bool b)
 {
     Q_Q(QGroupBox);
-    QObjectList childList = q->children();
-    for (int i = 0; i < childList.size(); ++i) {
-        QObject *o = childList.at(i);
+    for (QObject *o : q->children()) {
         if (o->isWidgetType()) {
             QWidget *w = static_cast<QWidget *>(o);
             if (b) {
@@ -707,6 +702,8 @@ void QGroupBox::mousePressEvent(QMouseEvent *event)
     if (d->checkable && (d->pressedControl & (QStyle::SC_GroupBoxCheckBox | QStyle::SC_GroupBoxLabel))) {
         d->overCheckBox = true;
         update(style()->subControlRect(QStyle::CC_GroupBox, &box, QStyle::SC_GroupBoxCheckBox, this));
+    } else {
+        event->ignore();
     }
 }
 
@@ -723,6 +720,8 @@ void QGroupBox::mouseMoveEvent(QMouseEvent *event)
     if (d->checkable && (d->pressedControl == QStyle::SC_GroupBoxCheckBox || d->pressedControl == QStyle::SC_GroupBoxLabel)
         && (d->overCheckBox != oldOverCheckBox))
         update(style()->subControlRect(QStyle::CC_GroupBox, &box, QStyle::SC_GroupBoxCheckBox, this));
+
+    event->ignore();
 }
 
 /*! \reimp */
@@ -752,9 +751,6 @@ void QGroupBox::mouseReleaseEvent(QMouseEvent *event)
         update(style()->subControlRect(QStyle::CC_GroupBox, &box, QStyle::SC_GroupBoxCheckBox, this));
 }
 
-
 QT_END_NAMESPACE
 
 #include "moc_qgroupbox.cpp"
-
-#endif //QT_NO_GROUPBOX

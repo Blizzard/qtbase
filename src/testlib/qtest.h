@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,14 +53,11 @@
 #include <QtCore/qobject.h>
 #include <QtCore/qvariant.h>
 #include <QtCore/qurl.h>
+#include <QtCore/quuid.h>
 
 #include <QtCore/qpoint.h>
 #include <QtCore/qsize.h>
 #include <QtCore/qrect.h>
-
-#ifdef QT_NETWORK_LIB
-#  include <QtNetwork/qhostaddress.h>
-#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -157,8 +161,13 @@ template<> inline char *toString(const QRectF &s)
 template<> inline char *toString(const QUrl &uri)
 {
     if (!uri.isValid())
-        return qstrdup(qPrintable(QStringLiteral("Invalid URL: ") + uri.errorString()));
+        return qstrdup(qPrintable(QLatin1String("Invalid URL: ") + uri.errorString()));
     return qstrdup(uri.toEncoded().constData());
+}
+
+template <> inline char *toString(const QUuid &uuid)
+{
+    return qstrdup(uuid.toByteArray().constData());
 }
 
 template<> inline char *toString(const QVariant &v)
@@ -173,7 +182,7 @@ template<> inline char *toString(const QVariant &v)
         if (!v.isNull()) {
             vstring.append(',');
             if (v.canConvert(QVariant::String)) {
-                vstring.append(qvariant_cast<QString>(v).toLocal8Bit());
+                vstring.append(v.toString().toLocal8Bit());
             }
             else {
                 vstring.append("<value not representable as string>");
@@ -185,22 +194,10 @@ template<> inline char *toString(const QVariant &v)
     return qstrdup(vstring.constData());
 }
 
-#ifdef QT_NETWORK_LIB
-template<> inline char *toString(const QHostAddress &addr)
+inline char *toString(std::nullptr_t)
 {
-    switch (addr.protocol()) {
-    case QAbstractSocket::UnknownNetworkLayerProtocol:
-        return qstrdup("<unknown address (parse error)>");
-    case QAbstractSocket::AnyIPProtocol:
-        return qstrdup("QHostAddress::Any");
-    case QAbstractSocket::IPv4Protocol:
-    case QAbstractSocket::IPv6Protocol:
-        break;
-    }
-
-    return qstrdup(addr.toString().toLatin1().constData());
+    return toString(QLatin1String("nullptr"));
 }
-#endif
 
 template<>
 inline bool qCompare(QString const &t1, QLatin1String const &t2, const char *actual,
@@ -340,6 +337,10 @@ int main(int argc, char *argv[]) \
 #else
 #  define QTEST_ADD_GPU_BLACKLIST_SUPPORT_DEFS
 #  define QTEST_ADD_GPU_BLACKLIST_SUPPORT
+#endif
+
+#if defined(QT_NETWORK_LIB)
+#  include <QtTest/qtest_network.h>
 #endif
 
 #if defined(QT_WIDGETS_LIB)

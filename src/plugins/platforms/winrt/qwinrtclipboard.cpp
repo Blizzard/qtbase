@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -58,7 +61,6 @@ QT_BEGIN_NAMESPACE
 QWinRTClipboard::QWinRTClipboard()
     : m_mimeData(Q_NULLPTR)
 {
-#ifndef Q_OS_WINPHONE
     QEventDispatcherWinRT::runOnXamlThread([this]() {
         HRESULT hr;
         hr = GetActivationFactory(HString::MakeReference(RuntimeClass_Windows_ApplicationModel_DataTransfer_Clipboard).Get(),
@@ -71,7 +73,6 @@ QWinRTClipboard::QWinRTClipboard()
 
         return hr;
     });
-#endif // !Q_OS_WINPHONE
 }
 
 QMimeData *QWinRTClipboard::mimeData(QClipboard::Mode mode)
@@ -79,7 +80,6 @@ QMimeData *QWinRTClipboard::mimeData(QClipboard::Mode mode)
     if (!supportsMode(mode))
         return nullptr;
 
-#ifndef Q_OS_WINPHONE
     ComPtr<IDataPackageView> view;
     HRESULT hr;
     hr = m_nativeClipBoard->GetContent(&view);
@@ -100,7 +100,7 @@ QMimeData *QWinRTClipboard::mimeData(QClipboard::Mode mode)
     quint32 size;
     const wchar_t *textStr = result.GetRawBuffer(&size);
     QString text = QString::fromWCharArray(textStr, size);
-    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QLatin1String("\r\n"), QLatin1String("\n"));
 
     if (m_mimeData) {
         if (m_mimeData->text() == text)
@@ -111,9 +111,6 @@ QMimeData *QWinRTClipboard::mimeData(QClipboard::Mode mode)
     m_mimeData->setText(text);
 
     return m_mimeData;
-#else // Q_OS_WINPHONE
-    return QPlatformClipboard::mimeData(mode);
-#endif // Q_OS_WINPHONE
 }
 
 // Inspired by QWindowsMimeText::convertFromMime
@@ -150,7 +147,6 @@ void QWinRTClipboard::setMimeData(QMimeData *data, QClipboard::Mode mode)
     if (!supportsMode(mode))
         return;
 
-#ifndef Q_OS_WINPHONE
     const bool newData = !m_mimeData || m_mimeData != data;
     if (newData) {
         if (m_mimeData)
@@ -175,18 +171,11 @@ void QWinRTClipboard::setMimeData(QMimeData *data, QClipboard::Mode mode)
         return S_OK;
     });
     RETURN_VOID_IF_FAILED("Could not set clipboard text.");
-#else // Q_OS_WINPHONE
-    QPlatformClipboard::setMimeData(data, mode);
-#endif // Q_OS_WINPHONE
 }
 
 bool QWinRTClipboard::supportsMode(QClipboard::Mode mode) const
 {
-#ifndef Q_OS_WINPHONE
     return mode == QClipboard::Clipboard;
-#else
-    return QPlatformClipboard::supportsMode(mode);
-#endif
 }
 
 HRESULT QWinRTClipboard::onContentChanged(IInspectable *, IInspectable *)

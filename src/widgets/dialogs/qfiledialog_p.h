@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,9 +51,7 @@
 // We mean it.
 //
 
-#include <QtCore/qglobal.h>
-
-#ifndef QT_NO_FILEDIALOG
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #include "qfiledialog.h"
 #include "private/qdialog_p.h"
@@ -65,15 +69,21 @@
 #include <qstackedwidget.h>
 #include <qdialogbuttonbox.h>
 #include <qabstractproxymodel.h>
+#if QT_CONFIG(completer)
 #include <qcompleter.h>
+#endif
 #include <qpointer.h>
 #include <qdebug.h>
 #include "qsidebar_p.h"
+#if QT_CONFIG(fscompleter)
 #include "qfscompleter_p.h"
+#endif
 
 #if defined (Q_OS_UNIX)
 #include <unistd.h>
 #endif
+
+QT_REQUIRE_CONFIG(filedialog);
 
 QT_BEGIN_NAMESPACE
 
@@ -171,10 +181,6 @@ public:
 #if defined(Q_OS_WIN)
         QString n(path);
         n.replace(QLatin1Char('\\'), QLatin1Char('/'));
-#if defined(Q_OS_WINCE)
-        if ((n.size() > 1) && (n.startsWith(QLatin1String("//"))))
-            n = n.mid(1);
-#endif
         return n;
 #else // the compile should optimize away this
         return path;
@@ -229,9 +235,9 @@ public:
     QStringList watching;
     QFileSystemModel *model;
 
-#ifndef QT_NO_FSCOMPLETER
+#if QT_CONFIG(fscompleter)
     QFSCompleter *completer;
-#endif //QT_NO_FSCOMPLETER
+#endif //QT_CONFIG(fscompleter)
 
     QString setWindowTitle;
 
@@ -244,7 +250,6 @@ public:
     QAction *newFolderAction;
 
     bool useDefaultCaption;
-    bool defaultFileTypes;
 
     // setVisible_sys returns true if it ends up showing a native
     // dialog. Returning false means that a non-native dialog must be
@@ -252,13 +257,15 @@ public:
     bool canBeNativeDialog() const Q_DECL_OVERRIDE;
     inline bool usingWidgets() const;
 
-    void setDirectory_sys(const QUrl &directory);
-    QUrl directory_sys() const;
-    void selectFile_sys(const QUrl &filename);
-    QList<QUrl> selectedFiles_sys() const;
-    void setFilter_sys();
-    void selectNameFilter_sys(const QString &filter);
-    QString selectedNameFilter_sys() const;
+    inline void setDirectory_sys(const QUrl &directory);
+    inline QUrl directory_sys() const;
+    inline void selectFile_sys(const QUrl &filename);
+    inline QList<QUrl> selectedFiles_sys() const;
+    inline void setFilter_sys();
+    inline void selectMimeTypeFilter_sys(const QString &filter);
+    inline QString selectedMimeTypeFilter_sys() const;
+    inline void selectNameFilter_sys(const QString &filter);
+    inline QString selectedNameFilter_sys() const;
     //////////////////////////////////////////////
 
     QScopedPointer<Ui_QFileDialog> qFileDialogUi;
@@ -338,14 +345,14 @@ private:
     QFileDialogPrivate *d_ptr;
 };
 
-inline QModelIndex QFileDialogPrivate::mapToSource(const QModelIndex &index) const {
+QModelIndex QFileDialogPrivate::mapToSource(const QModelIndex &index) const {
 #ifdef QT_NO_PROXYMODEL
     return index;
 #else
     return proxyModel ? proxyModel->mapToSource(index) : index;
 #endif
 }
-inline QModelIndex QFileDialogPrivate::mapFromSource(const QModelIndex &index) const {
+QModelIndex QFileDialogPrivate::mapFromSource(const QModelIndex &index) const {
 #ifdef QT_NO_PROXYMODEL
     return index;
 #else
@@ -353,11 +360,12 @@ inline QModelIndex QFileDialogPrivate::mapFromSource(const QModelIndex &index) c
 #endif
 }
 
-inline QString QFileDialogPrivate::rootPath() const {
+QString QFileDialogPrivate::rootPath() const
+{
     return (model ? model->rootPath() : QStringLiteral("/"));
 }
 
-inline void QFileDialogPrivate::setDirectory_sys(const QUrl &directory)
+void QFileDialogPrivate::setDirectory_sys(const QUrl &directory)
 {
     QPlatformFileDialogHelper *helper = platformFileDialogHelper();
 
@@ -368,14 +376,14 @@ inline void QFileDialogPrivate::setDirectory_sys(const QUrl &directory)
         helper->setDirectory(directory);
 }
 
-inline QUrl QFileDialogPrivate::directory_sys() const
+QUrl QFileDialogPrivate::directory_sys() const
 {
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         return helper->directory();
     return QUrl();
 }
 
-inline void QFileDialogPrivate::selectFile_sys(const QUrl &filename)
+void QFileDialogPrivate::selectFile_sys(const QUrl &filename)
 {
     QPlatformFileDialogHelper *helper = platformFileDialogHelper();
 
@@ -386,26 +394,40 @@ inline void QFileDialogPrivate::selectFile_sys(const QUrl &filename)
         helper->selectFile(filename);
 }
 
-inline QList<QUrl> QFileDialogPrivate::selectedFiles_sys() const
+QList<QUrl> QFileDialogPrivate::selectedFiles_sys() const
 {
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         return helper->selectedFiles();
     return QList<QUrl>();
 }
 
-inline void QFileDialogPrivate::setFilter_sys()
+void QFileDialogPrivate::setFilter_sys()
 {
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         helper->setFilter();
 }
 
-inline void QFileDialogPrivate::selectNameFilter_sys(const QString &filter)
+void QFileDialogPrivate::selectMimeTypeFilter_sys(const QString &filter)
+{
+    if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
+        helper->selectMimeTypeFilter(filter);
+}
+
+QString QFileDialogPrivate::selectedMimeTypeFilter_sys() const
+{
+    if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
+        return helper->selectedMimeTypeFilter();
+
+    return QString();
+}
+
+void QFileDialogPrivate::selectNameFilter_sys(const QString &filter)
 {
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         helper->selectNameFilter(filter);
 }
 
-inline QString QFileDialogPrivate::selectedNameFilter_sys() const
+QString QFileDialogPrivate::selectedNameFilter_sys() const
 {
     if (QPlatformFileDialogHelper *helper = platformFileDialogHelper())
         return helper->selectedNameFilter();
@@ -413,7 +435,5 @@ inline QString QFileDialogPrivate::selectedNameFilter_sys() const
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_FILEDIALOG
 
 #endif // QFILEDIALOG_P_H

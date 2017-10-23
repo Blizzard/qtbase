@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,12 +39,15 @@
 #include <QtWidgets/QStackedWidget>
 #include <QtTest/QtTest>
 #include <QSignalSpy>
+#include <private/qguiapplication_p.h>
+#include <qpa/qplatformintegration.h>
 
 class tst_QOpenGLWidget : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void create();
     void clearAndGrab();
     void clearAndResizeAndGrab();
@@ -57,6 +55,7 @@ private slots:
     void painter();
     void reparentToAlreadyCreated();
     void reparentToNotYetCreated();
+    void reparentHidden();
     void asViewport();
     void requestUpdate();
     void fboRedirect();
@@ -64,6 +63,13 @@ private slots:
     void nativeWindow();
     void stackWidgetOpaqueChildIsVisible();
 };
+
+void tst_QOpenGLWidget::initTestCase()
+{
+    // See QOpenGLWidget constructor
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::RasterGLSurface))
+        QSKIP("QOpenGLWidget is not supported on this platform.");
+}
 
 void tst_QOpenGLWidget::create()
 {
@@ -228,6 +234,8 @@ void tst_QOpenGLWidget::painter()
     glw->m_clear = true;
     image = glw->grabFramebuffer();
     QVERIFY(image.pixel(20, 10) == qRgb(0, 255, 0));
+
+    QPixmap pix = glw->grab(); // QTBUG-61036
 }
 
 void tst_QOpenGLWidget::reparentToAlreadyCreated()
@@ -272,6 +280,36 @@ void tst_QOpenGLWidget::reparentToNotYetCreated()
     QVERIFY(image.pixel(20, 10) == qRgb(0, 0, 255));
 }
 
+void tst_QOpenGLWidget::reparentHidden()
+{
+    // Tests QTBUG-60896
+    QWidget topLevel1;
+
+    QWidget *container = new QWidget(&topLevel1);
+    PainterWidget *glw = new PainterWidget(container);
+    topLevel1.resize(640, 480);
+    glw->resize(320, 200);
+    topLevel1.show();
+
+    glw->hide(); // Explicitly hidden
+
+    QTest::qWaitForWindowExposed(&topLevel1);
+
+    QWidget topLevel2;
+    topLevel2.resize(640, 480);
+    topLevel2.show();
+    QTest::qWaitForWindowExposed(&topLevel2);
+
+    QOpenGLContext *originalContext = glw->context();
+    QVERIFY(originalContext);
+
+    container->setParent(&topLevel2);
+    glw->show(); // Should get a new context now
+
+    QOpenGLContext *newContext = glw->context();
+    QVERIFY(originalContext != newContext);
+}
+
 class CountingGraphicsView : public QGraphicsView
 {
 public:
@@ -287,6 +325,13 @@ protected:
 void CountingGraphicsView::drawForeground(QPainter *, const QRectF &)
 {
     ++m_count;
+
+    // QTBUG-59318: verify that the context's internal default fbo redirection
+    // is active also when using the QOpenGLWidget as a viewport.
+    GLint currentFbo = -1;
+    QOpenGLContext::currentContext()->functions()->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFbo);
+    GLuint defFbo = QOpenGLContext::currentContext()->defaultFramebufferObject();
+    QCOMPARE(GLuint(currentFbo), defFbo);
 }
 
 void tst_QOpenGLWidget::asViewport()

@@ -6,23 +6,16 @@ CONFIG += minimal_syncqt internal_module force_bootstrap
 
 MODULE_INCNAME = QtCore QtXml
 MODULE_DEFINES = \
+        QT_VERSION_STR=$$shell_quote(\"$$QT_VERSION\") \
+        QT_VERSION_MAJOR=$$QT_MAJOR_VERSION \
+        QT_VERSION_MINOR=$$QT_MINOR_VERSION \
+        QT_VERSION_PATCH=$$QT_PATCH_VERSION \
         QT_BOOTSTRAPPED \
-        QT_LITE_UNICODE \
-        QT_NO_CAST_TO_ASCII \
-        QT_NO_CODECS \
-        QT_NO_DATASTREAM \
-        QT_NO_LIBRARY \
-        QT_NO_QOBJECT \
-        QT_NO_SYSTEMLOCALE \
-        QT_NO_THREAD \
-        QT_NO_UNICODETABLES \
-        QT_NO_USING_NAMESPACE \
-        QT_NO_DEPRECATED \
-        QT_NO_TRANSLATION
+        QT_NO_CAST_TO_ASCII
 
 DEFINES += \
     $$MODULE_DEFINES \
-    QT_CRYPTOGRAPHICHASH_ONLY_SHA1 \
+    QT_NO_FOREACH \
     QT_NO_CAST_FROM_ASCII
 
 DEFINES -= QT_EVAL
@@ -35,6 +28,7 @@ SOURCES += \
            ../../corelib/global/qlogging.cpp \
            ../../corelib/global/qmalloc.cpp \
            ../../corelib/global/qnumeric.cpp \
+           ../../corelib/global/qoperatingsystemversion.cpp \
            ../../corelib/io/qabstractfileengine.cpp \
            ../../corelib/io/qbuffer.cpp \
            ../../corelib/io/qdatastream.cpp \
@@ -49,8 +43,10 @@ SOURCES += \
            ../../corelib/io/qfsfileengine_iterator.cpp \
            ../../corelib/io/qiodevice.cpp \
            ../../corelib/io/qfiledevice.cpp \
+           ../../corelib/io/qresource.cpp \
            ../../corelib/io/qtemporaryfile.cpp \
            ../../corelib/io/qtextstream.cpp \
+           ../../corelib/io/qsavefile.cpp \
            ../../corelib/io/qstandardpaths.cpp \
            ../../corelib/io/qloggingcategory.cpp \
            ../../corelib/io/qloggingregistry.cpp \
@@ -84,7 +80,6 @@ SOURCES += \
            ../../corelib/tools/qstringbuilder.cpp \
            ../../corelib/tools/qstring_compat.cpp \
            ../../corelib/tools/qstringlist.cpp \
-           ../../corelib/tools/qvector.cpp \
            ../../corelib/tools/qvsnprintf.cpp \
            ../../corelib/xml/qxmlutils.cpp \
            ../../corelib/xml/qxmlstream.cpp \
@@ -102,7 +97,8 @@ unix:SOURCES += ../../corelib/io/qfilesystemengine_unix.cpp \
                 ../../corelib/io/qfilesystemiterator_unix.cpp \
                 ../../corelib/io/qfsfileengine_unix.cpp
 
-win32:SOURCES += ../../corelib/io/qfilesystemengine_win.cpp \
+win32:SOURCES += ../../corelib/global/qoperatingsystemversion_win.cpp \
+                 ../../corelib/io/qfilesystemengine_win.cpp \
                  ../../corelib/io/qfilesystemiterator_win.cpp \
                  ../../corelib/io/qfsfileengine_win.cpp \
                  ../../corelib/kernel/qcoreapplication_win.cpp \
@@ -113,16 +109,17 @@ mac {
         ../../corelib/kernel/qcoreapplication_mac.cpp \
         ../../corelib/kernel/qcore_mac.cpp
     OBJECTIVE_SOURCES += \
-        ../../corelib/kernel/qcore_mac_objc.mm
+        ../../corelib/global/qoperatingsystemversion_darwin.mm \
+        ../../corelib/kernel/qcore_mac_objc.mm \
+        ../../corelib/kernel/qcore_foundation.mm
 
     LIBS += -framework Foundation
     osx: LIBS_PRIVATE += -framework CoreServices
-    ios: LIBS_PRIVATE += -framework UIKit
+    uikit: LIBS_PRIVATE += -framework UIKit
 }
 
 macx {
     OBJECTIVE_SOURCES += \
-        ../../corelib/tools/qstring_mac.mm \
         ../../corelib/io/qstandardpaths_mac.mm
 } else:unix {
     SOURCES += \
@@ -132,14 +129,17 @@ macx {
         ../../corelib/io/qstandardpaths_win.cpp
 }
 
-contains(QT_CONFIG, zlib)|cross_compile {
+!qtConfig(system-zlib)|cross_compile {
     include(../../3rdparty/zlib.pri)
 } else {
     CONFIG += no_core_dep
     include(../../3rdparty/zlib_dependency.pri)
 }
 
-win32:LIBS += -luser32 -lole32 -ladvapi32 -lshell32
+win32 {
+    LIBS += -luser32 -lole32 -ladvapi32 -lshell32
+    mingw: LIBS += -luuid
+}
 
 load(qt_module)
 

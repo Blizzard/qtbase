@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #ifndef QABSTRACTITEMVIEW_H
 #define QABSTRACTITEMVIEW_H
 
+#include <QtWidgets/qtwidgetsglobal.h>
 #include <QtWidgets/qabstractscrollarea.h>
 #include <QtCore/qabstractitemmodel.h>
 #include <QtCore/qitemselectionmodel.h>
@@ -42,10 +49,9 @@
 class tst_QAbstractItemView;
 class tst_QTreeView;
 
+QT_REQUIRE_CONFIG(itemviews);
+
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_ITEMVIEWS
 
 class QMenu;
 class QDrag;
@@ -55,7 +61,6 @@ class QAbstractItemViewPrivate;
 class Q_WIDGETS_EXPORT QAbstractItemView : public QAbstractScrollArea
 {
     Q_OBJECT
-    Q_FLAGS(EditTriggers)
     Q_PROPERTY(bool autoScroll READ hasAutoScroll WRITE setAutoScroll)
     Q_PROPERTY(int autoScrollMargin READ autoScrollMargin WRITE setAutoScrollMargin)
     Q_PROPERTY(EditTriggers editTriggers READ editTriggers WRITE setEditTriggers)
@@ -72,8 +77,8 @@ class Q_WIDGETS_EXPORT QAbstractItemView : public QAbstractScrollArea
     Q_PROPERTY(SelectionBehavior selectionBehavior READ selectionBehavior WRITE setSelectionBehavior)
     Q_PROPERTY(QSize iconSize READ iconSize WRITE setIconSize NOTIFY iconSizeChanged)
     Q_PROPERTY(Qt::TextElideMode textElideMode READ textElideMode WRITE setTextElideMode)
-    Q_PROPERTY(ScrollMode verticalScrollMode READ verticalScrollMode WRITE setVerticalScrollMode)
-    Q_PROPERTY(ScrollMode horizontalScrollMode READ horizontalScrollMode WRITE setHorizontalScrollMode)
+    Q_PROPERTY(ScrollMode verticalScrollMode READ verticalScrollMode WRITE setVerticalScrollMode RESET resetVerticalScrollMode)
+    Q_PROPERTY(ScrollMode horizontalScrollMode READ horizontalScrollMode WRITE setHorizontalScrollMode RESET resetHorizontalScrollMode)
 
 public:
     enum SelectionMode {
@@ -111,6 +116,7 @@ public:
     };
 
     Q_DECLARE_FLAGS(EditTriggers, EditTrigger)
+    Q_FLAG(EditTriggers)
 
     enum ScrollMode {
         ScrollPerItem,
@@ -144,9 +150,11 @@ public:
 
     void setVerticalScrollMode(ScrollMode mode);
     ScrollMode verticalScrollMode() const;
+    void resetVerticalScrollMode();
 
     void setHorizontalScrollMode(ScrollMode mode);
     ScrollMode horizontalScrollMode() const;
+    void resetHorizontalScrollMode();
 
     void setAutoScroll(bool enable);
     bool hasAutoScroll() const;
@@ -358,7 +366,7 @@ private:
     Q_PRIVATE_SLOT(d_func(), void _q_modelDestroyed())
     Q_PRIVATE_SLOT(d_func(), void _q_layoutChanged())
     Q_PRIVATE_SLOT(d_func(), void _q_headerDataChanged())
-#ifndef QT_NO_GESTURES
+#if QT_CONFIG(gestures) && QT_CONFIG(scroller)
     Q_PRIVATE_SLOT(d_func(), void _q_scrollerStateChanged())
 #endif
 
@@ -367,11 +375,10 @@ private:
     friend class QTreeViewPrivate; // needed to compile with MSVC
     friend class QListModeViewBase;
     friend class QListViewPrivate;
+    friend class QAbstractSlider;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QAbstractItemView::EditTriggers)
-
-#endif // QT_NO_ITEMVIEWS
 
 QT_END_NAMESPACE
 

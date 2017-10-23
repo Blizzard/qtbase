@@ -1,32 +1,27 @@
 /*
 *********************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the autotests of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -713,46 +708,46 @@ public:
 
     void retranslateUi(QDialog *Config)
     {
-        Config->setWindowTitle(QApplication::translate("Config", "Configure", 0));
-        ButtonGroup1->setTitle(QApplication::translate("Config", "Size", 0));
-        size_176_220->setText(QApplication::translate("Config", "176x220 \"SmartPhone\"", 0));
-        size_240_320->setText(QApplication::translate("Config", "240x320 \"PDA\"", 0));
-        size_320_240->setText(QApplication::translate("Config", "320x240 \"TV\" / \"QVGA\"", 0));
-        size_640_480->setText(QApplication::translate("Config", "640x480 \"VGA\"", 0));
-        size_800_600->setText(QApplication::translate("Config", "800x600", 0));
-        size_1024_768->setText(QApplication::translate("Config", "1024x768", 0));
-        size_custom->setText(QApplication::translate("Config", "Custom", 0));
-        ButtonGroup2->setTitle(QApplication::translate("Config", "Depth", 0));
-        depth_1->setText(QApplication::translate("Config", "1 bit monochrome", 0));
-        depth_4gray->setText(QApplication::translate("Config", "4 bit grayscale", 0));
-        depth_8->setText(QApplication::translate("Config", "8 bit", 0));
-        depth_12->setText(QApplication::translate("Config", "12 (16) bit", 0));
-        depth_15->setText(QApplication::translate("Config", "15 bit", 0));
-        depth_16->setText(QApplication::translate("Config", "16 bit", 0));
-        depth_18->setText(QApplication::translate("Config", "18 bit", 0));
-        depth_24->setText(QApplication::translate("Config", "24 bit", 0));
-        depth_32->setText(QApplication::translate("Config", "32 bit", 0));
-        depth_32_argb->setText(QApplication::translate("Config", "32 bit ARGB", 0));
-        TextLabel1_3->setText(QApplication::translate("Config", "Skin", 0));
+        Config->setWindowTitle(QApplication::translate("Config", "Configure", Q_NULLPTR));
+        ButtonGroup1->setTitle(QApplication::translate("Config", "Size", Q_NULLPTR));
+        size_176_220->setText(QApplication::translate("Config", "176x220 \"SmartPhone\"", Q_NULLPTR));
+        size_240_320->setText(QApplication::translate("Config", "240x320 \"PDA\"", Q_NULLPTR));
+        size_320_240->setText(QApplication::translate("Config", "320x240 \"TV\" / \"QVGA\"", Q_NULLPTR));
+        size_640_480->setText(QApplication::translate("Config", "640x480 \"VGA\"", Q_NULLPTR));
+        size_800_600->setText(QApplication::translate("Config", "800x600", Q_NULLPTR));
+        size_1024_768->setText(QApplication::translate("Config", "1024x768", Q_NULLPTR));
+        size_custom->setText(QApplication::translate("Config", "Custom", Q_NULLPTR));
+        ButtonGroup2->setTitle(QApplication::translate("Config", "Depth", Q_NULLPTR));
+        depth_1->setText(QApplication::translate("Config", "1 bit monochrome", Q_NULLPTR));
+        depth_4gray->setText(QApplication::translate("Config", "4 bit grayscale", Q_NULLPTR));
+        depth_8->setText(QApplication::translate("Config", "8 bit", Q_NULLPTR));
+        depth_12->setText(QApplication::translate("Config", "12 (16) bit", Q_NULLPTR));
+        depth_15->setText(QApplication::translate("Config", "15 bit", Q_NULLPTR));
+        depth_16->setText(QApplication::translate("Config", "16 bit", Q_NULLPTR));
+        depth_18->setText(QApplication::translate("Config", "18 bit", Q_NULLPTR));
+        depth_24->setText(QApplication::translate("Config", "24 bit", Q_NULLPTR));
+        depth_32->setText(QApplication::translate("Config", "32 bit", Q_NULLPTR));
+        depth_32_argb->setText(QApplication::translate("Config", "32 bit ARGB", Q_NULLPTR));
+        TextLabel1_3->setText(QApplication::translate("Config", "Skin", Q_NULLPTR));
         skin->clear();
         skin->insertItems(0, QStringList()
-         << QApplication::translate("Config", "None", 0)
+         << QApplication::translate("Config", "None", Q_NULLPTR)
         );
-        touchScreen->setText(QApplication::translate("Config", "Emulate touch screen (no mouse move)", 0));
-        lcdScreen->setText(QApplication::translate("Config", "Emulate LCD screen (Only with fixed zoom of 3.0 times magnification)", 0));
-        TextLabel1->setText(QApplication::translate("Config", "<p>Note that any applications using the virtual framebuffer will be terminated if you change the Size or Depth <i>above</i>. You may freely modify the Gamma <i>below</i>.", 0));
-        GroupBox1->setTitle(QApplication::translate("Config", "Gamma", 0));
-        TextLabel3->setText(QApplication::translate("Config", "Blue", 0));
-        blabel->setText(QApplication::translate("Config", "1.0", 0));
-        TextLabel2->setText(QApplication::translate("Config", "Green", 0));
-        glabel->setText(QApplication::translate("Config", "1.0", 0));
-        TextLabel7->setText(QApplication::translate("Config", "All", 0));
-        TextLabel8->setText(QApplication::translate("Config", "1.0", 0));
-        TextLabel1_2->setText(QApplication::translate("Config", "Red", 0));
-        rlabel->setText(QApplication::translate("Config", "1.0", 0));
-        PushButton3->setText(QApplication::translate("Config", "Set all to 1.0", 0));
-        buttonOk->setText(QApplication::translate("Config", "&OK", 0));
-        buttonCancel->setText(QApplication::translate("Config", "&Cancel", 0));
+        touchScreen->setText(QApplication::translate("Config", "Emulate touch screen (no mouse move)", Q_NULLPTR));
+        lcdScreen->setText(QApplication::translate("Config", "Emulate LCD screen (Only with fixed zoom of 3.0 times magnification)", Q_NULLPTR));
+        TextLabel1->setText(QApplication::translate("Config", "<p>Note that any applications using the virtual framebuffer will be terminated if you change the Size or Depth <i>above</i>. You may freely modify the Gamma <i>below</i>.", Q_NULLPTR));
+        GroupBox1->setTitle(QApplication::translate("Config", "Gamma", Q_NULLPTR));
+        TextLabel3->setText(QApplication::translate("Config", "Blue", Q_NULLPTR));
+        blabel->setText(QApplication::translate("Config", "1.0", Q_NULLPTR));
+        TextLabel2->setText(QApplication::translate("Config", "Green", Q_NULLPTR));
+        glabel->setText(QApplication::translate("Config", "1.0", Q_NULLPTR));
+        TextLabel7->setText(QApplication::translate("Config", "All", Q_NULLPTR));
+        TextLabel8->setText(QApplication::translate("Config", "1.0", Q_NULLPTR));
+        TextLabel1_2->setText(QApplication::translate("Config", "Red", Q_NULLPTR));
+        rlabel->setText(QApplication::translate("Config", "1.0", Q_NULLPTR));
+        PushButton3->setText(QApplication::translate("Config", "Set all to 1.0", Q_NULLPTR));
+        buttonOk->setText(QApplication::translate("Config", "&OK", Q_NULLPTR));
+        buttonCancel->setText(QApplication::translate("Config", "&Cancel", Q_NULLPTR));
     } // retranslateUi
 
 };

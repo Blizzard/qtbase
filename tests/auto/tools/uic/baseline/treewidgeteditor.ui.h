@@ -1,32 +1,27 @@
 /*
 *********************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the autotests of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -283,63 +278,63 @@ public:
 
     void retranslateUi(QDialog *qdesigner_internal__TreeWidgetEditor)
     {
-        qdesigner_internal__TreeWidgetEditor->setWindowTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Edit Tree Widget", 0));
-        itemsBox->setTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Items", 0));
+        qdesigner_internal__TreeWidgetEditor->setWindowTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Edit Tree Widget", Q_NULLPTR));
+        itemsBox->setTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Items", Q_NULLPTR));
         QTreeWidgetItem *___qtreewidgetitem = treeWidget->headerItem();
-        ___qtreewidgetitem->setText(0, QApplication::translate("qdesigner_internal::TreeWidgetEditor", "1", 0));
+        ___qtreewidgetitem->setText(0, QApplication::translate("qdesigner_internal::TreeWidgetEditor", "1", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        treeWidget->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Items", 0));
+        treeWidget->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Items", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
 #ifndef QT_NO_TOOLTIP
-        newItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Item", 0));
+        newItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Item", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        newItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "&New", 0));
+        newItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "&New", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        newSubItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Subitem", 0));
+        newSubItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Subitem", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        newSubItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New &Subitem", 0));
+        newSubItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New &Subitem", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        deleteItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete Item", 0));
+        deleteItemButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete Item", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        deleteItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "&Delete", 0));
+        deleteItemButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "&Delete", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveItemLeftButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Left (before Parent Item)", 0));
+        moveItemLeftButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Left (before Parent Item)", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveItemLeftButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "L", 0));
+        moveItemLeftButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "L", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveItemRightButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Right (as a First Subitem of the Next Sibling Item)", 0));
+        moveItemRightButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Right (as a First Subitem of the Next Sibling Item)", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveItemRightButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "R", 0));
+        moveItemRightButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "R", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveItemUpButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Up", 0));
+        moveItemUpButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Up", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveItemUpButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "U", 0));
+        moveItemUpButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "U", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveItemDownButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Down", 0));
+        moveItemDownButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Item Down", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveItemDownButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "D", 0));
-        label_2->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Icon", 0));
-        columnsBox->setTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Columns", 0));
+        moveItemDownButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "D", Q_NULLPTR));
+        label_2->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Icon", Q_NULLPTR));
+        columnsBox->setTitle(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Columns", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        listWidget->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Columns", 0));
+        listWidget->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Tree Columns", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
 #ifndef QT_NO_TOOLTIP
-        newColumnButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Column", 0));
+        newColumnButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New Column", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        newColumnButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New", 0));
+        newColumnButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "New", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        deleteColumnButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete Column", 0));
+        deleteColumnButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete Column", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        deleteColumnButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete", 0));
+        deleteColumnButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Delete", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveColumnUpButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Column Up", 0));
+        moveColumnUpButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Column Up", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveColumnUpButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "U", 0));
+        moveColumnUpButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "U", Q_NULLPTR));
 #ifndef QT_NO_TOOLTIP
-        moveColumnDownButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Column Down", 0));
+        moveColumnDownButton->setToolTip(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Move Column Down", Q_NULLPTR));
 #endif // QT_NO_TOOLTIP
-        moveColumnDownButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "D", 0));
-        label->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Icon", 0));
+        moveColumnDownButton->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "D", Q_NULLPTR));
+        label->setText(QApplication::translate("qdesigner_internal::TreeWidgetEditor", "Icon", Q_NULLPTR));
     } // retranslateUi
 
 };

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,12 +43,16 @@
 #include <private/qmath_p.h>
 #include <private/qstyle_p.h>
 #include <qmath.h>
+#if QT_CONFIG(scrollbar)
 #include <qscrollbar.h>
+#endif
 #include <qabstractscrollarea.h>
 #include <qwindow.h>
 
 #include "qstylehelper_p.h"
 #include <qstringbuilder.h>
+#include <qdatastream.h>
+#include <qcryptographichash.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -56,17 +66,35 @@ QString uniqueName(const QString &key, const QStyleOption *option, const QSize &
     QString tmp = key % HexString<uint>(option->state)
                       % HexString<uint>(option->direction)
                       % HexString<uint>(complexOption ? uint(complexOption->activeSubControls) : 0u)
-                      % HexString<quint64>(option->palette.cacheKey())
                       % HexString<uint>(size.width())
                       % HexString<uint>(size.height());
 
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
     if (const QStyleOptionSpinBox *spinBox = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
         tmp = tmp % HexString<uint>(spinBox->buttonSymbols)
                   % HexString<uint>(spinBox->stepEnabled)
                   % QLatin1Char(spinBox->frame ? '1' : '0'); ;
     }
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
+
+    // QTBUG-56743, try to create a palette cache key reflecting the value,
+    // as leaks may occur in conjunction with QStyleSheetStyle/QRenderRule modifying
+    // palettes when using QPalette::cacheKey()
+    if (option->palette != QGuiApplication::palette()) {
+        tmp.append(QLatin1Char('P'));
+#ifndef QT_NO_DATASTREAM
+        QByteArray key;
+        key.reserve(5120); // Observed 5040B for a serialized palette on 64bit
+        {
+            QDataStream str(&key, QIODevice::WriteOnly);
+            str << option->palette;
+        }
+        const QByteArray sha1 = QCryptographicHash::hash(key, QCryptographicHash::Sha1).toHex();
+        tmp.append(QString::fromLatin1(sha1));
+#else // QT_NO_DATASTREAM
+        tmp.append(QString::number(option->palette.cacheKey(), 16));
+#endif // !QT_NO_DATASTREAM
+    }
     return tmp;
 }
 
@@ -105,7 +133,7 @@ bool hasAncestor(QObject *obj, QAccessible::Role role)
 #endif // QT_NO_ACCESSIBILITY
 
 
-#ifndef QT_NO_DIAL
+#if QT_CONFIG(dial)
 
 int calcBigLineSize(int radius)
 {
@@ -324,7 +352,7 @@ void drawDial(const QStyleOptionSlider *option, QPainter *painter)
     painter->drawEllipse(dialRect);
     painter->restore();
 }
-#endif //QT_NO_DIAL
+#endif //QT_CONFIG(dial)
 
 void drawBorderPixmap(const QPixmap &pixmap, QPainter *painter, const QRect &rect,
                      int left, int top, int right,
@@ -385,9 +413,13 @@ void drawBorderPixmap(const QPixmap &pixmap, QPainter *painter, const QRect &rec
 
 QColor backgroundColor(const QPalette &pal, const QWidget* widget)
 {
+#if QT_CONFIG(scrollarea)
     if (qobject_cast<const QScrollBar *>(widget) && widget->parent() &&
             qobject_cast<const QAbstractScrollArea *>(widget->parent()->parent()))
         return widget->parentWidget()->parentWidget()->palette().color(QPalette::Base);
+#else
+    Q_UNUSED(widget);
+#endif
     return pal.color(QPalette::Base);
 }
 

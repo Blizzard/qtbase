@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -109,12 +115,6 @@
 #ifndef QT_NO_IMAGEFORMAT_PNG
 #include <private/qpnghandler_p.h>
 #endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-#include <private/qjpeghandler_p.h>
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-#include <private/qgifhandler_p.h>
-#endif
 
 #include <algorithm>
 
@@ -177,14 +177,6 @@ static QImageIOHandler *createWriteHandlerHelper(QIODevice *device,
 #ifndef QT_NO_IMAGEFORMAT_PNG
         } else if (testFormat == "png") {
             handler = new QPngHandler;
-#endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-        } else if (testFormat == "jpg" || testFormat == "jpeg") {
-            handler = new QJpegHandler;
-#endif
-#ifdef QT_BUILTIN_GIF_READER
-        } else if (testFormat == "gif") {
-            handler = new QGifHandler;
 #endif
 #ifndef QT_NO_IMAGEFORMAT_BMP
         } else if (testFormat == "bmp") {
@@ -291,8 +283,13 @@ bool QImageWriterPrivate::canWriteHelper()
         errorString = QImageWriter::tr("Device is not set");
         return false;
     }
-    if (!device->isOpen())
-        device->open(QIODevice::WriteOnly);
+    if (!device->isOpen()) {
+        if (!device->open(QIODevice::WriteOnly)) {
+            imageWriterError = QImageWriter::DeviceError;
+            errorString = QImageWriter::tr("Cannot open device for writing: %1").arg(device->errorString());
+            return false;
+        }
+    }
     if (!device->isWritable()) {
         imageWriterError = QImageWriter::DeviceError;
         errorString = QImageWriter::tr("Device not writable");
@@ -334,12 +331,9 @@ QImageWriter::QImageWriter(QIODevice *device, const QByteArray &format)
     by inspecting the extension of \a fileName.
 */
 QImageWriter::QImageWriter(const QString &fileName, const QByteArray &format)
-    : d(new QImageWriterPrivate(this))
+    : QImageWriter(new QFile(fileName), format)
 {
-    QFile *file = new QFile(fileName);
-    d->device = file;
     d->deleteDevice = true;
-    d->format = format;
 }
 
 /*!
@@ -716,6 +710,11 @@ bool QImageWriter::canWrite() const
     if (QFile *file = qobject_cast<QFile *>(d->device)) {
         const bool remove = !file->isOpen() && !file->exists();
         const bool result = d->canWriteHelper();
+
+        // This looks strange (why remove if it doesn't exist?) but the issue
+        // here is that canWriteHelper will create the file in the process of
+        // checking if the write can succeed. If it subsequently fails, we
+        // should remove that empty file.
         if (!result && remove)
             file->remove();
         return result;
@@ -848,9 +847,9 @@ void supportedImageHandlerMimeTypes(QFactoryLoader *loader,
 
     const int pluginCount = metaDataList.size();
     for (int i = 0; i < pluginCount; ++i) {
-        const QJsonObject metaData = metaDataList.at(i).value(QStringLiteral("MetaData")).toObject();
-        const QJsonArray keys = metaData.value(QStringLiteral("Keys")).toArray();
-        const QJsonArray mimeTypes = metaData.value(QStringLiteral("MimeTypes")).toArray();
+        const QJsonObject metaData = metaDataList.at(i).value(QLatin1String("MetaData")).toObject();
+        const QJsonArray keys = metaData.value(QLatin1String("Keys")).toArray();
+        const QJsonArray mimeTypes = metaData.value(QLatin1String("MimeTypes")).toArray();
         QImageIOPlugin *plugin = qobject_cast<QImageIOPlugin *>(loader->instance(i));
         const int keyCount = keys.size();
         for (int k = 0; k < keyCount; ++k) {
@@ -904,9 +903,6 @@ QList<QByteArray> QImageWriter::supportedImageFormats()
 #ifndef QT_NO_IMAGEFORMAT_PNG
     formats << "png";
 #endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-    formats << "jpg" << "jpeg";
-#endif
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN
     supportedImageHandlerFormats(loader(), QImageIOPlugin::CanWrite, &formats);
@@ -944,9 +940,6 @@ QList<QByteArray> QImageWriter::supportedMimeTypes()
 #endif
 #ifndef QT_NO_IMAGEFORMAT_PNG
     mimeTypes << "image/png";
-#endif
-#ifndef QT_NO_IMAGEFORMAT_JPEG
-    mimeTypes << "image/jpeg";
 #endif
 
 #ifndef QT_NO_IMAGEFORMATPLUGIN

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,52 +44,89 @@
 #include <Carbon/Carbon.h>
 #undef check
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qmacstyle_mac_p.h"
 #include "qcommonstyle_p.h"
 #include <private/qapplication_p.h>
+#if QT_CONFIG(combobox)
 #include <private/qcombobox_p.h>
+#endif
 #include <private/qpainter_p.h>
 #include <private/qstylehelper_p.h>
 #include <qapplication.h>
 #include <qbitmap.h>
+#if QT_CONFIG(checkbox)
 #include <qcheckbox.h>
+#endif
 #include <qcombobox.h>
+#if QT_CONFIG(dialogbuttonbox)
 #include <qdialogbuttonbox.h>
+#endif
+#if QT_CONFIG(dockwidget)
 #include <qdockwidget.h>
+#endif
 #include <qevent.h>
 #include <qfocusframe.h>
 #include <qformlayout.h>
+#if QT_CONFIG(groupbox)
 #include <qgroupbox.h>
+#endif
 #include <qhash.h>
 #include <qheaderview.h>
 #include <qlayout.h>
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
+#endif
+#if QT_CONFIG(listview)
 #include <qlistview.h>
+#endif
+#if QT_CONFIG(mainwindow)
 #include <qmainwindow.h>
+#endif
 #include <qmap.h>
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
 #include <qpaintdevice.h>
 #include <qpainter.h>
 #include <qpixmapcache.h>
 #include <qpointer.h>
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
+#if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
+#endif
 #include <qradiobutton.h>
+#if QT_CONFIG(rubberband)
 #include <qrubberband.h>
+#endif
+#if QT_CONFIG(sizegrip)
 #include <qsizegrip.h>
+#endif
+#if QT_CONFIG(spinbox)
 #include <qspinbox.h>
+#endif
+#if QT_CONFIG(splitter)
 #include <qsplitter.h>
+#endif
 #include <qstyleoption.h>
 #include <qtextedit.h>
 #include <qtextstream.h>
 #include <qtoolbar.h>
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(treeview)
 #include <qtreeview.h>
+#endif
+#if QT_CONFIG(tableview)
 #include <qtableview.h>
-#include <qwizard.h>
+#endif
 #include <qdebug.h>
-#include <qlibrary.h>
+#if QT_CONFIG(datetimeedit)
 #include <qdatetimeedit.h>
+#endif
 #include <qmath.h>
 #include <qpair.h>
 #include <qvector.h>
@@ -102,6 +145,9 @@
 //
 // We mean it.
 //
+
+Q_FORWARD_DECLARE_OBJC_CLASS(NSView);
+Q_FORWARD_DECLARE_OBJC_CLASS(NSScroller);
 
 QT_BEGIN_NAMESPACE
 
@@ -145,9 +191,11 @@ typedef void (^QCocoaDrawRectBlock)(NSRect, CGContextRef);
     do { \
         static const int sizes[] = { (large), (small), (mini) }; \
         return sizes[controlSize]; \
-    } while (0)
+    } while (false)
 
+#if QT_CONFIG(pushbutton)
 bool qt_mac_buttonIsRenderedFlat(const QPushButton *pushButton, const QStyleOptionButton *option);
+#endif
 
 class QMacStylePrivate : public QCommonStylePrivate
 {
@@ -170,6 +218,9 @@ public:
     enum Animates { AquaPushButton, AquaProgressBar, AquaListViewItemOpen, AquaScrollBar };
     static ThemeDrawState getDrawState(QStyle::State flags);
     QAquaWidgetSize aquaSizeConstrain(const QStyleOption *option, const QWidget *widg,
+                             QStyle::ContentsType ct = QStyle::CT_CustomBase,
+                             QSize szHint=QSize(-1, -1), QSize *insz = 0) const;
+    QAquaWidgetSize effectiveAquaSizeConstrain(const QStyleOption *option, const QWidget *widg,
                              QStyle::ContentsType ct = QStyle::CT_CustomBase,
                              QSize szHint=QSize(-1, -1), QSize *insz = 0) const;
     void getSliderInfo(QStyle::ComplexControl cc, const QStyleOptionSlider *slider,
@@ -211,6 +262,10 @@ public:
 
     void drawFocusRing(QPainter *p, const QRect &targetRect, int hMargin, int vMargin, qreal radius = 0) const;
 
+#if QT_CONFIG(tabbar)
+    void tabLayout(const QStyleOptionTab *opt, const QWidget *widget, QRect *textRect, QRect *iconRect) const;
+#endif
+
 public:
     mutable QPointer<QObject> pressedButton;
     mutable QPointer<QObject> defaultButton;
@@ -225,7 +280,8 @@ public:
     CFAbsoluteTime defaultButtonStart;
     bool mouseDown;
     void* receiver;
-    void *nsscroller;
+    NSScroller *horizontalScroller;
+    NSScroller *verticalScroller;
     void *indicatorBranchButtonCell;
     NSView *backingStoreNSView;
     QHash<QCocoaWidget, NSView *> cocoaControls;

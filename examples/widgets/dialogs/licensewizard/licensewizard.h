@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -78,7 +88,7 @@ class IntroPage : public QWizardPage
 public:
     IntroPage(QWidget *parent = 0);
 
-    int nextId() const Q_DECL_OVERRIDE;
+    int nextId() const override;
 
 private:
     QLabel *topLabel;
@@ -95,7 +105,7 @@ class EvaluatePage : public QWizardPage
 public:
     EvaluatePage(QWidget *parent = 0);
 
-    int nextId() const Q_DECL_OVERRIDE;
+    int nextId() const override;
 
 private:
     QLabel *nameLabel;
@@ -112,7 +122,7 @@ class RegisterPage : public QWizardPage
 public:
     RegisterPage(QWidget *parent = 0);
 
-    int nextId() const Q_DECL_OVERRIDE;
+    int nextId() const override;
 
 private:
     QLabel *nameLabel;
@@ -128,7 +138,7 @@ class DetailsPage : public QWizardPage
 public:
     DetailsPage(QWidget *parent = 0);
 
-    int nextId() const Q_DECL_OVERRIDE;
+    int nextId() const override;
 
 private:
     QLabel *companyLabel;
@@ -147,9 +157,9 @@ class ConclusionPage : public QWizardPage
 public:
     ConclusionPage(QWidget *parent = 0);
 
-    void initializePage() Q_DECL_OVERRIDE;
-    int nextId() const Q_DECL_OVERRIDE;
-    void setVisible(bool visible) Q_DECL_OVERRIDE;
+    void initializePage() override;
+    int nextId() const override;
+    void setVisible(bool visible) override;
 
 private slots:
     void printButtonClicked();

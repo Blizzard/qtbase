@@ -1,56 +1,67 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 # include <private/qcore_mac_p.h>
 #endif
+
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
 #include <qapplication.h>
 #include <qdesktopwidget.h>
 #include <qevent.h>
-#include <qlabel.h>
 #include <qpointer.h>
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qstylepainter.h>
 #include <qtimer.h>
-#include <qtooltip.h>
+#if QT_CONFIG(effects)
 #include <private/qeffects_p.h>
+#endif
 #include <qtextdocument.h>
 #include <qdebug.h>
 #include <private/qstylesheetstyle_p.h>
-#ifndef QT_NO_TOOLTIP
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#ifndef QT_NO_TOOLTIP
+#include <qlabel.h>
+#include <qtooltip.h>
+
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 # include <private/qcore_mac_p.h>
 #include <private/qt_cocoa_helpers_mac_p.h>
 #endif
@@ -264,12 +275,12 @@ void QTipLabel::hideTipImmediately()
 
 void QTipLabel::setTipRect(QWidget *w, const QRect &r)
 {
-    if (!r.isNull() && !w)
+    if (Q_UNLIKELY(!r.isNull() && !w)) {
         qWarning("QToolTip::setTipRect: Cannot pass null widget if rect is set");
-    else{
-        widget = w;
-        rect = r;
+        return;
     }
+    widget = w;
+    rect = r;
 }
 
 void QTipLabel::timerEvent(QTimerEvent *e)
@@ -278,7 +289,7 @@ void QTipLabel::timerEvent(QTimerEvent *e)
         || e->timerId() == expireTimer.timerId()){
         hideTimer.stop();
         expireTimer.stop();
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC) && !defined(QT_NO_EFFECTS)
+#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ && QT_CONFIG(effects)
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip)){
             // Fade out tip on mac (makes it invisible).
             // The tip will not be deleted until a new tip is shown.
@@ -298,7 +309,7 @@ void QTipLabel::timerEvent(QTimerEvent *e)
 bool QTipLabel::eventFilter(QObject *o, QEvent *e)
 {
     switch (e->type()) {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     case QEvent::KeyPress:
     case QEvent::KeyRelease: {
         int key = static_cast<QKeyEvent *>(e)->key();
@@ -336,6 +347,7 @@ bool QTipLabel::eventFilter(QObject *o, QEvent *e)
     case QEvent::FocusIn:
     case QEvent::FocusOut:
 #endif
+    case QEvent::Close: // For QTBUG-55523 (QQC) specifically: Hide tooltip when windows are closed
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
     case QEvent::MouseButtonDblClick:
@@ -379,7 +391,7 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 #endif //QT_NO_STYLE_STYLESHEET
 
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     // When in full screen mode, there is no Dock nor Menu so we can use
     // the whole screen for displaying the tooltip. However when not in
     // full screen mode we need to save space for the dock, so we use
@@ -396,7 +408,7 @@ void QTipLabel::placeTip(const QPoint &pos, QWidget *w)
 
     QPoint p = pos;
     p += QPoint(2,
-#ifdef Q_DEAD_CODE_FROM_QT4_WIN
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
                 21
 #else
                 16
@@ -485,19 +497,19 @@ void QToolTip::showText(const QPoint &pos, const QString &text, QWidget *w, cons
     }
 
     if (!text.isEmpty()){ // no tip can be reused, create new tip:
-#ifndef Q_DEAD_CODE_FROM_QT4_WIN
-        new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
-#else
+#ifdef Q_OS_WIN32
         // On windows, we can't use the widget as parent otherwise the window will be
         // raised when the tooltip will be shown
         new QTipLabel(text, QApplication::desktop()->screen(QTipLabel::getTipScreen(pos, w)), msecDisplayTime);
+#else
+        new QTipLabel(text, w, msecDisplayTime); // sets QTipLabel::instance to itself
 #endif
         QTipLabel::instance->setTipRect(w, rect);
         QTipLabel::instance->placeTip(pos, w);
         QTipLabel::instance->setObjectName(QLatin1String("qtooltip_label"));
 
 
-#if !defined(QT_NO_EFFECTS) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if QT_CONFIG(effects) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
         if (QApplication::isEffectEnabled(Qt::UI_FadeTooltip))
             qFadeEffect(QTipLabel::instance);
         else if (QApplication::isEffectEnabled(Qt::UI_AnimateTooltip))

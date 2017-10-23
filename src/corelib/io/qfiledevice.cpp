@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -42,13 +48,16 @@
 
 QT_BEGIN_NAMESPACE
 
-static const int QFILE_WRITEBUFFER_SIZE = 16384;
+#ifndef QFILE_WRITEBUFFER_SIZE
+#define QFILE_WRITEBUFFER_SIZE 16384
+#endif
 
 QFileDevicePrivate::QFileDevicePrivate()
     : fileEngine(0),
-      writeBuffer(QFILE_WRITEBUFFER_SIZE), cachedSize(0),
+      cachedSize(0),
       error(QFile::NoError), lastWasWrite(false)
 {
+    writeBufferChunkSize = QFILE_WRITEBUFFER_SIZE;
 }
 
 QFileDevicePrivate::~QFileDevicePrivate()
@@ -246,8 +255,6 @@ bool QFileDevice::isSequential() const
 
   If the file is not open, or there is an error, handle() returns -1.
 
-  This function is not supported on Windows CE.
-
   \sa QSocketNotifier
 */
 int QFileDevice::handle() const
@@ -268,14 +275,6 @@ QString QFileDevice::fileName() const
     return QString();
 }
 
-static inline qint64 _qfile_writeData(QAbstractFileEngine *engine, QRingBuffer *buffer)
-{
-    qint64 ret = engine->write(buffer->readPointer(), buffer->nextDataBlockSize());
-    if (ret > 0)
-        buffer->free(ret);
-    return ret;
-}
-
 /*!
     Flushes any buffered data to the file. Returns \c true if successful;
     otherwise returns \c false.
@@ -289,8 +288,11 @@ bool QFileDevice::flush()
     }
 
     if (!d->writeBuffer.isEmpty()) {
-        qint64 size = d->writeBuffer.size();
-        if (_qfile_writeData(d->fileEngine, &d->writeBuffer) != size) {
+        qint64 size = d->writeBuffer.nextDataBlockSize();
+        qint64 written = d->fileEngine->write(d->writeBuffer.readPointer(), size);
+        if (written > 0)
+            d->writeBuffer.free(written);
+        if (written != size) {
             QFileDevice::FileError err = d->fileEngine->error();
             if (err == QFileDevice::UnspecifiedError)
                 err = QFileDevice::WriteError;
@@ -326,6 +328,9 @@ void QFileDevice::close()
     d->lastWasWrite = false;
     d->writeBuffer.clear();
 
+    // reset cached size
+    d->cachedSize = 0;
+
     // keep earlier error from flush
     if (d->fileEngine->close() && flushed)
         unsetError();
@@ -355,7 +360,7 @@ bool QFileDevice::atEnd() const
     Q_D(const QFileDevice);
 
     // If there's buffered data left, we're not at the end.
-    if (!d->buffer.isEmpty())
+    if (!d->isBufferEmpty())
         return false;
 
     if (!isOpen())
@@ -482,9 +487,10 @@ bool QFileDevicePrivate::putCharHelper(char c)
 
     // Cutoff for code that doesn't only touch the buffer.
     qint64 writeBufferSize = writeBuffer.size();
-    if ((openMode & QIODevice::Unbuffered) || writeBufferSize + 1 >= QFILE_WRITEBUFFER_SIZE
+    if ((openMode & QIODevice::Unbuffered) || writeBufferSize + 1 >= writeBufferChunkSize
 #ifdef Q_OS_WIN
-        || ((openMode & QIODevice::Text) && c == '\n' && writeBufferSize + 2 >= QFILE_WRITEBUFFER_SIZE)
+        || ((openMode & QIODevice::Text) && c == '\n'
+            && writeBufferSize + 2 >= writeBufferChunkSize)
 #endif
         ) {
         return QIODevicePrivate::putCharHelper(c);
@@ -538,14 +544,14 @@ qint64 QFileDevice::writeData(const char *data, qint64 len)
     bool buffered = !(d->openMode & Unbuffered);
 
     // Flush buffered data if this read will overflow.
-    if (buffered && (d->writeBuffer.size() + len) > QFILE_WRITEBUFFER_SIZE) {
+    if (buffered && (d->writeBuffer.size() + len) > d->writeBufferChunkSize) {
         if (!flush())
             return -1;
     }
 
     // Write directly to the engine if the block size is larger than
     // the write buffer size.
-    if (!buffered || len > QFILE_WRITEBUFFER_SIZE) {
+    if (!buffered || len > d->writeBufferChunkSize) {
         const qint64 ret = d->fileEngine->write(data, len);
         if (ret < 0) {
             QFileDevice::FileError err = d->fileEngine->error();
@@ -557,11 +563,7 @@ qint64 QFileDevice::writeData(const char *data, qint64 len)
     }
 
     // Write to the buffer.
-    char *writePointer = d->writeBuffer.reserve(len);
-    if (len == 1)
-        *writePointer = *data;
-    else if (len)
-        ::memcpy(writePointer, data, len);
+    d->writeBuffer.append(data, len);
     return len;
 }
 
@@ -612,6 +614,8 @@ qint64 QFileDevice::size() const
     resize succeeds; false otherwise. If \a sz is larger than the file
     currently is, the new bytes will be set to 0; if \a sz is smaller, the
     file is simply truncated.
+
+    \warning This function can fail if the file doesn't exist.
 
     \sa size()
 */
@@ -680,8 +684,7 @@ bool QFileDevice::setPermissions(Permissions permissions)
     be written to disk.  Any such modifications will be lost when the
     memory is unmapped.  It is unspecified whether modifications made
     to the file made after the mapping is created will be visible through
-    the mapped memory.  This flag is not supported on Windows CE.
-    This enum value was introduced in Qt 5.4.
+    the mapped memory. This enum value was introduced in Qt 5.4.
 */
 
 /*!
@@ -698,8 +701,6 @@ bool QFileDevice::setPermissions(Permissions permissions)
     Any mapping options can be passed through \a flags.
 
     Returns a pointer to the memory or 0 if there is an error.
-
-    \note On Windows CE 5.0 the file will be closed before mapping occurs.
 
     \sa unmap()
  */
@@ -740,3 +741,7 @@ bool QFileDevice::unmap(uchar *address)
 }
 
 QT_END_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+#include "moc_qfiledevice.cpp"
+#endif

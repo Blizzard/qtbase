@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -57,6 +67,7 @@ TabletCanvas::TabletCanvas()
     resize(500, 500);
     initPixmap();
     setAutoFillBackground(true);
+    setAttribute(Qt::WA_TabletTracking);
 }
 
 void TabletCanvas::initPixmap()
@@ -121,6 +132,7 @@ void TabletCanvas::tabletEvent(QTabletEvent *event)
         default:
             break;
     }
+    event->accept();
     update();
 }
 //! [3]
@@ -176,7 +188,7 @@ void TabletCanvas::paintPixmap(QPainter &painter, QTabletEvent *event)
         case QTabletEvent::FourDMouse:
             {
                 const QString error(tr("This input device is not supported by the example."));
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
                 QStatusTipEvent status(error);
                 QApplication::sendEvent(this, &status);
 #else
@@ -187,7 +199,7 @@ void TabletCanvas::paintPixmap(QPainter &painter, QTabletEvent *event)
         default:
             {
                 const QString error(tr("Unknown tablet device - treating as stylus"));
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
                 QStatusTipEvent status(error);
                 QApplication::sendEvent(this, &status);
 #else

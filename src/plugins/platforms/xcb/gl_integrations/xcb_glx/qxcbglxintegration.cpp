@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,7 +39,7 @@
 
 #include "qxcbglxintegration.h"
 
-#if defined(XCB_HAS_XCB_GLX)
+#if QT_CONFIG(xcb_glx)
 #include <xcb/glx.h>
 #endif
 
@@ -50,44 +56,41 @@
 
 QT_BEGIN_NAMESPACE
 
-#if defined(XCB_HAS_XCB_GLX) && XCB_GLX_MAJOR_VERSION == 1 && XCB_GLX_MINOR_VERSION < 4
-
-#define XCB_GLX_BUFFER_SWAP_COMPLETE 1
-
-typedef struct xcb_glx_buffer_swap_complete_event_t {
-    uint8_t            response_type;
-    uint8_t            pad0;
-    uint16_t           sequence;
-    uint16_t           event_type;
-    uint8_t            pad1[2];
-    xcb_glx_drawable_t drawable;
-    uint32_t           ust_hi;
-    uint32_t           ust_lo;
-    uint32_t           msc_hi;
-    uint32_t           msc_lo;
-    uint32_t           sbc;
-} xcb_glx_buffer_swap_complete_event_t;
-#endif
-
-#if defined(XCB_USE_XLIB) && defined(XCB_USE_GLX)
-typedef struct {
-    int type;
-    unsigned long serial;       /* # of last request processed by server */
-    Bool send_event;            /* true if this came from a SendEvent request */
-    Display *display;           /* Display the event was read from */
-    Drawable drawable;  /* drawable on which event was requested in event mask */
-    int event_type;
-    int64_t ust;
-    int64_t msc;
-    int64_t sbc;
-} QGLXBufferSwapComplete;
+#if QT_CONFIG(xcb_glx)
+  #if XCB_GLX_MAJOR_VERSION == 1 && XCB_GLX_MINOR_VERSION < 4
+    #define XCB_GLX_BUFFER_SWAP_COMPLETE 1
+    typedef struct xcb_glx_buffer_swap_complete_event_t {
+        uint8_t            response_type;
+        uint8_t            pad0;
+        uint16_t           sequence;
+        uint16_t           event_type;
+        uint8_t            pad1[2];
+        xcb_glx_drawable_t drawable;
+        uint32_t           ust_hi;
+        uint32_t           ust_lo;
+        uint32_t           msc_hi;
+        uint32_t           msc_lo;
+        uint32_t           sbc;
+    } xcb_glx_buffer_swap_complete_event_t;
+  #endif
+  typedef struct {
+      int type;
+      unsigned long serial;       /* # of last request processed by server */
+      Bool send_event;            /* true if this came from a SendEvent request */
+      Display *display;           /* Display the event was read from */
+      Drawable drawable;  /* drawable on which event was requested in event mask */
+      int event_type;
+      int64_t ust;
+      int64_t msc;
+      int64_t sbc;
+  } QGLXBufferSwapComplete;
 #endif
 
 QXcbGlxIntegration::QXcbGlxIntegration()
     : m_connection(Q_NULLPTR)
     , m_glx_first_event(0)
 {
-    qCDebug(QT_XCB_GLINTEGRATION) << "Xcb GLX gl-integration created";
+    qCDebug(lcQpaGl) << "Xcb GLX gl-integration created";
 }
 
 QXcbGlxIntegration::~QXcbGlxIntegration()
@@ -97,7 +100,7 @@ QXcbGlxIntegration::~QXcbGlxIntegration()
 bool QXcbGlxIntegration::initialize(QXcbConnection *connection)
 {
     m_connection = connection;
-#ifdef XCB_HAS_XCB_GLX
+#if QT_CONFIG(xcb_glx)
 
     const xcb_query_extension_reply_t *reply = xcb_get_extension_data(m_connection->xcb_connection(), &xcb_glx_id);
     if (!reply || !reply->present)
@@ -112,7 +115,7 @@ bool QXcbGlxIntegration::initialize(QXcbConnection *connection)
     xcb_glx_query_version_reply_t *xglx_query = xcb_glx_query_version_reply(m_connection->xcb_connection(),
                                                                             xglx_query_cookie, &error);
     if (!xglx_query || error) {
-        qCWarning(QT_XCB_GLINTEGRATION) << "QXcbConnection: Failed to initialize GLX";
+        qCWarning(lcQpaGl) << "QXcbConnection: Failed to initialize GLX";
         free(error);
         return false;
     }
@@ -121,7 +124,7 @@ bool QXcbGlxIntegration::initialize(QXcbConnection *connection)
 
     m_native_interface_handler.reset(new QXcbGlxNativeInterfaceHandler(connection->nativeInterface()));
 
-    qCDebug(QT_XCB_GLINTEGRATION) << "Xcb GLX gl-integration successfully initialized";
+    qCDebug(lcQpaGl) << "Xcb GLX gl-integration successfully initialized";
     return true;
 }
 
@@ -139,7 +142,7 @@ bool QXcbGlxIntegration::handleXcbEvent(xcb_generic_event_t *event, uint respons
         XEvent dummy;
         event->sequence = LastKnownRequestProcessed(xdisplay);
         if (proc(xdisplay, &dummy, (xEvent*)event)) {
-#ifdef XCB_HAS_XCB_GLX
+#if QT_CONFIG(xcb_glx)
             // DRI2 clients don't receive GLXBufferSwapComplete events on the wire.
             // Instead the GLX event is synthesized from the DRI2BufferSwapComplete event
             // by DRI2WireToEvent(). For an application to be able to see the event
@@ -183,7 +186,7 @@ QXcbWindow *QXcbGlxIntegration::createWindow(QWindow *window) const
 QPlatformOpenGLContext *QXcbGlxIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
     QXcbScreen *screen = static_cast<QXcbScreen *>(context->screen()->handle());
-    QGLXContext *platformContext = new QGLXContext(screen, context->format(),
+    QGLXContext *platformContext = new QGLXContext(screen, screen->surfaceFormatFor(context->format()),
                                                    context->shareHandle(), context->nativeHandle());
     context->setNativeHandle(platformContext->nativeHandle());
     return platformContext;
@@ -196,10 +199,9 @@ QPlatformOffscreenSurface *QXcbGlxIntegration::createPlatformOffscreenSurface(QO
     if (!vendorChecked) {
         vendorChecked = true;
         Display *display = glXGetCurrentDisplay();
-#ifdef XCB_USE_XLIB
         if (!display)
             display = static_cast<Display *>(m_connection->xlib_display());
-#endif
+
         const char *glxvendor = glXGetClientString(display, GLX_VENDOR);
         if (glxvendor) {
             if (!strcmp(glxvendor, "ATI") || !strcmp(glxvendor, "Chromium"))
@@ -225,10 +227,9 @@ bool QXcbGlxIntegration::supportsSwitchableWidgetComposition() const
     if (!vendorChecked) {
         vendorChecked = true;
         Display *display = glXGetCurrentDisplay();
-#ifdef XCB_USE_XLIB
         if (!display)
             display = static_cast<Display *>(m_connection->xlib_display());
-#endif
+
         const char *glxvendor = glXGetClientString(display, GLX_VENDOR);
         if (glxvendor) {
             if (!strcmp(glxvendor, "Parallels Inc"))

@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qglobal.h"
-
-#ifndef QT_NO_GRAPHICSVIEW
 
 #include "qgraphicswidget.h"
 #include "qgraphicswidget_p.h"
@@ -251,7 +255,8 @@ QGraphicsWidget::~QGraphicsWidget()
     //we check if we have a layout previously
     if (d->layout) {
         QGraphicsLayout *temp = d->layout;
-        foreach (QGraphicsItem * item, childItems()) {
+        const auto items = childItems();
+        for (QGraphicsItem *item : items) {
             // In case of a custom layout which doesn't remove and delete items, we ensure that
             // the parent layout item does not point to the deleted layout. This code is here to
             // avoid regression from 4.4 to 4.5, because according to 4.5 docs it is not really needed.
@@ -267,6 +272,11 @@ QGraphicsWidget::~QGraphicsWidget()
 
     // Remove this graphics widget from widgetStyles
     widgetStyles()->setStyleForWidget(this, 0);
+
+    // Unset the parent here, when we're still a QGraphicsWidget.
+    // It is otherwise done in ~QGraphicsItem() where we'd be
+    // calling QGraphicsWidget members on an ex-QGraphicsWidget object
+    setParentItem(Q_NULLPTR);
 }
 
 /*!
@@ -696,7 +706,7 @@ void QGraphicsWidget::initStyleOption(QStyleOption *option) const
         option->state |= QStyle::State_Window;
     /*
       ###
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     extern bool qt_mac_can_clickThrough(const QGraphicsWidget *w); //qwidget_mac.cpp
     if (!(option->state & QStyle::State_Active) && !qt_mac_can_clickThrough(widget))
         option->state &= ~QStyle::State_Enabled;
@@ -1444,6 +1454,7 @@ bool QGraphicsWidget::event(QEvent *event)
     case QEvent::GraphicsSceneMousePress:
         if (d->hasDecoration() && windowFrameEvent(event))
             return true;
+        break;
     case QEvent::GraphicsSceneMouseMove:
     case QEvent::GraphicsSceneMouseRelease:
     case QEvent::GraphicsSceneMouseDoubleClick:
@@ -1487,6 +1498,7 @@ void QGraphicsWidget::changeEvent(QEvent *event)
         unsetWindowFrameMargins();
         if (d->layout)
             d->layout->invalidate();
+        Q_FALLTHROUGH();
     case QEvent::FontChange:
         update();
         updateGeometry();
@@ -2057,7 +2069,11 @@ void QGraphicsWidget::insertAction(QAction *before, QAction *action)
 
     \sa removeAction(), QMenu, insertAction(), QWidget::insertActions()
 */
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+void QGraphicsWidget::insertActions(QAction *before, const QList<QAction *> &actions)
+#else
 void QGraphicsWidget::insertActions(QAction *before, QList<QAction *> actions)
+#endif
 {
     for (int i = 0; i < actions.count(); ++i)
         insertAction(before, actions.at(i));
@@ -2261,15 +2277,8 @@ void QGraphicsWidget::paintWindowFrame(QPainter *painter, const QStyleOptionGrap
     bar.QStyleOption::operator=(*option);
     d->initStyleOptionTitleBar(&bar);   // this clear flags in bar.state
     d->ensureWindowData();
-    if (d->windowData->buttonMouseOver)
-        bar.state |= QStyle::State_MouseOver;
-    else
-        bar.state &= ~QStyle::State_MouseOver;
-    if (d->windowData->buttonSunken)
-        bar.state |= QStyle::State_Sunken;
-    else
-        bar.state &= ~QStyle::State_Sunken;
-
+    bar.state.setFlag(QStyle::State_MouseOver, d->windowData->buttonMouseOver);
+    bar.state.setFlag(QStyle::State_Sunken, d->windowData->buttonSunken);
     bar.rect = windowFrameRect;
 
     // translate painter to make the style happy
@@ -2326,17 +2335,9 @@ void QGraphicsWidget::paintWindowFrame(QPainter *painter, const QStyleOptionGrap
     initStyleOption(&frameOptions);
     if (!hasBorder)
         painter->setClipRect(windowFrameRect.adjusted(0, +height, 0, 0), Qt::IntersectClip);
-    if (hasFocus()) {
-        frameOptions.state |= QStyle::State_HasFocus;
-    } else {
-        frameOptions.state &= ~QStyle::State_HasFocus;
-    }
+    frameOptions.state.setFlag(QStyle::State_HasFocus, hasFocus());
     bool isActive = isActiveWindow();
-    if (isActive) {
-        frameOptions.state |= QStyle::State_Active;
-    } else {
-        frameOptions.state &= ~QStyle::State_Active;
-    }
+    frameOptions.state.setFlag(QStyle::State_Active, isActive);
 
     frameOptions.palette.setCurrentColorGroup(isActive ? QPalette::Active : QPalette::Normal);
     frameOptions.rect = windowFrameRect;
@@ -2422,5 +2423,3 @@ void QGraphicsWidget::dumpFocusChain()
 QT_END_NAMESPACE
 
 #include "moc_qgraphicswidget.cpp"
-
-#endif //QT_NO_GRAPHICSVIEW

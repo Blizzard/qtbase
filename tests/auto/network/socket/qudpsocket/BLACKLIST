@@ -6,7 +6,6 @@ osx
 windows
 osx
 [asyncReadDatagram]
-windows
 osx
 [multicastLeaveAfterClose]
 osx
@@ -21,4 +20,9 @@ osx
 osx
 [loop]
 osx
-
+[broadcasting]
+osx
+[zeroLengthDatagram]
+osx
+[linkLocalIPv6]
+redhatenterpriselinuxworkstation-6.6

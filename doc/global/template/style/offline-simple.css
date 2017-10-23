@@ -1,4 +1,4 @@
-pre {
+pre, .LegaleseLeft {
   background-color: #f0f0f0;
   font-family: Courier, monospace;
   font-weight: 600;
@@ -159,4 +159,8 @@ td#buildversion {
 
 .footer p {
   margin: 0px;
+}
+
+.video {
+  margin: 15px 0 0 15px;
 }

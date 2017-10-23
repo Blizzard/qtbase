@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,9 +44,9 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is not part of the Qt API.  It exists for the convenience
-// of the QLibrary class.  This header file may change from
-// version to version without notice, or even be removed.
+// This file is not part of the Qt API. It exists purely as an
+// implementation detail. This header file may change from version to
+// version without notice, or even be removed.
 //
 // We mean it.
 //
@@ -81,7 +87,7 @@ Q_SIGNALS:
 private slots:
     void doEmitFileChanged(const QString &path, bool removed);
     void doEmitDirectoryChanged(const QString &path, bool removed);
-    void restartStream();
+    bool restartStream();
 
 private:
     struct Info {
@@ -112,6 +118,19 @@ private:
     typedef QHash<QString, DirInfo> DirsByName;
     typedef QHash<QString, qint64> PathRefCounts;
 
+    struct WatchingState {
+        // These fields go hand-in-hand. FSEvents watches paths, and there is no use in watching
+        // the same path multiple times. So, the "refcount" on a path is the number of watched
+        // files that have the same path, plus the number of directories that have the same path.
+        //
+        // If the stream fails to start after adding files/directories, the watcher will try to
+        // keep watching files/directories that it was already watching. It does that by restoring
+        // the previous WatchingState and restarting the stream.
+        FilesByPath watchedFiles;
+        DirsByName watchedDirectories;
+        PathRefCounts watchedPaths;
+    };
+
     QFseventsFileSystemWatcherEngine(QObject *parent);
     bool startStream();
     void stopStream(bool isStopped = false);
@@ -125,10 +144,8 @@ private:
     QMutex lock;
     dispatch_queue_t queue;
     FSEventStreamRef stream;
-    FilesByPath watchedFiles;
-    DirsByName watchedDirectories;
-    PathRefCounts watchedPaths;
     FSEventStreamEventId lastReceivedEvent;
+    WatchingState watchingState;
 };
 
 QT_END_NAMESPACE

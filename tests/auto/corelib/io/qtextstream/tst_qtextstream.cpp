@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,8 +40,9 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTextCodec>
-#include <QProcess>
-
+#if QT_CONFIG(process)
+# include <QProcess>
+#endif
 #include "../../../network-settings.h"
 
 
@@ -180,20 +176,16 @@ private slots:
     void octTest();
     void zeroTermination();
     void ws_manipulator();
-#ifndef Q_OS_WINCE
     void stillOpenWhenAtEnd();
-#endif
     void readNewlines_data();
     void readNewlines();
     void seek();
     void pos();
     void pos2();
     void pos3LargeFile();
-#if !defined(Q_OS_WINCE)
     void readStdin();
     void readAllFromStdin();
     void readLineFromStdin();
-#endif
     void read();
     void qbool();
     void forcePoint();
@@ -1212,8 +1204,6 @@ void tst_QTextStream::ws_manipulator()
 }
 
 // ------------------------------------------------------------------------------
-#ifndef Q_OS_WINCE
-// Qt/CE: Cannot test network on emulator
 void tst_QTextStream::stillOpenWhenAtEnd()
 {
     QFile file(QFINDTESTDATA("tst_qtextstream.cpp"));
@@ -1234,7 +1224,6 @@ void tst_QTextStream::stillOpenWhenAtEnd()
     while (!stream2.readLine().isNull()) {}
     QVERIFY(socket.isOpen());
 }
-#endif
 
 // ------------------------------------------------------------------------------
 void tst_QTextStream::readNewlines_data()
@@ -1503,11 +1492,9 @@ void tst_QTextStream::pos3LargeFile()
 }
 
 // ------------------------------------------------------------------------------
-// Qt/CE has no stdin/out support for processes
-#if !defined(Q_OS_WINCE)
 void tst_QTextStream::readStdin()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     QProcess stdinProcess;
@@ -1532,10 +1519,9 @@ void tst_QTextStream::readStdin()
 }
 
 // ------------------------------------------------------------------------------
-// Qt/CE has no stdin/out support for processes
 void tst_QTextStream::readAllFromStdin()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     QProcess stdinProcess;
@@ -1554,10 +1540,9 @@ void tst_QTextStream::readAllFromStdin()
 }
 
 // ------------------------------------------------------------------------------
-// Qt/CE has no stdin/out support for processes
 void tst_QTextStream::readLineFromStdin()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
     QProcess stdinProcess;
@@ -1577,7 +1562,6 @@ void tst_QTextStream::readLineFromStdin()
     QVERIFY(stdinProcess.waitForFinished(5000));
 #endif
 }
-#endif
 
 // ------------------------------------------------------------------------------
 void tst_QTextStream::read()
@@ -1635,18 +1619,18 @@ void tst_QTextStream::forcePoint()
 {
     QString str;
     QTextStream stream(&str);
-    stream << fixed << forcepoint << 1.0 << " " << 1 << " " << 0 << " " << -1.0 << " " << -1;
+    stream << fixed << forcepoint << 1.0 << ' ' << 1 << ' ' << 0 << ' ' << -1.0 << ' ' << -1;
     QCOMPARE(str, QString("1.000000 1 0 -1.000000 -1"));
 
     str.clear();
     stream.seek(0);
-    stream << scientific << forcepoint << 1.0 << " " << 1 << " " << 0 << " " << -1.0 << " " << -1;
+    stream << scientific << forcepoint << 1.0 << ' ' << 1 << ' ' << 0 << ' ' << -1.0 << ' ' << -1;
     QCOMPARE(str, QString("1.000000e+00 1 0 -1.000000e+00 -1"));
 
     str.clear();
     stream.seek(0);
     stream.setRealNumberNotation(QTextStream::SmartNotation);
-    stream << forcepoint << 1.0 << " " << 1 << " " << 0 << " " << -1.0 << " " << -1;
+    stream << forcepoint << 1.0 << ' ' << 1 << ' ' << 0 << ' ' << -1.0 << ' ' << -1;
     QCOMPARE(str, QString("1.00000 1 0 -1.00000 -1"));
 
 }
@@ -1656,7 +1640,7 @@ void tst_QTextStream::forceSign()
 {
     QString str;
     QTextStream stream(&str);
-    stream << forcesign << 1.2 << " " << -1.2 << " " << 0;
+    stream << forcesign << 1.2 << ' ' << -1.2 << ' ' << 0;
     QCOMPARE(str, QString("+1.2 -1.2 +0"));
 }
 
@@ -1793,9 +1777,9 @@ void tst_QTextStream::nanInf()
 
     QString s;
     QTextStream out(&s);
-    out << qInf() << " " << -qInf() << " " << qQNaN()
-        << uppercasedigits << " "
-        << qInf() << " " << -qInf() << " " << qQNaN()
+    out << qInf() << ' ' << -qInf() << ' ' << qQNaN()
+        << uppercasedigits << ' '
+        << qInf() << ' ' << -qInf() << ' ' << qQNaN()
         << flush;
 
     QCOMPARE(s, QString("inf -inf nan INF -INF NAN"));
@@ -2040,13 +2024,13 @@ void tst_QTextStream::generateNaturalNumbersData(bool for_QString)
     QTest::newRow("2147483648") << QByteArray("2147483648") << Q_UINT64_C(2147483648);
     QTest::newRow("-2147483646") << QByteArray("-2147483646") << qulonglong(-2147483646);
     QTest::newRow("-2147483647") << QByteArray("-2147483647") << qulonglong(-2147483647);
-    QTest::newRow("-2147483648") << QByteArray("-2147483648") << Q_UINT64_C(-2147483648);
+    QTest::newRow("-2147483648") << QByteArray("-2147483648") << quint64(-2147483648LL);
     QTest::newRow("4294967296") << QByteArray("4294967296") << Q_UINT64_C(4294967296);
     QTest::newRow("4294967297") << QByteArray("4294967297") << Q_UINT64_C(4294967297);
     QTest::newRow("4294967298") << QByteArray("4294967298") << Q_UINT64_C(4294967298);
-    QTest::newRow("-4294967296") << QByteArray("-4294967296") << Q_UINT64_C(-4294967296);
-    QTest::newRow("-4294967297") << QByteArray("-4294967297") << Q_UINT64_C(-4294967297);
-    QTest::newRow("-4294967298") << QByteArray("-4294967298") << Q_UINT64_C(-4294967298);
+    QTest::newRow("-4294967296") << QByteArray("-4294967296") << quint64(-4294967296);
+    QTest::newRow("-4294967297") << QByteArray("-4294967297") << quint64(-4294967297);
+    QTest::newRow("-4294967298") << QByteArray("-4294967298") << quint64(-4294967298);
     QTest::newRow("9223372036854775807") << QByteArray("9223372036854775807") << Q_UINT64_C(9223372036854775807);
     QTest::newRow("9223372036854775808") << QByteArray("9223372036854775808") << Q_UINT64_C(9223372036854775808);
     QTest::newRow("9223372036854775809") << QByteArray("9223372036854775809") << Q_UINT64_C(9223372036854775809);
@@ -2303,7 +2287,7 @@ void tst_QTextStream::signedShort_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("-1") << QByteArray("-1");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("-1") << QByteArray("-1");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("-32768") << QByteArray("-32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("-32767") << QByteArray("-32,767");
@@ -2323,7 +2307,7 @@ void tst_QTextStream::unsignedShort_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("65535") << QByteArray("65,535");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("65535") << QByteArray("65,535");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("32768") << QByteArray("32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("32769") << QByteArray("32,769");
@@ -2343,7 +2327,7 @@ void tst_QTextStream::signedInt_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("-1") << QByteArray("-1");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("-1") << QByteArray("-1");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("32768") << QByteArray("32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("32769") << QByteArray("32,769");
@@ -2369,7 +2353,7 @@ void tst_QTextStream::unsignedInt_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("4294967295") << QByteArray("4,294,967,295");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("4294967295") << QByteArray("4,294,967,295");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("32768") << QByteArray("32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("32769") << QByteArray("32,769");
@@ -2395,7 +2379,7 @@ void tst_QTextStream::qlonglong_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("-1") << QByteArray("-1");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("-1") << QByteArray("-1");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("32768") << QByteArray("32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("32769") << QByteArray("32,769");
@@ -2425,7 +2409,7 @@ void tst_QTextStream::qulonglong_write_operator_ToDevice_data()
 
     QTest::newRow("0") << Q_UINT64_C(0) << QByteArray("0") << QByteArray("0");
     QTest::newRow("1") << Q_UINT64_C(1) << QByteArray("1") << QByteArray("1");
-    QTest::newRow("-1") << Q_UINT64_C(-1) << QByteArray("18446744073709551615") << QByteArray("18,446,744,073,709,551,615");
+    QTest::newRow("-1") << quint64(-1) << QByteArray("18446744073709551615") << QByteArray("18,446,744,073,709,551,615");
     QTest::newRow("32767") << Q_UINT64_C(32767) << QByteArray("32767") << QByteArray("32,767");
     QTest::newRow("32768") << Q_UINT64_C(32768) << QByteArray("32768") << QByteArray("32,768");
     QTest::newRow("32769") << Q_UINT64_C(32769) << QByteArray("32769") << QByteArray("32,769");
@@ -2601,7 +2585,7 @@ void tst_QTextStream::useCase1()
         stream.setCodec(QTextCodec::codecForName("ISO-8859-1"));
         stream.setAutoDetectUnicode(true);
 
-        stream << 4.15 << " " << QByteArray("abc") << " " << QString("ole");
+        stream << 4.15 << ' ' << QByteArray("abc") << ' ' << QString("ole");
     }
 
     file.seek(0);
@@ -2637,7 +2621,7 @@ void tst_QTextStream::useCase2()
     stream.setCodec(QTextCodec::codecForName("ISO-8859-1"));
     stream.setAutoDetectUnicode(true);
 
-    stream << 4.15 << " " << QByteArray("abc") << " " << QString("ole");
+    stream << 4.15 << ' ' << QByteArray("abc") << ' ' << QString("ole");
 
     file.close();
     QVERIFY(file.open(QFile::ReadWrite));
@@ -2804,12 +2788,7 @@ void tst_QTextStream::status_real_read()
 
 void tst_QTextStream::status_integer_read()
 {
-#ifdef Q_OS_WINCE
-    QString text = QLatin1String("123 abc   ");
-    QTextStream s(&text);
-#else
     QTextStream s("123 abc   ");
-#endif
     int i;
     QString w;
     s >> i;
@@ -2827,12 +2806,7 @@ void tst_QTextStream::status_integer_read()
 
 void tst_QTextStream::status_word_read()
 {
-#ifdef Q_OS_WINCE
-    QString text = QLatin1String("abc ");
-    QTextStream s(&text);
-#else
     QTextStream s("abc ");
-#endif
     QString w;
     s >> w;
     QCOMPARE(s.status(), QTextStream::Ok);

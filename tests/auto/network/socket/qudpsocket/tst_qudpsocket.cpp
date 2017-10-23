@@ -1,32 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2015 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +39,7 @@
 #include <qhostinfo.h>
 #include <qtcpsocket.h>
 #include <qmap.h>
+#include <qnetworkdatagram.h>
 #include <QNetworkProxy>
 #include <QNetworkInterface>
 
@@ -56,6 +52,13 @@
 #include <QtNetwork/qnetworksession.h>
 #endif
 
+#if defined(Q_OS_LINUX)
+#define SHOULD_CHECK_SYSCALL_SUPPORT
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <errno.h>
+#endif
+
 Q_DECLARE_METATYPE(QHostAddress)
 
 QT_FORWARD_DECLARE_CLASS(QUdpSocket)
@@ -64,17 +67,11 @@ class tst_QUdpSocket : public QObject
 {
     Q_OBJECT
 
-public:
-    tst_QUdpSocket();
-    virtual ~tst_QUdpSocket();
-
-
-public slots:
+private slots:
     void initTestCase_data();
     void initTestCase();
     void init();
     void cleanup();
-private slots:
     void constructing();
     void unconnectedServerAndClientTest();
     void broadcasting();
@@ -125,6 +122,13 @@ protected slots:
     void async_readDatagramSlot();
 
 private:
+    bool shouldSkipIpv6TestsForBrokenSetsockopt();
+#ifdef SHOULD_CHECK_SYSCALL_SUPPORT
+    bool ipv6SetsockoptionMissing(int level, int optname);
+#endif
+
+    bool m_skipUnsupportedIPv6Tests;
+    QList<QHostAddress> allAddresses;
 #ifndef QT_NO_BEARERMANAGEMENT
     QNetworkConfigurationManager *netConfMan;
     QNetworkConfiguration networkConfiguration;
@@ -133,6 +137,43 @@ private:
     QUdpSocket *m_asyncSender;
     QUdpSocket *m_asyncReceiver;
 };
+
+#ifdef SHOULD_CHECK_SYSCALL_SUPPORT
+bool tst_QUdpSocket::ipv6SetsockoptionMissing(int level, int optname)
+{
+    int testSocket;
+
+    testSocket = socket(PF_INET6, SOCK_DGRAM, 0);
+
+    // If we can't test here, assume it's not missing
+    if (testSocket == -1)
+        return false;
+
+    bool result = false;
+    if (setsockopt(testSocket, level, optname, nullptr, 0) == -1)
+        if (errno == ENOPROTOOPT)
+            result = true;
+
+    close(testSocket);
+    return result;
+}
+#endif //SHOULD_CHECK_SYSCALL_SUPPORT
+
+bool tst_QUdpSocket::shouldSkipIpv6TestsForBrokenSetsockopt()
+{
+#ifdef SHOULD_CHECK_SYSCALL_SUPPORT
+    // Following parameters for setsockopt are not supported by all QEMU versions:
+    if (ipv6SetsockoptionMissing(SOL_IPV6, IPV6_JOIN_GROUP)
+        || ipv6SetsockoptionMissing(SOL_IPV6, IPV6_MULTICAST_HOPS)
+        || ipv6SetsockoptionMissing(SOL_IPV6, IPV6_MULTICAST_IF)
+        || ipv6SetsockoptionMissing(SOL_IPV6, IPV6_MULTICAST_LOOP)
+        || ipv6SetsockoptionMissing(SOL_IPV6, IPV6_RECVHOPLIMIT)) {
+        return true;
+    }
+#endif //SHOULD_CHECK_SYSCALL_SUPPORT
+
+    return false;
+}
 
 static QHostAddress makeNonAny(const QHostAddress &address, QHostAddress::SpecialAddress preferForAny = QHostAddress::LocalHost)
 {
@@ -143,14 +184,6 @@ static QHostAddress makeNonAny(const QHostAddress &address, QHostAddress::Specia
     if (address == QHostAddress::AnyIPv6)
         return QHostAddress::LocalHostIPv6;
     return address;
-}
-
-tst_QUdpSocket::tst_QUdpSocket()
-{
-}
-
-tst_QUdpSocket::~tst_QUdpSocket()
-{
 }
 
 void tst_QUdpSocket::initTestCase_data()
@@ -172,7 +205,7 @@ void tst_QUdpSocket::initTestCase_data()
     QTest::addColumn<int>("proxyType");
 
     QTest::newRow("WithoutProxy") << false << 0;
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
     if (!newTestServer)
         QTest::newRow("WithSocks5Proxy") << true << int(QNetworkProxy::Socks5Proxy);
 #endif
@@ -180,7 +213,7 @@ void tst_QUdpSocket::initTestCase_data()
 #ifndef QT_NO_BEARERMANAGEMENT
     netConfMan = new QNetworkConfigurationManager(this);
     networkConfiguration = netConfMan->defaultConfiguration();
-    networkSession = QSharedPointer<QNetworkSession>(new QNetworkSession(networkConfiguration));
+    networkSession = QSharedPointer<QNetworkSession>::create(networkConfiguration);
     if (!networkSession->isOpen()) {
         networkSession->open();
         QVERIFY(networkSession->waitForOpened(30000));
@@ -192,20 +225,22 @@ void tst_QUdpSocket::initTestCase()
 {
     if (!QtNetworkSettings::verifyTestNetworkSettings())
         QSKIP("No network test server available");
+    allAddresses = QNetworkInterface::allAddresses();
+    m_skipUnsupportedIPv6Tests = shouldSkipIpv6TestsForBrokenSetsockopt();
 }
 
 void tst_QUdpSocket::init()
 {
     QFETCH_GLOBAL(bool, setProxy);
     if (setProxy) {
-#ifndef QT_NO_SOCKS5
+#if QT_CONFIG(socks5)
         QFETCH_GLOBAL(int, proxyType);
         if (proxyType == QNetworkProxy::Socks5Proxy) {
             QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::Socks5Proxy, QtNetworkSettings::serverName(), 1080));
         }
 #else
         QSKIP("No proxy support");
-#endif // !QT_NO_SOCKS5
+#endif // QT_CONFIG(socks5)
     }
 }
 
@@ -271,6 +306,11 @@ void tst_QUdpSocket::unconnectedServerAndClientTest()
                 int(strlen(message[i])));
         buf[strlen(message[i])] = '\0';
         QCOMPARE(QByteArray(buf), QByteArray(message[i]));
+        QCOMPARE(port, clientSocket.localPort());
+        if (host.toIPv4Address()) // in case the sender is IPv4 mapped in IPv6
+            QCOMPARE(host.toIPv4Address(), makeNonAny(clientSocket.localAddress()).toIPv4Address());
+        else
+            QCOMPARE(host, makeNonAny(clientSocket.localAddress()));
     }
 }
 
@@ -344,14 +384,32 @@ void tst_QUdpSocket::broadcasting()
             QVERIFY(serverSocket.hasPendingDatagrams());
 
             do {
-                QByteArray arr; arr.resize(serverSocket.pendingDatagramSize() + 1);
-                QHostAddress host;
-                quint16 port;
                 const int messageLength = int(strlen(message[i]));
-                QCOMPARE((int) serverSocket.readDatagram(arr.data(), arr.size() - 1, &host, &port),
-                         messageLength);
+                QNetworkDatagram dgram = serverSocket.receiveDatagram();
+                QVERIFY(dgram.isValid());
+                QByteArray arr = dgram.data();
+
+                QCOMPARE(arr.length(), messageLength);
                 arr.resize(messageLength);
                 QCOMPARE(arr, QByteArray(message[i]));
+
+                if (dgram.senderAddress().toIPv4Address()) // in case it's a v6-mapped address
+                    QVERIFY2(allAddresses.contains(QHostAddress(dgram.senderAddress().toIPv4Address())),
+                             dgram.senderAddress().toString().toLatin1());
+                else if (!dgram.senderAddress().isNull())
+                    QVERIFY2(allAddresses.contains(dgram.senderAddress()),
+                             dgram.senderAddress().toString().toLatin1());
+                QCOMPARE(dgram.senderPort(), int(broadcastSocket.localPort()));
+                if (!dgram.destinationAddress().isNull()) {
+                    QVERIFY2(dgram.destinationAddress() == QHostAddress::Broadcast
+                            || broadcastAddresses.contains(dgram.destinationAddress()),
+                             dgram.destinationAddress().toString().toLatin1());
+                    QCOMPARE(dgram.destinationPort(), int(serverSocket.localPort()));
+                }
+
+                int ttl = dgram.hopLimit();
+                if (ttl != -1)
+                    QVERIFY(ttl != 0);
             } while (serverSocket.hasPendingDatagrams());
         }
     }
@@ -454,13 +512,8 @@ void tst_QUdpSocket::ipv6Loop()
 
     char peterBuffer[16*1024];
     char paulBuffer[16*1024];
-#if !defined(Q_OS_WINCE)
-        QVERIFY2(peter.waitForReadyRead(5000), QtNetworkSettings::msgSocketError(peter).constData());
-        QVERIFY2(paul.waitForReadyRead(5000), QtNetworkSettings::msgSocketError(paul).constData());
-#else
-        QVERIFY(peter.waitForReadyRead(15000));
-        QVERIFY(paul.waitForReadyRead(15000));
-#endif
+    QVERIFY(peter.waitForReadyRead(5000));
+    QVERIFY(paul.waitForReadyRead(5000));
     if (success) {
         QCOMPARE(peter.readDatagram(peterBuffer, sizeof(peterBuffer)), qint64(paulMessage.length()));
         QCOMPARE(paul.readDatagram(paulBuffer, sizeof(peterBuffer)), qint64(peterMessage.length()));
@@ -954,12 +1007,9 @@ void tst_QUdpSocket::writeToNonExistingPeer()
 
 void tst_QUdpSocket::outOfProcessConnectedClientServerTest()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
-#if defined(Q_OS_WINCE)
-    QSKIP("This test depends on reading data from QProcess (not supported on Qt/WinCE).");
-#endif
     QProcess serverProcess;
     serverProcess.start(QLatin1String("clientserver/clientserver server 1 1"),
                         QIODevice::ReadWrite | QIODevice::Text);
@@ -1018,12 +1068,9 @@ void tst_QUdpSocket::outOfProcessConnectedClientServerTest()
 
 void tst_QUdpSocket::outOfProcessUnconnectedClientServerTest()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No qprocess support", SkipAll);
 #else
-#if defined(Q_OS_WINCE)
-    QSKIP("This test depends on reading data from QProcess (not supported on Qt/WinCE).");
-#endif
     QProcess serverProcess;
     serverProcess.start(QLatin1String("clientserver/clientserver server 1 1"),
                         QIODevice::ReadWrite | QIODevice::Text);
@@ -1100,7 +1147,7 @@ void tst_QUdpSocket::zeroLengthDatagram()
 #ifdef FORCE_SESSION
     sender.setProperty("_q_networksession", QVariant::fromValue(networkSession));
 #endif
-    QCOMPARE(sender.writeDatagram(QByteArray(), QHostAddress::LocalHost, receiver.localPort()), qint64(0));
+    QCOMPARE(sender.writeDatagram(QNetworkDatagram(QByteArray(), QHostAddress::LocalHost, receiver.localPort())), qint64(0));
 
     QVERIFY2(receiver.waitForReadyRead(1000), QtNetworkSettings::msgSocketError(receiver).constData());
     QVERIFY(receiver.hasPendingDatagrams());
@@ -1120,12 +1167,13 @@ void tst_QUdpSocket::multicastTtlOption_data()
     addresses += QHostAddress(QHostAddress::AnyIPv6);
 
     foreach (const QHostAddress &address, addresses) {
-        QTest::newRow(QString("%1 0").arg(address.toString()).toLatin1()) << address << 0 << 0;
-        QTest::newRow(QString("%1 1").arg(address.toString()).toLatin1()) << address << 1 << 1;
-        QTest::newRow(QString("%1 2").arg(address.toString()).toLatin1()) << address << 2 << 2;
-        QTest::newRow(QString("%1 128").arg(address.toString()).toLatin1()) << address << 128 << 128;
-        QTest::newRow(QString("%1 255").arg(address.toString()).toLatin1()) << address << 255 << 255;
-        QTest::newRow(QString("%1 1024").arg(address.toString()).toLatin1()) << address << 1024 << 1;
+        const QByteArray addressB = address.toString().toLatin1();
+        QTest::newRow((addressB + " 0").constData()) << address << 0 << 0;
+        QTest::newRow((addressB + " 1").constData()) << address << 1 << 1;
+        QTest::newRow((addressB + " 2").constData()) << address << 2 << 2;
+        QTest::newRow((addressB + " 128").constData()) << address << 128 << 128;
+        QTest::newRow((addressB + " 255").constData()) << address << 255 << 255;
+        QTest::newRow((addressB + " 1024").constData()) << address << 1024 << 1;
     }
 }
 
@@ -1141,6 +1189,13 @@ void tst_QUdpSocket::multicastTtlOption()
     if (setProxy) {
         // UDP multicast does not work with proxies
         expected = 0;
+    }
+
+    // Some syscalls needed for ipv6 udp multicasting are not functional
+    if (m_skipUnsupportedIPv6Tests) {
+        if (bindAddress.protocol() == QAbstractSocket::IPv6Protocol) {
+            QSKIP("Syscalls needed for ipv6 udp multicasting missing functionality");
+        }
     }
 
     QUdpSocket udpSocket;
@@ -1164,13 +1219,14 @@ void tst_QUdpSocket::multicastLoopbackOption_data()
     addresses += QHostAddress(QHostAddress::AnyIPv6);
 
     foreach (const QHostAddress &address, addresses) {
-        QTest::newRow(QString("%1 0").arg(address.toString()).toLatin1()) << address << 0 << 0;
-        QTest::newRow(QString("%1 1").arg(address.toString()).toLatin1()) << address << 1 << 1;
-        QTest::newRow(QString("%1 2").arg(address.toString()).toLatin1()) << address << 2 << 1;
-        QTest::newRow(QString("%1 0 again").arg(address.toString()).toLatin1()) << address << 0 << 0;
-        QTest::newRow(QString("%1 2 again").arg(address.toString()).toLatin1()) << address << 2 << 1;
-        QTest::newRow(QString("%1 0 last time").arg(address.toString()).toLatin1()) << address << 0 << 0;
-        QTest::newRow(QString("%1 1 again").arg(address.toString()).toLatin1()) << address << 1 << 1;
+        const QByteArray addressB = address.toString().toLatin1();
+        QTest::newRow((addressB + " 0").constData()) << address << 0 << 0;
+        QTest::newRow((addressB + " 1").constData()) << address << 1 << 1;
+        QTest::newRow((addressB + " 2").constData()) << address << 2 << 1;
+        QTest::newRow((addressB + " 0 again").constData()) << address << 0 << 0;
+        QTest::newRow((addressB + " 2 again").constData()) << address << 2 << 1;
+        QTest::newRow((addressB + " 0 last time").constData()) << address << 0 << 0;
+        QTest::newRow((addressB + " 1 again").constData()) << address << 1 << 1;
     }
 }
 
@@ -1186,6 +1242,13 @@ void tst_QUdpSocket::multicastLoopbackOption()
     if (setProxy) {
         // UDP multicast does not work with proxies
         expected = 0;
+    }
+
+    // Some syscalls needed for ipv6 udp multicasting are not functional
+    if (m_skipUnsupportedIPv6Tests) {
+        if (bindAddress.protocol() == QAbstractSocket::IPv6Protocol) {
+            QSKIP("Syscalls needed for ipv6 udp multicasting missing functionality");
+        }
     }
 
     QUdpSocket udpSocket;
@@ -1242,6 +1305,13 @@ void tst_QUdpSocket::multicastLeaveAfterClose()
     if (!QtNetworkSettings::hasIPv6() && groupAddress.protocol() == QAbstractSocket::IPv6Protocol)
         QSKIP("system doesn't support ipv6!");
 
+    // Some syscalls needed for ipv6 udp multicasting are not functional
+    if (m_skipUnsupportedIPv6Tests) {
+        if (groupAddress.protocol() == QAbstractSocket::IPv6Protocol) {
+            QSKIP("Syscalls needed for ipv6 udp multicasting missing functionality");
+        }
+    }
+
     QUdpSocket udpSocket;
 #ifdef FORCE_SESSION
     udpSocket.setProperty("_q_networksession", QVariant::fromValue(networkSession));
@@ -1267,9 +1337,8 @@ void tst_QUdpSocket::setMulticastInterface_data()
         if ((iface.flags() & QNetworkInterface::IsUp) == 0)
             continue;
         foreach (const QNetworkAddressEntry &entry, iface.addressEntries()) {
-            QTest::newRow(QString("%1:%2").arg(iface.name()).arg(entry.ip().toString()).toLatin1())
-                    << iface
-                    << entry.ip();
+            const QByteArray testName = iface.name().toLatin1() + ':' + entry.ip().toString().toLatin1();
+            QTest::newRow(testName.constData()) << iface << entry.ip();
         }
     }
 }
@@ -1282,6 +1351,11 @@ void tst_QUdpSocket::setMulticastInterface()
     QFETCH_GLOBAL(bool, setProxy);
     QFETCH(QNetworkInterface, iface);
     QFETCH(QHostAddress, address);
+
+    // Some syscalls needed for udp multicasting are not functional
+    if (m_skipUnsupportedIPv6Tests) {
+        QSKIP("Syscalls needed for udp multicasting missing functionality");
+    }
 
     QUdpSocket udpSocket;
     // bind initializes the socket
@@ -1342,6 +1416,13 @@ void tst_QUdpSocket::multicast()
         return;
     }
 
+    // Some syscalls needed for ipv6 udp multicasting are not functional
+    if (m_skipUnsupportedIPv6Tests) {
+        if (groupAddress.protocol() == QAbstractSocket::IPv6Protocol) {
+            QSKIP("Syscalls needed for ipv6 udp multicasting missing functionality");
+        }
+    }
+
     QUdpSocket receiver;
 #ifdef FORCE_SESSION
     receiver.setProperty("_q_networksession", QVariant::fromValue(networkSession));
@@ -1384,10 +1465,20 @@ void tst_QUdpSocket::multicast()
     QVERIFY(receiver.hasPendingDatagrams());
     QList<QByteArray> receivedDatagrams;
     while (receiver.hasPendingDatagrams()) {
-        QByteArray datagram;
-        datagram.resize(receiver.pendingDatagramSize());
-        receiver.readDatagram(datagram.data(), datagram.size(), 0, 0);
-        receivedDatagrams << datagram;
+        QNetworkDatagram dgram = receiver.receiveDatagram();
+        receivedDatagrams << dgram.data();
+
+        QVERIFY2(allAddresses.contains(dgram.senderAddress()),
+                dgram.senderAddress().toString().toLatin1());
+        QCOMPARE(dgram.senderPort(), int(sender.localPort()));
+        if (!dgram.destinationAddress().isNull()) {
+            QCOMPARE(dgram.destinationAddress(), groupAddress);
+            QCOMPARE(dgram.destinationPort(), int(receiver.localPort()));
+        }
+
+        int ttl = dgram.hopLimit();
+        if (ttl != -1)
+            QVERIFY(ttl != 0);
     }
     QCOMPARE(receivedDatagrams, datagrams);
 
@@ -1462,9 +1553,17 @@ void tst_QUdpSocket::linkLocalIPv6()
         //Windows preallocates link local addresses to interfaces that are down.
         //These may or may not work depending on network driver
         if (iface.flags() & QNetworkInterface::IsUp) {
+#if defined(Q_OS_WIN)
             // Do not add the Teredo Tunneling Pseudo Interface on Windows.
             if (iface.humanReadableName().contains("Teredo"))
                 continue;
+#elif defined(Q_OS_DARWIN)
+            // Do not add "utun" interfaces on macOS: nothing ever gets received
+            // (we don't know why)
+            if (iface.name().startsWith("utun"))
+                continue;
+#endif
+
             foreach (QNetworkAddressEntry addressEntry, iface.addressEntries()) {
                 QHostAddress addr(addressEntry.ip());
                 if (!addr.scopeId().isEmpty() && addr.isInSubnet(localMask, 64)) {
@@ -1482,7 +1581,8 @@ void tst_QUdpSocket::linkLocalIPv6()
     quint16 port = 0;
     foreach (const QHostAddress& addr, addresses) {
         QUdpSocket *s = new QUdpSocket;
-        QVERIFY2(s->bind(addr, port), qPrintable(s->errorString()));
+        QVERIFY2(s->bind(addr, port), addr.toString().toLatin1()
+                 + '/' + QByteArray::number(port) + ": " + qPrintable(s->errorString()));
         port = s->localPort(); //bind same port, different networks
         sockets << s;
     }
@@ -1492,24 +1592,25 @@ void tst_QUdpSocket::linkLocalIPv6()
     QSignalSpy neutralReadSpy(&neutral, SIGNAL(readyRead()));
 
     QByteArray testData("hello");
-    QByteArray receiveBuffer("xxxxx");
     foreach (QUdpSocket *s, sockets) {
         QSignalSpy spy(s, SIGNAL(readyRead()));
 
         neutralReadSpy.clear();
         QVERIFY(s->writeDatagram(testData, s->localAddress(), neutral.localPort()));
         QTRY_VERIFY(neutralReadSpy.count() > 0); //note may need to accept a firewall prompt
-        QHostAddress from;
-        quint16 fromPort;
-        QCOMPARE((int)neutral.readDatagram(receiveBuffer.data(), receiveBuffer.length(), &from, &fromPort), testData.length());
-        QCOMPARE(from, s->localAddress());
-        QCOMPARE(fromPort, s->localPort());
-        QCOMPARE(receiveBuffer, testData);
 
-        QVERIFY(neutral.writeDatagram(testData, s->localAddress(), s->localPort()));
+        QNetworkDatagram dgram = neutral.receiveDatagram(testData.length() * 2);
+        QVERIFY(dgram.isValid());
+        QCOMPARE(dgram.senderAddress(), s->localAddress());
+        QCOMPARE(dgram.senderPort(), int(s->localPort()));
+        QCOMPARE(dgram.data().length(), testData.length());
+        QCOMPARE(dgram.data(), testData);
+
+        QVERIFY(neutral.writeDatagram(dgram.makeReply(testData)));
         QTRY_VERIFY(spy.count() > 0); //note may need to accept a firewall prompt
-        QCOMPARE((int)s->readDatagram(receiveBuffer.data(), receiveBuffer.length(), &from, &fromPort), testData.length());
-        QCOMPARE(receiveBuffer, testData);
+
+        dgram = s->receiveDatagram(testData.length() * 2);
+        QCOMPARE(dgram.data(), testData);
 
         //sockets bound to other interfaces shouldn't have received anything
         foreach (QUdpSocket *s2, sockets) {
@@ -1537,9 +1638,16 @@ void tst_QUdpSocket::linkLocalIPv4()
         //Windows preallocates link local addresses to interfaces that are down.
         //These may or may not work depending on network driver (they do not work for the Bluetooth PAN driver)
         if (iface.flags() & QNetworkInterface::IsUp) {
+#if defined(Q_OS_WIN)
             // Do not add the Teredo Tunneling Pseudo Interface on Windows.
             if (iface.humanReadableName().contains("Teredo"))
                 continue;
+#elif defined(Q_OS_DARWIN)
+            // Do not add "utun" interfaces on macOS: nothing ever gets received
+            // (we don't know why)
+            if (iface.name().startsWith("utun"))
+                continue;
+#endif
             foreach (QNetworkAddressEntry addr, iface.addressEntries()) {
                 if (addr.ip().isInSubnet(localMask, 16)) {
                     addresses << addr.ip();
@@ -1564,21 +1672,23 @@ void tst_QUdpSocket::linkLocalIPv4()
     QVERIFY(neutral.bind(QHostAddress(QHostAddress::AnyIPv4)));
 
     QByteArray testData("hello");
-    QByteArray receiveBuffer("xxxxx");
     foreach (QUdpSocket *s, sockets) {
         QVERIFY(s->writeDatagram(testData, s->localAddress(), neutral.localPort()));
         QVERIFY2(neutral.waitForReadyRead(10000), QtNetworkSettings::msgSocketError(neutral).constData());
-        QHostAddress from;
-        quint16 fromPort;
-        QCOMPARE((int)neutral.readDatagram(receiveBuffer.data(), receiveBuffer.length(), &from, &fromPort), testData.length());
-        QCOMPARE(from, s->localAddress());
-        QCOMPARE(fromPort, s->localPort());
-        QCOMPARE(receiveBuffer, testData);
 
-        QVERIFY(neutral.writeDatagram(testData, s->localAddress(), s->localPort()));
         QVERIFY2(s->waitForReadyRead(10000), QtNetworkSettings::msgSocketError(*s).constData());
-        QCOMPARE((int)s->readDatagram(receiveBuffer.data(), receiveBuffer.length(), &from, &fromPort), testData.length());
-        QCOMPARE(receiveBuffer, testData);
+        QNetworkDatagram dgram = neutral.receiveDatagram(testData.length() * 2);
+        QVERIFY(dgram.isValid());
+        QCOMPARE(dgram.senderAddress(), s->localAddress());
+        QCOMPARE(dgram.senderPort(), int(s->localPort()));
+        QCOMPARE(dgram.data().length(), testData.length());
+        QCOMPARE(dgram.data(), testData);
+
+        QVERIFY(neutral.writeDatagram(dgram.makeReply(testData)));
+
+        dgram = s->receiveDatagram(testData.length() * 2);
+        QVERIFY(dgram.isValid());
+        QCOMPARE(dgram.data(), testData);
 
         //sockets bound to other interfaces shouldn't have received anything
         foreach (QUdpSocket *s2, sockets) {

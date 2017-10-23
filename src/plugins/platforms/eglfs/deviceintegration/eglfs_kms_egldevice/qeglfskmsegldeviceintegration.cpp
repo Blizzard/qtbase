@@ -1,99 +1,76 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Pelagicore AG
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qeglfskmsegldeviceintegration.h"
+#include "qeglfskmsegldevice.h"
+#include "qeglfskmsegldevicescreen.h"
+#include <QtEglSupport/private/qeglconvenience_p.h>
+#include "private/qeglfswindow_p.h"
+#include "private/qeglfscursor_p.h"
 #include <QLoggingCategory>
 #include <private/qmath_p.h>
 
 QT_BEGIN_NAMESPACE
 
-// Use a name different from qLcEglfsEglKmsDebug to avoid duplicate symbols in
-// static builds. Starting from Qt 5.7 this will be solved by the common kms
-// support library, but in the meantime just work it around.
-Q_LOGGING_CATEGORY(qLcEglfsEglDevDebug, "qt.qpa.eglfs.kms")
-
 QEglFSKmsEglDeviceIntegration::QEglFSKmsEglDeviceIntegration()
-    : m_dri_fd(-1)
-    , m_egl_device(EGL_NO_DEVICE_EXT)
-    , m_egl_display(EGL_NO_DISPLAY)
-    , m_drm_connector(Q_NULLPTR)
-    , m_drm_encoder(Q_NULLPTR)
-    , m_drm_crtc(0)
+    : m_egl_device(EGL_NO_DEVICE_EXT)
     , m_funcs(Q_NULLPTR)
 {
-    qCDebug(qLcEglfsEglDevDebug, "New DRM/KMS on EGLDevice integration created");
+    qCDebug(qLcEglfsKmsDebug, "New DRM/KMS on EGLDevice integration created");
 }
 
-void QEglFSKmsEglDeviceIntegration::platformInit()
+QSurfaceFormat QEglFSKmsEglDeviceIntegration::surfaceFormatFor(const QSurfaceFormat &inputFormat) const
 {
-    if (!query_egl_device())
-        qFatal("Could not set up EGL device!");
-
-    const char *deviceName = m_funcs->query_device_string(m_egl_device, EGL_DRM_DEVICE_FILE_EXT);
-    if (!deviceName)
-        qFatal("Failed to query device name from EGLDevice");
-
-    qCDebug(qLcEglfsEglDevDebug, "Opening %s", deviceName);
-
-    m_dri_fd = drmOpen(deviceName, Q_NULLPTR);
-    if (m_dri_fd < 0)
-        qFatal("Could not open DRM device");
-
-    if (!setup_kms())
-        qFatal("Could not set up KMS on device %s!", m_device.constData());
-
-    qCDebug(qLcEglfsEglDevDebug, "DRM/KMS initialized");
+    QSurfaceFormat format = QEglFSKmsIntegration::surfaceFormatFor(inputFormat);
+    format.setAlphaBufferSize(8);
+    return format;
 }
 
-void QEglFSKmsEglDeviceIntegration::platformDestroy()
+EGLint QEglFSKmsEglDeviceIntegration::surfaceType() const
 {
-    if (qt_safe_close(m_dri_fd) == -1)
-        qErrnoWarning("Could not close DRM device");
-
-    m_dri_fd = -1;
-
-    delete m_funcs;
-    m_funcs = Q_NULLPTR;
-}
-
-EGLNativeDisplayType QEglFSKmsEglDeviceIntegration::platformDisplay() const
-{
-    return static_cast<EGLNativeDisplayType>(m_egl_device);
+    return EGL_STREAM_BIT_KHR;
 }
 
 EGLDisplay QEglFSKmsEglDeviceIntegration::createDisplay(EGLNativeDisplayType nativeDisplay)
 {
-    qCDebug(qLcEglfsEglDevDebug, "Creating display");
+    qCDebug(qLcEglfsKmsDebug, "Creating display");
 
     EGLDisplay display;
 
@@ -104,106 +81,93 @@ EGLDisplay QEglFSKmsEglDeviceIntegration::createDisplay(EGLNativeDisplayType nat
         display = eglGetDisplay(nativeDisplay);
     }
 
-    if (display == EGL_NO_DISPLAY)
+    if (Q_UNLIKELY(display == EGL_NO_DISPLAY))
         qFatal("Could not get EGL display");
 
     EGLint major, minor;
-    if (!eglInitialize(display, &major, &minor))
+    if (Q_UNLIKELY(!eglInitialize(display, &major, &minor)))
         qFatal("Could not initialize egl display");
 
-    if (!eglBindAPI(EGL_OPENGL_ES_API))
+    if (Q_UNLIKELY(!eglBindAPI(EGL_OPENGL_ES_API)))
         qFatal("Failed to bind EGL_OPENGL_ES_API\n");
 
     return display;
 }
 
-QSizeF QEglFSKmsEglDeviceIntegration::physicalScreenSize() const
+bool QEglFSKmsEglDeviceIntegration::supportsSurfacelessContexts() const
 {
-    const int defaultPhysicalDpi = 100;
-    static const int width = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_WIDTH");
-    static const int height = qEnvironmentVariableIntValue("QT_QPA_EGLFS_PHYSICAL_HEIGHT");
-    QSizeF size(width, height);
-    if (size.isEmpty()) {
-        size = QSizeF(m_drm_connector->mmWidth, m_drm_connector->mmHeight);
-        if (size.isEmpty()) {
-            const float pixelsPerMm = Q_MM_PER_INCH / defaultPhysicalDpi;
-            size = QSizeF(screenSize().width() * pixelsPerMm, screenSize().height() * pixelsPerMm);
-        }
-    }
-    return size;
+    // Returning false disables the usage of EGL_KHR_surfaceless_context even when the
+    // extension is available. This is just what we need since, at least with NVIDIA
+    // 352.00 making a null surface current with a context breaks.
+    return false;
 }
 
-QSize QEglFSKmsEglDeviceIntegration::screenSize() const
+bool QEglFSKmsEglDeviceIntegration::supportsPBuffers() const
 {
-    return QSize(m_drm_mode.hdisplay, m_drm_mode.vdisplay);
+    return true;
 }
 
-int QEglFSKmsEglDeviceIntegration::screenDepth() const
-{
-    return 32;
-}
-
-QSurfaceFormat QEglFSKmsEglDeviceIntegration::surfaceFormatFor(const QSurfaceFormat &inputFormat) const
-{
-    QSurfaceFormat format(inputFormat);
-    format.setRenderableType(QSurfaceFormat::OpenGLES);
-    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
-    format.setRedBufferSize(8);
-    format.setGreenBufferSize(8);
-    format.setBlueBufferSize(8);
-    return format;
-}
-
-EGLint QEglFSKmsEglDeviceIntegration::surfaceType() const
-{
-    return EGL_STREAM_BIT_KHR;
-}
-
-class QEglJetsonTK1Window : public QEglFSWindow
+class QEglFSKmsEglDeviceWindow : public QEglFSWindow
 {
 public:
-    QEglJetsonTK1Window(QWindow *w, const QEglFSKmsEglDeviceIntegration *integration)
+    QEglFSKmsEglDeviceWindow(QWindow *w, const QEglFSKmsEglDeviceIntegration *integration)
         : QEglFSWindow(w)
         , m_integration(integration)
         , m_egl_stream(EGL_NO_STREAM_KHR)
     { }
 
-    void invalidateSurface() Q_DECL_OVERRIDE;
-    void resetSurface() Q_DECL_OVERRIDE;
+    void invalidateSurface() override;
+    void resetSurface() override;
 
     const QEglFSKmsEglDeviceIntegration *m_integration;
     EGLStreamKHR m_egl_stream;
     EGLint m_latency;
 };
 
-void QEglJetsonTK1Window::invalidateSurface()
+void QEglFSKmsEglDeviceWindow::invalidateSurface()
 {
     QEglFSWindow::invalidateSurface();
     m_integration->m_funcs->destroy_stream(screen()->display(), m_egl_stream);
 }
 
-void QEglJetsonTK1Window::resetSurface()
+void QEglFSKmsEglDeviceWindow::resetSurface()
 {
-    qCDebug(qLcEglfsEglDevDebug, "Creating stream");
+    qCDebug(qLcEglfsKmsDebug, "Creating stream");
 
     EGLDisplay display = screen()->display();
-    EGLOutputLayerEXT layer = EGL_NO_OUTPUT_LAYER_EXT;
-    EGLint count;
+    EGLint streamAttribs[3];
+    int streamAttribCount = 0;
+    int fifoLength = qEnvironmentVariableIntValue("QT_QPA_EGLFS_STREAM_FIFO_LENGTH");
+    if (fifoLength > 0) {
+        streamAttribs[streamAttribCount++] = EGL_STREAM_FIFO_LENGTH_KHR;
+        streamAttribs[streamAttribCount++] = fifoLength;
+    }
+    streamAttribs[streamAttribCount++] = EGL_NONE;
 
-    m_egl_stream = m_integration->m_funcs->create_stream(display, Q_NULLPTR);
+    m_egl_stream = m_integration->m_funcs->create_stream(display, streamAttribs);
     if (m_egl_stream == EGL_NO_STREAM_KHR) {
         qWarning("resetSurface: Couldn't create EGLStream for native window");
         return;
     }
 
-    qCDebug(qLcEglfsEglDevDebug, "Created stream %p on display %p", m_egl_stream, display);
+    qCDebug(qLcEglfsKmsDebug, "Created stream %p on display %p", m_egl_stream, display);
+
+    EGLint count;
+    if (m_integration->m_funcs->query_stream(display, m_egl_stream, EGL_STREAM_FIFO_LENGTH_KHR, &count)) {
+        if (count > 0)
+            qCDebug(qLcEglfsKmsDebug, "Using EGLStream FIFO mode with %d frames", count);
+        else
+            qCDebug(qLcEglfsKmsDebug, "Using EGLStream mailbox mode");
+    } else {
+        qCDebug(qLcEglfsKmsDebug, "Could not query number of EGLStream FIFO frames");
+    }
 
     if (!m_integration->m_funcs->get_output_layers(display, Q_NULLPTR, Q_NULLPTR, 0, &count) || count == 0) {
         qWarning("No output layers found");
         return;
     }
 
-    qCDebug(qLcEglfsEglDevDebug, "Output has %d layers", count);
+    qCDebug(qLcEglfsKmsDebug, "Output has %d layers", count);
 
     QVector<EGLOutputLayerEXT> layers;
     layers.resize(count);
@@ -213,25 +177,35 @@ void QEglJetsonTK1Window::resetSurface()
         return;
     }
 
+    QEglFSKmsEglDeviceScreen *cur_screen = static_cast<QEglFSKmsEglDeviceScreen *>(screen());
+    Q_ASSERT(cur_screen);
+    QKmsOutput &output(cur_screen->output());
+    const uint32_t wantedId = !output.wants_plane ? output.crtc_id : output.plane_id;
+    qCDebug(qLcEglfsKmsDebug, "Searching for id: %d", wantedId);
+
+    EGLOutputLayerEXT layer = EGL_NO_OUTPUT_LAYER_EXT;
     for (int i = 0; i < actualCount; ++i) {
         EGLAttrib id;
         if (m_integration->m_funcs->query_output_layer_attrib(display, layers[i], EGL_DRM_CRTC_EXT, &id)) {
-            qCDebug(qLcEglfsEglDevDebug, "  [%d] layer %p - crtc %d", i, layers[i], (int) id);
-            if (id == EGLAttrib(m_integration->m_drm_crtc))
+            qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - crtc %d", i, layers[i], (int) id);
+            if (id == EGLAttrib(wantedId))
                 layer = layers[i];
         } else if (m_integration->m_funcs->query_output_layer_attrib(display, layers[i], EGL_DRM_PLANE_EXT, &id)) {
-            // Not used yet, just for debugging.
-            qCDebug(qLcEglfsEglDevDebug, "  [%d] layer %p - plane %d", i, layers[i], (int) id);
+            qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - plane %d", i, layers[i], (int) id);
+            if (id == EGLAttrib(wantedId))
+                layer = layers[i];
         } else {
-            qCDebug(qLcEglfsEglDevDebug, "  [%d] layer %p - unknown", i, layers[i]);
+            qCDebug(qLcEglfsKmsDebug, "  [%d] layer %p - unknown", i, layers[i]);
         }
     }
 
     QByteArray reqLayerIndex = qgetenv("QT_QPA_EGLFS_LAYER_INDEX");
     if (!reqLayerIndex.isEmpty()) {
         int idx = reqLayerIndex.toInt();
-        if (idx >= 0 && idx < layers.count())
+        if (idx >= 0 && idx < layers.count()) {
+            qCDebug(qLcEglfsKmsDebug, "EGLOutput layer index override = %d", idx);
             layer = layers[idx];
+        }
     }
 
     if (layer == EGL_NO_OUTPUT_LAYER_EXT) {
@@ -239,18 +213,18 @@ void QEglJetsonTK1Window::resetSurface()
         return;
     }
 
-    qCDebug(qLcEglfsEglDevDebug, "Using layer %p", layer);
+    qCDebug(qLcEglfsKmsDebug, "Using layer %p", layer);
 
     if (!m_integration->m_funcs->stream_consumer_output(display, m_egl_stream, layer))
         qWarning("resetSurface: Unable to connect stream");
 
-    m_config = QEglFSIntegration::chooseConfig(display, m_integration->surfaceFormatFor(window()->requestedFormat()));
+    m_config = QEglFSDeviceIntegration::chooseConfig(display, m_integration->surfaceFormatFor(window()->requestedFormat()));
     m_format = q_glFormatFromConfig(display, m_config);
-    qCDebug(qLcEglfsEglDevDebug) << "Stream producer format is" << m_format;
+    qCDebug(qLcEglfsKmsDebug) << "Stream producer format is" << m_format;
 
-    const int w = m_integration->screenSize().width();
-    const int h = m_integration->screenSize().height();
-    qCDebug(qLcEglfsEglDevDebug, "Creating stream producer surface of size %dx%d", w, h);
+    const int w = cur_screen->rawGeometry().width();
+    const int h = cur_screen->rawGeometry().height();
+    qCDebug(qLcEglfsKmsDebug, "Creating stream producer surface of size %dx%d", w, h);
 
     const EGLint stream_producer_attribs[] = {
         EGL_WIDTH,  w,
@@ -262,152 +236,37 @@ void QEglJetsonTK1Window::resetSurface()
     if (m_surface == EGL_NO_SURFACE)
         return;
 
-    qCDebug(qLcEglfsEglDevDebug, "Created stream producer surface %p", m_surface);
+    qCDebug(qLcEglfsKmsDebug, "Created stream producer surface %p", m_surface);
 }
 
 QEglFSWindow *QEglFSKmsEglDeviceIntegration::createWindow(QWindow *window) const
 {
-    QEglJetsonTK1Window *eglWindow = new QEglJetsonTK1Window(window, this);
+    QEglFSKmsEglDeviceWindow *eglWindow = new QEglFSKmsEglDeviceWindow(window, this);
 
     m_funcs->initialize(eglWindow->screen()->display());
-    if (!(m_funcs->has_egl_output_base && m_funcs->has_egl_output_drm && m_funcs->has_egl_stream
-          && m_funcs->has_egl_stream_producer_eglsurface && m_funcs->has_egl_stream_consumer_egloutput))
+    if (Q_UNLIKELY(!(m_funcs->has_egl_output_base && m_funcs->has_egl_output_drm && m_funcs->has_egl_stream &&
+                     m_funcs->has_egl_stream_producer_eglsurface && m_funcs->has_egl_stream_consumer_egloutput)))
         qFatal("Required extensions missing!");
 
     return eglWindow;
 }
 
-bool QEglFSKmsEglDeviceIntegration::hasCapability(QPlatformIntegration::Capability cap) const
+QKmsDevice *QEglFSKmsEglDeviceIntegration::createDevice()
 {
-    switch (cap) {
-    case QPlatformIntegration::ThreadedPixmaps:
-    case QPlatformIntegration::OpenGL:
-    case QPlatformIntegration::ThreadedOpenGL:
-    case QPlatformIntegration::BufferQueueingOpenGL:
-        return true;
-    default:
-        return false;
-    }
-}
+    if (Q_UNLIKELY(!query_egl_device()))
+        qFatal("Could not set up EGL device!");
 
-void QEglFSKmsEglDeviceIntegration::waitForVSync(QPlatformSurface *) const
-{
-    static bool mode_set = false;
+    const char *deviceName = m_funcs->query_device_string(m_egl_device, EGL_DRM_DEVICE_FILE_EXT);
+    if (Q_UNLIKELY(!deviceName))
+        qFatal("Failed to query device name from EGLDevice");
 
-    if (!mode_set) {
-        mode_set = true;
-
-        drmModeCrtcPtr currentMode = drmModeGetCrtc(m_dri_fd, m_drm_crtc);
-        const bool alreadySet = currentMode
-            && currentMode->width == m_drm_mode.hdisplay
-            && currentMode->height == m_drm_mode.vdisplay;
-        if (currentMode)
-            drmModeFreeCrtc(currentMode);
-        if (alreadySet) {
-            // Maybe detecting the DPMS mode could help here, but there are no properties
-            // exposed on the connector apparently. So rely on an env var for now.
-            static bool alwaysDoSet = qEnvironmentVariableIntValue("QT_QPA_EGLFS_ALWAYS_SET_MODE");
-            if (!alwaysDoSet) {
-                qCDebug(qLcEglfsEglDevDebug, "Mode already set");
-                return;
-            }
-        }
-
-        qCDebug(qLcEglfsEglDevDebug, "Setting mode");
-        int ret = drmModeSetCrtc(m_dri_fd, m_drm_crtc,
-                                 -1, 0, 0,
-                                 &m_drm_connector->connector_id, 1,
-                                 const_cast<const drmModeModeInfoPtr>(&m_drm_mode));
-        if (ret)
-            qFatal("drmModeSetCrtc failed");
-    }
-}
-
-qreal QEglFSKmsEglDeviceIntegration::refreshRate() const
-{
-    quint32 refresh = m_drm_mode.vrefresh;
-    return refresh > 0 ? refresh : 60;
-}
-
-bool QEglFSKmsEglDeviceIntegration::supportsSurfacelessContexts() const
-{
-    // Returning false disables the usage of EGL_KHR_surfaceless_context even when the
-    // extension is available. This is just what we need since, at least with NVIDIA
-    // 352.00 making a null surface current with a context breaks.
-    return false;
-}
-
-bool QEglFSKmsEglDeviceIntegration::setup_kms()
-{
-    drmModeRes *resources;
-    drmModeConnector *connector = Q_NULLPTR;
-    drmModeEncoder *encoder = Q_NULLPTR;
-    quint32 crtc = 0;
-    int i;
-
-    resources = drmModeGetResources(m_dri_fd);
-    if (!resources) {
-        qWarning("drmModeGetResources failed");
-        return false;
-    }
-
-    for (i = 0; i < resources->count_connectors; i++) {
-        connector = drmModeGetConnector(m_dri_fd, resources->connectors[i]);
-        if (!connector)
-            continue;
-
-        if (connector->connection == DRM_MODE_CONNECTED && connector->count_modes > 0)
-            break;
-
-        drmModeFreeConnector(connector);
-    }
-
-    if (i == resources->count_connectors) {
-        qWarning("No currently active connector found.");
-        return false;
-    }
-
-    qCDebug(qLcEglfsEglDevDebug, "Using connector with type %d", connector->connector_type);
-
-    for (i = 0; i < resources->count_encoders; i++) {
-        encoder = drmModeGetEncoder(m_dri_fd, resources->encoders[i]);
-        if (!encoder)
-            continue;
-
-        if (encoder->encoder_id == connector->encoder_id)
-            break;
-
-        drmModeFreeEncoder(encoder);
-    }
-
-    for (int j = 0; j < resources->count_crtcs; j++) {
-        if ((encoder->possible_crtcs & (1 << j))) {
-            crtc = resources->crtcs[j];
-            break;
-        }
-    }
-
-    if (crtc == 0)
-        qFatal("No suitable CRTC available");
-
-    m_drm_connector = connector;
-    m_drm_encoder = encoder;
-    m_drm_mode = connector->modes[0];
-    m_drm_crtc = crtc;
-
-    qCDebug(qLcEglfsEglDevDebug).noquote() << "Using crtc" << m_drm_crtc
-                                        << "with mode" << m_drm_mode.hdisplay << "x" << m_drm_mode.vdisplay
-                                        << "@" << m_drm_mode.vrefresh;
-
-    drmModeFreeResources(resources);
-
-    return true;
+    return new QEglFSKmsEglDevice(this, screenConfig(), deviceName);
 }
 
 bool QEglFSKmsEglDeviceIntegration::query_egl_device()
 {
     m_funcs = new QEGLStreamConvenience;
-    if (!m_funcs->has_egl_device_base)
+    if (Q_UNLIKELY(!m_funcs->has_egl_device_base))
         qFatal("EGL_EXT_device_base missing");
 
     EGLint num_devices = 0;
@@ -416,7 +275,7 @@ bool QEglFSKmsEglDeviceIntegration::query_egl_device()
         return false;
     }
 
-    qCDebug(qLcEglfsEglDevDebug, "Found %d EGL devices", num_devices);
+    qCDebug(qLcEglfsKmsDebug, "Found %d EGL devices", num_devices);
 
     if (num_devices < 1 || m_egl_device == EGL_NO_DEVICE_EXT) {
         qWarning("eglQueryDevicesEXT could not find any EGL devices");
@@ -424,6 +283,15 @@ bool QEglFSKmsEglDeviceIntegration::query_egl_device()
     }
 
     return true;
+}
+
+QPlatformCursor *QEglFSKmsEglDeviceIntegration::createCursor(QPlatformScreen *screen) const
+{
+#if QT_CONFIG(opengl)
+    if (screenConfig()->separateScreens())
+        return  new QEglFSCursor(screen);
+#endif
+    return nullptr;
 }
 
 QT_END_NAMESPACE

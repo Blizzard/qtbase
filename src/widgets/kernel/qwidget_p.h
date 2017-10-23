@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qwidget.h"
 #include "private/qobject_p.h"
 #include "QtCore/qrect.h"
@@ -57,10 +64,14 @@
 #include "QtWidgets/qsizepolicy.h"
 #include "QtWidgets/qstyle.h"
 #include "QtWidgets/qapplication.h"
+#if QT_CONFIG(graphicseffect)
 #include <private/qgraphicseffect_p.h>
+#endif
+#if QT_CONFIG(graphicsview)
 #include "QtWidgets/qgraphicsproxywidget.h"
 #include "QtWidgets/qgraphicsscene.h"
 #include "QtWidgets/qgraphicsview.h"
+#endif
 #include <private/qgesture_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -182,7 +193,7 @@ struct QTLWExtra {
     uint embedded : 1;
 
     // *************************** Platform specific values (bit fields first) **********
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) // <----------------------------------------------------------- X11
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ // <----------------------------------------------------------- X11
     uint spont_unmapped: 1; // window was spontaneously unmapped
     uint dnd : 1; // DND properties installed
     uint validWMState : 1; // is WM_STATE valid?
@@ -196,11 +207,11 @@ struct QTLWExtra {
     qint32 newCounterValueHi;
     quint32 newCounterValueLo;
 #endif
-#elif defined(Q_DEAD_CODE_FROM_QT4_WIN) // <--------------------------------------------------------- WIN
+#elif 0 /* Used to be included in Qt4 for Q_WS_WIN */ // <--------------------------------------------------------- WIN
     uint hotkeyRegistered: 1; // Hot key from the STARTUPINFO has been registered.
     HICON winIconBig; // internal big Windows icon
     HICON winIconSmall; // internal small Windows icon
-#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <--------------------------------------------------------- MAC
+#elif 0 /* Used to be included in Qt4 for Q_WS_MAC */ // <--------------------------------------------------------- MAC
     uint resizer : 4;
     uint isSetGeometry : 1;
     uint isMove : 1;
@@ -223,7 +234,7 @@ struct QWExtra {
     // Regular pointers (keep them together to avoid gaps on 64 bits architectures).
     void *glContext; // if the widget is hijacked by QGLWindowSurface
     QTLWExtra *topextra; // only useful for TLWs
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     QGraphicsProxyWidget *proxyWidget; // if the widget is embedded
 #endif
 #ifndef QT_NO_CURSOR
@@ -255,15 +266,15 @@ struct QWExtra {
     uint hasWindowContainer : 1;
 
     // *************************** Platform specific values (bit fields first) **********
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN) // <----------------------------------------------------------- WIN
+#if 0 /* Used to be included in Qt4 for Q_WS_WIN */ // <----------------------------------------------------------- WIN
 #ifndef QT_NO_DRAGANDDROP
     QOleDropTarget *dropTarget; // drop target
     QList<QPointer<QWidget> > oleDropWidgets;
 #endif
-#elif defined(Q_DEAD_CODE_FROM_QT4_X11) // <--------------------------------------------------------- X11
+#elif 0 /* Used to be included in Qt4 for Q_WS_X11 */ // <--------------------------------------------------------- X11
     uint compress_events : 1;
     WId xDndProxy; // XDND forwarding to embedded windows
-#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <------------------------------------------------------ MAC
+#elif 0 /* Used to be included in Qt4 for Q_WS_MAC */ // <------------------------------------------------------ MAC
     // Cocoa Mask stuff
     QImage maskBits;
     CGImageRef imageMask;
@@ -323,6 +334,7 @@ public:
     ~QWidgetPrivate();
 
     static QWidgetPrivate *get(QWidget *w) { return w->d_func(); }
+    static const QWidgetPrivate *get(const QWidget *w) { return w->d_func(); }
 
     QWExtra *extraData() const;
     QTLWExtra *topData() const;
@@ -394,10 +406,7 @@ public:
                                 const QRegion &rgn, const QPoint &offset, int flags,
                                 QPainter *sharedPainter, QWidgetBackingStore *backingStore);
 
-
-    QPainter *beginSharedPainter();
-    bool endSharedPainter();
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     static QGraphicsProxyWidget * nearestGraphicsProxyWidget(const QWidget *origin);
 #endif
     void repaint_sys(const QRegion &rgn);
@@ -413,9 +422,9 @@ public:
     void setOpaque(bool opaque);
     void updateIsTranslucent();
     bool paintOnScreen() const;
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
     void invalidateGraphicsEffectsRecursively();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
     const QRegion &getOpaqueChildren() const;
     void setDirtyOpaqueRegion();
@@ -525,7 +534,7 @@ public:
     static QRect screenGeometry(const QWidget *widget)
     {
         QRect screen;
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
         QGraphicsProxyWidget *ancestorProxy = widget->d_func()->nearestGraphicsProxyWidget(widget);
         //It's embedded if it has an ancestor
         if (ancestorProxy) {
@@ -584,10 +593,10 @@ public:
 
     inline QRect effectiveRectFor(const QRect &rect) const
     {
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
         if (graphicsEffect && graphicsEffect->isEnabled())
             return graphicsEffect->boundingRectFor(rect).toAlignedRect();
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
         return rect;
     }
 
@@ -689,10 +698,10 @@ public:
     QString toolTip;
     int toolTipDuration;
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     QString statusTip;
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     QString whatsThis;
 #endif
 #ifndef QT_NO_ACCESSIBILITY
@@ -746,12 +755,14 @@ public:
     uint renderToTextureReallyDirty : 1;
     uint renderToTextureComposeActive : 1;
 #endif
+    uint childrenHiddenByWState : 1;
+    uint childrenShownByExpose : 1;
 
     // *************************** Platform specific ************************************
 #if defined(Q_OS_WIN)
     uint noPaintOnScreen : 1; // see qwidget.cpp ::paintEngine()
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) // <----------------------------------------------------------- X11
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ // <----------------------------------------------------------- X11
     Qt::HANDLE picture;
     static QWidget *mouseGrabber;
     static QWidget *keyboardGrabber;
@@ -763,7 +774,7 @@ public:
     void updateX11AcceptFocus();
     QPoint mapToGlobal(const QPoint &pos) const;
     QPoint mapFromGlobal(const QPoint &pos) const;
-#elif defined(Q_DEAD_CODE_FROM_QT4_WIN) // <--------------------------------------------------------- WIN
+#elif 0 /* Used to be included in Qt4 for Q_WS_WIN */ // <--------------------------------------------------------- WIN
 #ifndef QT_NO_GESTURES
     uint nativeGesturePanEnabled : 1;
 #endif
@@ -779,7 +790,7 @@ public:
     void winSetupGestures();
 #elif defined(Q_OS_MAC) // <--------------------------------------------------------- MAC
     void macUpdateSizeAttribute();
-#elif defined(Q_DEAD_CODE_FROM_QT4_MAC) // <--------------------------------------------------------- MAC (old stuff)
+#elif 0 /* Used to be included in Qt4 for Q_WS_MAC */ // <--------------------------------------------------------- MAC (old stuff)
     // This is new stuff
     uint needWindowChange : 1;
 
@@ -875,7 +886,7 @@ struct QWidgetPaintContext
     QPainter *painter;
 };
 
-#ifndef QT_NO_GRAPHICSEFFECT
+#if QT_CONFIG(graphicseffect)
 class QWidgetEffectSourcePrivate : public QGraphicsEffectSourcePrivate
 {
 public:
@@ -928,7 +939,7 @@ public:
     QTransform lastEffectTransform;
     bool updateDueToGraphicsEffect;
 };
-#endif //QT_NO_GRAPHICSEFFECT
+#endif // QT_CONFIG(graphicseffect)
 
 inline QWExtra *QWidgetPrivate::extraData() const
 {

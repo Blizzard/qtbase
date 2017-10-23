@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -220,7 +215,7 @@ void tst_QUndoGroup::setActive()
     QUndoGroup group;
     QUndoStack stack1(&group), stack2(&group);
 
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
     QCOMPARE(stack1.isActive(), false);
     QCOMPARE(stack2.isActive(), false);
 
@@ -243,13 +238,13 @@ void tst_QUndoGroup::setActive()
     QCOMPARE(stack3.isActive(), false);
 
     group.removeStack(&stack2);
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
     QCOMPARE(stack1.isActive(), false);
     QCOMPARE(stack2.isActive(), true);
     QCOMPARE(stack3.isActive(), false);
 
     group.removeStack(&stack2);
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
     QCOMPARE(stack1.isActive(), false);
     QCOMPARE(stack2.isActive(), true);
     QCOMPARE(stack3.isActive(), false);
@@ -285,7 +280,7 @@ void tst_QUndoGroup::deleteStack()
 
     QUndoStack *stack1 = new QUndoStack(&group);
     QCOMPARE(group.stacks(), QList<QUndoStack*>() << stack1);
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
 
     stack1->setActive();
     QCOMPARE(group.activeStack(), stack1);
@@ -304,17 +299,17 @@ void tst_QUndoGroup::deleteStack()
 
     delete stack1;
     QCOMPARE(group.stacks(), QList<QUndoStack*>() << stack3);
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
 
     stack3->setActive(false);
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
 
     stack3->setActive(true);
     QCOMPARE(group.activeStack(), stack3);
 
     group.removeStack(stack3);
     QCOMPARE(group.stacks(), QList<QUndoStack*>());
-    QCOMPARE(group.activeStack(), (QUndoStack*)0);
+    QCOMPARE(group.activeStack(), nullptr);
 
     delete stack3;
 }
@@ -382,14 +377,14 @@ static QString glue(const QString &s1, const QString &s2)
 void tst_QUndoGroup::checkSignals()
 {
     QUndoGroup group;
-    QAction *undo_action = group.createUndoAction(0, QString("foo"));
-    QAction *redo_action = group.createRedoAction(0, QString("bar"));
-    QSignalSpy indexChangedSpy(&group, SIGNAL(indexChanged(int)));
-    QSignalSpy cleanChangedSpy(&group, SIGNAL(cleanChanged(bool)));
-    QSignalSpy canUndoChangedSpy(&group, SIGNAL(canUndoChanged(bool)));
-    QSignalSpy undoTextChangedSpy(&group, SIGNAL(undoTextChanged(QString)));
-    QSignalSpy canRedoChangedSpy(&group, SIGNAL(canRedoChanged(bool)));
-    QSignalSpy redoTextChangedSpy(&group, SIGNAL(redoTextChanged(QString)));
+    const QScopedPointer<QAction> undo_action(group.createUndoAction(0, QString("foo")));
+    const QScopedPointer<QAction> redo_action(group.createRedoAction(0, QString("bar")));
+    QSignalSpy indexChangedSpy(&group, &QUndoGroup::indexChanged);
+    QSignalSpy cleanChangedSpy(&group, &QUndoGroup::cleanChanged);
+    QSignalSpy canUndoChangedSpy(&group, &QUndoGroup::canUndoChanged);
+    QSignalSpy undoTextChangedSpy(&group, &QUndoGroup::undoTextChanged);
+    QSignalSpy canRedoChangedSpy(&group, &QUndoGroup::canRedoChanged);
+    QSignalSpy redoTextChangedSpy(&group, &QUndoGroup::redoTextChanged);
 
     QString str;
 
@@ -595,9 +590,6 @@ void tst_QUndoGroup::checkSignals()
                 true,       // indexChanged
                 true,       // undoChanged
                 true)       // redoChanged
-
-    delete undo_action;
-    delete redo_action;
 }
 
 void tst_QUndoGroup::addStackAndDie()
@@ -614,7 +606,7 @@ void tst_QUndoGroup::addStackAndDie()
 
 void tst_QUndoGroup::commandTextFormat()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("No QProcess available");
 #else
     QString binDir = QLibraryInfo::location(QLibraryInfo::BinariesPath);
@@ -634,8 +626,8 @@ void tst_QUndoGroup::commandTextFormat()
     qApp->installTranslator(&translator);
 
     QUndoGroup group;
-    QAction *undo_action = group.createUndoAction(0);
-    QAction *redo_action = group.createRedoAction(0);
+    const QScopedPointer<QAction> undo_action(group.createUndoAction(0));
+    const QScopedPointer<QAction> redo_action(group.createRedoAction(0));
 
     QCOMPARE(undo_action->text(), QString("Undo-default-text"));
     QCOMPARE(redo_action->text(), QString("Redo-default-text"));

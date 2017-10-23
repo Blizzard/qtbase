@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -95,10 +90,10 @@ private slots:
     void count();
     void insertItem_QString_QObject();
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+#if !defined(Q_OS_DARWIN)
     void accel();
     void activatedCount();
-    void allowActiveAndDisabled();
+    void activatedCount_data();
 
     void check_accelKeys();
     void check_cursorKeys1();
@@ -106,6 +101,9 @@ private slots:
     void check_cursorKeys3();
 
     void check_escKey();
+#endif
+#ifndef Q_OS_WINCE
+    void allowActiveAndDisabled();
 #endif
 
     void check_endKey();
@@ -118,9 +116,10 @@ private slots:
 
     void check_altPress();
     void check_altClosePress();
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+#if !defined(Q_OS_DARWIN)
     void check_shortcutPress();
     void check_menuPosition();
+    void taskQTBUG46812_doNotLeaveMenubarHighlighted();
 #endif
     void task223138_triggered();
     void task256322_highlight();
@@ -133,6 +132,14 @@ private slots:
     void cornerWidgets_data();
     void cornerWidgets();
     void taskQTBUG53205_crashReparentNested();
+#ifdef Q_OS_MACOS
+    void taskQTBUG56275_reinsertMenuInParentlessQMenuBar();
+    void QTBUG_57404_existingMenuItemException();
+#endif
+    void taskQTBUG55966_subMenuRemoved();
+    void QTBUG_58344_invalidIcon();
+
+    void platformMenu();
 
 protected slots:
     void onSimpleActivated( QAction*);
@@ -140,8 +147,8 @@ protected slots:
     void slotForTaskQTBUG53205();
 
 private:
-    TestMenu initSimpleMenuBar(QMenuBar *mb);
-    TestMenu initWindowWithSimpleMenuBar(QMainWindow &w);
+    TestMenu initSimpleMenuBar(QMenuBar *mb, bool forceNonNative = true);
+    TestMenu initWindowWithSimpleMenuBar(QMainWindow &w, bool forceNonNative = true);
     QAction *createCharacterAction(QMenu *menu, char lowerAscii);
     QMenu *addNumberedMenu(QMenuBar *mb, int n);
     TestMenu initComplexMenuBar(QMenuBar *mb);
@@ -168,8 +175,6 @@ void tst_QMenuBar::getSetCheck()
 }
 
 #include <qcursor.h>
-
-const int RESET = 0;
 
 /*!
     Test plan:
@@ -211,9 +216,10 @@ void tst_QMenuBar::cleanup()
 
 // Create a simple menu bar and connect its actions to onSimpleActivated().
 
-TestMenu tst_QMenuBar::initSimpleMenuBar(QMenuBar *mb)
-{
+TestMenu tst_QMenuBar::initSimpleMenuBar(QMenuBar *mb, bool forceNonNative) {
     TestMenu result;
+    if (forceNonNative)
+        mb->setNativeMenuBar(false);
     connect(mb, SIGNAL(triggered(QAction*)), this, SLOT(onSimpleActivated(QAction*)));
     QMenu *menu = mb->addMenu(QStringLiteral("&accel"));
     QAction *action = menu->addAction(QStringLiteral("menu1") );
@@ -226,9 +232,14 @@ TestMenu tst_QMenuBar::initSimpleMenuBar(QMenuBar *mb)
     menu = mb->addMenu(QStringLiteral("accel1"));
     action = menu->addAction(QStringLiteral("&Open...") );
     action->setShortcut(Qt::Key_O);
+    result.actions << action;
+
+    action = menu->addAction(QStringLiteral("action"));
+    action->setShortcut(QKeySequence(Qt::ALT + Qt::Key_Z));
+    result.actions << action;
+
     result.menus << menu;
     connect(menu, SIGNAL(triggered(QAction*)), this, SLOT(onSimpleActivated(QAction*)));
-    result.actions << action;
 
     m_lastSimpleAcceleratorId = 0;
     m_simpleActivatedCount = 0;
@@ -236,11 +247,11 @@ TestMenu tst_QMenuBar::initSimpleMenuBar(QMenuBar *mb)
     return result;
 }
 
-inline TestMenu tst_QMenuBar::initWindowWithSimpleMenuBar(QMainWindow &w)
+inline TestMenu tst_QMenuBar::initWindowWithSimpleMenuBar(QMainWindow &w, bool forceNonNative)
 {
     w.resize(200, 200);
     centerOnScreen(&w);
-    return initSimpleMenuBar(w.menuBar());
+    return initSimpleMenuBar(w.menuBar(), forceNonNative);
 }
 
 // add a menu with number n, set number as data.
@@ -281,6 +292,7 @@ void tst_QMenuBar::onComplexActionTriggered()
 TestMenu tst_QMenuBar::initComplexMenuBar(QMenuBar *mb)
 {
     TestMenu result;
+    mb->setNativeMenuBar(false);
     QMenu *menu = addNumberedMenu(mb, 1);
     result.menus << menu;
     for (char c = 'a'; c < 'c'; ++c)
@@ -313,8 +325,8 @@ inline TestMenu tst_QMenuBar::initWindowWithComplexMenuBar(QMainWindow &w)
     return initComplexMenuBar(w.menuBar());
 }
 
-// On Mac/WinCE, native key events are needed to test menu action activation
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// On Mac native key events are needed to test menu action activation
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::accel()
 {
     // create a popup menu with menu items set the accelerators later...
@@ -331,13 +343,14 @@ void tst_QMenuBar::accel()
 }
 #endif
 
-// On Mac/WinCE, native key events are needed to test menu action activation
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// On Mac native key events are needed to test menu action activation
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::activatedCount()
 {
     // create a popup menu with menu items set the accelerators later...
     QMainWindow w;
-    initWindowWithSimpleMenuBar(w);
+    QFETCH( bool, forceNonNative );
+    initWindowWithSimpleMenuBar(w, forceNonNative);
     w.show();
     QApplication::setActiveWindow(&w);
     QVERIFY(QTest::qWaitForWindowActive(&w));
@@ -345,6 +358,13 @@ void tst_QMenuBar::activatedCount()
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_A, Qt::ControlModifier );
 //wait(5000);
     QCOMPARE( m_simpleActivatedCount, 2 ); //1 from the popupmenu and 1 from the menubar
+}
+
+void tst_QMenuBar::activatedCount_data()
+{
+    QTest::addColumn<bool>("forceNonNative");
+    QTest::newRow( "forcing non-native menubar" ) << true;
+    QTest::newRow( "not forcing non-native menubar" ) << false;
 }
 #endif
 
@@ -522,8 +542,8 @@ void tst_QMenuBar::insertItem_QString_QObject()
     QVERIFY(actions.size() < 4); // there is no menu 4!
 }
 
-// On Mac/WinCE, native key events are needed to test menu action activation
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// On Mac native key events are needed to test menu action activation
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_accelKeys()
 {
     QMainWindow w;
@@ -595,8 +615,8 @@ void tst_QMenuBar::check_accelKeys()
 }
 #endif
 
-// On Mac/WinCE, native key events are needed to test menu action activation
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// On Mac native key events are needed to test menu action activation
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_cursorKeys1()
 {
     QMainWindow w;
@@ -629,8 +649,8 @@ void tst_QMenuBar::check_cursorKeys1()
 }
 #endif
 
-// Qt/Mac,WinCE does not use the native popups/menubar
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_cursorKeys2()
 {
     QMainWindow w;
@@ -662,8 +682,8 @@ void tst_QMenuBar::check_cursorKeys2()
 /*!
     If a popupmenu is active you can use Left to move to the menu to the left of it.
 */
-// Qt/Mac,WinCE does not use the native popups/menubar
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_cursorKeys3()
 {
     QMainWindow w;
@@ -777,8 +797,8 @@ void tst_QMenuBar::check_endKey()
     If Down is pressed next the popup is activated again.
 */
 
-// Qt/Mac,WinCE does not use the native popups/menubar
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_escKey()
 {
     QMainWindow w;
@@ -803,6 +823,12 @@ void tst_QMenuBar::check_escKey()
 
     if (!QApplication::style()->inherits("QWindowsStyle"))
         return;
+
+    if (!QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)) {
+        QWARN("Skipping menu button test on minimal/offscreen platforms");
+        return;
+    }
 
     // If we press Down the popupmenu should be active again
     QTest::keyClick(static_cast<QWidget *>(0), Qt::Key_Down );
@@ -923,10 +949,10 @@ void tst_QMenuBar::check_escKey()
 //     QCOMPARE(m_complexActionTriggerCount['h'], (uint)itemH_count);
 // }
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
 void tst_QMenuBar::allowActiveAndDisabled()
 {
     QMenuBar menuBar;
+    menuBar.setNativeMenuBar(false);
 
      // Task 241043 : check that second menu is activated if only
     // disabled menu items are added
@@ -962,7 +988,6 @@ void tst_QMenuBar::allowActiveAndDisabled()
     else
         QCOMPARE(menuBar.activeAction()->text(), fileMenu.title());
 }
-#endif
 
 void tst_QMenuBar::check_altPress()
 {
@@ -994,6 +1019,7 @@ void tst_QMenuBar::check_altClosePress()
 
     QMainWindow w;
     w.setWindowTitle(QTest::currentTestFunction());
+    w.menuBar()->setNativeMenuBar(false);
     QMenu *menuFile = w.menuBar()->addMenu(tr("&File"));
     menuFile->addAction("Quit");
     QMenu *menuEdit = w.menuBar()->addMenu(tr("&Edit"));
@@ -1011,8 +1037,8 @@ void tst_QMenuBar::check_altClosePress()
     QTRY_VERIFY(!w.menuBar()->activeAction());
 }
 
-// Qt/Mac,WinCE does not use the native popups/menubar
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_shortcutPress()
 {
     QMainWindow w;
@@ -1054,8 +1080,8 @@ private:
     const Qt::LayoutDirection m_oldDirection;
 };
 
-// Qt/Mac,WinCE does not use the native popups/menubar
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
 void tst_QMenuBar::check_menuPosition()
 {
     QMainWindow w;
@@ -1069,6 +1095,7 @@ void tst_QMenuBar::check_menuPosition()
         menu.addAction("item");
     }
 
+    w.menuBar()->setNativeMenuBar(false);
     QAction *menu_action = w.menuBar()->addMenu(&menu);
     centerOnScreen(&w);
     w.show();
@@ -1123,7 +1150,7 @@ void tst_QMenuBar::check_menuPosition()
         menu.close();
     }
 
-#  ifndef QTEST_NO_CURSOR
+#  ifndef QT_NO_CURSOR
     // QTBUG-28031: Click at bottom-right corner.
     {
         w.move(400, 200);
@@ -1137,7 +1164,7 @@ void tst_QMenuBar::check_menuPosition()
         QCOMPARE(menu.geometry().right() - 1, globalPos.x());
         menu.close();
     }
-#  endif // QTEST_NO_CURSOR
+#  endif // QT_NO_CURSOR
 }
 #endif
 
@@ -1175,6 +1202,11 @@ void tst_QMenuBar::task223138_triggered()
 
 void tst_QMenuBar::task256322_highlight()
 {
+    if (!QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)
+        || !QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)) {
+        QSKIP("Highlighting does not work correctly for minimal/offscreen platforms");
+    }
+
     QMainWindow win;
     win.menuBar()->setNativeMenuBar(false);  //we can't check the geometry of native menubars
     QMenu menu;
@@ -1210,7 +1242,7 @@ void tst_QMenuBar::task256322_highlight()
     QTRY_VERIFY(!menu2.isVisible());
     QVERIFY(!menu.isVisible());
 #ifdef Q_OS_MAC
-    if ((QSysInfo::MacintoshVersion >= QSysInfo::MV_10_7) && (win.menuBar()->activeAction() != nothing))
+    if (win.menuBar()->activeAction() != nothing)
         QEXPECT_FAIL("", "QTBUG-30565: Unstable test", Continue);
 #endif
     QTRY_COMPARE(win.menuBar()->activeAction(), nothing);
@@ -1393,7 +1425,7 @@ void tst_QMenuBar::cornerWidgets()
 
     QFETCH(Qt::Corner, corner);
 
-#if defined(Q_OS_OSX) || defined(Q_OS_WINCE)
+#if defined(Q_OS_OSX)
     QSKIP("Test interferes with native menu bars on this platform");
 #endif
 
@@ -1402,6 +1434,7 @@ void tst_QMenuBar::cornerWidgets()
     widget.setWindowTitle(QLatin1String(QTest::currentTestFunction()) + dataTag);
     QVBoxLayout *layout = new QVBoxLayout(&widget);
     QMenuBar *menuBar = new QMenuBar(&widget);
+    menuBar->setNativeMenuBar(false);
     layout->addWidget(menuBar);
     QMenu *fileMenu = menuBar->addMenu("File");
     fileMenu->addAction("Quit");
@@ -1488,6 +1521,25 @@ void tst_QMenuBar::taskQTBUG53205_crashReparentNested()
     testMenus.actions[0]->trigger();
 }
 
+// QTBUG-56526
+void tst_QMenuBar::platformMenu()
+{
+    QMenuBar menuBar;
+    QPlatformMenuBar *platformMenuBar = menuBar.platformMenuBar();
+    if (!platformMenuBar)
+        QSKIP("No platform menubar implementation available on this platform.");
+
+    // QMenu must not create a platform menu instance at creation time, because
+    // on Unity the type of the platform menu instance must be different (QGtk3Menu
+    // vs. QDbusPlatformMenu) depending on whether the menu is in the global menubar
+    // or a standalone context menu.
+    QMenu *menu = new QMenu(&menuBar);
+    QVERIFY(!menu->platformMenu());
+
+    menuBar.addMenu(menu);
+    QVERIFY(menu->platformMenu());
+}
+
 void tst_QMenuBar::slotForTaskQTBUG53205()
 {
     QWidget *parent = taskQTBUG53205MenuBar->parentWidget();
@@ -1495,7 +1547,114 @@ void tst_QMenuBar::slotForTaskQTBUG53205()
     taskQTBUG53205MenuBar->setParent(parent);
 }
 
+// Qt/Mac does not use the native popups/menubar
+#if !defined(Q_OS_DARWIN)
+void tst_QMenuBar::taskQTBUG46812_doNotLeaveMenubarHighlighted()
+{
+    QMainWindow mainWindow;
+    QWidget *centralWidget = new QWidget;
+    centralWidget->setFocusPolicy(Qt::StrongFocus);
+    mainWindow.setCentralWidget(centralWidget);
+    initWindowWithSimpleMenuBar(mainWindow);
 
+    mainWindow.show();
+    QApplication::setActiveWindow(&mainWindow);
+    QVERIFY(QTest::qWaitForWindowActive(&mainWindow));
+
+    QVERIFY(!mainWindow.menuBar()->hasFocus());
+    QCOMPARE(m_simpleActivatedCount, 0);
+
+    QTest::keyPress(&mainWindow, Qt::Key_Alt, Qt::AltModifier);
+    QVERIFY(!mainWindow.menuBar()->hasFocus());
+    QCOMPARE(m_simpleActivatedCount, 0);
+
+    QTest::keyPress(&mainWindow, Qt::Key_Z, Qt::AltModifier);
+    QVERIFY(!mainWindow.menuBar()->hasFocus());
+    QCOMPARE(m_simpleActivatedCount, 2); // the action AND the menu will activate
+
+    QTest::keyRelease(&mainWindow, Qt::Key_Alt, Qt::NoModifier);
+    QVERIFY(!mainWindow.menuBar()->hasFocus());
+    QCOMPARE(m_simpleActivatedCount, 2);
+
+    QTest::keyRelease(&mainWindow, Qt::Key_Z, Qt::NoModifier);
+    QVERIFY(!mainWindow.menuBar()->hasFocus());
+    QCOMPARE(m_simpleActivatedCount, 2);
+}
+#endif
+
+#ifdef Q_OS_MACOS
+extern bool tst_qmenubar_taskQTBUG56275(QMenuBar *);
+
+void tst_QMenuBar::taskQTBUG56275_reinsertMenuInParentlessQMenuBar()
+{
+    QMenuBar menubar;
+
+    QMenu *menu = new QMenu("menu", &menubar);
+    QMenu* submenu = menu->addMenu("submenu");
+    submenu->addAction("action1");
+    submenu->addAction("action2");
+    menu->addAction("action3");
+    menubar.addMenu(menu);
+
+    QTest::qWait(100);
+    menubar.clear();
+    menubar.addMenu(menu);
+    QTest::qWait(100);
+
+    QVERIFY(tst_qmenubar_taskQTBUG56275(&menubar));
+}
+
+void tst_QMenuBar::QTBUG_57404_existingMenuItemException()
+{
+    QMainWindow mw1;
+    QMainWindow mw2;
+    mw1.show();
+    mw2.show();
+
+    QMenuBar *mb = new QMenuBar(&mw1);
+    mw1.setMenuBar(mb);
+    mb->show();
+    QMenu *editMenu = new QMenu(QLatin1String("Edit"), &mw1);
+    mb->addMenu(editMenu);
+    QAction *copyAction = editMenu->addAction("&Copy");
+    copyAction->setShortcut(QKeySequence("Ctrl+C"));
+    QTest::ignoreMessage(QtWarningMsg, "Menu item \"&Copy\" has unsupported role QPlatformMenuItem::MenuRole(NoRole)");
+    copyAction->setMenuRole(QAction::NoRole);
+
+    QVERIFY(QTest::qWaitForWindowExposed(&mw2));
+    QTest::qWait(100);
+    mw2.close();
+    mw1.activateWindow();
+    QTest::qWait(100);
+    // No crash, all fine. Ideally, there should be only one warning.
+}
+#endif // Q_OS_MACOS
+
+void tst_QMenuBar::taskQTBUG55966_subMenuRemoved()
+{
+    QMainWindow window;
+    QMenuBar *menubar = window.menuBar();
+    QMenu *parentMenu = menubar->addMenu("Parent menu");
+
+    QAction *action = parentMenu->addAction("Action in parent menu");
+    QMenu *subMenu = new QMenu("Submenu");
+    action->setMenu(subMenu);
+    delete subMenu;
+
+    window.show();
+    QApplication::setActiveWindow(&window);
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QTest::qWait(500);
+}
+
+void tst_QMenuBar::QTBUG_58344_invalidIcon()
+{
+    QMenuBar menuBar;
+    QMenu menu("menu");
+    menu.addAction(QIcon("crash.png"), "crash");
+    menuBar.addMenu(&menu);
+    // No crash, all fine.
+}
 
 QTEST_MAIN(tst_QMenuBar)
 #include "tst_qmenubar.moc"

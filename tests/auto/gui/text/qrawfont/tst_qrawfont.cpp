@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -93,9 +88,12 @@ private slots:
     void multipleRawFontsFromData();
 
     void rawFontFromInvalidData();
+
+    void kernedAdvances();
 private:
     QString testFont;
     QString testFontBoldItalic;
+    QString testFontOs2V1;
 #endif // QT_NO_RAWFONT
 };
 
@@ -113,6 +111,7 @@ void tst_QRawFont::initTestCase()
 {
     testFont = QFINDTESTDATA("testfont.ttf");
     testFontBoldItalic = QFINDTESTDATA("testfont_bold_italic.ttf");
+    testFontOs2V1 = QFINDTESTDATA("testfont_os2_v1.ttf");
     if (testFont.isEmpty() || testFontBoldItalic.isEmpty())
         QFAIL("qrawfont unittest font files not found!");
 
@@ -187,6 +186,7 @@ void tst_QRawFont::correctFontData_data()
     QTest::addColumn<QFont::HintingPreference>("hintingPreference");
     QTest::addColumn<qreal>("unitsPerEm");
     QTest::addColumn<qreal>("pixelSize");
+    QTest::addColumn<int>("capHeight");
 
     int hintingPreferences[] = {
         int(QFont::PreferDefaultHinting),
@@ -210,7 +210,8 @@ void tst_QRawFont::correctFontData_data()
                 << QFont::Normal
                 << QFont::HintingPreference(*hintingPreference)
                 << qreal(1000.0)
-                << qreal(10.0);
+                << qreal(10.0)
+                << 7;
 
         fileName = testFontBoldItalic;
         title = fileName
@@ -224,7 +225,23 @@ void tst_QRawFont::correctFontData_data()
                 << QFont::Bold
                 << QFont::HintingPreference(*hintingPreference)
                 << qreal(1000.0)
-                << qreal(10.0);
+                << qreal(10.0)
+                << 7;
+
+        fileName = testFontOs2V1;
+        title = fileName
+              + QLatin1String(": hintingPreference=")
+              + QString::number(*hintingPreference);
+
+        QTest::newRow(qPrintable(title))
+                << fileName
+                << QString::fromLatin1("QtBidiTestFont")
+                << QFont::StyleNormal
+                << QFont::Normal
+                << QFont::HintingPreference(*hintingPreference)
+                << qreal(1000.0)
+                << qreal(10.0)
+                << 7;
 
         ++hintingPreference;
     }
@@ -239,6 +256,7 @@ void tst_QRawFont::correctFontData()
     QFETCH(QFont::HintingPreference, hintingPreference);
     QFETCH(qreal, unitsPerEm);
     QFETCH(qreal, pixelSize);
+    QFETCH(int, capHeight);
 
     QRawFont font(fileName, 10, hintingPreference);
     QVERIFY(font.isValid());
@@ -249,6 +267,11 @@ void tst_QRawFont::correctFontData()
     QCOMPARE(font.hintingPreference(), hintingPreference);
     QCOMPARE(font.unitsPerEm(), unitsPerEm);
     QCOMPARE(font.pixelSize(), pixelSize);
+
+    // Some platforms return the actual fractional height of the
+    // H character when the value is missing from the OS/2 table,
+    // so we ceil it off to match (any touched pixel counts).
+    QCOMPARE(qCeil(font.capHeight()), capHeight);
 }
 
 void tst_QRawFont::glyphIndices()
@@ -952,6 +975,38 @@ void tst_QRawFont::rawFontFromInvalidData()
     font.loadFromData(invalidData, 10, QFont::PreferDefaultHinting);
 
     QVERIFY(!font.isValid());
+}
+
+#define FUZZY_LTEQ(X, Y) (X < Y || qFuzzyCompare(X, Y))
+
+void tst_QRawFont::kernedAdvances()
+{
+    const int emSquareSize = 1000;
+    const qreal pixelSize = 16.0;
+    const int underScoreAW = 500;
+    const int underscoreTwoKerning = -500;
+    const qreal errorMargin = 1.0 / 16.0; // Fixed point error margin
+
+    QRawFont font(testFont, pixelSize);
+    QVERIFY(font.isValid());
+
+    QVector<quint32> glyphIndexes = font.glyphIndexesForString(QStringLiteral("__"));
+    QCOMPARE(glyphIndexes.size(), 2);
+
+    QVector<QPointF> advances = font.advancesForGlyphIndexes(glyphIndexes, QRawFont::KernedAdvances);
+    QCOMPARE(advances.size(), 2);
+
+    qreal expectedAdvanceWidth = pixelSize * underScoreAW / emSquareSize;
+    QVERIFY(FUZZY_LTEQ(qAbs(advances.at(0).x() - expectedAdvanceWidth), errorMargin));
+
+    glyphIndexes = font.glyphIndexesForString(QStringLiteral("_2"));
+    QCOMPARE(glyphIndexes.size(), 2);
+
+    advances = font.advancesForGlyphIndexes(glyphIndexes, QRawFont::KernedAdvances);
+    QCOMPARE(advances.size(), 2);
+
+    expectedAdvanceWidth = pixelSize * (underScoreAW + underscoreTwoKerning) / emSquareSize;
+    QVERIFY(FUZZY_LTEQ(qAbs(advances.at(0).x() - expectedAdvanceWidth), errorMargin));
 }
 
 #endif // QT_NO_RAWFONT

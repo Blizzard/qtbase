@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,7 +41,7 @@
 #include <QtGui/QOffscreenSurface>
 #include <QtGui/QGenericMatrix>
 #include <QtGui/QMatrix4x4>
-#include <QtGui/private/qopengltextureblitter_p.h>
+#include <QtGui/qopengltextureblitter.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qopenglextensions_p.h>
 #include <qpa/qplatformintegration.h>
@@ -72,6 +67,7 @@ class tst_QOpenGL : public QObject
 Q_OBJECT
 
 private slots:
+    void initTestCase();
     void sharedResourceCleanup_data();
     void sharedResourceCleanup();
     void multiGroupSharedResourceCleanup_data();
@@ -91,6 +87,7 @@ private slots:
     void fboMRT_differentFormats();
     void openGLPaintDevice_data();
     void openGLPaintDevice();
+    void openGLPaintDeviceWithChangingContext();
     void aboutToBeDestroyed();
     void sizeLessWindow();
     void QTBUG15621_triangulatingStrokerDivZero();
@@ -114,6 +111,7 @@ private slots:
     void vaoCreate();
     void bufferCreate();
     void bufferMapRange();
+    void defaultQGLCurrentBuffer();
 };
 
 struct SharedResourceTracker
@@ -206,6 +204,12 @@ static QSurface *createSurface(int surfaceClass)
         return offscreenSurface;
     }
     return 0;
+}
+
+void tst_QOpenGL::initTestCase()
+{
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::OpenGL))
+        QSKIP("OpenGL is not supported on this platform.");
 }
 
 static void common_data()
@@ -385,6 +389,7 @@ static bool fuzzyComparePixels(const QRgb testPixel, const QRgb refPixel, const 
 
 static void fuzzyCompareImages(const QImage &testImage, const QImage &referenceImage, const char* file, int line)
 {
+    QCOMPARE(testImage.devicePixelRatio(), referenceImage.devicePixelRatio());
     QCOMPARE(testImage.width(), referenceImage.width());
     QCOMPARE(testImage.height(), referenceImage.height());
 
@@ -952,6 +957,14 @@ void tst_QOpenGL::openGLPaintDevice_data()
     QTest::newRow("Using QOffscreenSurface - RGB16") << int(QSurface::Offscreen) << QImage::Format_RGB16;
 }
 
+static void drawColoredRects(QPainter *p, const QSize &size)
+{
+    p->fillRect(0, 0, size.width() / 2, size.height() / 2, Qt::red);
+    p->fillRect(size.width() / 2, 0, size.width() / 2, size.height() / 2, Qt::green);
+    p->fillRect(size.width() / 2, size.height() / 2, size.width() / 2, size.height() / 2, Qt::blue);
+    p->fillRect(0, size.height() / 2, size.width() / 2, size.height() / 2, Qt::white);
+}
+
 void tst_QOpenGL::openGLPaintDevice()
 {
 #if defined(Q_OS_LINUX) && defined(Q_CC_GNU) && !defined(__x86_64__)
@@ -974,10 +987,7 @@ void tst_QOpenGL::openGLPaintDevice()
 
     QImage image(size, imageFormat);
     QPainter p(&image);
-    p.fillRect(0, 0, image.width() / 2, image.height() / 2, Qt::red);
-    p.fillRect(image.width() / 2, 0, image.width() / 2, image.height() / 2, Qt::green);
-    p.fillRect(image.width() / 2, image.height() / 2, image.width() / 2, image.height() / 2, Qt::blue);
-    p.fillRect(0, image.height() / 2, image.width() / 2, image.height() / 2, Qt::white);
+    drawColoredRects(&p, image.size());
     p.end();
 
     QOpenGLFramebufferObject fbo(size);
@@ -985,10 +995,7 @@ void tst_QOpenGL::openGLPaintDevice()
 
     QOpenGLPaintDevice device(size);
     QVERIFY(p.begin(&device));
-    p.fillRect(0, 0, image.width() / 2, image.height() / 2, Qt::red);
-    p.fillRect(image.width() / 2, 0, image.width() / 2, image.height() / 2, Qt::green);
-    p.fillRect(image.width() / 2, image.height() / 2, image.width() / 2, image.height() / 2, Qt::blue);
-    p.fillRect(0, image.height() / 2, image.width() / 2, image.height() / 2, Qt::white);
+    drawColoredRects(&p, image.size());
     p.end();
 
     QImage actual = fbo.toImage().convertToFormat(imageFormat);
@@ -1012,6 +1019,59 @@ void tst_QOpenGL::openGLPaintDevice()
     actual = fbo.toImage().convertToFormat(imageFormat);
     QCOMPARE(image.size(), actual.size());
     QCOMPARE(image, actual);
+}
+
+void tst_QOpenGL::openGLPaintDeviceWithChangingContext()
+{
+    QScopedPointer<QSurface> surface(createSurface(QSurface::Window));
+    const QSize size(512, 512);
+
+    // QOpenGLPaintDevice has a thread-local paint engine. Therefore render
+    // twice, with a different context and device. Under the hood it will
+    // still use the same paint engine!
+
+    QOpenGLContext ctx;
+    QVERIFY(ctx.create());
+    QVERIFY(ctx.makeCurrent(surface.data()));
+
+    QOpenGLFramebufferObject fbo(size);
+    QVERIFY(fbo.bind());
+
+    QOpenGLPaintDevice device(size);
+
+    QPainter p;
+    QVERIFY(p.begin(&device));
+    drawColoredRects(&p, size);
+    p.end();
+
+    QImage img1 = fbo.toImage();
+
+    QOpenGLContext ctx2;
+    // When supported, test the special case, where the second context is
+    // totally incompatible due to being a core profile one.
+    QSurfaceFormat coreFormat;
+    coreFormat.setVersion(3, 2);
+    coreFormat.setProfile(QSurfaceFormat::CoreProfile);
+    ctx2.setFormat(coreFormat);
+    if (!ctx2.create() || !ctx2.makeCurrent(surface.data())) {
+        ctx2.setFormat(QSurfaceFormat());
+        QVERIFY(ctx2.create());
+    }
+
+    QVERIFY(ctx2.makeCurrent(surface.data()));
+
+    QOpenGLFramebufferObject fbo2(size);
+    QVERIFY(fbo2.bind());
+
+    QOpenGLPaintDevice device2(size);
+
+    QVERIFY(p.begin(&device2));
+    drawColoredRects(&p, size);
+    p.end();
+
+    QImage img2 = fbo2.toImage();
+
+    QFUZZY_COMPARE_IMAGES(img1, img2);
 }
 
 void tst_QOpenGL::aboutToBeDestroyed()
@@ -1522,6 +1582,33 @@ void tst_QOpenGL::bufferMapRange()
     buf.unmap();
 
     buf.destroy();
+    ctx->doneCurrent();
+}
+
+void tst_QOpenGL::defaultQGLCurrentBuffer()
+{
+    QScopedPointer<QSurface> surface(createSurface(QSurface::Window));
+    QScopedPointer<QOpenGLContext> ctx(new QOpenGLContext);
+    ctx->create();
+    ctx->makeCurrent(surface.data());
+
+    // Bind default FBO on the current context, and record what's the current QGL FBO. It should
+    // be Q_NULLPTR because the default platform OpenGL FBO is not backed by a
+    // QOpenGLFramebufferObject.
+    QOpenGLFramebufferObject::bindDefault();
+    QOpenGLFramebufferObject *defaultQFBO = QOpenGLContextPrivate::get(ctx.data())->qgl_current_fbo;
+
+    // Create new FBO, bind it, and see that the QGL FBO points to the newly created FBO.
+    QScopedPointer<QOpenGLFramebufferObject> obj(new QOpenGLFramebufferObject(128, 128));
+    obj->bind();
+    QOpenGLFramebufferObject *customQFBO = QOpenGLContextPrivate::get(ctx.data())->qgl_current_fbo;
+    QVERIFY(defaultQFBO != customQFBO);
+
+    // Bind the default FBO, and check that the QGL FBO points to the original FBO object.
+    QOpenGLFramebufferObject::bindDefault();
+    QOpenGLFramebufferObject *finalQFBO = QOpenGLContextPrivate::get(ctx.data())->qgl_current_fbo;
+    QCOMPARE(defaultQFBO, finalQFBO);
+
     ctx->doneCurrent();
 }
 

@@ -1,6 +1,8 @@
 TEMPLATE=subdirs
 SUBDIRS=\
     qcoreapplication \
+    qdeadlinetimer \
+    qelapsedtimer \
     qeventdispatcher \
     qeventloop \
     qmath \
@@ -31,11 +33,14 @@ SUBDIRS=\
     qobject \
     qsocketnotifier
 
-!contains(QT_CONFIG, private_tests): SUBDIRS -= \
+!qtConfig(private_tests): SUBDIRS -= \
     qsocketnotifier \
     qsharedmemory
 
 # This test is only applicable on Windows
 !win32*|winrt: SUBDIRS -= qwineventnotifier
 
-android|ios: SUBDIRS -= qsharedmemory qsystemsemaphore
+android|uikit: SUBDIRS -= qclipboard qobject qsharedmemory qsystemsemaphore
+
+!qtConfig(systemsemaphore): SUBDIRS -= \
+    qsystemsemaphore

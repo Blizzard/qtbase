@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qcolordialog.h"
-
-#ifndef QT_NO_COLORDIALOG
 
 #include "qapplication.h"
 #include "qdesktopwidget.h"
@@ -44,7 +48,9 @@
 #include "qlabel.h"
 #include "qlayout.h"
 #include "qlineedit.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include "qpainter.h"
 #include "qpixmap.h"
 #include "qpushbutton.h"
@@ -86,7 +92,7 @@ public:
         SetColorAll = ShowColor | SelectColor
     };
 
-    QColorDialogPrivate() : options(new QColorDialogOptions)
+    QColorDialogPrivate() : options(QColorDialogOptions::create())
 #ifdef Q_OS_WIN32
         , updateTimer(0)
 #endif
@@ -349,7 +355,7 @@ void QWellArray::paintCell(QPainter* p, int row, int col, const QRect &rect)
     paintCellContents(p, row, col, opt.rect.adjusted(dfw, dfw, -dfw, -dfw));
 }
 
-/*!
+/*
   Reimplement this function to change the contents of the well array.
  */
 void QWellArray::paintCellContents(QPainter *p, int row, int col, const QRect &r)
@@ -423,7 +429,7 @@ void QWellArray::setSelected(int row, int col)
     if (row >= 0)
         emit selected(row, col);
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (isVisible() && qobject_cast<QMenu*>(parentWidget()))
         parentWidget()->close();
 #endif
@@ -435,16 +441,12 @@ void QWellArray::focusInEvent(QFocusEvent*)
     emit currentChanged(curRow, curCol);
 }
 
-/*!\reimp
-*/
 
 void QWellArray::focusOutEvent(QFocusEvent*)
 {
     updateCell(curRow, curCol);
 }
 
-/*\reimp
-*/
 void QWellArray::keyPressEvent(QKeyEvent* e)
 {
     switch(e->key()) {                        // Look at the key code
@@ -1174,14 +1176,10 @@ QColorShower::QColorShower(QColorDialog *parent)
     gl->setMargin(gl->spacing());
     lab = new QColorShowLabel(this);
 
-#ifndef Q_OS_WINCE
 #ifdef QT_SMALL_COLORDIALOG
     lab->setMinimumHeight(60);
 #endif
     lab->setMinimumWidth(60);
-#else
-    lab->setMinimumWidth(20);
-#endif
 
 // For QVGA screens only the comboboxes and color label are visible.
 // For nHD screens only color and luminence pickers and color label are visible.
@@ -1696,7 +1694,7 @@ void QColorDialogPrivate::initWidgets()
 
     leftLay = 0;
 
-#if defined(Q_OS_WINCE) || defined(QT_SMALL_COLORDIALOG)
+#if defined(QT_SMALL_COLORDIALOG)
     smallDisplay = true;
     const int lumSpace = 20;
 #else
@@ -1719,7 +1717,7 @@ void QColorDialogPrivate::initWidgets()
         leftLay->addWidget(lblBasicColors);
         leftLay->addWidget(standard);
 
-#if !defined(Q_OS_WINCE) && !defined(QT_SMALL_COLORDIALOG)
+#if !defined(QT_SMALL_COLORDIALOG)
         // The screen color picker button
         screenColorPickerButton = new QPushButton();
         leftLay->addWidget(screenColorPickerButton);
@@ -1728,9 +1726,7 @@ void QColorDialogPrivate::initWidgets()
         q->connect(screenColorPickerButton, SIGNAL(clicked()), SLOT(_q_pickScreenColor()));
 #endif
 
-#if !defined(Q_OS_WINCE)
         leftLay->addStretch();
-#endif
 
         custom = new QColorWell(q, customColorRows, colorColumns, QColorDialogOptions::customColors());
         custom->setAcceptDrops(true);
@@ -1862,13 +1858,16 @@ void QColorDialogPrivate::retranslateStrings()
 
 bool QColorDialogPrivate::canBeNativeDialog() const
 {
-    Q_Q(const QColorDialog);
+    // Don't use Q_Q here! This function is called from ~QDialog,
+    // so Q_Q calling q_func() invokes undefined behavior (invalid cast in q_func()).
+    const QDialog * const q = static_cast<const QDialog*>(q_ptr);
     if (nativeDialogInUse)
         return true;
-    if (q->testAttribute(Qt::WA_DontShowOnScreen))
+    if (QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs)
+        || q->testAttribute(Qt::WA_DontShowOnScreen)
+        || (options->options() & QColorDialog::DontUseNativeDialog)) {
         return false;
-    if (q->options() & QColorDialog::DontUseNativeDialog)
-        return false;
+    }
 
     QLatin1String staticName(QColorDialog::staticMetaObject.className());
     QLatin1String dynamicName(q->metaObject()->className());
@@ -1924,10 +1923,8 @@ static const Qt::WindowFlags DefaultWindowFlags =
     Constructs a color dialog with the given \a parent.
 */
 QColorDialog::QColorDialog(QWidget *parent)
-    : QDialog(*new QColorDialogPrivate, parent, DefaultWindowFlags)
+    : QColorDialog(QColor(Qt::white), parent)
 {
-    Q_D(QColorDialog);
-    d->init(Qt::white);
 }
 
 /*!
@@ -2249,10 +2246,13 @@ bool QColorDialogPrivate::handleColorPickingMouseButtonRelease(QMouseEvent *e)
 bool QColorDialogPrivate::handleColorPickingKeyPress(QKeyEvent *e)
 {
     Q_Q(QColorDialog);
+#if QT_CONFIG(shortcut)
     if (e->matches(QKeySequence::Cancel)) {
         releaseColorPicking();
         q->setCurrentColor(beforeScreenColorPicking);
-    } else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+    } else
+#endif
+      if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
         q->setCurrentColor(grabScreenColor(QCursor::pos()));
         releaseColorPicking();
     }
@@ -2289,6 +2289,3 @@ QT_END_NAMESPACE
 
 #include "qcolordialog.moc"
 #include "moc_qcolordialog.cpp"
-
-#endif // QT_NO_COLORDIALOG
-

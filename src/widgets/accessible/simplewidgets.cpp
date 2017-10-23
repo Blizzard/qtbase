@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,25 +39,50 @@
 
 #include "simplewidgets_p.h"
 
+#if QT_CONFIG(abstractbutton)
 #include <qabstractbutton.h>
+#endif
+#if QT_CONFIG(checkbox)
 #include <qcheckbox.h>
+#endif
+#if QT_CONFIG(pushbutton)
 #include <qpushbutton.h>
+#endif
+#if QT_CONFIG(progressbar)
 #include <qprogressbar.h>
+#endif
+#if QT_CONFIG(statusbar)
 #include <qstatusbar.h>
+#endif
+#if QT_CONFIG(radiobutton)
 #include <qradiobutton.h>
+#endif
+#if QT_CONFIG(toolbutton)
 #include <qtoolbutton.h>
+#endif
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
+#if QT_CONFIG(label)
 #include <qlabel.h>
+#endif
+#if QT_CONFIG(groupbox)
 #include <qgroupbox.h>
+#endif
+#if QT_CONFIG(lcdnumber)
 #include <qlcdnumber.h>
+#endif
+#if QT_CONFIG(lineedit)
 #include <qlineedit.h>
 #include <private/qlineedit_p.h>
+#endif
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtextdocument.h>
 #include <qwindow.h>
 #include <private/qwindowcontainer_p.h>
 #include <QtCore/qvarlengtharray.h>
+#include <QtGui/qvalidator.h>
 
 #ifdef Q_OS_MAC
 #include <qfocusframe.h>
@@ -66,6 +97,7 @@ extern QList<QWidget*> childWidgets(const QWidget *widget);
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
 
+#if QT_CONFIG(abstractbutton)
 /*!
   \class QAccessibleButton
   \brief The QAccessibleButton class implements the QAccessibleInterface for button type widgets.
@@ -103,7 +135,7 @@ QString QAccessibleButton::text(QAccessible::Text t) const
     switch (t) {
     case QAccessible::Accelerator:
     {
-#ifndef QT_NO_SHORTCUT
+#if QT_CONFIG(shortcut) && QT_CONFIG(pushbutton)
         QPushButton *pb = qobject_cast<QPushButton*>(object());
         if (pb && pb->isDefault())
             str = QKeySequence(Qt::Key_Enter).toString(QKeySequence::NativeText);
@@ -130,24 +162,30 @@ QAccessible::State QAccessibleButton::state() const
     QAccessible::State state = QAccessibleWidget::state();
 
     QAbstractButton *b = button();
+#if QT_CONFIG(checkbox)
     QCheckBox *cb = qobject_cast<QCheckBox *>(b);
+#endif
     if (b->isCheckable())
         state.checkable = true;
     if (b->isChecked())
         state.checked = true;
+#if QT_CONFIG(checkbox)
     else if (cb && cb->checkState() == Qt::PartiallyChecked)
         state.checkStateMixed = true;
+#endif
     if (b->isDown())
         state.pressed = true;
+#if QT_CONFIG(pushbutton)
     QPushButton *pb = qobject_cast<QPushButton*>(b);
     if (pb) {
         if (pb->isDefault())
             state.defaultButton = true;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         if (pb->menu())
             state.hasPopup = true;
 #endif
     }
+#endif
 
     return state;
 }
@@ -158,17 +196,22 @@ QRect QAccessibleButton::rect() const
     if (!ab->isVisible())
         return QRect();
 
+#if QT_CONFIG(checkbox)
     if (QCheckBox *cb = qobject_cast<QCheckBox *>(ab)) {
         QPoint wpos = cb->mapToGlobal(QPoint(0, 0));
         QStyleOptionButton opt;
         cb->initStyleOption(&opt);
         return cb->style()->subElementRect(QStyle::SE_CheckBoxClickRect, &opt, cb).translated(wpos);
-    } else if (QRadioButton *rb = qobject_cast<QRadioButton *>(ab)) {
+    }
+#endif
+#if QT_CONFIG(radiobutton)
+    else if (QRadioButton *rb = qobject_cast<QRadioButton *>(ab)) {
         QPoint wpos = rb->mapToGlobal(QPoint(0, 0));
         QStyleOptionButton opt;
         rb->initStyleOption(&opt);
         return rb->style()->subElementRect(QStyle::SE_RadioButtonClickRect, &opt, rb).translated(wpos);
     }
+#endif
     return QAccessibleWidget::rect();
 }
 
@@ -176,7 +219,7 @@ QAccessible::Role QAccessibleButton::role() const
 {
     QAbstractButton *ab = button();
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (QPushButton *pb = qobject_cast<QPushButton*>(ab)) {
         if (pb->menu())
             return QAccessible::ButtonMenu;
@@ -219,7 +262,7 @@ void QAccessibleButton::doAction(const QString &actionName)
         return;
     if (actionName == pressAction() ||
         actionName == showMenuAction()) {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         QPushButton *pb = qobject_cast<QPushButton*>(object());
         if (pb && pb->menu())
             pb->showMenu();
@@ -242,9 +285,9 @@ QStringList QAccessibleButton::keyBindingsForAction(const QString &actionName) c
     }
     return QStringList();
 }
+#endif // QT_CONFIG(abstractbutton)
 
-
-#ifndef QT_NO_TOOLBUTTON
+#if QT_CONFIG(toolbutton)
 /*!
   \class QAccessibleToolButton
   \brief The QAccessibleToolButton class implements the QAccessibleInterface for tool buttons.
@@ -273,7 +316,7 @@ QToolButton *QAccessibleToolButton::toolButton() const
 */
 bool QAccessibleToolButton::isSplitButton() const
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     return toolButton()->menu() && toolButton()->popupMode() == QToolButton::MenuButtonPopup;
 #else
     return false;
@@ -285,7 +328,7 @@ QAccessible::State QAccessibleToolButton::state() const
     QAccessible::State st = QAccessibleButton::state();
     if (toolButton()->autoRaise())
         st.hotTracked = true;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (toolButton()->menu())
         st.hasPopup = true;
 #endif
@@ -299,9 +342,8 @@ int QAccessibleToolButton::childCount() const
 
 QAccessible::Role QAccessibleToolButton::role() const
 {
+#if QT_CONFIG(menu)
     QAbstractButton *ab = button();
-
-#ifndef QT_NO_MENU
     QToolButton *tb = qobject_cast<QToolButton*>(ab);
     if (!tb->menu())
         return tb->isCheckable() ? QAccessible::CheckBox : QAccessible::PushButton;
@@ -314,11 +356,13 @@ QAccessible::Role QAccessibleToolButton::role() const
 
 QAccessibleInterface *QAccessibleToolButton::child(int index) const
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (index == 0 && toolButton()->menu())
     {
         return QAccessible::queryAccessibleInterface(toolButton()->menu());
     }
+#else
+    Q_UNUSED(index)
 #endif
     return 0;
 }
@@ -333,10 +377,12 @@ QStringList QAccessibleToolButton::actionNames() const
 {
     QStringList names;
     if (widget()->isEnabled()) {
+#if QT_CONFIG(menu)
         if (toolButton()->menu())
             names << showMenuAction();
         if (toolButton()->popupMode() != QToolButton::InstantPopup)
             names << QAccessibleButton::actionNames();
+#endif
     }
     return names;
 }
@@ -349,19 +395,19 @@ void QAccessibleToolButton::doAction(const QString &actionName)
     if (actionName == pressAction()) {
         button()->click();
     } else if (actionName == showMenuAction()) {
+#if QT_CONFIG(menu)
         if (toolButton()->popupMode() != QToolButton::InstantPopup) {
             toolButton()->setDown(true);
-#ifndef QT_NO_MENU
             toolButton()->showMenu();
-#endif
         }
+#endif
     } else {
         QAccessibleButton::doAction(actionName);
     }
 
 }
 
-#endif // QT_NO_TOOLBUTTON
+#endif // QT_CONFIG(toolbutton)
 
 /*!
   \class QAccessibleDisplay
@@ -382,6 +428,7 @@ QAccessibleDisplay::QAccessibleDisplay(QWidget *w, QAccessible::Role role)
 
 QAccessible::Role QAccessibleDisplay::role() const
 {
+#if QT_CONFIG(label)
     QLabel *l = qobject_cast<QLabel*>(object());
     if (l) {
         if (l->pixmap())
@@ -390,17 +437,20 @@ QAccessible::Role QAccessibleDisplay::role() const
         if (l->picture())
             return QAccessible::Graphic;
 #endif
-#ifndef QT_NO_MOVIE
+#if QT_CONFIG(movie)
         if (l->movie())
             return QAccessible::Animation;
 #endif
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
     } else if (qobject_cast<QProgressBar*>(object())) {
         return QAccessible::ProgressBar;
 #endif
+#if QT_CONFIG(statusbar)
     } else if (qobject_cast<QStatusBar*>(object())) {
         return QAccessible::StatusBar;
+#endif
     }
+#endif
     return QAccessibleWidget::role();
 }
 
@@ -411,7 +461,9 @@ QString QAccessibleDisplay::text(QAccessible::Text t) const
     case QAccessible::Name:
         str = widget()->accessibleName();
         if (str.isEmpty()) {
-            if (qobject_cast<QLabel*>(object())) {
+            if (false) {
+#if QT_CONFIG(label)
+            } else if (qobject_cast<QLabel*>(object())) {
                 QLabel *label = qobject_cast<QLabel*>(object());
                 str = label->text();
 #ifndef QT_NO_TEXTHTMLPARSER
@@ -422,9 +474,12 @@ QString QAccessibleDisplay::text(QAccessible::Text t) const
                     str = doc.toPlainText();
                 }
 #endif
+#ifndef QT_NO_SHORTCUT
                 if (label->buddy())
                     str = qt_accStripAmp(str);
-#ifndef QT_NO_LCDNUMBER
+#endif
+#endif // QT_CONFIG(label)
+#if QT_CONFIG(lcdnumber)
             } else if (qobject_cast<QLCDNumber*>(object())) {
                 QLCDNumber *l = qobject_cast<QLCDNumber*>(object());
                 if (l->digitCount())
@@ -432,13 +487,15 @@ QString QAccessibleDisplay::text(QAccessible::Text t) const
                 else
                     str = QString::number(l->intValue());
 #endif
+#if QT_CONFIG(statusbar)
             } else if (qobject_cast<QStatusBar*>(object())) {
                 return qobject_cast<QStatusBar*>(object())->currentMessage();
+#endif
             }
         }
         break;
     case QAccessible::Value:
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
         if (qobject_cast<QProgressBar*>(object()))
             str = QString::number(qobject_cast<QProgressBar*>(object())->value());
 #endif
@@ -456,21 +513,15 @@ QVector<QPair<QAccessibleInterface*, QAccessible::Relation> >
 QAccessibleDisplay::relations(QAccessible::Relation match /* = QAccessible::AllRelations */) const
 {
     QVector<QPair<QAccessibleInterface*, QAccessible::Relation> > rels = QAccessibleWidget::relations(match);
+#if QT_CONFIG(shortcut) && QT_CONFIG(label)
     if (match & QAccessible::Labelled) {
-        QVarLengthArray<QObject *, 4> relatedObjects;
-
-#ifndef QT_NO_SHORTCUT
         if (QLabel *label = qobject_cast<QLabel*>(object())) {
-            relatedObjects.append(label->buddy());
-        }
-#endif
-        for (int i = 0; i < relatedObjects.count(); ++i) {
             const QAccessible::Relation rel = QAccessible::Labelled;
-            QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(relatedObjects.at(i));
-            if (iface)
+            if (QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(label->buddy()))
                 rels.append(qMakePair(iface, rel));
         }
     }
+#endif
     return rels;
 }
 
@@ -487,36 +538,44 @@ QString QAccessibleDisplay::imageDescription() const
 #ifndef QT_NO_TOOLTIP
     return widget()->toolTip();
 #else
-    return QString::null;
+    return QString();
 #endif
 }
 
 /*! \internal */
 QSize QAccessibleDisplay::imageSize() const
 {
+#if QT_CONFIG(label)
     QLabel *label = qobject_cast<QLabel *>(widget());
     if (!label)
+#endif
         return QSize();
+#if QT_CONFIG(label)
     const QPixmap *pixmap = label->pixmap();
     if (!pixmap)
         return QSize();
     return pixmap->size();
+#endif
 }
 
 /*! \internal */
 QPoint QAccessibleDisplay::imagePosition() const
 {
+#if QT_CONFIG(label)
     QLabel *label = qobject_cast<QLabel *>(widget());
     if (!label)
+#endif
         return QPoint();
+#if QT_CONFIG(label)
     const QPixmap *pixmap = label->pixmap();
     if (!pixmap)
         return QPoint();
 
     return QPoint(label->mapToGlobal(label->pos()));
+#endif
 }
 
-#ifndef QT_NO_GROUPBOX
+#if QT_CONFIG(groupbox)
 QAccessibleGroupBox::QAccessibleGroupBox(QWidget *w)
 : QAccessibleWidget(w)
 {
@@ -536,9 +595,11 @@ QString QAccessibleGroupBox::text(QAccessible::Text t) const
         case QAccessible::Name:
             txt = qt_accStripAmp(groupBox()->title());
             break;
+#if QT_CONFIG(tooltip)
         case QAccessible::Description:
             txt = groupBox()->toolTip();
             break;
+#endif
         case QAccessible::Accelerator:
             txt = qt_accHotKey(groupBox()->title());
             break;
@@ -570,8 +631,8 @@ QAccessibleGroupBox::relations(QAccessible::Relation match /* = QAccessible::All
 
     if ((match & QAccessible::Labelled) && (!groupBox()->title().isEmpty())) {
         const QList<QWidget*> kids = childWidgets(widget());
-        for (int i = 0; i < kids.count(); ++i) {
-            QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(kids.at(i));
+        for (QWidget *kid : kids) {
+            QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(kid);
             if (iface)
                 rels.append(qMakePair(iface, QAccessible::Relation(QAccessible::Labelled)));
         }
@@ -602,7 +663,7 @@ QStringList QAccessibleGroupBox::keyBindingsForAction(const QString &) const
 
 #endif
 
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
 /*!
   \class QAccessibleLineEdit
   \brief The QAccessibleLineEdit class implements the QAccessibleInterface for widgets with editable text
@@ -654,11 +715,13 @@ void QAccessibleLineEdit::setText(QAccessible::Text t, const QString &text)
     }
 
     QString newText = text;
+#if QT_CONFIG(validator)
     if (lineEdit()->validator()) {
         int pos = 0;
         if (lineEdit()->validator()->validate(newText, pos) != QValidator::Acceptable)
             return;
     }
+#endif
     lineEdit()->setText(newText);
 }
 
@@ -837,9 +900,9 @@ void QAccessibleLineEdit::replaceText(int startOffset, int endOffset, const QStr
     lineEdit()->setText(lineEdit()->text().replace(startOffset, endOffset - startOffset, text));
 }
 
-#endif // QT_NO_LINEEDIT
+#endif // QT_CONFIG(lineedit)
 
-#ifndef QT_NO_PROGRESSBAR
+#if QT_CONFIG(progressbar)
 QAccessibleProgressBar::QAccessibleProgressBar(QWidget *o)
     : QAccessibleDisplay(o)
 {

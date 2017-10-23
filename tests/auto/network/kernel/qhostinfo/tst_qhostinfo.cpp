@@ -1,31 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -58,7 +54,6 @@
 #endif
 
 #include <time.h>
-#include <qlibrary.h>
 #if defined(Q_OS_WIN)
 #include <windows.h>
 #else
@@ -70,11 +65,7 @@
 #include "private/qhostinfo_p.h"
 
 #if !defined(QT_NO_GETADDRINFO)
-# if !defined(Q_OS_WINCE)
 #  include <sys/types.h>
-# else
-#  include <types.h>
-# endif
 # if defined(Q_OS_UNIX)
 #  include <sys/socket.h>
 # endif
@@ -92,23 +83,19 @@ class tst_QHostInfo : public QObject
 {
     Q_OBJECT
 
-public:
-    tst_QHostInfo();
-    virtual ~tst_QHostInfo();
-
-
-public slots:
-    void init();
-    void cleanup();
-    void initTestCase();
-
 private slots:
+    void init();
+    void initTestCase();
     void getSetCheck();
     void staticInformation();
     void lookupIPv4_data();
     void lookupIPv4();
     void lookupIPv6_data();
     void lookupIPv6();
+    void lookupConnectToFunctionPointer_data();
+    void lookupConnectToFunctionPointer();
+    void lookupConnectToLambda_data();
+    void lookupConnectToLambda();
     void reverseLookup_data();
     void reverseLookup();
 
@@ -169,14 +156,6 @@ void tst_QHostInfo::staticInformation()
     qDebug() << "Domain name:" << QHostInfo::localDomainName();
 }
 
-tst_QHostInfo::tst_QHostInfo()
-{
-}
-
-tst_QHostInfo::~tst_QHostInfo()
-{
-}
-
 void tst_QHostInfo::initTestCase()
 {
     QVERIFY(QtNetworkSettings::verifyTestNetworkSettings());
@@ -235,10 +214,6 @@ void tst_QHostInfo::init()
 
     QFETCH_GLOBAL(bool, cache);
     qt_qhostinfo_enable_cache(cache);
-}
-
-void tst_QHostInfo::cleanup()
-{
 }
 
 void tst_QHostInfo::lookupIPv4_data()
@@ -335,6 +310,74 @@ void tst_QHostInfo::lookupIPv6()
     QCOMPARE(tmp.join(' ').toLower(), expected.join(' ').toLower());
 }
 
+void tst_QHostInfo::lookupConnectToFunctionPointer_data()
+{
+    lookupIPv4_data();
+}
+
+void tst_QHostInfo::lookupConnectToFunctionPointer()
+{
+    QFETCH(QString, hostname);
+    QFETCH(int, err);
+    QFETCH(QString, addresses);
+
+    lookupDone = false;
+    QHostInfo::lookupHost(hostname, this, &tst_QHostInfo::resultsReady);
+
+    QTestEventLoop::instance().enterLoop(10);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(lookupDone);
+
+    if (int(lookupResults.error()) != int(err))
+        qWarning() << hostname << "=>" << lookupResults.errorString();
+    QCOMPARE(int(lookupResults.error()), int(err));
+
+    QStringList tmp;
+    for (const auto &result : lookupResults.addresses())
+        tmp.append(result.toString());
+    tmp.sort();
+
+    QStringList expected = addresses.split(' ');
+    expected.sort();
+
+    QCOMPARE(tmp.join(' '), expected.join(' '));
+}
+
+void tst_QHostInfo::lookupConnectToLambda_data()
+{
+    lookupIPv4_data();
+}
+
+void tst_QHostInfo::lookupConnectToLambda()
+{
+    QFETCH(QString, hostname);
+    QFETCH(int, err);
+    QFETCH(QString, addresses);
+
+    lookupDone = false;
+    QHostInfo::lookupHost(hostname, [=](const QHostInfo &hostInfo) {
+        resultsReady(hostInfo);
+    });
+
+    QTestEventLoop::instance().enterLoop(10);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+    QVERIFY(lookupDone);
+
+    if (int(lookupResults.error()) != int(err))
+        qWarning() << hostname << "=>" << lookupResults.errorString();
+    QCOMPARE(int(lookupResults.error()), int(err));
+
+    QStringList tmp;
+    for (int i = 0; i < lookupResults.addresses().count(); ++i)
+        tmp.append(lookupResults.addresses().at(i).toString());
+    tmp.sort();
+
+    QStringList expected = addresses.split(' ');
+    expected.sort();
+
+    QCOMPARE(tmp.join(' '), expected.join(' '));
+}
+
 void tst_QHostInfo::reverseLookup_data()
 {
     QTest::addColumn<QString>("address");
@@ -423,11 +466,7 @@ protected:
 void tst_QHostInfo::threadSafety()
 {
     const int nattempts = 5;
-#if defined(Q_OS_WINCE)
-    const int runs = 10;
-#else
     const int runs = 100;
-#endif
     LookupThread thr[nattempts];
     for (int j = 0; j < runs; ++j) {
         for (int i = 0; i < nattempts; ++i)

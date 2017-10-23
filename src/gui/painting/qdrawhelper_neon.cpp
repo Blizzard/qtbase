@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -517,8 +523,6 @@ void qt_blend_rgb32_on_rgb32_neon(uchar *destPixels, int dbpl,
                     vst1q_u32((uint32_t *)&dst[x], vcombine_u32(result32_low, result32_high));
                 }
                 for (; x<w; ++x) {
-                    uint s = src[x];
-                    s = BYTE_MUL(s, const_alpha);
                     dst[x] = INTERPOLATE_PIXEL_255(src[x], const_alpha, dst[x], one_minus_const_alpha);
                 }
                 dst = (quint32 *)(((uchar *) dst) + dbpl);
@@ -531,12 +535,23 @@ void qt_blend_rgb32_on_rgb32_neon(uchar *destPixels, int dbpl,
 }
 
 #if defined(ENABLE_PIXMAN_DRAWHELPERS)
+extern void qt_alphamapblit_quint16(QRasterBuffer *rasterBuffer,
+                                    int x, int y, const QRgba64 &color,
+                                    const uchar *map,
+                                    int mapWidth, int mapHeight, int mapStride,
+                                    const QClipData *clip, bool useGammaCorrection);
+
 void qt_alphamapblit_quint16_neon(QRasterBuffer *rasterBuffer,
                                   int x, int y, const QRgba64 &color,
                                   const uchar *bitmap,
                                   int mapWidth, int mapHeight, int mapStride,
-                                  const QClipData *)
+                                  const QClipData *clip, bool useGammaCorrection)
 {
+    if (clip || useGammaCorrection) {
+        qt_alphamapblit_quint16(rasterBuffer, x, y, color, bitmap, mapWidth, mapHeight, mapStride, clip, useGammaCorrection);
+        return;
+    }
+
     quint16 *dest = reinterpret_cast<quint16*>(rasterBuffer->scanLine(y)) + x;
     const int destStride = rasterBuffer->bytesPerLine() / sizeof(quint16);
 
@@ -811,7 +826,7 @@ void QT_FASTCALL comp_func_solid_SourceOver_neon(uint *destPixels, int length, u
             vst1q_u32(&dst[x], colorPlusBlendedPixels);
         }
 
-        for (;x < length; ++x)
+        SIMD_EPILOGUE(x, length, 3)
             destPixels[x] = color + BYTE_MUL(destPixels[x], minusAlphaOfColor);
     }
 }
@@ -863,7 +878,7 @@ void QT_FASTCALL comp_func_Plus_neon(uint *dst, const uint *src, int length, uin
             vst1q_u32((uint32_t *)&dst[x], vcombine_u32(result32_low, result32_high));
         }
 
-        for (; x < length; ++x)
+        SIMD_EPILOGUE(x, length, 3)
             dst[x] = comp_func_Plus_one_pixel_const_alpha(dst[x], src[x], const_alpha, one_minus_const_alpha);
     }
 }
@@ -1054,6 +1069,77 @@ const uint * QT_FASTCALL qt_fetch_radial_gradient_neon(uint *buffer, const Opera
 {
     return qt_fetch_radial_gradient_template<QRadialFetchSimd<QSimdNeon>,uint>(buffer, op, data, y, x, length);
 }
+
+extern void QT_FASTCALL qt_convert_rgb888_to_rgb32_neon(quint32 *dst, const uchar *src, int len);
+
+const uint * QT_FASTCALL qt_fetchUntransformed_888_neon(uint *buffer, const Operator *, const QSpanData *data,
+                                                       int y, int x, int length)
+{
+    const uchar *line = data->texture.scanLine(y) + x * 3;
+    qt_convert_rgb888_to_rgb32_neon(buffer, line, length);
+    return buffer;
+}
+
+#if defined(Q_PROCESSOR_ARM_64) && Q_BYTE_ORDER == Q_LITTLE_ENDIAN
+template<bool RGBA>
+static inline void convertARGBToARGB32PM_neon(uint *buffer, const uint *src, int count)
+{
+    int i = 0;
+    const uint8x16_t rgbaMask  = { 2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15};
+    const uint8x8_t shuffleMask = { 3, 3, 3, 3, 7, 7, 7, 7};
+    const uint32x4_t blendMask = vdupq_n_u32(0xff000000);
+
+    for (; i < count - 3; i += 4) {
+        uint32x4_t srcVector = vld1q_u32(src + i);
+        uint32x4_t alphaVector = vshrq_n_u32(srcVector, 24);
+        uint32_t alphaSum = vaddvq_u32(alphaVector);
+        if (alphaSum) {
+            if (alphaSum != 255 * 4) {
+                if (RGBA)
+                    srcVector = vreinterpretq_u32_u8(vqtbl1q_u8(vreinterpretq_u8_u32(srcVector), rgbaMask));
+                const uint8x8_t s1 = vreinterpret_u8_u32(vget_low_u32(srcVector));
+                const uint8x8_t s2 = vreinterpret_u8_u32(vget_high_u32(srcVector));
+                const uint8x8_t alpha1 = vtbl1_u8(s1, shuffleMask);
+                const uint8x8_t alpha2 = vtbl1_u8(s2, shuffleMask);
+                uint16x8_t src1 = vmull_u8(s1, alpha1);
+                uint16x8_t src2 = vmull_u8(s2, alpha2);
+                src1 = vsraq_n_u16(src1, src1, 8);
+                src2 = vsraq_n_u16(src2, src2, 8);
+                const uint8x8_t d1 = vrshrn_n_u16(src1, 8);
+                const uint8x8_t d2 = vrshrn_n_u16(src2, 8);
+                const uint32x4_t d = vbslq_u32(blendMask, srcVector, vreinterpretq_u32_u8(vcombine_u8(d1, d2)));
+                vst1q_u32(buffer + i, d);
+            } else {
+                if (RGBA)
+                    vst1q_u32(buffer + i, vreinterpretq_u32_u8(vqtbl1q_u8(vreinterpretq_u8_u32(srcVector), rgbaMask)));
+                else if (buffer != src)
+                    vst1q_u32(buffer + i, srcVector);
+            }
+        } else {
+            vst1q_u32(buffer + i, vdupq_n_u32(0));
+        }
+    }
+
+    SIMD_EPILOGUE(i, count, 3) {
+        uint v = qPremultiply(src[i]);
+        buffer[i] = RGBA ? RGBA2ARGB(v) : v;
+    }
+}
+
+const uint *QT_FASTCALL convertARGB32ToARGB32PM_neon(uint *buffer, const uint *src, int count,
+                                                     const QVector<QRgb> *, QDitherInfo *)
+{
+    convertARGBToARGB32PM_neon<false>(buffer, src, count);
+    return buffer;
+}
+
+const uint *QT_FASTCALL convertRGBA8888ToARGB32PM_neon(uint *buffer, const uint *src, int count,
+                                                       const QVector<QRgb> *, QDitherInfo *)
+{
+    convertARGBToARGB32PM_neon<true>(buffer, src, count);
+    return buffer;
+}
+#endif
 
 QT_END_NAMESPACE
 

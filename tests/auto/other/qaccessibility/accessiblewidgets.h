@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -103,53 +98,54 @@ public:
         return 0;
     }
     CustomTextWidgetIface(CustomTextWidget *w): QAccessibleWidget(w) {}
-    void *interface_cast(QAccessible::InterfaceType t) {
+    void *interface_cast(QAccessible::InterfaceType t) override
+    {
         if (t == QAccessible::TextInterface)
             return static_cast<QAccessibleTextInterface*>(this);
         return 0;
     }
 
     // this is mostly to test the base implementation for textBefore/At/After
-    QString text(QAccessible::Text t) const Q_DECL_OVERRIDE
+    QString text(QAccessible::Text t) const override
     {
         if (t == QAccessible::Value)
             return textWidget()->text;
         return QAccessibleWidget::text(t);
     }
 
-    QString textBeforeOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const
+    QString textBeforeOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const override
     {
         if (offset == -2)
             offset = textWidget()->cursorPosition;
         return QAccessibleTextInterface::textBeforeOffset(offset, boundaryType, startOffset, endOffset);
     }
-    QString textAtOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const
+    QString textAtOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const override
     {
         if (offset == -2)
             offset = textWidget()->cursorPosition;
         return QAccessibleTextInterface::textAtOffset(offset, boundaryType, startOffset, endOffset);
     }
-    QString textAfterOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const
+    QString textAfterOffset(int offset, QAccessible::TextBoundaryType boundaryType, int *startOffset, int *endOffset) const override
     {
         if (offset == -2)
             offset = textWidget()->cursorPosition;
         return QAccessibleTextInterface::textAfterOffset(offset, boundaryType, startOffset, endOffset);
     }
 
-    void selection(int, int *startOffset, int *endOffset) const Q_DECL_OVERRIDE
+    void selection(int, int *startOffset, int *endOffset) const override
     { *startOffset = *endOffset = -1; }
-    int selectionCount() const Q_DECL_OVERRIDE { return 0; }
-    void addSelection(int, int) Q_DECL_OVERRIDE {}
-    void removeSelection(int) Q_DECL_OVERRIDE {}
-    void setSelection(int, int, int) Q_DECL_OVERRIDE {}
-    int cursorPosition() const Q_DECL_OVERRIDE { return textWidget()->cursorPosition; }
-    void setCursorPosition(int position) Q_DECL_OVERRIDE { textWidget()->cursorPosition = position; }
-    QString text(int startOffset, int endOffset) const Q_DECL_OVERRIDE { return textWidget()->text.mid(startOffset, endOffset); }
-    int characterCount() const Q_DECL_OVERRIDE { return textWidget()->text.length(); }
-    QRect characterRect(int) const Q_DECL_OVERRIDE { return QRect(); }
-    int offsetAtPoint(const QPoint &) const Q_DECL_OVERRIDE { return 0; }
-    void scrollToSubstring(int, int) Q_DECL_OVERRIDE {}
-    QString attributes(int, int *, int *) const Q_DECL_OVERRIDE
+    int selectionCount() const override { return 0; }
+    void addSelection(int, int) override {}
+    void removeSelection(int) override {}
+    void setSelection(int, int, int) override {}
+    int cursorPosition() const override { return textWidget()->cursorPosition; }
+    void setCursorPosition(int position) override { textWidget()->cursorPosition = position; }
+    QString text(int startOffset, int endOffset) const override { return textWidget()->text.mid(startOffset, endOffset); }
+    int characterCount() const override { return textWidget()->text.length(); }
+    QRect characterRect(int) const override { return QRect(); }
+    int offsetAtPoint(const QPoint &) const override { return 0; }
+    void scrollToSubstring(int, int) override {}
+    QString attributes(int, int *, int *) const override
     { return QString(); }
 
 private:

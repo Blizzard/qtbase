@@ -1,4 +1,6 @@
 TEMPLATE=subdirs
+QT_FOR_CONFIG += network
+
 SUBDIRS=\
    qhttpsocketengine \
    qudpsocket \
@@ -8,12 +10,16 @@ SUBDIRS=\
    qsocks5socketengine \
    qabstractsocket \
    platformsocketengine \
+   qsctpsocket \
 
-!contains(QT_CONFIG, private_tests): SUBDIRS -= \
+!qtConfig(private_tests): SUBDIRS -= \
    platformsocketengine \
    qtcpsocket \
    qhttpsocketengine \
    qsocks5socketengine \
+
+!qtConfig(sctp): SUBDIRS -= \
+   qsctpsocket \
 
 winrt: SUBDIRS -= \
    qhttpsocketengine \

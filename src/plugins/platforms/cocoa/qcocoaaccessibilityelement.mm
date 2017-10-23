@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,7 +41,7 @@
 #include "qcocoahelpers.h"
 #include "qcocoawindow.h"
 #include "private/qaccessiblecache_p.h"
-#include <QtPlatformSupport/private/qaccessiblebridgeutils_p.h>
+#include <QtAccessibilitySupport/private/qaccessiblebridgeutils_p.h>
 #include <QtGui/qaccessible.h>
 
 #import <AppKit/NSAccessibility.h>
@@ -229,19 +235,26 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     if (!iface || !iface->isValid())
         return nil;
 
+    // macOS expects that the hierarchy is:
+    // App -> Window -> Children
+    // We don't actually have the window reflected properly in QAccessibility.
+    // Check if the parent is the application and then instead return the native window.
+
+    if (QAccessibleInterface *parent = iface->parent()) {
+        if (parent->role() != QAccessible::Application) {
+            QAccessible::Id parentId = QAccessible::uniqueId(parent);
+            return [QMacAccessibilityElement elementWithId: parentId];
+        }
+    }
+
     if (QWindow *window = iface->window()) {
-        QCocoaWindow *win = static_cast<QCocoaWindow*>(window->handle());
-        return win->qtView();
+        QPlatformWindow *platformWindow = window->handle();
+        if (platformWindow) {
+            QCocoaWindow *win = static_cast<QCocoaWindow*>(platformWindow);
+            return qnsview_cast(win->view());
+        }
     }
-
-    QAccessibleInterface *parent = iface->parent();
-    if (!parent) {
-        qWarning() << "INVALID PARENT FOR INTERFACE: " << iface;
-        return nil;
-    }
-
-    QAccessible::Id parentId = QAccessible::uniqueId(parent);
-    return [QMacAccessibilityElement elementWithId: parentId];
+    return nil;
 }
 
 
@@ -292,9 +305,11 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
         QSize qtSize = iface->rect().size();
         return [NSValue valueWithSize: NSMakeSize(qtSize.width(), qtSize.height())];
     } else if ([attribute isEqualToString:NSAccessibilityTitleAttribute]) {
-        return QCFString::toNSString(iface->text(QAccessible::Name));
+        if (iface->role() == QAccessible::StaticText)
+            return nil;
+        return iface->text(QAccessible::Name).toNSString();
     } else if ([attribute isEqualToString:NSAccessibilityDescriptionAttribute]) {
-        return QCFString::toNSString(iface->text(QAccessible::Description));
+        return iface->text(QAccessible::Description).toNSString();
     } else if ([attribute isEqualToString:NSAccessibilityEnabledAttribute]) {
         return [NSNumber numberWithBool:!iface->state().disabled];
     } else if ([attribute isEqualToString:NSAccessibilityValueAttribute]) {
@@ -431,7 +446,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     if ([attribute isEqualToString: NSAccessibilityAttributedStringForRangeParameterizedAttribute]) {
         NSRange range = [parameter rangeValue];
         QString text = iface->textInterface()->text(range.location, range.location + range.length);
-        return [[NSAttributedString alloc] initWithString: text.toNSString()];
+        return [[NSAttributedString alloc] initWithString:text.toNSString()];
     } else if ([attribute isEqualToString: NSAccessibilityRangeForPositionParameterizedAttribute]) {
         NSPoint nsPoint = [parameter pointValue];
         QPoint point(static_cast<int>(nsPoint.x), static_cast<int>(qt_mac_flipYCoordinate(nsPoint.y)));
@@ -494,7 +509,7 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 // actions
 
 - (NSArray *)accessibilityActionNames {
-    NSMutableArray * nsActions = [NSMutableArray new];
+    NSMutableArray *nsActions = [[NSMutableArray new] autorelease];
     QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
     if (!iface || !iface->isValid())
         return nsActions;
@@ -524,12 +539,12 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     } else {
         description = qAccessibleLocalizedActionDescription(qtAction);
     }
-    return QCFString::toNSString(description);
+    return description.toNSString();
 }
 
 - (void)accessibilityPerformAction:(NSString *)action {
     QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
-    if (iface) {
+    if (iface && iface->isValid()) {
         const QString qtAction = QCocoaAccessible::translateAction(action, iface);
         QAccessibleBridgeUtils::performEffectiveAction(iface, qtAction);
     }
@@ -547,23 +562,23 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
 - (id)accessibilityHitTest:(NSPoint)point {
     QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
     if (!iface || !iface->isValid()) {
-//        qDebug() << "Hit test: INVALID";
+//        qDebug("Hit test: INVALID");
         return NSAccessibilityUnignoredAncestor(self);
     }
 
     int y = qt_mac_flipYCoordinate(point.y);
     QAccessibleInterface *childInterface = iface->childAt(point.x, y);
     // No child found, meaning we hit this element.
-    if (!childInterface)
+    if (!childInterface || !childInterface->isValid())
         return NSAccessibilityUnignoredAncestor(self);
 
     // find the deepest child at the point
     QAccessibleInterface *childOfChildInterface = 0;
     do {
         childOfChildInterface = childInterface->childAt(point.x, y);
-        if (childOfChildInterface)
+        if (childOfChildInterface && childOfChildInterface->isValid())
             childInterface = childOfChildInterface;
-    } while (childOfChildInterface);
+    } while (childOfChildInterface && childOfChildInterface->isValid());
 
     QAccessible::Id childId = QAccessible::uniqueId(childInterface);
     // hit a child, forward to child accessible interface.
@@ -577,12 +592,12 @@ static void convertLineOffset(QAccessibleTextInterface *text, int *line, int *of
     QAccessibleInterface *iface = QAccessible::accessibleInterface(axid);
 
     if (!iface || !iface->isValid()) {
-        qWarning() << "FocusedUIElement for INVALID";
+        qWarning("FocusedUIElement for INVALID");
         return nil;
     }
 
     QAccessibleInterface *childInterface = iface->focusChild();
-    if (childInterface) {
+    if (childInterface && childInterface->isValid()) {
         QAccessible::Id childAxid = QAccessible::uniqueId(childInterface);
         QMacAccessibilityElement *accessibleElement = [QMacAccessibilityElement elementWithId:childAxid];
         return NSAccessibilityUnignoredAncestor(accessibleElement);

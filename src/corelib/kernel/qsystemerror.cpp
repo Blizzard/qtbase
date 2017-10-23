@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,15 +39,9 @@
 
 #include <qglobal.h>
 #include "qsystemerror_p.h"
-#if !defined(Q_OS_WINCE)
-#  include <errno.h>
-#  if defined(Q_CC_MSVC)
-#    include <crtdbg.h>
-#  endif
-#else
-#  if (_WIN32_WCE >= 0x700)
-#    include <errno.h>
-#  endif
+#include <errno.h>
+#if defined(Q_CC_MSVC)
+#  include <crtdbg.h>
 #endif
 #ifdef Q_OS_WIN
 #  include <qt_windows.h>
@@ -101,6 +101,11 @@ static QString windowsErrorString(int errorCode)
 
     if (ret.isEmpty() && errorCode == ERROR_MOD_NOT_FOUND)
         ret = QString::fromLatin1("The specified module could not be found.");
+    if (ret.endsWith(QLatin1String("\r\n")))
+        ret.chop(2);
+    if (ret.isEmpty())
+        ret = QString::fromLatin1("Unknown error 0x%1.")
+                .arg(unsigned(errorCode), 8, 16, QLatin1Char('0'));
     return ret;
 }
 #endif
@@ -125,16 +130,12 @@ static QString standardLibraryErrorString(int errorCode)
         s = QT_TRANSLATE_NOOP("QIODevice", "No space left on device");
         break;
     default: {
-    #ifdef Q_OS_WINCE
-        ret = windowsErrorString(errorCode);
-    #else
-        #if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && _POSIX_VERSION >= 200112L && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_QNX)
-            QByteArray buf(1024, '\0');
+      #if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && _POSIX_VERSION >= 200112L && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_QNX)
+            QByteArray buf(1024, Qt::Uninitialized);
             ret = fromstrerror_helper(strerror_r(errorCode, buf.data(), buf.size()), buf);
-        #else
+      #else
             ret = QString::fromLocal8Bit(strerror(errorCode));
-        #endif
-    #endif
+      #endif
     break; }
     }
     if (s) {
@@ -145,7 +146,7 @@ static QString standardLibraryErrorString(int errorCode)
     return ret.trimmed();
 }
 
-QString QSystemError::toString() const
+QString QSystemError::string(ErrorScope errorScope, int errorCode)
 {
     switch(errorScope) {
     case NativeError:
@@ -153,16 +154,38 @@ QString QSystemError::toString() const
         return windowsErrorString(errorCode);
 #else
         //unix: fall through as native and standard library are the same
+        Q_FALLTHROUGH();
 #endif
     case StandardLibraryError:
         return standardLibraryErrorString(errorCode);
     default:
         qWarning("invalid error scope");
-        //fall through
+        Q_FALLTHROUGH();
     case NoError:
         return QLatin1String("No error");
     }
 }
 
-QT_END_NAMESPACE
+QString QSystemError::stdString(int errorCode)
+{
+    return standardLibraryErrorString(errorCode == -1 ? errno : errorCode);
+}
 
+#ifdef Q_OS_WIN
+QString QSystemError::windowsString(int errorCode)
+{
+    return windowsErrorString(errorCode == -1 ? GetLastError() : errorCode);
+}
+
+QString qt_error_string(int code)
+{
+    return windowsErrorString(code == -1 ? GetLastError() : code);
+}
+#else
+QString qt_error_string(int code)
+{
+    return standardLibraryErrorString(code == -1 ? errno : code);
+}
+#endif
+
+QT_END_NAMESPACE

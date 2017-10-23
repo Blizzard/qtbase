@@ -1,9 +1,11 @@
 CONFIG += console testcase
-CONFIG += parallel_test
-CONFIG -= app_bundle
 QT = core testlib core-private
 embedded: QT += gui
 SOURCES = ../tst_qlocale.cpp
+
+!qtConfig(doubleconversion):!qtConfig(system-doubleconversion) {
+    DEFINES += QT_NO_DOUBLECONVERSION
+}
 
 TARGET = ../tst_qlocale
 win32 {
@@ -15,6 +17,3 @@ win32 {
 }
 
 !winrt: TEST_HELPER_INSTALLS = ../syslocaleapp/syslocaleapp
-
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0
-blackberry:LIBS += -lpps

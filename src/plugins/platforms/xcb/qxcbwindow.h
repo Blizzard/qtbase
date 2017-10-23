@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -70,74 +76,74 @@ public:
     QXcbWindow(QWindow *window);
     ~QXcbWindow();
 
-    void setGeometry(const QRect &rect) Q_DECL_OVERRIDE;
+    void setGeometry(const QRect &rect) override;
 
-    QMargins frameMargins() const Q_DECL_OVERRIDE;
+    QMargins frameMargins() const override;
 
-    void setVisible(bool visible) Q_DECL_OVERRIDE;
-    void setWindowFlags(Qt::WindowFlags flags) Q_DECL_OVERRIDE;
-    void setWindowState(Qt::WindowState state) Q_DECL_OVERRIDE;
-    WId winId() const Q_DECL_OVERRIDE;
-    void setParent(const QPlatformWindow *window) Q_DECL_OVERRIDE;
+    void setVisible(bool visible) override;
+    void setWindowFlags(Qt::WindowFlags flags) override;
+    void setWindowState(Qt::WindowState state) override;
+    WId winId() const override;
+    void setParent(const QPlatformWindow *window) override;
 
-    bool isExposed() const Q_DECL_OVERRIDE;
-    bool isEmbedded(const QPlatformWindow *parentWindow = 0) const Q_DECL_OVERRIDE;
-    QPoint mapToGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
-    QPoint mapFromGlobal(const QPoint &pos) const Q_DECL_OVERRIDE;
+    bool isExposed() const override;
+    bool isEmbedded() const override;
+    QPoint mapToGlobal(const QPoint &pos) const override;
+    QPoint mapFromGlobal(const QPoint &pos) const override;
 
-    void setWindowTitle(const QString &title) Q_DECL_OVERRIDE;
+    void setWindowTitle(const QString &title) override;
     void setWindowIconText(const QString &title);
-    void setWindowIcon(const QIcon &icon) Q_DECL_OVERRIDE;
-    void raise() Q_DECL_OVERRIDE;
-    void lower() Q_DECL_OVERRIDE;
-    void propagateSizeHints() Q_DECL_OVERRIDE;
+    void setWindowIcon(const QIcon &icon) override;
+    void raise() override;
+    void lower() override;
+    void propagateSizeHints() override;
 
-    void requestActivateWindow() Q_DECL_OVERRIDE;
+    void requestActivateWindow() override;
 
-    bool setKeyboardGrabEnabled(bool grab) Q_DECL_OVERRIDE;
-    bool setMouseGrabEnabled(bool grab) Q_DECL_OVERRIDE;
+    bool setKeyboardGrabEnabled(bool grab) override;
+    bool setMouseGrabEnabled(bool grab) override;
 
-    void setCursor(xcb_cursor_t cursor);
+    void setCursor(xcb_cursor_t cursor, bool isBitmapCursor);
 
-    QSurfaceFormat format() const Q_DECL_OVERRIDE;
+    QSurfaceFormat format() const override;
 
-    void windowEvent(QEvent *event) Q_DECL_OVERRIDE;
+    void windowEvent(QEvent *event) override;
 
-    bool startSystemResize(const QPoint &pos, Qt::Corner corner) Q_DECL_OVERRIDE;
+    bool startSystemResize(const QPoint &pos, Qt::Corner corner) override;
 
-    void setOpacity(qreal level) Q_DECL_OVERRIDE;
-    void setMask(const QRegion &region) Q_DECL_OVERRIDE;
+    void setOpacity(qreal level) override;
+    void setMask(const QRegion &region) override;
 
-    void setAlertState(bool enabled) Q_DECL_OVERRIDE;
-    bool isAlertState() const Q_DECL_OVERRIDE { return m_alertState; }
+    void setAlertState(bool enabled) override;
+    bool isAlertState() const override { return m_alertState; }
 
     xcb_window_t xcb_window() const { return m_window; }
     uint depth() const { return m_depth; }
     QImage::Format imageFormat() const { return m_imageFormat; }
     bool imageNeedsRgbSwap() const { return m_imageRgbSwap; }
 
-    bool handleGenericEvent(xcb_generic_event_t *event, long *result)  Q_DECL_OVERRIDE;
+    bool handleGenericEvent(xcb_generic_event_t *event, long *result)  override;
 
-    void handleExposeEvent(const xcb_expose_event_t *event) Q_DECL_OVERRIDE;
-    void handleClientMessageEvent(const xcb_client_message_event_t *event) Q_DECL_OVERRIDE;
-    void handleConfigureNotifyEvent(const xcb_configure_notify_event_t *event) Q_DECL_OVERRIDE;
-    void handleMapNotifyEvent(const xcb_map_notify_event_t *event) Q_DECL_OVERRIDE;
-    void handleUnmapNotifyEvent(const xcb_unmap_notify_event_t *event) Q_DECL_OVERRIDE;
-    void handleButtonPressEvent(const xcb_button_press_event_t *event) Q_DECL_OVERRIDE;
-    void handleButtonReleaseEvent(const xcb_button_release_event_t *event) Q_DECL_OVERRIDE;
-    void handleMotionNotifyEvent(const xcb_motion_notify_event_t *event) Q_DECL_OVERRIDE;
+    void handleExposeEvent(const xcb_expose_event_t *event) override;
+    void handleClientMessageEvent(const xcb_client_message_event_t *event) override;
+    void handleConfigureNotifyEvent(const xcb_configure_notify_event_t *event) override;
+    void handleMapNotifyEvent(const xcb_map_notify_event_t *event) override;
+    void handleUnmapNotifyEvent(const xcb_unmap_notify_event_t *event) override;
+    void handleButtonPressEvent(const xcb_button_press_event_t *event) override;
+    void handleButtonReleaseEvent(const xcb_button_release_event_t *event) override;
+    void handleMotionNotifyEvent(const xcb_motion_notify_event_t *event) override;
 
-    void handleEnterNotifyEvent(const xcb_enter_notify_event_t *event) Q_DECL_OVERRIDE;
-    void handleLeaveNotifyEvent(const xcb_leave_notify_event_t *event) Q_DECL_OVERRIDE;
-    void handleFocusInEvent(const xcb_focus_in_event_t *event) Q_DECL_OVERRIDE;
-    void handleFocusOutEvent(const xcb_focus_out_event_t *event) Q_DECL_OVERRIDE;
-    void handlePropertyNotifyEvent(const xcb_property_notify_event_t *event) Q_DECL_OVERRIDE;
+    void handleEnterNotifyEvent(const xcb_enter_notify_event_t *event) override;
+    void handleLeaveNotifyEvent(const xcb_leave_notify_event_t *event) override;
+    void handleFocusInEvent(const xcb_focus_in_event_t *event) override;
+    void handleFocusOutEvent(const xcb_focus_out_event_t *event) override;
+    void handlePropertyNotifyEvent(const xcb_property_notify_event_t *event) override;
 #ifdef XCB_USE_XINPUT22
-    void handleXIMouseEvent(xcb_ge_event_t *, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized) Q_DECL_OVERRIDE;
-    void handleXIEnterLeave(xcb_ge_event_t *) Q_DECL_OVERRIDE;
+    void handleXIMouseEvent(xcb_ge_event_t *, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized) override;
+    void handleXIEnterLeave(xcb_ge_event_t *) override;
 #endif
 
-    QXcbWindow *toWindow() Q_DECL_OVERRIDE;
+    QXcbWindow *toWindow() override;
 
     void handleMouseEvent(xcb_timestamp_t time, const QPoint &local, const QPoint &global,
                           Qt::KeyboardModifiers modifiers, Qt::MouseEventSource source);
@@ -171,6 +177,8 @@ public:
 
     QXcbScreen *xcbScreen() const;
 
+    bool doStartSystemResize(const QPoint &globalPos, Qt::Corner corner);
+
     virtual void create();
     virtual void destroy();
 
@@ -178,16 +186,18 @@ public Q_SLOTS:
     void updateSyncRequestCounter();
 
 protected:
-    virtual void resolveFormat() { m_format = window()->requestedFormat(); }
-    virtual void *createVisual() { return Q_NULLPTR; }
+    virtual void resolveFormat(const QSurfaceFormat &format) { m_format = format; }
+    virtual const xcb_visualtype_t *createVisual();
 
     QXcbScreen *parentScreen();
 
+    QXcbScreen *initialScreen() const;
     void changeNetWmState(bool set, xcb_atom_t one, xcb_atom_t two = 0);
     NetWmStates netWmStates();
     void setNetWmStates(NetWmStates);
 
     void setMotifWindowFlags(Qt::WindowFlags flags);
+    void setNetWmStateWindowFlags(Qt::WindowFlags flags);
 
     void updateMotifWmHintsBeforeMap();
     void updateNetWmStateBeforeMap();
@@ -224,45 +234,60 @@ protected:
     void handleLeaveNotifyEvent(int root_x, int root_y,
                                 quint8 mode, quint8 detail, xcb_timestamp_t timestamp);
 
-    xcb_window_t m_window;
+    xcb_window_t m_window = 0;
+    xcb_colormap_t m_cmap = 0;
 
-    uint m_depth;
-    QImage::Format m_imageFormat;
-    bool m_imageRgbSwap;
+    uint m_depth = 0;
+    QImage::Format m_imageFormat = QImage::Format_ARGB32_Premultiplied;
+    bool m_imageRgbSwap = false;
 
     xcb_sync_int64_t m_syncValue;
-    xcb_sync_counter_t m_syncCounter;
+    xcb_sync_counter_t m_syncCounter = 0;
 
-    Qt::WindowState m_windowState;
+    Qt::WindowState m_windowState = Qt::WindowNoState;
 
-    xcb_gravity_t m_gravity;
+    xcb_gravity_t m_gravity = XCB_GRAVITY_STATIC;
 
-    bool m_mapped;
-    bool m_transparent;
-    bool m_usingSyncProtocol;
-    bool m_deferredActivation;
-    bool m_embedded;
-    bool m_alertState;
-    xcb_window_t m_netWmUserTimeWindow;
+    bool m_mapped = false;
+    bool m_transparent = false;
+    bool m_usingSyncProtocol = false;
+    bool m_deferredActivation = false;
+    bool m_embedded = false;
+    bool m_alertState = false;
+    xcb_window_t m_netWmUserTimeWindow = XCB_NONE;
 
     QSurfaceFormat m_format;
 
-    mutable bool m_dirtyFrameMargins;
+    mutable bool m_dirtyFrameMargins = false;
     mutable QMargins m_frameMargins;
 
     QRegion m_exposeRegion;
+    QSize m_oldWindowSize;
 
-    xcb_visualid_t m_visualId;
-    int m_lastWindowStateEvent;
+    xcb_visualid_t m_visualId = 0;
+    int m_lastWindowStateEvent = -1;
 
     enum SyncState {
         NoSyncNeeded,
         SyncReceived,
         SyncAndConfigureReceived
     };
-    SyncState m_syncState;
+    SyncState m_syncState = NoSyncNeeded;
 
-    QXcbSyncWindowRequest *m_pendingSyncRequest;
+    QXcbSyncWindowRequest *m_pendingSyncRequest = nullptr;
+    xcb_cursor_t m_currentBitmapCursor = XCB_CURSOR_NONE;
+};
+
+class QXcbForeignWindow : public QXcbWindow
+{
+public:
+    QXcbForeignWindow(QWindow *window, WId nativeHandle)
+        : QXcbWindow(window) { m_window = nativeHandle; }
+    ~QXcbForeignWindow();
+    bool isForeignWindow() const override { return true; }
+
+protected:
+    void create() override {} // No-op
 };
 
 QT_END_NAMESPACE

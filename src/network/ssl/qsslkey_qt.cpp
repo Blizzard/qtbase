@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Jeremy Lainé <jeremy.laine@m4x.org>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -163,7 +169,7 @@ void QSslKeyPrivate::decodeDer(const QByteArray &der, bool deepClear)
         QDataStream keyStream(elem.value());
         if (!elem.read(keyStream) || elem.type() != QAsn1Element::SequenceType)
             return;
-        QVector<QAsn1Element> infoItems = elem.toVector();
+        const QVector<QAsn1Element> infoItems = elem.toVector();
         if (infoItems.size() < 2 || infoItems[0].type() != QAsn1Element::ObjectIdentifierType)
             return;
         if (algorithm == QSsl::Rsa) {
@@ -183,7 +189,7 @@ void QSslKeyPrivate::decodeDer(const QByteArray &der, bool deepClear)
             if (infoItems[1].type() != QAsn1Element::SequenceType)
                 return;
             // key params
-            QVector<QAsn1Element> params = infoItems[1].toVector();
+            const QVector<QAsn1Element> params = infoItems[1].toVector();
             if (params.isEmpty() || params[0].type() != QAsn1Element::IntegerType)
                 return;
             keyLength = numberOfBits(params[0].value());
@@ -196,7 +202,7 @@ void QSslKeyPrivate::decodeDer(const QByteArray &der, bool deepClear)
         }
 
     } else {
-        QVector<QAsn1Element> items = elem.toVector();
+        const QVector<QAsn1Element> items = elem.toVector();
         if (items.isEmpty())
             return;
 
@@ -243,7 +249,7 @@ void QSslKeyPrivate::decodePem(const QByteArray &pem, const QByteArray &passPhra
     QMap<QByteArray, QByteArray> headers;
     QByteArray data = derFromPem(pem, &headers);
     if (headers.value("Proc-Type") == "4,ENCRYPTED") {
-        QList<QByteArray> dekInfo = headers.value("DEK-Info").split(',');
+        const QList<QByteArray> dekInfo = headers.value("DEK-Info").split(',');
         if (dekInfo.size() != 2) {
             clear(deepClear);
             return;

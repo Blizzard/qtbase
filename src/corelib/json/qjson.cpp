@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -129,10 +135,12 @@ bool Data::valid() const
         return false;
 
     bool res = false;
-    if (header->root()->is_object)
-        res = static_cast<Object *>(header->root())->isValid();
+    Base *root = header->root();
+    int maxSize = alloc - sizeof(Header);
+    if (root->is_object)
+        res = static_cast<Object *>(root)->isValid(maxSize);
     else
-        res = static_cast<Array *>(header->root())->isValid();
+        res = static_cast<Array *>(root)->isValid(maxSize);
 
     return res;
 }
@@ -173,7 +181,7 @@ void Base::removeItems(int pos, int numItems)
     length -= numItems;
 }
 
-int Object::indexOf(const QString &key, bool *exists)
+int Object::indexOf(const QString &key, bool *exists) const
 {
     int min = 0;
     int n = length;
@@ -195,9 +203,31 @@ int Object::indexOf(const QString &key, bool *exists)
     return min;
 }
 
-bool Object::isValid() const
+int Object::indexOf(QLatin1String key, bool *exists) const
 {
-    if (tableOffset + length*sizeof(offset) > size)
+    int min = 0;
+    int n = length;
+    while (n > 0) {
+        int half = n >> 1;
+        int middle = min + half;
+        if (*entryAt(middle) >= key) {
+            n = half;
+        } else {
+            min = middle + 1;
+            n -= half + 1;
+        }
+    }
+    if (min < (int)length && *entryAt(min) == key) {
+        *exists = true;
+        return min;
+    }
+    *exists = false;
+    return min;
+}
+
+bool Object::isValid(int maxSize) const
+{
+    if (size > (uint)maxSize || tableOffset + length*sizeof(offset) > size)
         return false;
 
     QString lastKey;
@@ -206,8 +236,7 @@ bool Object::isValid() const
         if (entryOffset + sizeof(Entry) >= tableOffset)
             return false;
         Entry *e = entryAt(i);
-        int s = e->size();
-        if (table()[i] + s > tableOffset)
+        if (!e->isValid(tableOffset - table()[i]))
             return false;
         QString key = e->key();
         if (key < lastKey)
@@ -221,9 +250,9 @@ bool Object::isValid() const
 
 
 
-bool Array::isValid() const
+bool Array::isValid(int maxSize) const
 {
-    if (tableOffset + length*sizeof(offset) > size)
+    if (size > (uint)maxSize || tableOffset + length*sizeof(offset) > size)
         return false;
 
     for (uint i = 0; i < length; ++i) {
@@ -240,6 +269,14 @@ bool Entry::operator ==(const QString &key) const
         return (shallowLatin1Key() == key);
     else
         return (shallowKey() == key);
+}
+
+bool Entry::operator==(QLatin1String key) const
+{
+    if (value.latinKey)
+        return shallowLatin1Key() == key;
+    else
+        return shallowKey() == key;
 }
 
 bool Entry::operator ==(const Entry &other) const
@@ -303,7 +340,7 @@ bool Value::isValid(const Base *b) const
     case QJsonValue::Double:
         if (latinOrIntValue)
             break;
-        // fall through
+        Q_FALLTHROUGH();
     case QJsonValue::String:
     case QJsonValue::Array:
     case QJsonValue::Object:
@@ -323,12 +360,12 @@ bool Value::isValid(const Base *b) const
     int s = usedStorage(b);
     if (!s)
         return true;
-    if (s < 0 || offset + s > (int)b->tableOffset)
+    if (s < 0 || s > (int)b->tableOffset - offset)
         return false;
     if (type == QJsonValue::Array)
-        return static_cast<Array *>(base(b))->isValid();
+        return static_cast<Array *>(base(b))->isValid(s);
     if (type == QJsonValue::Object)
-        return static_cast<Object *>(base(b))->isValid();
+        return static_cast<Object *>(base(b))->isValid(s);
     return true;
 }
 
@@ -382,7 +419,7 @@ uint Value::valueToStore(const QJsonValue &v, uint offset)
         if (c != INT_MAX)
             return c;
     }
-        // fall through
+        Q_FALLTHROUGH();
     case QJsonValue::String:
     case QJsonValue::Array:
     case QJsonValue::Object:
@@ -399,7 +436,7 @@ void Value::copyData(const QJsonValue &v, char *dest, bool compressed)
     switch (v.t) {
     case QJsonValue::Double:
         if (!compressed) {
-            qToLittleEndian(v.ui, (uchar *)dest);
+            qToLittleEndian(v.ui, dest);
         }
         break;
     case QJsonValue::String: {

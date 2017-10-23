@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -141,45 +141,6 @@
 
 /*! \fn QPixmap QMacStyle::standardPixmap(StandardPixmap standardPixmap, const QStyleOption *opt, const QWidget *widget) const
     \reimp
-*/
-
-/*!
-    \enum QMacStyle::FocusRectPolicy
-
-    This type is used to signify a widget's focus rectangle policy.
-
-    \value FocusEnabled  show a focus rectangle when the widget has focus.
-    \value FocusDisabled  never show a focus rectangle for the widget.
-    \value FocusDefault  show a focus rectangle when the widget has
-    focus and the widget is a QSpinWidget, QDateTimeEdit, QLineEdit,
-    QListBox, QListView, editable QTextEdit, or one of their
-    subclasses.
-*/
-
-/*! \fn void QMacStyle::setFocusRectPolicy(QWidget *w, FocusRectPolicy policy)
-    \obsolete
-    Sets the focus rectangle policy of \a w. The \a policy can be one of
-    \l{QMacStyle::FocusRectPolicy}.
-
-    This is now simply an interface to the Qt::WA_MacShowFocusRect attribute and the
-    FocusDefault value does nothing anymore. If you want to set a widget back
-    to its default value, you must save the old value of the attribute before
-    you change it.
-
-    \sa focusRectPolicy(), QWidget::setAttribute()
-*/
-
-/*! \fn QMacStyle::FocusRectPolicy QMacStyle::focusRectPolicy(const QWidget *w)
-    \obsolete
-    Returns the focus rectangle policy for the widget \a w.
-
-    The focus rectangle policy can be one of \l{QMacStyle::FocusRectPolicy}.
-
-    In 4.3 and up this function will simply test for the
-    Qt::WA_MacShowFocusRect attribute and will never return
-    QMacStyle::FocusDefault.
-
-    \sa setFocusRectPolicy(), QWidget::testAttribute()
 */
 
 /*! \fn void QMacStyle::setWidgetSizePolicy(const QWidget *widget, WidgetSizePolicy policy)

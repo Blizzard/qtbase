@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,6 +39,7 @@
 
 #include "qxcbnativeinterface.h"
 
+#include "qxcbcursor.h"
 #include "qxcbscreen.h"
 #include "qxcbwindow.h"
 #include "qxcbintegration.h"
@@ -50,15 +57,7 @@
 #include <QtPlatformHeaders/qxcbintegrationfunctions.h>
 #include <QtPlatformHeaders/qxcbscreenfunctions.h>
 
-#ifndef QT_NO_DBUS
-#include "QtPlatformSupport/private/qdbusmenuconnection_p.h"
-#endif
-
-#ifdef XCB_USE_XLIB
-#  include <X11/Xlib.h>
-#else
-#  include <stdio.h>
-#endif
+#include <stdio.h>
 
 #include <algorithm>
 
@@ -78,8 +77,8 @@ static int resourceType(const QByteArray &key)
         QByteArrayLiteral("gettimestamp"), QByteArrayLiteral("x11screen"),
         QByteArrayLiteral("rootwindow"),
         QByteArrayLiteral("subpixeltype"), QByteArrayLiteral("antialiasingenabled"),
-        QByteArrayLiteral("nofonthinting"),
-        QByteArrayLiteral("atspibus")
+        QByteArrayLiteral("atspibus"),
+        QByteArrayLiteral("compositingenabled")
     };
     const QByteArray *end = names + sizeof(names) / sizeof(names[0]);
     const QByteArray *result = std::find(names, end, key);
@@ -87,21 +86,8 @@ static int resourceType(const QByteArray &key)
 }
 
 QXcbNativeInterface::QXcbNativeInterface() :
-    m_genericEventFilterType(QByteArrayLiteral("xcb_generic_event_t")),
-    m_sysTraySelectionAtom(XCB_ATOM_NONE)
+    m_genericEventFilterType(QByteArrayLiteral("xcb_generic_event_t"))
 {
-}
-
-void QXcbNativeInterface::beep() // For QApplication::beep()
-{
-    QScreen *priScreen = QGuiApplication::primaryScreen();
-    if (!priScreen)
-        return;
-    QPlatformScreen *screen = priScreen->handle();
-    if (!screen)
-        return;
-    xcb_connection_t *connection = static_cast<QXcbScreen *>(screen)->xcb_connection();
-    xcb_bell(connection, 0);
 }
 
 static inline QXcbSystemTrayTracker *systemTrayTracker(const QScreen *s)
@@ -208,7 +194,7 @@ void *QXcbNativeInterface::nativeResourceForContext(const QByteArray &resourceSt
 void *QXcbNativeInterface::nativeResourceForScreen(const QByteArray &resourceString, QScreen *screen)
 {
     if (!screen) {
-        qWarning() << "nativeResourceForScreen: null screen";
+        qWarning("nativeResourceForScreen: null screen");
         return Q_NULLPTR;
     }
 
@@ -220,7 +206,7 @@ void *QXcbNativeInterface::nativeResourceForScreen(const QByteArray &resourceStr
     const QXcbScreen *xcbScreen = static_cast<QXcbScreen *>(screen->handle());
     switch (resourceType(lowerCaseResource)) {
     case Display:
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
         result = xcbScreen->connection()->xlib_display();
 #endif
         break;
@@ -246,11 +232,12 @@ void *QXcbNativeInterface::nativeResourceForScreen(const QByteArray &resourceStr
     case GetTimestamp:
         result = getTimestamp(xcbScreen);
         break;
-    case NoFontHinting:
-        result = xcbScreen->noFontHinting() ? this : 0; //qboolptr...
-        break;
     case RootWindow:
         result = reinterpret_cast<void *>(xcbScreen->root());
+        break;
+    case CompositingEnabled:
+        if (QXcbVirtualDesktop *vd = xcbScreen->virtualDesktop())
+            result = vd->compositingActive() ? this : Q_NULLPTR;
         break;
     default:
         break;
@@ -289,6 +276,20 @@ void *QXcbNativeInterface::nativeResourceForBackingStore(const QByteArray &resou
     return result;
 }
 
+#ifndef QT_NO_CURSOR
+void *QXcbNativeInterface::nativeResourceForCursor(const QByteArray &resource, const QCursor &cursor)
+{
+    if (resource == QByteArrayLiteral("xcbcursor")) {
+        if (const QScreen *primaryScreen = QGuiApplication::primaryScreen()) {
+            if (const QPlatformCursor *pCursor= primaryScreen->handle()->cursor()) {
+                xcb_cursor_t xcbCursor = static_cast<const QXcbCursor *>(pCursor)->xcbCursor(cursor);
+                return reinterpret_cast<void *>(quintptr(xcbCursor));
+            }
+        }
+    }
+    return Q_NULLPTR;
+}
+#endif // !QT_NO_CURSOR
 
 QPlatformNativeInterface::NativeResourceForIntegrationFunction QXcbNativeInterface::nativeResourceFunctionForIntegration(const QByteArray &resource)
 {
@@ -431,7 +432,7 @@ void *QXcbNativeInterface::rootWindow()
 
 void *QXcbNativeInterface::display()
 {
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     QXcbIntegration *integration = QXcbIntegration::instance();
     QXcbConnection *defaultConnection = integration->defaultConnection();
     if (defaultConnection)
@@ -452,11 +453,15 @@ void *QXcbNativeInterface::atspiBus()
     QXcbConnection *defaultConnection = integration->defaultConnection();
     if (defaultConnection) {
         xcb_atom_t atspiBusAtom = defaultConnection->internAtom("AT_SPI_BUS");
-        xcb_get_property_cookie_t cookie = Q_XCB_CALL(xcb_get_property(defaultConnection->xcb_connection(), false,
-                                                            defaultConnection->rootWindow(),
-                                                            atspiBusAtom,
-                                                            XCB_ATOM_STRING, 0, 128));
-        xcb_get_property_reply_t *reply = Q_XCB_CALL(xcb_get_property_reply(defaultConnection->xcb_connection(), cookie, 0));
+        xcb_get_property_cookie_t cookie = Q_XCB_CALL2(xcb_get_property(
+                                                           defaultConnection->xcb_connection(),
+                                                           false, defaultConnection->rootWindow(),
+                                                           atspiBusAtom, XCB_ATOM_STRING, 0, 128),
+                                                       defaultConnection);
+        xcb_get_property_reply_t *reply = Q_XCB_CALL2(xcb_get_property_reply(
+                                                          defaultConnection->xcb_connection(),
+                                                          cookie, 0),
+                                                      defaultConnection);
         Q_ASSERT(!reply->bytes_after);
         char *data = (char *)xcb_get_property_value(reply);
         int length = xcb_get_property_value_length(reply);
@@ -505,7 +510,7 @@ QXcbScreen *QXcbNativeInterface::qPlatformScreenForWindow(QWindow *window)
 
 void *QXcbNativeInterface::displayForWindow(QWindow *window)
 {
-#if defined(XCB_USE_XLIB)
+#if QT_CONFIG(xcb_xlib)
     QXcbScreen *screen = qPlatformScreenForWindow(window);
     return screen ? screen->connection()->xlib_display() : Q_NULLPTR;
 #else

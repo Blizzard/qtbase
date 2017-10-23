@@ -1,8 +1,12 @@
 TARGET = qsqlodbc
 
-SOURCES = main.cpp
+HEADERS += $$PWD/qsql_odbc_p.h
+SOURCES += $$PWD/qsql_odbc.cpp $$PWD/main.cpp
+
+QMAKE_USE += odbc
+unix: DEFINES += UNICODE
+
 OTHER_FILES += odbc.json
-include(../../../sql/drivers/odbc/qsql_odbc.pri)
 
 PLUGIN_CLASS_NAME = QODBCDriverPlugin
 include(../qsqldriverbase.pri)

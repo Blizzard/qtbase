@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -61,7 +56,6 @@ class tst_QGridLayout : public QObject
 Q_OBJECT
 
 private slots:
-    void initTestCase();
     void cleanup();
     void getItemPosition();
     void itemAtPosition();
@@ -86,16 +80,10 @@ private slots:
     void taskQTBUG_27420_takeAtShouldUnparentLayout();
     void taskQTBUG_40609_addingWidgetToItsOwnLayout();
     void taskQTBUG_40609_addingLayoutToItself();
+    void taskQTBUG_52357_spacingWhenItemIsHidden();
     void replaceWidget();
     void dontCrashWhenExtendsToEnd();
 };
-
-void tst_QGridLayout::initTestCase()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 static inline int visibleTopLevelWidgetCount()
 {
@@ -353,6 +341,8 @@ void tst_QGridLayout::setMinAndMaxSize()
 
 
     layout.removeItem(spacer);
+    delete spacer;
+    spacer = Q_NULLPTR;
 
     rightChild.hide();
     QApplication::sendPostedEvents(0, 0);
@@ -538,7 +528,8 @@ public:
     }
 private:
     void init(int numPixels = -1){
-        setText(QString::fromLatin1("(%1,%2)").arg(sh.width()).arg(sh.height()));
+        setText(QLatin1Char('(') + QString::number(sh.width())
+                + QLatin1Char(',') + QString::number(sh.height()) + QLatin1Char(')'));
         setFrameStyle(QFrame::Box | QFrame::Plain);
         setNumberOfPixels(numPixels);
     }
@@ -607,19 +598,6 @@ void tst_QGridLayout::spacingsAndMargins_data()
                                         << QPoint( 20, child_offset_y)
                                         << QPoint( 20, child_offset_y + 100 + 6)
                                         );
-#if defined (Q_OS_WINCE) //There is not enough screenspace to run the test in original size on Windows CE. We use smaller widgets.
-    child_offset_y = 11 + 9 + 50 + 6 + 50 + 6 + 50 + 6;
-    QTest::newRow("1x3 grid") << 1 << 3 << QSize(50, 50)
-                       << (PointList()  // toplevel
-                                        << QPoint( 11, 11)
-                                        << QPoint( 11, 11 + 50 + 6)
-                                        << QPoint( 11, 11 + 50 + 6 + 50 + 6)
-                                        // children
-                                        << QPoint( 20, child_offset_y)
-                                        << QPoint( 20, child_offset_y + 50 + 6)
-                                        << QPoint( 20, child_offset_y + 50 + 6 + 50 + 6)
-                                        );
-#else
     child_offset_y = 11 + 9 + 100 + 6 + 100 + 6 + 100 + 6;
     QTest::newRow("1x3 grid") << 1 << 3 << QSize(100, 100)
                        << (PointList()  // toplevel
@@ -631,7 +609,6 @@ void tst_QGridLayout::spacingsAndMargins_data()
                                         << QPoint( 20, child_offset_y + 100 + 6)
                                         << QPoint( 20, child_offset_y + 100 + 6 + 100 + 6)
                                         );
-#endif
 
     child_offset_y = 11 + 9 + 100 + 6 + 100 + 6;
     QTest::newRow("2x2 grid") << 2 << 2 << QSize(100, 100)
@@ -1432,8 +1409,9 @@ void tst_QGridLayout::layoutSpacing_data()
             w->setLayout(layout);
             int pw = up->sizeHint().width();
             int ph = up->sizeHint().height();
-            QByteArray testName = QString::fromLatin1("arrowpad with %1 empty rows, %2 empty columns").arg(yoff).arg(xoff).toLatin1();
-            QTest::newRow(testName.data())
+            QByteArray testName = "arrowpad with " + QByteArray::number(yoff)
+                + " empty rows, " + QByteArray::number(xoff) + " empty columns";
+            QTest::newRow(testName.constData())
                     << w << (PointList()
                     << QPoint(0 + pw + 5, 3)
                     << QPoint(0, 3 + ph + 10)
@@ -1601,10 +1579,10 @@ void tst_QGridLayout::contentsRect()
 void tst_QGridLayout::distributeMultiCell()
 {
     QWidget w;
-    Qt42Style *style = new Qt42Style();
-    style->spacing = 9;
+    Qt42Style style;
+    style.spacing = 9;
 
-    w.setStyle(style);
+    w.setStyle(&style);
     QGridLayout grid;
     w.setLayout(&grid);
 
@@ -1675,6 +1653,26 @@ void tst_QGridLayout::taskQTBUG_40609_addingLayoutToItself(){
     QCOMPARE(layout.count(), 0);
 }
 
+void tst_QGridLayout::taskQTBUG_52357_spacingWhenItemIsHidden()
+{
+    QWidget widget;
+    setFrameless(&widget);
+    QGridLayout layout(&widget);
+    layout.setMargin(0);
+    layout.setSpacing(5);
+    QPushButton button1;
+    layout.addWidget(&button1, 0, 0);
+    QPushButton button2;
+    layout.addWidget(&button2, 0, 1);
+    QPushButton button3;
+    layout.addWidget(&button3, 0, 2);
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
+    int tempWidth = button1.width() + button2.width() + button3.width() + 2 * layout.spacing();
+    button2.hide();
+    QTRY_COMPARE_WITH_TIMEOUT(tempWidth, button1.width() + button3.width() + layout.spacing(), 1000);
+}
+
 void tst_QGridLayout::replaceWidget()
 {
     QWidget wdg;
@@ -1686,7 +1684,7 @@ void tst_QGridLayout::replaceWidget()
     for (int n = 0; n < itemCount; ++n) {
         int x = n % 3;
         int y = n / 3;
-        labels[n] = new QLabel(QString("label %1").arg(n));
+        labels[n] = new QLabel(QLatin1String("label ") + QString::number(n));
         Qt::Alignment align = (n % 3 ? Qt::AlignLeft : Qt::AlignRight);
         l->addWidget(labels[n], x * 3, y * 3, (n % 2) + 1, (n + 1) % 2 + 1, align);
     }

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,39 +51,32 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qmainwindow.h"
 
-#ifndef QT_NO_MAINWINDOW
-
 #include "QtWidgets/qlayout.h"
+#if QT_CONFIG(tabbar)
 #include "QtWidgets/qtabbar.h"
+#endif
 #include "QtCore/qvector.h"
 #include "QtCore/qset.h"
 #include "QtCore/qbasictimer.h"
 #include "private/qlayoutengine_p.h"
 #include "private/qwidgetanimator_p.h"
 
+#if QT_CONFIG(dockwidget)
 #include "qdockarealayout_p.h"
+#endif
 #include "qtoolbararealayout_p.h"
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
-// Forward defs to make avoid including Carbon.h (faster compile you know ;).
-struct OpaqueHIObjectRef;
-typedef struct OpaqueHIObjectRef*       HIObjectRef;
-typedef HIObjectRef                     HIToolbarItemRef;
-typedef const void * CFTypeRef;
-typedef const struct __CFString * CFStringRef;
-
-#include <private/qunifiedtoolbarsurface_mac_p.h>
-
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+QT_REQUIRE_CONFIG(mainwindow);
 
 QT_BEGIN_NAMESPACE
 
 class QToolBar;
 class QRubberBand;
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 class QDockWidgetGroupWindow : public QWidget
 {
     Q_OBJECT
@@ -88,9 +87,14 @@ public:
     QDockWidget *topDockWidget() const;
     void destroyOrHideIfEmpty();
     void adjustFlags();
+    bool hasNativeDecos() const;
+
 protected:
     bool event(QEvent *) Q_DECL_OVERRIDE;
     void paintEvent(QPaintEvent*) Q_DECL_OVERRIDE;
+
+private:
+    QSize m_removedFrameSize;
 };
 
 // This item will be used in the layout for the gap item. We cannot use QWidgetItem directly
@@ -126,7 +130,7 @@ public:
     QToolBarAreaLayout toolBarAreaLayout;
 #endif
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QDockAreaLayout dockAreaLayout;
 #else
     QLayoutItem *centralWidgetItem;
@@ -188,7 +192,7 @@ public:
 
     QLayoutItem *statusbar;
 
-#ifndef QT_NO_STATUSBAR
+#if QT_CONFIG(statusbar)
     QStatusBar *statusBar() const;
     void setStatusBar(QStatusBar *sb);
 #endif
@@ -217,7 +221,7 @@ public:
 
     // dock widgets
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     void setCorner(Qt::Corner corner, Qt::DockWidgetArea area);
     Qt::DockWidgetArea corner(Qt::Corner corner) const;
     void addDockWidget(Qt::DockWidgetArea area,
@@ -231,9 +235,9 @@ public:
     void raise(QDockWidget *widget);
     void setVerticalTabsEnabled(bool enabled);
     bool restoreDockWidget(QDockWidget *dockwidget);
-    QDockAreaLayoutInfo *dockInfo(QWidget *w);
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
+    QDockAreaLayoutInfo *dockInfo(QWidget *w);
     bool _documentMode;
     bool documentMode() const;
     void setDocumentMode(bool enabled);
@@ -248,7 +252,7 @@ public:
     QList<QWidget*> unusedSeparatorWidgets;
     int sep; // separator extent
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
     QTabWidget::TabPosition tabPositions[4];
     QTabWidget::TabShape _tabShape;
 
@@ -258,8 +262,8 @@ public:
     void setTabPosition(Qt::DockWidgetAreas areas, QTabWidget::TabPosition tabPosition);
 
     QDockWidgetGroupWindow *createTabbedDockWindow();
-#endif // QT_NO_TABWIDGET
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabwidget)
+#endif // QT_CONFIG(tabbar)
 
     // separators
 
@@ -271,11 +275,11 @@ public:
     bool separatorMove(const QPoint &pos);
     bool endSeparatorMove(const QPoint &pos);
     void keepSize(QDockWidget *w);
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 
     // save/restore
 
-    enum { // sentinel values used to validate state data
+    enum VersionMarkers { // sentinel values used to validate state data
         VersionMarker = 0xff
     };
     void saveState(QDataStream &stream) const;
@@ -301,18 +305,18 @@ public:
     QList<int> currentGapPos;
     QRect currentGapRect;
     QWidget *pluggingWidget;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     QPointer<QRubberBand> gapIndicator;
 #endif
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
     QPointer<QWidget> currentHoveredFloat; // set when dragging over a floating dock widget
+    void setCurrentHoveredFloat(QWidget *w);
 #endif
 
     void hover(QLayoutItem *widgetItem, const QPoint &mousePos);
     bool plug(QLayoutItem *widgetItem);
     QLayoutItem *unplug(QWidget *widget, bool group = false);
     void revert(QLayoutItem *widgetItem);
-    void updateGapIndicator();
     void paintDropIndicator(QPainter *p, QWidget *widget, const QRegion &clip);
     void applyState(QMainWindowLayoutState &newState, bool animate = true);
     void restore(bool keepSavedState = false);
@@ -320,17 +324,18 @@ public:
     void animationFinished(QWidget *widget);
 
 private Q_SLOTS:
-#ifndef QT_NO_DOCKWIDGET
-#ifndef QT_NO_TABBAR
+    void updateGapIndicator();
+#if QT_CONFIG(dockwidget)
+#if QT_CONFIG(tabbar)
     void tabChanged();
     void tabMoved(int from, int to);
 #endif
 #endif
 private:
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
     void updateTabBarShapes();
 #endif
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     static OSStatus qtmacToolbarDelegate(EventHandlerCallRef, EventRef , void *);
     static OSStatus qtoolbarInHIToolbarHandler(EventHandlerCallRef inCallRef, EventRef event,
                                                void *data);
@@ -363,17 +368,15 @@ public:
     QUnifiedToolbarSurface *unifiedSurface;
     void updateUnifiedToolbarOffset();
 
-#endif // Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 };
 
-#if !defined(QT_NO_DOCKWIDGET) && !defined(QT_NO_DEBUG_STREAM)
+#if QT_CONFIG(dockwidget) && !defined(QT_NO_DEBUG_STREAM)
 class QDebug;
 QDebug operator<<(QDebug debug, const QDockAreaLayout &layout);
 QDebug operator<<(QDebug debug, const QMainWindowLayout *layout);
 #endif
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_MAINWINDOW
 
 #endif // QDYNAMICMAINWINDOWLAYOUT_P_H

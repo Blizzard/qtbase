@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -42,6 +52,8 @@
 
 #include <qpa/qplatformintegration.h>
 
+#include <QCommandLineParser>
+#include <QCommandLineOption>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QThread>
@@ -50,9 +62,26 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
+    QCoreApplication::setApplicationName("Qt HelloWindow GL Example");
+    QCoreApplication::setOrganizationName("QtProject");
+    QCoreApplication::setApplicationVersion(QT_VERSION_STR);
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QCoreApplication::applicationName());
+    parser.addHelpOption();
+    parser.addVersionOption();
+    QCommandLineOption multipleOption("multiple", "Create multiple windows");
+    parser.addOption(multipleOption);
+    QCommandLineOption multipleSampleOption("multisample", "Multisampling");
+    parser.addOption(multipleSampleOption);
+    QCommandLineOption multipleScreenOption("multiscreen", "Run on multiple screens");
+    parser.addOption(multipleScreenOption);
+    QCommandLineOption timeoutOption("timeout", "Close after 10s");
+    parser.addOption(timeoutOption);
+    parser.process(app);
+
     // Some platforms can only have one window per screen. Therefore we need to differentiate.
-    const bool multipleWindows = QGuiApplication::arguments().contains(QStringLiteral("--multiple"));
-    const bool multipleScreens = QGuiApplication::arguments().contains(QStringLiteral("--multiscreen"));
+    const bool multipleWindows = parser.isSet(multipleOption);
+    const bool multipleScreens = parser.isSet(multipleScreenOption);
 
     QScreen *screen = QGuiApplication::primaryScreen();
 
@@ -60,7 +89,7 @@ int main(int argc, char *argv[])
 
     QSurfaceFormat format;
     format.setDepthBufferSize(16);
-    if (QGuiApplication::arguments().contains(QStringLiteral("--multisample")))
+    if (parser.isSet(multipleSampleOption))
         format.setSamples(4);
 
     QPoint center = QPoint(screenGeometry.center().x(), screenGeometry.top() + 80);
@@ -126,7 +155,7 @@ int main(int argc, char *argv[])
     }
 
     // Quit after 10 seconds. For platforms that do not have windows that are closeable.
-    if (QCoreApplication::arguments().contains(QStringLiteral("--timeout")))
+    if (parser.isSet(timeoutOption))
         QTimer::singleShot(10000, qGuiApp, &QCoreApplication::quit);
 
     const int exitValue = app.exec();

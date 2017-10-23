@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,7 +54,7 @@ static inline QVariant themeableHint(QPlatformTheme::ThemeHint th,
                                      QPlatformIntegration::StyleHint ih)
 {
     if (!QCoreApplication::instance()) {
-        qWarning() << "Must construct a QGuiApplication before accessing a platform theme hint.";
+        qWarning("Must construct a QGuiApplication before accessing a platform theme hint.");
         return QVariant();
     }
     if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
@@ -65,17 +71,25 @@ class QStyleHintsPrivate : public QObjectPrivate
 public:
     inline QStyleHintsPrivate()
         : m_mouseDoubleClickInterval(-1)
+        , m_mousePressAndHoldInterval(-1)
         , m_startDragDistance(-1)
         , m_startDragTime(-1)
         , m_keyboardInputInterval(-1)
         , m_cursorFlashTime(-1)
+        , m_tabFocusBehavior(-1)
+        , m_uiEffects(-1)
+        , m_wheelScrollLines(-1)
         {}
 
     int m_mouseDoubleClickInterval;
+    int m_mousePressAndHoldInterval;
     int m_startDragDistance;
     int m_startDragTime;
     int m_keyboardInputInterval;
     int m_cursorFlashTime;
+    int m_tabFocusBehavior;
+    int m_uiEffects;
+    int m_wheelScrollLines;
 };
 
 /*!
@@ -129,6 +143,21 @@ int QStyleHints::mouseDoubleClickInterval() const
 }
 
 /*!
+    Sets the \a mousePressAndHoldInterval.
+    \internal
+    \sa mousePressAndHoldInterval()
+    \since 5.7
+*/
+void QStyleHints::setMousePressAndHoldInterval(int mousePressAndHoldInterval)
+{
+    Q_D(QStyleHints);
+    if (d->m_mousePressAndHoldInterval == mousePressAndHoldInterval)
+        return;
+    d->m_mousePressAndHoldInterval = mousePressAndHoldInterval;
+    emit mousePressAndHoldIntervalChanged(mousePressAndHoldInterval);
+}
+
+/*!
     \property QStyleHints::mousePressAndHoldInterval
     \brief the time limit in milliseconds that activates
     a press and hold.
@@ -137,7 +166,10 @@ int QStyleHints::mouseDoubleClickInterval() const
 */
 int QStyleHints::mousePressAndHoldInterval() const
 {
-    return themeableHint(QPlatformTheme::MousePressAndHoldInterval, QPlatformIntegration::MousePressAndHoldInterval).toInt();
+    Q_D(const QStyleHints);
+    return d->m_mousePressAndHoldInterval >= 0 ?
+           d->m_mousePressAndHoldInterval :
+           themeableHint(QPlatformTheme::MousePressAndHoldInterval, QPlatformIntegration::MousePressAndHoldInterval).toInt();
 }
 
 /*!
@@ -299,7 +331,9 @@ int QStyleHints::cursorFlashTime() const
 
 /*!
     \property QStyleHints::showIsFullScreen
-    \brief \c true if the platform defaults to windows being fullscreen,
+    \brief whether the platform defaults to fullscreen windows.
+
+    This property is \c true if the platform defaults to windows being fullscreen,
     otherwise \c false.
 
     \note The platform may still choose to show certain windows non-fullscreen,
@@ -314,7 +348,9 @@ bool QStyleHints::showIsFullScreen() const
 
 /*!
     \property QStyleHints::showIsMaximized
-    \brief \c true if the platform defaults to windows being maximized,
+    \brief whether the platform defaults to maximized windows.
+
+    This property is \c true if the platform defaults to windows being maximized,
     otherwise \c false.
 
     \note The platform may still choose to show certain windows non-maximized,
@@ -359,7 +395,9 @@ qreal QStyleHints::fontSmoothingGamma() const
 
 /*!
     \property QStyleHints::useRtlExtensions
-    \brief \c true if right-to-left writing direction is enabled,
+    \brief the writing direction.
+
+    This property is \c true if right-to-left writing direction is enabled,
     otherwise \c false.
 */
 bool QStyleHints::useRtlExtensions() const
@@ -369,7 +407,9 @@ bool QStyleHints::useRtlExtensions() const
 
 /*!
     \property QStyleHints::setFocusOnTouchRelease
-    \brief \c true if focus objects (line edits etc) should receive
+    \brief the event that should set input focus on focus objects.
+
+    This property is \c true if focus objects (line edits etc) should receive
     input focus after a touch/mouse release. This is normal behavior on
     touch platforms. On desktop platforms, the standard is to set
     focus already on touch/mouse press.
@@ -390,12 +430,32 @@ bool QStyleHints::setFocusOnTouchRelease() const
 
 Qt::TabFocusBehavior QStyleHints::tabFocusBehavior() const
 {
-    return Qt::TabFocusBehavior(themeableHint(QPlatformTheme::TabFocusBehavior, QPlatformIntegration::TabFocusBehavior).toInt());
+    Q_D(const QStyleHints);
+    return Qt::TabFocusBehavior(d->m_tabFocusBehavior >= 0 ?
+                                d->m_tabFocusBehavior :
+                                themeableHint(QPlatformTheme::TabFocusBehavior, QPlatformIntegration::TabFocusBehavior).toInt());
+}
+
+/*!
+    Sets the \a tabFocusBehavior.
+    \internal
+    \sa tabFocusBehavior()
+    \since 5.7
+*/
+void QStyleHints::setTabFocusBehavior(Qt::TabFocusBehavior tabFocusBehavior)
+{
+    Q_D(QStyleHints);
+    if (d->m_tabFocusBehavior == tabFocusBehavior)
+        return;
+    d->m_tabFocusBehavior = tabFocusBehavior;
+    emit tabFocusBehaviorChanged(tabFocusBehavior);
 }
 
 /*!
     \property QStyleHints::singleClickActivation
-    \brief \c true if items should be activated by single click, \b false
+    \brief whether items are activated by single or double click.
+
+    This property is \c true if items should be activated by single click, \c false
     if they should be activated by double click instead.
 
     \since 5.5
@@ -403,6 +463,67 @@ Qt::TabFocusBehavior QStyleHints::tabFocusBehavior() const
 bool QStyleHints::singleClickActivation() const
 {
     return themeableHint(QPlatformTheme::ItemViewActivateItemOnSingleClick, QPlatformIntegration::ItemViewActivateItemOnSingleClick).toBool();
+}
+
+/*!
+    \property QStyleHints::useHoverEffects
+    \brief whether UI elements use hover effects.
+
+    This property is \c true if UI elements should use hover effects. This is the
+    standard behavior on desktop platforms with a mouse pointer, whereas
+    on touch platforms the overhead of hover event delivery can be avoided.
+
+    \since 5.8
+*/
+bool QStyleHints::useHoverEffects() const
+{
+    Q_D(const QStyleHints);
+    return (d->m_uiEffects >= 0 ?
+            d->m_uiEffects :
+            themeableHint(QPlatformTheme::UiEffects, QPlatformIntegration::UiEffects).toInt()) & QPlatformTheme::HoverEffect;
+}
+
+void QStyleHints::setUseHoverEffects(bool useHoverEffects)
+{
+    Q_D(QStyleHints);
+    if (d->m_uiEffects >= 0 && useHoverEffects == bool(d->m_uiEffects & QPlatformTheme::HoverEffect))
+        return;
+    if (d->m_uiEffects == -1)
+        d->m_uiEffects = 0;
+    if (useHoverEffects)
+        d->m_uiEffects |= QPlatformTheme::HoverEffect;
+    else
+        d->m_uiEffects &= ~QPlatformTheme::HoverEffect;
+    emit useHoverEffectsChanged(useHoverEffects);
+}
+
+/*!
+    \property QStyleHints::wheelScrollLines
+    \brief Number of lines to scroll by default for each wheel click.
+
+    \since 5.9
+*/
+int QStyleHints::wheelScrollLines() const
+{
+    Q_D(const QStyleHints);
+    if (d->m_wheelScrollLines > 0)
+        return d->m_wheelScrollLines;
+    return themeableHint(QPlatformTheme::WheelScrollLines, QPlatformIntegration::WheelScrollLines).toInt();
+}
+
+/*!
+    Sets the \a wheelScrollLines.
+    \internal
+    \sa wheelScrollLines()
+    \since 5.9
+*/
+void QStyleHints::setWheelScrollLines(int scrollLines)
+{
+    Q_D(QStyleHints);
+    if (d->m_wheelScrollLines == scrollLines)
+        return;
+    d->m_wheelScrollLines = scrollLines;
+    emit wheelScrollLinesChanged(scrollLines);
 }
 
 QT_END_NAMESPACE

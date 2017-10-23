@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,7 +33,7 @@
 #include <qbitmap.h>
 #include <qpainter.h>
 #include <qpolygon.h>
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
 #include <private/qt_x11_p.h>
 #endif
 
@@ -50,7 +45,9 @@ public:
     tst_QRegion();
 
 private slots:
+    void moveSemantics();
     void boundingRect();
+    void rangeFor();
     void rects();
     void swap();
     void setRects();
@@ -82,7 +79,7 @@ private slots:
 
     void isEmpty_data();
     void isEmpty();
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) && defined(QT_BUILD_INTERNAL)
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && defined(QT_BUILD_INTERNAL)
     void clipRectangles();
 #endif
 
@@ -96,6 +93,28 @@ private slots:
 
 tst_QRegion::tst_QRegion()
 {
+}
+
+void tst_QRegion::moveSemantics()
+{
+    const QRegion rect(QRect(0, 0, 100, 100));
+
+    // move assignment
+    {
+        QRegion r1 = rect;
+        QRegion r2;
+        r2 = std::move(r1);
+        QVERIFY(r1.isNull());
+        QCOMPARE(r2, rect);
+    }
+
+    // move construction
+    {
+        QRegion r1 = rect;
+        QRegion r2 = std::move(r1);
+        QVERIFY(r1.isNull());
+        QCOMPARE(r2, rect);
+    }
 }
 
 void tst_QRegion::boundingRect()
@@ -118,17 +137,34 @@ void tst_QRegion::boundingRect()
 
 }
 
+void tst_QRegion::rangeFor()
+{
+    // compile-only test for range-for over QRegion, so really useless
+    // content otherwise:
+    QRect rect(10, -20, 30, 40);
+    QRegion region(rect);
+    int equal = 0;
+    for (const QRect &r : region) // check this compiles
+        equal += int(r == rect); // can't use QCOMPARE here b/c of the
+                                 // MSVC 201272013 parse bug re:
+                                 // do-while in range-for loops
+    QCOMPARE(equal, 1);
+}
+
 void tst_QRegion::rects()
 {
     {
         QRect rect;
         QRegion region(rect);
         QVERIFY(region.isEmpty());
+        QCOMPARE(region.begin(), region.end());
         QVERIFY(region.rects().isEmpty());
     }
     {
         QRect rect(10, -20, 30, 40);
         QRegion region(rect);
+        QCOMPARE(region.end(), region.begin() + 1);
+        QCOMPARE(*region.begin(), rect);
         QCOMPARE(region.rects().count(), 1);
         QCOMPARE(region.rects()[0], rect);
     }
@@ -174,6 +210,7 @@ void tst_QRegion::setRects()
         region.setRects(&rect, 0);
         QVERIFY(region.isEmpty());
         QCOMPARE(region, QRegion());
+        QCOMPARE(region.begin(), region.end());
         QVERIFY(!region.boundingRect().isValid());
         QVERIFY(region.rects().isEmpty());
     }
@@ -181,6 +218,7 @@ void tst_QRegion::setRects()
         QRegion region;
         QRect rect;
         region.setRects(&rect, 1);
+        QCOMPARE(region.begin(), region.end());
         QVERIFY(!region.boundingRect().isValid());
         QVERIFY(region.rects().isEmpty());
     }
@@ -188,8 +226,10 @@ void tst_QRegion::setRects()
         QRegion region;
         QRect rect(10, -20, 30, 40);
         region.setRects(&rect, 1);
+        QCOMPARE(region.end(), region.begin() + 1);
         QCOMPARE(region.rects().count(), 1);
         QCOMPARE(region.rects()[0], rect);
+        QCOMPARE(*region.begin(), rect);
     }
 }
 
@@ -302,8 +342,12 @@ void tst_QRegion::emptyPolygonRegion()
 
     QRegion r(pa);
     QTEST(r.isEmpty(), "isEmpty");
+    QTEST(int(std::distance(r.begin(), r.end())), "numRects");
+    QVector<QRect> rects;
+    std::copy(r.begin(), r.end(), std::back_inserter(rects));
     QTEST(r.rects().count(), "numRects");
     QTEST(r.rects(), "rects");
+    QCOMPARE(r.rects(), rects);
 }
 
 
@@ -842,13 +886,14 @@ void tst_QRegion::isEmpty()
     QFETCH(QRegion, region);
 
     QVERIFY(region.isEmpty());
+    QCOMPARE(region.begin(), region.end());
     QCOMPARE(region, QRegion());
     QCOMPARE(region.rectCount(), 0);
     QCOMPARE(region.boundingRect(), QRect());
     QVERIFY(region.rects().isEmpty());
 }
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) && defined(QT_BUILD_INTERNAL)
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && defined(QT_BUILD_INTERNAL)
 void tst_QRegion::clipRectangles()
 {
     QRegion region(30, 30, 30, 30);
@@ -874,6 +919,11 @@ void tst_QRegion::regionFromPath()
         path.addRect(0, 100, 100, 1000);
 
         QRegion rgn(path.toFillPolygon().toPolygon());
+
+        QCOMPARE(rgn.end(), rgn.begin() + 2);
+        QCOMPARE(rgn.begin()[0], QRect(0, 0, 10, 10));
+        QCOMPARE(rgn.begin()[1], QRect(0, 100, 100, 1000));
+
         QCOMPARE(rgn.rects().size(), 2);
         QCOMPARE(rgn.rects().at(0), QRect(0, 0, 10, 10));
         QCOMPARE(rgn.rects().at(1), QRect(0, 100, 100, 1000));
@@ -887,8 +937,14 @@ void tst_QRegion::regionFromPath()
         path.addRect(10, 10, 80, 80);
 
         QRegion rgn(path.toFillPolygon().toPolygon());
-        QCOMPARE(rgn.rects().size(), 4);
 
+        QCOMPARE(rgn.end(), rgn.begin() + 4);
+        QCOMPARE(rgn.begin()[0], QRect(0, 0, 100, 10));
+        QCOMPARE(rgn.begin()[1], QRect(0, 10, 10, 80));
+        QCOMPARE(rgn.begin()[2], QRect(90, 10, 10, 80));
+        QCOMPARE(rgn.begin()[3], QRect(0, 90, 100, 10));
+
+        QCOMPARE(rgn.rects().size(), 4);
         QCOMPARE(rgn.rects().at(0), QRect(0, 0, 100, 10));
         QCOMPARE(rgn.rects().at(1), QRect(0, 10, 10, 80));
         QCOMPARE(rgn.rects().at(2), QRect(90, 10, 10, 80));

@@ -20,9 +20,6 @@ OBJECTIVE_SOURCES += main.mm \
     qmultitouch_mac.mm \
     qcocoaaccessibilityelement.mm \
     qcocoaaccessibility.mm \
-    qcocoacolordialoghelper.mm \
-    qcocoafiledialoghelper.mm \
-    qcocoafontdialoghelper.mm \
     qcocoacursor.mm \
     qcocoaclipboard.mm \
     qcocoadrag.mm \
@@ -55,9 +52,6 @@ HEADERS += qcocoaintegration.h \
     qmultitouch_mac_p.h \
     qcocoaaccessibilityelement.h \
     qcocoaaccessibility.h \
-    qcocoacolordialoghelper.h \
-    qcocoafiledialoghelper.h \
-    qcocoafontdialoghelper.h \
     qcocoacursor.h \
     qcocoaclipboard.h \
     qcocoadrag.h \
@@ -71,7 +65,7 @@ HEADERS += qcocoaintegration.h \
     messages.h \
     qcocoamimetypes.h
 
-contains(QT_CONFIG, opengl.*) {
+qtConfig(opengl.*) {
     OBJECTIVE_SOURCES += qcocoaglcontext.mm
 
     HEADERS += qcocoaglcontext.h
@@ -79,11 +73,18 @@ contains(QT_CONFIG, opengl.*) {
 
 RESOURCES += qcocoaresources.qrc
 
-LIBS += -framework Cocoa -framework Carbon -framework IOKit -lcups
+LIBS += -framework AppKit -framework Carbon -framework IOKit -lcups
 
-QT += core-private gui-private platformsupport-private
+QT += \
+    core-private gui-private \
+    accessibility_support-private clipboard_support-private theme_support-private \
+    fontdatabase_support-private graphics_support-private cgl_support-private
+
+CONFIG += no_app_extension_api_only
 
 qtHaveModule(widgets) {
+    QT_FOR_CONFIG += widgets
+
     OBJECTIVE_SOURCES += \
         qpaintengine_mac.mm \
         qprintengine_mac.mm \
@@ -96,6 +97,21 @@ qtHaveModule(widgets) {
         qcocoaprintersupport.h \
         qcocoaprintdevice.h \
 
+    qtConfig(colordialog) {
+        SOURCES += qcocoacolordialoghelper.mm
+        HEADERS += qcocoacolordialoghelper.h
+    }
+
+    qtConfig(filedialog) {
+        SOURCES += qcocoafiledialoghelper.mm
+        HEADERS += qcocoafiledialoghelper.h
+    }
+
+    qtConfig(fontdialog) {
+        SOURCES += qcocoafontdialoghelper.mm
+        HEADERS += qcocoafontdialoghelper.h
+    }
+
     QT += widgets-private printsupport-private
 }
 
@@ -105,8 +121,6 @@ OTHER_FILES += cocoa.json
 # DEFINES += QT_COCOA_ENABLE_ACCESSIBILITY_INSPECTOR
 # include ($$PWD/../../../../util/accessibilityinspector/accessibilityinspector.pri)
 
-# Window debug support
-#DEFINES += QT_COCOA_ENABLE_WINDOW_DEBUG
 
 PLUGIN_TYPE = platforms
 PLUGIN_CLASS_NAME = QCocoaIntegrationPlugin

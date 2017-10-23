@@ -1,10 +1,11 @@
 TARGET = qwindows
 
-QT *= core-private
-QT *= gui-private
-QT *= platformsupport-private
+QT += \
+    core-private gui-private \
+    eventdispatcher_support-private accessibility_support-private \
+    fontdatabase_support-private theme_support-private
 
-!wince:LIBS *= -lgdi32
+LIBS += -lgdi32 -ldwmapi
 
 include(windows.pri)
 

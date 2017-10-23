@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,86 +55,127 @@
 QT_FORWARD_DECLARE_CLASS(QCFString)
 QT_FORWARD_DECLARE_CLASS(QString)
 
-
-QT_BEGIN_NAMESPACE
-
-/*
-    Loads and instantiates the main app menu from the menu nib file(s).
-
-    The main app menu contains the Quit, Hide  About, Preferences entries, and
-    The reason for having the nib file is that those can not be created
-    programmatically. To ease deployment the nib files are stored in Qt resources
-    and written to QDir::temp() before loading. (Earlier Qt versions used
-    to require having the nib file in the Qt GUI framework.)
-*/
-void qt_mac_loadMenuNib(QCocoaMenuLoader *qtMenuLoader)
-{
-    // Create qt_menu.nib dir in temp.
-    QDir temp = QDir::temp();
-    temp.mkdir("qt_menu.nib");
-    QString nibDir = temp.canonicalPath() + QLatin1String("/") + QLatin1String("qt_menu.nib/");
-    if (!QDir(nibDir).exists()) {
-        qWarning("qt_mac_loadMenuNib: could not create nib directory in temp");
-        return;
-    }
-
-    // Copy nib files from resources to temp.
-    QDir nibResource(":/qt-project.org/mac/qt_menu.nib/");
-    if (!nibResource.exists()) {
-        qWarning("qt_mac_loadMenuNib: could not load nib from resources");
-        return;
-    }
-    foreach (const QFileInfo &file, nibResource.entryInfoList()) {
-        QFileInfo destinationFile(nibDir + QLatin1String("/") + file.fileName());
-        if (destinationFile.exists() && destinationFile.size() != file.size())
-            QFile::remove(destinationFile.absoluteFilePath());
-
-        QFile::copy(file.absoluteFilePath(), destinationFile.absoluteFilePath());
-    }
-
-    // Load and instantiate nib file from temp
-    NSURL *nibUrl = [NSURL fileURLWithPath : QCFString::toNSString(nibDir)];
-    NSNib *nib = [[NSNib alloc] initWithContentsOfURL : nibUrl];
-    [nib autorelease];
-    if(!nib) {
-        qWarning("qt_mac_loadMenuNib: could not load nib from  temp");
-        return;
-    }
-    bool ok = [nib instantiateNibWithOwner : qtMenuLoader topLevelObjects : nil];
-    if (!ok) {
-        qWarning("qt_mac_loadMenuNib: could not instantiate nib");
-    }
-}
-
-QT_END_NAMESPACE
-
 @implementation QCocoaMenuLoader
 
-- (void)awakeFromNib
++ (instancetype)sharedMenuLoader
 {
-    servicesItem = [[appMenu itemWithTitle:@"Services"] retain];
-    hideAllOthersItem = [[appMenu itemWithTitle:@"Hide Others"] retain];
-    showAllItem = [[appMenu itemWithTitle:@"Show All"] retain];
+    static QCocoaMenuLoader *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+                      shared = [[self alloc] init];
+                  });
+    return shared;
+}
 
-    // Get the names in the nib to match the app name set by Qt.
-    const NSString *appName = qt_mac_applicationName().toNSString();
-    [quitItem setTitle:[[quitItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
-                                                                   withString:const_cast<NSString *>(appName)]];
-    [hideItem setTitle:[[hideItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
-                                                                   withString:const_cast<NSString *>(appName)]];
-    [aboutItem setTitle:[[aboutItem title] stringByReplacingOccurrencesOfString:@"NewApplication"
-                                                                   withString:const_cast<NSString *>(appName)]];
-    // Disable the items that don't do anything. If someone associates a QAction with them
-    // They should get synced back in.
-    [preferencesItem setEnabled:NO];
-    [preferencesItem setHidden:YES];
+- (instancetype)init
+{
+    if ((self = [super init])) {
+        NSString *appName = qt_mac_applicationName().toNSString();
 
-    // should set this in the NIB
-    [preferencesItem setTarget: self];
-    [preferencesItem setAction: @selector(qtDispatcherToQPAMenuItem:)];
+        // Menubar as menu. Title as set in the NIB file
+        theMenu = [[NSMenu alloc] initWithTitle:@"Main Menu"];
 
-    [aboutItem setEnabled:NO];
-    [aboutItem setHidden:YES];
+        // Application menu. Since 10.6, the first menu
+        // is always identified as the application menu.
+        NSMenuItem *appItem = [[[NSMenuItem alloc] init] autorelease];
+        appItem.title = appName;
+        [theMenu addItem:appItem];
+        appMenu = [[NSMenu alloc] initWithTitle:appName];
+        appItem.submenu = appMenu;
+
+        // About Application
+        aboutItem = [[NSMenuItem alloc] initWithTitle:[@"About " stringByAppendingString:appName]
+                                               action:@selector(orderFrontStandardAboutPanel:)
+                                        keyEquivalent:@""];
+        aboutItem.target = self;
+        // Disable until a QAction is associated
+        aboutItem.enabled = NO;
+        aboutItem.hidden = YES;
+        [appMenu addItem:aboutItem];
+
+        // About Qt (shameless self-promotion)
+        aboutQtItem = [[NSMenuItem alloc] init];
+        aboutQtItem.title = @"About Qt";
+        // Disable until a QAction is associated
+        aboutQtItem.enabled = NO;
+        aboutQtItem.hidden = YES;
+        [appMenu addItem:aboutQtItem];
+
+        [appMenu addItem:[NSMenuItem separatorItem]];
+
+        // Preferences
+        preferencesItem = [[NSMenuItem alloc] initWithTitle:@"Preferences…"
+                                                     action:@selector(qtDispatcherToQPAMenuItem:)
+                                              keyEquivalent:@","];
+        preferencesItem.target = self;
+        // Disable until a QAction is associated
+        preferencesItem.enabled = NO;
+        preferencesItem.hidden = YES;
+        [appMenu addItem:preferencesItem];
+
+        [appMenu addItem:[NSMenuItem separatorItem]];
+
+        // Services item and menu
+        servicesItem = [[NSMenuItem alloc] init];
+        servicesItem.title = @"Services";
+        NSMenu *servicesMenu = [[[NSMenu alloc] initWithTitle:@"Services"] autorelease];
+        servicesItem.submenu = servicesMenu;
+        [NSApplication sharedApplication].servicesMenu = servicesMenu;
+        [appMenu addItem:servicesItem];
+
+        [appMenu addItem:[NSMenuItem separatorItem]];
+
+        // Hide Application
+        hideItem = [[NSMenuItem alloc] initWithTitle:[@"Hide " stringByAppendingString:appName]
+                                              action:@selector(hide:)
+                                       keyEquivalent:@"h"];
+        hideItem.target = self;
+        [appMenu addItem:hideItem];
+
+        // Hide Others
+        hideAllOthersItem = [[NSMenuItem alloc] initWithTitle:@"Hide Others"
+                                                       action:@selector(hideOtherApplications:)
+                                                keyEquivalent:@"h"];
+        hideAllOthersItem.target = self;
+        hideAllOthersItem.keyEquivalentModifierMask = NSCommandKeyMask | NSAlternateKeyMask;
+        [appMenu addItem:hideAllOthersItem];
+
+        // Show All
+        showAllItem = [[NSMenuItem alloc] initWithTitle:@"Show All"
+                                                 action:@selector(unhideAllApplications:)
+                                          keyEquivalent:@""];
+        showAllItem.target = self;
+        [appMenu addItem:showAllItem];
+
+        [appMenu addItem:[NSMenuItem separatorItem]];
+
+        // Quit Application
+        quitItem = [[NSMenuItem alloc] initWithTitle:[@"Quit " stringByAppendingString:appName]
+                                              action:@selector(terminate:)
+                                       keyEquivalent:@"q"];
+        quitItem.target = self;
+        [appMenu addItem:quitItem];
+    }
+
+    return self;
+}
+
+- (void)dealloc
+{
+    [theMenu release];
+    [appMenu release];
+    [aboutItem release];
+    [aboutQtItem release];
+    [preferencesItem release];
+    [servicesItem release];
+    [hideItem release];
+    [hideAllOthersItem release];
+    [showAllItem release];
+    [quitItem release];
+
+    [lastAppSpecificItem release];
+
+    [super dealloc];
 }
 
 - (void)ensureAppMenuInMenu:(NSMenu *)menu
@@ -171,18 +218,6 @@ QT_END_NAMESPACE
 {
     for (NSMenuItem *item in [appMenu itemArray])
         [item setTag:0];
-}
-
-- (void)dealloc
-{
-    [servicesItem release];
-    [hideAllOthersItem release];
-    [showAllItem release];
-
-    [lastAppSpecificItem release];
-    [theMenu release];
-    [appMenu release];
-    [super dealloc];
 }
 
 - (NSMenu *)menu
@@ -279,13 +314,13 @@ QT_END_NAMESPACE
 {
 
 #ifndef QT_NO_TRANSLATION
-    [servicesItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(0))];
-    [hideItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(1).arg(qt_mac_applicationName()))];
-    [hideAllOthersItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(2))];
-    [showAllItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(3))];
-    [preferencesItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(4))];
-    [quitItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(5).arg(qt_mac_applicationName()))];
-    [aboutItem setTitle: QCFString::toNSString(qt_mac_applicationmenu_string(6).arg(qt_mac_applicationName()))];
+    [servicesItem setTitle:qt_mac_applicationmenu_string(0).toNSString()];
+    [hideItem setTitle:qt_mac_applicationmenu_string(1).arg(qt_mac_applicationName()).toNSString()];
+    [hideAllOthersItem setTitle:qt_mac_applicationmenu_string(2).toNSString()];
+    [showAllItem setTitle:qt_mac_applicationmenu_string(3).toNSString()];
+    [preferencesItem setTitle:qt_mac_applicationmenu_string(4).toNSString()];
+    [quitItem setTitle:qt_mac_applicationmenu_string(5).arg(qt_mac_applicationName()).toNSString()];
+    [aboutItem setTitle:qt_mac_applicationmenu_string(6).arg(qt_mac_applicationName()).toNSString()];
 #endif
 }
 
@@ -302,7 +337,7 @@ QT_END_NAMESPACE
 
     if ([item tag]) {
         QCocoaMenuItem *cocoaItem = reinterpret_cast<QCocoaMenuItem *>([item tag]);
-        QScopedLoopLevelCounter loopLevelCounter(QGuiApplicationPrivate::instance()->threadData);
+        QScopedScopeLevelCounter scopeLevelCounter(QGuiApplicationPrivate::instance()->threadData);
         cocoaItem->activated();
     }
 }

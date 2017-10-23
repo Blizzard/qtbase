@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -41,26 +47,28 @@ QT_BEGIN_NAMESPACE
 QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(QHttpNetworkRequest::Operation op,
         QHttpNetworkRequest::Priority pri, const QUrl &newUrl)
     : QHttpNetworkHeaderPrivate(newUrl), operation(op), priority(pri), uploadByteDevice(0),
-      autoDecompress(false), pipeliningAllowed(false), spdyAllowed(false),
-      withCredentials(true), preConnect(false), followRedirect(false), redirectCount(0)
+      autoDecompress(false), pipeliningAllowed(false), spdyAllowed(false), http2Allowed(false),
+      withCredentials(true), preConnect(false), redirectCount(0),
+      redirectPolicy(QNetworkRequest::ManualRedirectPolicy)
 {
 }
 
-QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(const QHttpNetworkRequestPrivate &other)
-    : QHttpNetworkHeaderPrivate(other)
+QHttpNetworkRequestPrivate::QHttpNetworkRequestPrivate(const QHttpNetworkRequestPrivate &other) // = default
+    : QHttpNetworkHeaderPrivate(other),
+      operation(other.operation),
+      customVerb(other.customVerb),
+      priority(other.priority),
+      uploadByteDevice(other.uploadByteDevice),
+      autoDecompress(other.autoDecompress),
+      pipeliningAllowed(other.pipeliningAllowed),
+      spdyAllowed(other.spdyAllowed),
+      http2Allowed(other.http2Allowed),
+      withCredentials(other.withCredentials),
+      ssl(other.ssl),
+      preConnect(other.preConnect),
+      redirectCount(other.redirectCount),
+      redirectPolicy(other.redirectPolicy)
 {
-    operation = other.operation;
-    priority = other.priority;
-    uploadByteDevice = other.uploadByteDevice;
-    autoDecompress = other.autoDecompress;
-    pipeliningAllowed = other.pipeliningAllowed;
-    spdyAllowed = other.spdyAllowed;
-    customVerb = other.customVerb;
-    withCredentials = other.withCredentials;
-    ssl = other.ssl;
-    preConnect = other.preConnect;
-    followRedirect = other.followRedirect;
-    redirectCount = other.redirectCount;
 }
 
 QHttpNetworkRequestPrivate::~QHttpNetworkRequestPrivate()
@@ -76,11 +84,13 @@ bool QHttpNetworkRequestPrivate::operator==(const QHttpNetworkRequestPrivate &ot
         && (autoDecompress == other.autoDecompress)
         && (pipeliningAllowed == other.pipeliningAllowed)
         && (spdyAllowed == other.spdyAllowed)
+        && (http2Allowed == other.http2Allowed)
         // we do not clear the customVerb in setOperation
         && (operation != QHttpNetworkRequest::Custom || (customVerb == other.customVerb))
         && (withCredentials == other.withCredentials)
         && (ssl == other.ssl)
-        && (preConnect == other.preConnect);
+        && (preConnect == other.preConnect)
+        && (redirectPolicy == other.redirectPolicy);
 }
 
 QByteArray QHttpNetworkRequest::methodName() const
@@ -221,12 +231,17 @@ void QHttpNetworkRequest::setPreConnect(bool preConnect)
 
 bool QHttpNetworkRequest::isFollowRedirects() const
 {
-    return d->followRedirect;
+    return d->redirectPolicy != QNetworkRequest::ManualRedirectPolicy;
 }
 
-void QHttpNetworkRequest::setFollowRedirects(bool followRedirect)
+void QHttpNetworkRequest::setRedirectPolicy(QNetworkRequest::RedirectPolicy policy)
 {
-    d->followRedirect = followRedirect;
+    d->redirectPolicy = policy;
+}
+
+QNetworkRequest::RedirectPolicy QHttpNetworkRequest::redirectPolicy() const
+{
+    return d->redirectPolicy;
 }
 
 int QHttpNetworkRequest::redirectCount() const
@@ -323,6 +338,16 @@ bool QHttpNetworkRequest::isSPDYAllowed() const
 void QHttpNetworkRequest::setSPDYAllowed(bool b)
 {
     d->spdyAllowed = b;
+}
+
+bool QHttpNetworkRequest::isHTTP2Allowed() const
+{
+    return d->http2Allowed;
+}
+
+void QHttpNetworkRequest::setHTTP2Allowed(bool b)
+{
+    d->http2Allowed = b;
 }
 
 bool QHttpNetworkRequest::withCredentials() const

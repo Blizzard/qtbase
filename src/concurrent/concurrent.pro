@@ -2,7 +2,8 @@ TARGET     = QtConcurrent
 QT         = core-private
 CONFIG    += exceptions
 
-DEFINES   += QT_NO_USING_NAMESPACE
+DEFINES   += QT_NO_USING_NAMESPACE QT_NO_FOREACH
+
 win32-msvc*|win32-icc:QMAKE_LFLAGS += /BASE:0x66000000
 
 QMAKE_DOCS = $$PWD/doc/qtconcurrent.qdocconf
@@ -35,9 +36,5 @@ HEADERS += \
 
 # private headers
 HEADERS += \
-
-contains(QT_CONFIG, clock-gettime) {
-    linux-*|hpux-*|solaris-*: LIBS_PRIVATE *= -lrt
-}
 
 load(qt_module)

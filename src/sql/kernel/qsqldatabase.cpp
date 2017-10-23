@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,51 +39,6 @@
 
 #include "qsqldatabase.h"
 #include "qsqlquery.h"
-
-#ifdef Q_OS_WIN32
-// Conflicting declarations of LPCBYTE in sqlfront.h and winscard.h
-#define _WINSCARD_H_
-#endif
-
-#ifdef QT_SQL_PSQL
-#include "../drivers/psql/qsql_psql_p.h"
-#endif
-#ifdef QT_SQL_MYSQL
-#include "../drivers/mysql/qsql_mysql_p.h"
-#endif
-#ifdef QT_SQL_ODBC
-#include "../drivers/odbc/qsql_odbc_p.h"
-#endif
-#ifdef QT_SQL_OCI
-#include "../drivers/oci/qsql_oci_p.h"
-#endif
-#ifdef QT_SQL_TDS
-// conflicting RETCODE typedef between odbc and freetds
-#define RETCODE DBRETCODE
-#include "../drivers/tds/qsql_tds_p.h"
-#undef RETCODE
-#endif
-#ifdef QT_SQL_DB2
-#include "../drivers/db2/qsql_db2_p.h"
-#endif
-#ifdef QT_SQL_SQLITE
-#include "../drivers/sqlite/qsql_sqlite_p.h"
-#endif
-#ifdef QT_SQL_SQLITE2
-#include "../drivers/sqlite2/qsql_sqlite2_p.h"
-#endif
-#ifdef QT_SQL_IBASE
-#undef SQL_FLOAT  // avoid clash with ODBC
-#undef SQL_DOUBLE
-#undef SQL_TIMESTAMP
-#undef SQL_TYPE_TIME
-#undef SQL_TYPE_DATE
-#undef SQL_DATE
-#define SCHAR IBASE_SCHAR  // avoid clash with ODBC (older versions of ibase.h with Firebird)
-#include "../drivers/ibase/qsql_ibase_p.h"
-#undef SCHAR
-#endif
-
 #include "qdebug.h"
 #include "qcoreapplication.h"
 #include "qreadwritelock.h"
@@ -93,11 +54,9 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_LIBRARY
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
                           (QSqlDriverFactoryInterface_iid,
                            QLatin1String("/sqldrivers")))
-#endif
 
 #if !defined(Q_CC_MSVC) || _MSC_VER >= 1900
 // ### Qt6: remove the #ifdef
@@ -354,7 +313,7 @@ void QSqlDatabasePrivate::disable()
 
 /*!
     \class QSqlDatabase
-    \brief The QSqlDatabase class represents a connection to
+    \brief The QSqlDatabase class handles a connection to
     a database.
 
     \ingroup database
@@ -373,18 +332,17 @@ void QSqlDatabasePrivate::disable()
     Create a connection (i.e., an instance of QSqlDatabase) by calling
     one of the static addDatabase() functions, where you specify
     \l{SQL Database Drivers#Supported Databases} {the driver or type
-    of driver} to use (i.e., what kind of database will you access?)
+    of driver} to use (depending on the type of database)
     and a connection name. A connection is known by its own name,
     \e{not} by the name of the database it connects to. You can have
     multiple connections to one database. QSqlDatabase also supports
     the concept of a \e{default} connection, which is the unnamed
     connection. To create the default connection, don't pass the
     connection name argument when you call addDatabase().
-    Subsequently, when you call any static member function that takes
-    the connection name argument, if you don't pass the connection
-    name argument, the default connection is assumed. The following
-    snippet shows how to create and open a default connection to a
-    PostgreSQL database:
+    Subsequently, the default connection will be assumed if you call
+    any static member function without specifying the connection name.
+    The following snippet shows how to create and open a default connection
+    to a PostgreSQL database:
 
     \snippet sqldatabase/sqldatabase.cpp 0
 
@@ -407,6 +365,14 @@ void QSqlDatabasePrivate::disable()
     cloneDatabase() to create an independent database connection based
     on an existing one.
 
+    \warning It is highly recommended that you do not keep a copy of the
+    QSqlDatabase around as a member of a class, as this will prevent the
+    instance from being correctly cleaned up on shutdown. If you need to
+    access an existing QSqlDatabase, it should be accessed with database().
+    If you chose to have a QSqlDatabase member variable, this needs to be
+    deleted before the QCoreApplication instance is deleted, otherwise it
+    may lead to undefined behavior.
+
     If you create multiple database connections, specify a unique
     connection name for each one, when you call addDatabase(). Use
     database() with a connection name to get that connection. Use
@@ -415,26 +381,49 @@ void QSqlDatabasePrivate::disable()
     referenced by other QSqlDatabase objects. Use contains() to see if
     a given connection name is in the list of connections.
 
-    Once a connection is established, you can call tables() to get the
-    list of tables in the database, call primaryIndex() to get a
-    table's primary index, and call record() to get meta-information
-    about a table's fields (e.g., field names).
+    \table
+    \header
+       \li {2,1}Some utility methods:
+    \row
+        \li tables()
+         \li returns the list of tables
+    \row
+        \li primaryIndex()
+        \li returns a table's primary index
+    \row
+        \li record()
+        \li returns meta-information about a table's fields
+    \row
+        \li transaction()
+        \li starts a transaction
+    \row
+        \li commit()
+        \li saves and completes a transaction
+    \row
+        \li rollback()
+        \li cancels a transaction
+    \row
+        \li hasFeature()
+        \li checks if a driver supports transactions
+    \row
+        \li lastError()
+        \li returns information about the last error
+    \row
+        \li drivers()
+        \li returns the names of the available SQL drivers
+    \row
+        \li isDriverAvailable()
+        \li checks if a particular driver is available
+    \row
+        \li registerSqlDriver()
+        \li registers a custom-made driver
+    \endtable
 
     \note QSqlDatabase::exec() is deprecated. Use QSqlQuery::exec()
     instead.
 
-    If the driver supports transactions, use transaction() to start a
-    transaction, and commit() or rollback() to complete it. Use
-    \l{QSqlDriver::} {hasFeature()} to ask if the driver supports
-    transactions. \note When using transactions, you must start the
+    \note When using transactions, you must start the
     transaction before you create your query.
-
-    If an error occurs, lastError() will return information about it.
-
-    Get the names of the available SQL drivers with drivers().  Check
-    for the presence of a particular driver with isDriverAvailable().
-    If you have created your own custom driver, you must register it
-    with registerSqlDriver().
 
     \sa QSqlDriver, QSqlQuery, {Qt SQL}, {Threads and the SQL Module}
 */
@@ -538,40 +527,6 @@ QStringList QSqlDatabase::drivers()
 {
     QStringList list;
 
-#ifdef QT_SQL_PSQL
-    list << QLatin1String("QPSQL7");
-    list << QLatin1String("QPSQL");
-#endif
-#ifdef QT_SQL_MYSQL
-    list << QLatin1String("QMYSQL3");
-    list << QLatin1String("QMYSQL");
-#endif
-#ifdef QT_SQL_ODBC
-    list << QLatin1String("QODBC3");
-    list << QLatin1String("QODBC");
-#endif
-#ifdef QT_SQL_OCI
-    list << QLatin1String("QOCI8");
-    list << QLatin1String("QOCI");
-#endif
-#ifdef QT_SQL_TDS
-    list << QLatin1String("QTDS7");
-    list << QLatin1String("QTDS");
-#endif
-#ifdef QT_SQL_DB2
-    list << QLatin1String("QDB2");
-#endif
-#ifdef QT_SQL_SQLITE
-    list << QLatin1String("QSQLITE");
-#endif
-#ifdef QT_SQL_SQLITE2
-    list << QLatin1String("QSQLITE2");
-#endif
-#ifdef QT_SQL_IBASE
-    list << QLatin1String("QIBASE");
-#endif
-
-#ifndef QT_NO_LIBRARY
     if (QFactoryLoader *fl = loader()) {
         typedef QMultiMap<int, QString> PluginKeyMap;
         typedef PluginKeyMap::const_iterator PluginKeyMapConstIterator;
@@ -582,7 +537,6 @@ QStringList QSqlDatabase::drivers()
             if (!list.contains(it.value()))
                 list << it.value();
     }
-#endif
 
     DriverDict dict = QSqlDatabasePrivate::driverDict();
     for (DriverDict::const_iterator i = dict.constBegin(); i != dict.constEnd(); ++i) {
@@ -724,45 +678,6 @@ void QSqlDatabasePrivate::init(const QString &type)
     drvName = type;
 
     if (!driver) {
-#ifdef QT_SQL_PSQL
-        if (type == QLatin1String("QPSQL") || type == QLatin1String("QPSQL7"))
-            driver = new QPSQLDriver();
-#endif
-#ifdef QT_SQL_MYSQL
-        if (type == QLatin1String("QMYSQL") || type == QLatin1String("QMYSQL3"))
-            driver = new QMYSQLDriver();
-#endif
-#ifdef QT_SQL_ODBC
-        if (type == QLatin1String("QODBC") || type == QLatin1String("QODBC3"))
-            driver = new QODBCDriver();
-#endif
-#ifdef QT_SQL_OCI
-        if (type == QLatin1String("QOCI") || type == QLatin1String("QOCI8"))
-            driver = new QOCIDriver();
-#endif
-#ifdef QT_SQL_TDS
-        if (type == QLatin1String("QTDS") || type == QLatin1String("QTDS7"))
-            driver = new QTDSDriver();
-#endif
-#ifdef QT_SQL_DB2
-        if (type == QLatin1String("QDB2"))
-            driver = new QDB2Driver();
-#endif
-#ifdef QT_SQL_SQLITE
-        if (type == QLatin1String("QSQLITE"))
-            driver = new QSQLiteDriver();
-#endif
-#ifdef QT_SQL_SQLITE2
-        if (type == QLatin1String("QSQLITE2"))
-            driver = new QSQLite2Driver();
-#endif
-#ifdef QT_SQL_IBASE
-        if (type == QLatin1String("QIBASE"))
-            driver = new QIBaseDriver();
-#endif
-    }
-
-    if (!driver) {
         DriverDict dict = QSqlDatabasePrivate::driverDict();
         for (DriverDict::const_iterator it = dict.constBegin();
              it != dict.constEnd() && !driver; ++it) {
@@ -772,10 +687,8 @@ void QSqlDatabasePrivate::init(const QString &type)
         }
     }
 
-#ifndef QT_NO_LIBRARY
     if (!driver && loader())
         driver = qLoadPlugin<QSqlDriver, QSqlDriverPlugin>(loader(), type);
-#endif // QT_NO_LIBRARY
 
     if (!driver) {
         qWarning("QSqlDatabase: %s driver not loaded", type.toLatin1().data());
@@ -789,6 +702,9 @@ void QSqlDatabasePrivate::init(const QString &type)
 
 /*!
     Destroys the object and frees any allocated resources.
+
+    \note When the last connection is destroyed, the destructor
+    implicitly calls close() to release the database connection.
 
     \sa close()
 */
@@ -1080,9 +996,9 @@ QString QSqlDatabase::userName() const
 }
 
 /*!
-    Returns the connection's password. If the password was not set
-    with setPassword(), and if the password was given in the open()
-    call, or if no password was used, an empty string is returned.
+    Returns the connection's password. An empty string will be returned
+    if the password was not set with setPassword(), and if the password
+    was given in the open() call, or if no password was used.
 */
 QString QSqlDatabase::password() const
 {
@@ -1162,7 +1078,7 @@ QStringList QSqlDatabase::tables(QSql::TableType type) const
 
 /*!
     Returns the primary index for table \a tablename. If no primary
-    index exists an empty QSqlIndex is returned.
+    index exists, an empty QSqlIndex is returned.
 
     \sa tables(), record()
 */
@@ -1188,8 +1104,9 @@ QSqlRecord QSqlDatabase::record(const QString& tablename) const
 
 /*!
     Sets database-specific \a options. This must be done before the
-    connection is opened or it has no effect (or you can close() the
-    connection, call this function and open() the connection again).
+    connection is opened, otherwise it has no effect. Another possibility
+    is to close the connection, call QSqlDatabase::setConnectOptions(),
+    and open() the connection again.
 
     The format of the \a options string is a semicolon separated list
     of option names or option=value pairs. The options depend on the

@@ -1,39 +1,46 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qstyleoption.h"
 #include "qapplication.h"
-#ifdef Q_OS_MAC
+#if QT_CONFIG(style_mac)
 # include "qmacstyle_mac_p.h"
 #endif
 #include <qdebug.h>
@@ -193,12 +200,12 @@ void QStyleOption::init(const QWidget *widget)
         state |= QStyle::State_Active;
     if (widget->isWindow())
         state |= QStyle::State_Window;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     extern bool qt_mac_can_clickThrough(const QWidget *w); //qwidget_mac.cpp
     if (!(state & QStyle::State_Active) && !qt_mac_can_clickThrough(widget))
         state &= ~QStyle::State_Enabled;
 #endif
-#if defined(Q_OS_OSX) && !defined(QT_NO_STYLE_MAC)
+#if QT_CONFIG(style_mac)
     switch (QMacStyle::widgetSizePolicy(widget)) {
     case QMacStyle::SizeSmall:
         state |= QStyle::State_Small;
@@ -1224,7 +1231,7 @@ QStyleOptionToolBar::QStyleOptionToolBar(int version)
 
 #endif
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 /*!
     \class QStyleOptionTab
     \brief The QStyleOptionTab class is used to describe the
@@ -1472,7 +1479,7 @@ QStyleOptionTab::QStyleOptionTab(int version)
     The default value is QSize(-1, -1), i.e. an invalid size;
 */
 
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
 /*!
     \class QStyleOptionProgressBar
@@ -1946,7 +1953,7 @@ QStyleOptionComplex::QStyleOptionComplex(int version, int type)
     \sa QStyle::SubControl
 */
 
-#ifndef QT_NO_SLIDER
+#if QT_CONFIG(slider)
 /*!
     \class QStyleOptionSlider
     \brief The QStyleOptionSlider class is used to describe the
@@ -2143,9 +2150,9 @@ QStyleOptionSlider::QStyleOptionSlider(int version)
 
     \sa QAbstractSlider::pageStep
 */
-#endif // QT_NO_SLIDER
+#endif // QT_CONFIG(slider)
 
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
 /*!
     \class QStyleOptionSpinBox
     \brief The QStyleOptionSpinBox class is used to describe the
@@ -2249,7 +2256,7 @@ QStyleOptionSpinBox::QStyleOptionSpinBox(int version)
 
     The default value is false, i.e. the spin box has no frame.
 */
-#endif // QT_NO_SPINBOX
+#endif // QT_CONFIG(spinbox)
 
 /*!
     \class QStyleOptionDockWidget
@@ -2790,7 +2797,7 @@ QStyleOptionToolBox::QStyleOptionToolBox(int version)
     a selected tab nor is it the selected tab.
 */
 
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
 /*!
     \class QStyleOptionRubberBand
     \brief The QStyleOptionRubberBand class is used to describe the
@@ -2880,7 +2887,7 @@ QStyleOptionRubberBand::QStyleOptionRubberBand(int version)
 
     The default value is true.
 */
-#endif // QT_NO_RUBBERBAND
+#endif // QT_CONFIG(rubberband)
 
 /*!
     \class QStyleOptionTitleBar
@@ -2993,7 +3000,7 @@ QStyleOptionTitleBar::QStyleOptionTitleBar(int version)
     \sa Qt::WindowFlags
 */
 
-#ifndef QT_NO_ITEMVIEWS
+#if QT_CONFIG(itemviews)
 /*!
     \class QStyleOptionViewItem
     \brief The QStyleOptionViewItem class is used to describe the
@@ -3260,7 +3267,7 @@ QStyleOptionViewItem::QStyleOptionViewItem(int version)
                      therefore both at the beginning and the end.
 */
 
-#endif // QT_NO_ITEMVIEWS
+#endif // QT_CONFIG(itemviews)
 /*!
     \fn T qstyleoption_cast<T>(const QStyleOption *option)
     \relates QStyleOption
@@ -3283,7 +3290,7 @@ QStyleOptionViewItem::QStyleOptionViewItem(int version)
     Returns a T or 0 depending on the type of the given \a option.
 */
 
-#ifndef QT_NO_TABWIDGET
+#if QT_CONFIG(tabwidget)
 /*!
     \class QStyleOptionTabWidgetFrame
     \brief The QStyleOptionTabWidgetFrame class is used to describe the
@@ -3427,9 +3434,9 @@ QStyleOptionTabWidgetFrame::QStyleOptionTabWidgetFrame(int version)
     and the height set to 0.
 */
 
-#endif // QT_NO_TABWIDGET
+#endif // QT_CONFIG(tabwidget)
 
-#ifndef QT_NO_TABBAR
+#if QT_CONFIG(tabbar)
 
 /*!
     \class QStyleOptionTabBarBase
@@ -3549,9 +3556,9 @@ QStyleOptionTabBarBase::QStyleOptionTabBarBase(int version)
     The default value is false;
 */
 
-#endif // QT_NO_TABBAR
+#endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_SIZEGRIP
+#if QT_CONFIG(sizegrip)
 /*!
     \class QStyleOptionSizeGrip
     \brief The QStyleOptionSizeGrip class is used to describe the
@@ -3631,7 +3638,7 @@ QStyleOptionSizeGrip::QStyleOptionSizeGrip(int version)
 
     \sa StyleOptionType
 */
-#endif // QT_NO_SIZEGRIP
+#endif // QT_CONFIG(sizegrip)
 
 /*!
     \class QStyleOptionGraphicsItem

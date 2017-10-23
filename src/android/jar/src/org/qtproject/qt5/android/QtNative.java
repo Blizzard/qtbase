@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 BogDan Vatra <bogdan@kde.org>
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Android port of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -39,13 +45,15 @@ import java.util.ArrayList;
 import java.util.concurrent.Semaphore;
 
 import android.app.Activity;
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.ClipboardManager;
+import android.content.ClipboardManager;
+import android.content.ClipboardManager.OnPrimaryClipChangedListener;
 import android.os.Build;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -53,6 +61,7 @@ import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.InputDevice;
 
 import java.lang.reflect.Method;
 import java.security.KeyStore;
@@ -66,7 +75,9 @@ public class QtNative
 {
     private static Activity m_activity = null;
     private static boolean m_activityPaused = false;
+    private static Service m_service = null;
     private static QtActivityDelegate m_activityDelegate = null;
+    private static QtServiceDelegate m_serviceDelegate = null;
     public static Object m_mainActivityMutex = new Object(); // mutex used to synchronize runnable operations
 
     public static final String QtTAG = "Qt JAVA"; // string used for Log.x
@@ -85,6 +96,12 @@ public class QtNative
     private static ClipboardManager m_clipboardManager = null;
     private static Method m_checkSelfPermissionMethod = null;
     private static Boolean m_tabletEventSupported = null;
+    private static final Runnable runPendingCppRunnablesRunnable = new Runnable() {
+        @Override
+        public void run() {
+            runPendingCppRunnables();
+        }
+    };
 
     private static ClassLoader m_classLoader = null;
     public static ClassLoader classLoader()
@@ -104,10 +121,25 @@ public class QtNative
         }
     }
 
+    public static Service service()
+    {
+        synchronized (m_mainActivityMutex) {
+            return m_service;
+        }
+    }
+
+
     public static QtActivityDelegate activityDelegate()
     {
         synchronized (m_mainActivityMutex) {
             return m_activityDelegate;
+        }
+    }
+
+    public static QtServiceDelegate serviceDelegate()
+    {
+        synchronized (m_mainActivityMutex) {
+            return m_serviceDelegate;
         }
     }
 
@@ -175,6 +207,14 @@ public class QtNative
         }
     }
 
+    public static void setService(Service qtMainService, QtServiceDelegate qtServiceDelegate)
+    {
+        synchronized (m_mainActivityMutex) {
+            m_service = qtMainService;
+            m_serviceDelegate = qtServiceDelegate;
+        }
+    }
+
     public static void setApplicationState(int state)
     {
         synchronized (m_mainActivityMutex) {
@@ -205,14 +245,25 @@ public class QtNative
         }
     }
 
-    private static void runQtOnUiThread(final long id)
+    private static void runPendingCppRunnablesOnAndroidThread()
     {
-        runAction(new Runnable() {
-            @Override
-            public void run() {
-                QtNative.onAndroidUiThread(id);
+        synchronized (m_mainActivityMutex) {
+            if (m_activity != null) {
+                if (!m_activityPaused)
+                    m_activity.runOnUiThread(runPendingCppRunnablesRunnable);
+                else
+                    runAction(runPendingCppRunnablesRunnable);
+            } else {
+                final Looper mainLooper = Looper.getMainLooper();
+                final Thread looperThread = mainLooper.getThread();
+                if (looperThread.equals(Thread.currentThread())) {
+                    runPendingCppRunnablesRunnable.run();
+                } else {
+                    final Handler handler = new Handler(mainLooper);
+                    handler.post(runPendingCppRunnablesRunnable);
+                }
             }
-        });
+        }
     }
 
     private static void setViewVisibility(final View view, final boolean visible)
@@ -299,6 +350,7 @@ public class QtNative
     // application methods
     public static native void startQtApplication(String params, String env);
     public static native boolean startQtAndroidPlugin();
+    public static native void quitQtCoreApplication();
     public static native void quitQtAndroidPlugin();
     public static native void terminateQt();
     // application methods
@@ -308,7 +360,11 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activity.finish();
+                quitQtAndroidPlugin();
+                if (m_activity != null)
+                     m_activity.finish();
+                 if (m_service != null)
+                     m_service.stopSelf();
             }
         });
     }
@@ -347,16 +403,14 @@ public class QtNative
         if (m_tabletEventSupported == null)
             m_tabletEventSupported = isTabletEventSupported();
 
-        if (Build.VERSION.SDK_INT >= 14) {
-            switch (event.getToolType(0)) {
-            case MotionEvent.TOOL_TYPE_STYLUS:
-                pointerType = 1; // QTabletEvent::Pen
-                break;
-            case MotionEvent.TOOL_TYPE_ERASER:
-                pointerType = 3; // QTabletEvent::Eraser
-                break;
-            // TODO TOOL_TYPE_MOUSE
-            }
+        switch (event.getToolType(0)) {
+        case MotionEvent.TOOL_TYPE_STYLUS:
+            pointerType = 1; // QTabletEvent::Pen
+            break;
+        case MotionEvent.TOOL_TYPE_ERASER:
+            pointerType = 3; // QTabletEvent::Eraser
+            break;
+        // TODO TOOL_TYPE_MOUSE
         }
 
         if (m_tabletEventSupported && pointerType != 0) {
@@ -371,7 +425,9 @@ public class QtNative
                              i == 0,
                              (int)event.getX(i),
                              (int)event.getY(i),
-                             event.getSize(i),
+                             event.getTouchMajor(i),
+                             event.getTouchMinor(i),
+                             event.getOrientation(i),
                              event.getPressure(i));
             }
 
@@ -415,20 +471,36 @@ public class QtNative
         }
     }
 
-    public static int checkSelfPermission(final String permission)
+    static public void sendGenericMotionEvent(MotionEvent event, int id)
+    {
+        if (event.getActionMasked() != MotionEvent.ACTION_SCROLL
+                || (event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != InputDevice.SOURCE_CLASS_POINTER) {
+            return;
+        }
+
+        mouseWheel(id, (int) event.getX(), (int) event.getY(),
+                       event.getAxisValue(MotionEvent.AXIS_HSCROLL), event.getAxisValue(MotionEvent.AXIS_VSCROLL));
+    }
+
+    public static Context getContext() {
+        if (m_activity != null)
+            return m_activity;
+        return m_service;
+    }
+
+    public static int checkSelfPermission(String permission)
     {
         int perm = PackageManager.PERMISSION_DENIED;
         synchronized (m_mainActivityMutex) {
-            if (m_activity == null)
-                return perm;
+            Context context = getContext();
             try {
                 if (Build.VERSION.SDK_INT >= 23) {
                     if (m_checkSelfPermissionMethod == null)
                         m_checkSelfPermissionMethod = Context.class.getMethod("checkSelfPermission", String.class);
-                    perm = (Integer)m_checkSelfPermissionMethod.invoke(m_activity, permission);
+                    perm = (Integer)m_checkSelfPermissionMethod.invoke(context, permission);
                 } else {
-                    final PackageManager pm = m_activity.getPackageManager();
-                    perm = pm.checkPermission(permission, m_activity.getPackageName());
+                    final PackageManager pm = context.getPackageManager();
+                    perm = pm.checkPermission(permission, context.getApplicationContext().getPackageName());
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -446,7 +518,23 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.updateSelection(selStart, selEnd, candidatesStart, candidatesEnd);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.updateSelection(selStart, selEnd, candidatesStart, candidatesEnd);
+            }
+        });
+    }
+
+    private static void updateHandles(final int mode,
+                                      final int x1,
+                                      final int y1,
+                                      final int x2,
+                                      final int y2,
+                                      final boolean rtl)
+    {
+        runAction(new Runnable() {
+            @Override
+            public void run() {
+                m_activityDelegate.updateHandles(mode, x1, y1, x2, y2, rtl);
             }
         });
     }
@@ -461,7 +549,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.showSoftwareKeyboard(x, y, width, height, inputHints, enterKeyType);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.showSoftwareKeyboard(x, y, width, height, inputHints, enterKeyType);
             }
         });
     }
@@ -471,7 +560,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.resetSoftwareKeyboard();
+                if (m_activityDelegate != null)
+                    m_activityDelegate.resetSoftwareKeyboard();
             }
         });
     }
@@ -481,7 +571,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.hideSoftwareKeyboard();
+                if (m_activityDelegate != null)
+                    m_activityDelegate.hideSoftwareKeyboard();
             }
         });
     }
@@ -491,7 +582,9 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.setFullScreen(fullScreen);
+                if (m_activityDelegate != null) {
+                    m_activityDelegate.setFullScreen(fullScreen);
+                }
                 updateWindow();
             }
         });
@@ -499,34 +592,51 @@ public class QtNative
 
     private static void registerClipboardManager()
     {
-        final Semaphore semaphore = new Semaphore(0);
-        runAction(new Runnable() {
-            @Override
-            public void run() {
-                m_clipboardManager = (android.text.ClipboardManager) m_activity.getSystemService(Context.CLIPBOARD_SERVICE);
-                semaphore.release();
+        if (m_service == null || m_activity != null) { // Avoid freezing if only service
+            final Semaphore semaphore = new Semaphore(0);
+            runAction(new Runnable() {
+                @Override
+                public void run() {
+                    if (m_activity != null)
+                        m_clipboardManager = (android.content.ClipboardManager) m_activity.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (m_clipboardManager != null) {
+                        m_clipboardManager.addPrimaryClipChangedListener(new ClipboardManager.OnPrimaryClipChangedListener() {
+                            public void onPrimaryClipChanged() {
+                                onClipboardDataChanged();
+                            }
+                        });
+                    }
+                    semaphore.release();
+                }
+            });
+            try {
+                semaphore.acquire();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        });
-        try {
-            semaphore.acquire();
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
     private static void setClipboardText(String text)
     {
-        m_clipboardManager.setText(text);
+        if (m_clipboardManager != null)
+            m_clipboardManager.setText(text);
     }
 
-    private static boolean hasClipboardText()
+    public static boolean hasClipboardText()
     {
-        return m_clipboardManager.hasText();
+        if (m_clipboardManager != null)
+            return m_clipboardManager.hasText();
+        else
+            return false;
     }
 
     private static String getClipboardText()
     {
-        return m_clipboardManager.getText().toString();
+        if (m_clipboardManager != null)
+            return m_clipboardManager.getText().toString();
+        else
+            return "";
     }
 
     private static void openContextMenu(final int x, final int y, final int w, final int h)
@@ -534,7 +644,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.openContextMenu(x, y, w, h);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.openContextMenu(x, y, w, h);
             }
         });
     }
@@ -544,7 +655,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.closeContextMenu();
+                if (m_activityDelegate != null)
+                    m_activityDelegate.closeContextMenu();
             }
         });
     }
@@ -554,7 +666,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.resetOptionsMenu();
+                if (m_activityDelegate != null)
+                    m_activityDelegate.resetOptionsMenu();
             }
         });
     }
@@ -564,7 +677,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activity.openOptionsMenu();
+                if (m_activity != null)
+                    m_activity.openOptionsMenu();
             }
         });
     }
@@ -601,7 +715,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.createSurface(id, onTop, x, y, w, h, imageDepth);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.createSurface(id, onTop, x, y, w, h, imageDepth);
             }
         });
     }
@@ -611,7 +726,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.insertNativeView(id, view, x, y, w, h);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.insertNativeView(id, view, x, y, w, h);
             }
         });
     }
@@ -621,7 +737,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.setSurfaceGeometry(id, x, y, w, h);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.setSurfaceGeometry(id, x, y, w, h);
             }
         });
     }
@@ -631,7 +748,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.bringChildToFront(id);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.bringChildToFront(id);
             }
         });
     }
@@ -641,7 +759,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.bringChildToBack(id);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.bringChildToBack(id);
             }
         });
     }
@@ -651,7 +770,8 @@ public class QtNative
         runAction(new Runnable() {
             @Override
             public void run() {
-                m_activityDelegate.destroySurface(id);
+                if (m_activityDelegate != null)
+                    m_activityDelegate.destroySurface(id);
             }
         });
     }
@@ -662,6 +782,17 @@ public class QtNative
             @Override
             public void run() {
                 m_activityDelegate.initializeAccessibility();
+            }
+        });
+    }
+
+    private static void hideSplashScreen()
+    {
+        runAction(new Runnable() {
+            @Override
+            public void run() {
+                if (m_activityDelegate != null)
+                    m_activityDelegate.hideSplashScreen();
             }
         });
     }
@@ -682,8 +813,9 @@ public class QtNative
     public static native void mouseDown(int winId, int x, int y);
     public static native void mouseUp(int winId, int x, int y);
     public static native void mouseMove(int winId, int x, int y);
+    public static native void mouseWheel(int winId, int x, int y, float hdelta, float vdelta);
     public static native void touchBegin(int winId);
-    public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float size, float pressure);
+    public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float major, float minor, float rotation, float pressure);
     public static native void touchEnd(int winId, int action);
     public static native void longPress(int winId, int x, int y);
     // pointer methods
@@ -699,6 +831,13 @@ public class QtNative
     public static native void keyboardVisibilityChanged(boolean visibility);
     public static native void keyboardGeometryChanged(int x, int y, int width, int height);
     // keyboard methods
+
+    // handle methods
+    public static final int IdCursorHandle = 1;
+    public static final int IdLeftHandle = 2;
+    public static final int IdRightHandle = 3;
+    public static native void handleLocationChanged(int id, int x, int y);
+    // handle methods
 
     // dispatch events methods
     public static native boolean dispatchGenericMotionEvent(MotionEvent ev);
@@ -727,9 +866,18 @@ public class QtNative
     public static native void onContextMenuClosed(Menu menu);
     // menu methods
 
+    // clipboard methods
+    public static native void onClipboardDataChanged();
+    // clipboard methods
+
     // activity methods
     public static native void onActivityResult(int requestCode, int resultCode, Intent data);
     public static native void onNewIntent(Intent data);
 
-    public static native void onAndroidUiThread(long id);
+    public static native void runPendingCppRunnables();
+
+    public static native void sendRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults);
+
+    private static native void setNativeActivity(Activity activity);
+    private static native void setNativeService(Service service);
 }

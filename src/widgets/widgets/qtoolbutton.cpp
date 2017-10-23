@@ -1,57 +1,66 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qtoolbutton.h"
-#ifndef QT_NO_TOOLBUTTON
 
 #include <qapplication.h>
 #include <qdesktopwidget.h>
 #include <qdrawutil.h>
 #include <qevent.h>
 #include <qicon.h>
-#include <qmenu.h>
 #include <qpainter.h>
 #include <qpointer.h>
 #include <qstyle.h>
 #include <qstyleoption.h>
 #include <qtooltip.h>
+#if QT_CONFIG(mainwindow)
 #include <qmainwindow.h>
+#endif
 #include <qtoolbar.h>
 #include <qvariant.h>
 #include <qstylepainter.h>
 #include <private/qabstractbutton_p.h>
 #include <private/qaction_p.h>
+#if QT_CONFIG(menu)
+#include <qmenu.h>
 #include <private/qmenu_p.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -60,7 +69,7 @@ class QToolButtonPrivate : public QAbstractButtonPrivate
     Q_DECLARE_PUBLIC(QToolButton)
 public:
     void init();
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     void _q_buttonPressed();
     void _q_buttonReleased();
     void popupTimerDone();
@@ -84,14 +93,14 @@ public:
     uint autoRaise             : 1;
     uint repeat                : 1;
     QAction *defaultAction;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     bool hasMenu() const;
     //workaround for task 177850
     QList<QAction *> actionsCopy;
 #endif
 };
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 bool QToolButtonPrivate::hasMenu() const
 {
     return ((defaultAction && defaultAction->menu())
@@ -190,7 +199,6 @@ QToolButton::QToolButton(QWidget * parent)
 void QToolButtonPrivate::init()
 {
     Q_Q(QToolButton);
-    delay = q->style()->styleHint(QStyle::SH_ToolButton_PopupDelay, 0, q);
     defaultAction = 0;
 #ifndef QT_NO_TOOLBAR
     if (qobject_cast<QToolBar*>(parent))
@@ -210,13 +218,13 @@ void QToolButtonPrivate::init()
     q->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed,
                                  QSizePolicy::ToolButton));
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     QObject::connect(q, SIGNAL(pressed()), q, SLOT(_q_buttonPressed()));
     QObject::connect(q, SIGNAL(released()), q, SLOT(_q_buttonReleased()));
 #endif
 
     setLayoutItemMargins(QStyle::SE_ToolButtonLayoutItem);
-
+    delay = q->style()->styleHint(QStyle::SH_ToolButton_PopupDelay, 0, q);
 }
 
 /*!
@@ -282,7 +290,7 @@ void QToolButton::initStyleOption(QStyleOptionToolButton *option) const
         option->features |= QStyleOptionToolButton::Arrow;
     if (d->popupMode == QToolButton::DelayedPopup)
         option->features |= QStyleOptionToolButton::PopupDelay;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (d->hasMenu())
         option->features |= QStyleOptionToolButton::HasMenu;
 #endif
@@ -467,7 +475,7 @@ void QToolButton::actionEvent(QActionEvent *event)
     case QEvent::ActionRemoved:
         if (d->defaultAction == action)
             d->defaultAction = 0;
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
         if (action == d->menuAction)
             d->menuAction = 0;
 #endif
@@ -546,7 +554,7 @@ void QToolButton::leaveEvent(QEvent * e)
  */
 void QToolButton::timerEvent(QTimerEvent *e)
 {
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     Q_D(QToolButton);
     if (e->timerId() == d->popupTimer.timerId()) {
         d->popupTimerDone();
@@ -585,7 +593,7 @@ void QToolButton::changeEvent(QEvent *e)
 void QToolButton::mousePressEvent(QMouseEvent *e)
 {
     Q_D(QToolButton);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     QStyleOptionToolButton opt;
     initStyleOption(&opt);
     if (e->button() == Qt::LeftButton && (d->popupMode == MenuButtonPopup)) {
@@ -624,7 +632,7 @@ bool QToolButton::hitButton(const QPoint &pos) const
 }
 
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 /*!
     Associates the given \a menu with this tool button.
 
@@ -817,10 +825,7 @@ void QToolButtonPrivate::_q_menuTriggered(QAction *action)
     if (action && !actionsCopy.contains(action))
         emit q->triggered(action);
 }
-#endif // QT_NO_MENU
 
-
-#ifndef QT_NO_MENU
 /*! \enum QToolButton::ToolButtonPopupMode
 
     Describes how a menu should be popped up for tool buttons that has
@@ -895,7 +900,7 @@ bool QToolButton::autoRaise() const
 void QToolButton::setDefaultAction(QAction *action)
 {
     Q_D(QToolButton);
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     bool hadMenu = false;
     hadMenu = d->hasMenu();
 #endif
@@ -914,13 +919,13 @@ void QToolButton::setDefaultAction(QAction *action)
 #ifndef QT_NO_TOOLTIP
     setToolTip(action->toolTip());
 #endif
-#ifndef QT_NO_STATUSTIP
+#if QT_CONFIG(statustip)
     setStatusTip(action->statusTip());
 #endif
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
     setWhatsThis(action->whatsThis());
 #endif
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     if (action->menu() && !hadMenu) {
         // new 'default' popup mode defined introduced by tool bar. We
         // should have changed QToolButton's default instead. Do that
@@ -980,5 +985,3 @@ bool QToolButton::event(QEvent *event)
 QT_END_NAMESPACE
 
 #include "moc_qtoolbutton.cpp"
-
-#endif

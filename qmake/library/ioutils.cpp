@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -42,7 +37,12 @@
 #  include <sys/types.h>
 #  include <sys/stat.h>
 #  include <unistd.h>
+#  include <utime.h>
+#  include <fcntl.h>
+#  include <errno.h>
 #endif
+
+#define fL1S(s) QString::fromLatin1(s)
 
 QT_BEGIN_NAMESPACE
 
@@ -187,5 +187,105 @@ QString IoUtils::shellQuoteWin(const QString &arg)
     }
     return ret;
 }
+
+#if defined(PROEVALUATOR_FULL)
+
+#  if defined(Q_OS_WIN)
+static QString windowsErrorCode()
+{
+    wchar_t *string = 0;
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
+                  NULL,
+                  GetLastError(),
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                  (LPWSTR)&string,
+                  0,
+                  NULL);
+    QString ret = QString::fromWCharArray(string);
+    LocalFree((HLOCAL)string);
+    return ret.trimmed();
+}
+#  endif
+
+bool IoUtils::touchFile(const QString &targetFileName, const QString &referenceFileName, QString *errorString)
+{
+#  ifdef Q_OS_UNIX
+    struct stat st;
+    if (stat(referenceFileName.toLocal8Bit().constData(), &st)) {
+        *errorString = fL1S("Cannot stat() reference file %1: %2.").arg(referenceFileName, fL1S(strerror(errno)));
+        return false;
+    }
+#    if defined(_POSIX_VERSION) && _POSIX_VERSION >= 200809L
+    const struct timespec times[2] = { { 0, UTIME_NOW }, st.st_mtim };
+    const bool utimeError = utimensat(AT_FDCWD, targetFileName.toLocal8Bit().constData(), times, 0) < 0;
+#    else
+    struct utimbuf utb;
+    utb.actime = time(0);
+    utb.modtime = st.st_mtime;
+    const bool utimeError= utime(targetFileName.toLocal8Bit().constData(), &utb) < 0;
+#    endif
+    if (utimeError) {
+        *errorString = fL1S("Cannot touch %1: %2.").arg(targetFileName, fL1S(strerror(errno)));
+        return false;
+    }
+#  else
+    HANDLE rHand = CreateFile((wchar_t*)referenceFileName.utf16(),
+                              GENERIC_READ, FILE_SHARE_READ,
+                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (rHand == INVALID_HANDLE_VALUE) {
+        *errorString = fL1S("Cannot open reference file %1: %2").arg(referenceFileName, windowsErrorCode());
+        return false;
+        }
+    FILETIME ft;
+    GetFileTime(rHand, 0, 0, &ft);
+    CloseHandle(rHand);
+    HANDLE wHand = CreateFile((wchar_t*)targetFileName.utf16(),
+                              GENERIC_WRITE, FILE_SHARE_READ,
+                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (wHand == INVALID_HANDLE_VALUE) {
+        *errorString = fL1S("Cannot open %1: %2").arg(targetFileName, windowsErrorCode());
+        return false;
+    }
+    SetFileTime(wHand, 0, 0, &ft);
+    CloseHandle(wHand);
+#  endif
+    return true;
+}
+#endif
+
+#ifdef Q_OS_UNIX
+bool IoUtils::readLinkTarget(const QString &symlinkPath, QString *target)
+{
+    const QByteArray localSymlinkPath = QFile::encodeName(symlinkPath);
+#  if defined(__GLIBC__) && !defined(PATH_MAX)
+#    define PATH_CHUNK_SIZE 256
+    char *s = 0;
+    int len = -1;
+    int size = PATH_CHUNK_SIZE;
+
+    forever {
+        s = (char *)::realloc(s, size);
+        len = ::readlink(localSymlinkPath.constData(), s, size);
+        if (len < 0) {
+            ::free(s);
+            break;
+        }
+        if (len < size)
+            break;
+        size *= 2;
+    }
+#  else
+    char s[PATH_MAX+1];
+    int len = readlink(localSymlinkPath.constData(), s, PATH_MAX);
+#  endif
+    if (len <= 0)
+        return false;
+    *target = QFile::decodeName(QByteArray(s, len));
+#  if defined(__GLIBC__) && !defined(PATH_MAX)
+    ::free(s);
+#  endif
+    return true;
+}
+#endif
 
 QT_END_NAMESPACE

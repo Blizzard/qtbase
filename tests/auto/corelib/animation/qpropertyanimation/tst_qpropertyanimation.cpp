@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +29,7 @@
 #include <QtTest/QtTest>
 #include <QtCore/qpropertyanimation.h>
 #include <QtCore/qvariantanimation.h>
+#include <QtGui/qtouchdevice.h>
 #include <QtWidgets/qwidget.h>
 
 Q_DECLARE_METATYPE(QAbstractAnimation::State)
@@ -369,7 +365,7 @@ void tst_QPropertyAnimation::deletion2()
     QTimer::singleShot(0, object, SLOT(deleteLater()));
     QTest::qWait(50);
 
-    QVERIFY(anim->targetObject() == 0);
+    QVERIFY(!anim->targetObject());
 }
 
 void tst_QPropertyAnimation::deletion3()
@@ -431,7 +427,7 @@ public:
     void setOle(int v) { o = v; values << v; }
 
     int o;
-    QList<int> values;
+    QVector<int> values;
 };
 
 void tst_QPropertyAnimation::noStartValue()
@@ -445,10 +441,8 @@ void tst_QPropertyAnimation::noStartValue()
     a.setDuration(250);
     a.start();
 
-    QTest::qWait(300);
-
-    QTRY_COMPARE(o.values.first(), 42);
-    QCOMPARE(o.values.last(), 420);
+    QTRY_COMPARE(o.values.value(o.values.size() - 1, -1), 420);
+    QCOMPARE(o.values.first(), 42);
 }
 
 void tst_QPropertyAnimation::noStartValueWithLoop()
@@ -678,19 +672,15 @@ struct Number
     Number(int n)
         : n(n) {}
 
-    Number(const Number &other)
-        : n(other.n){}
-
-    Number &operator=(const Number &other) {
-        n = other.n;
-        return *this;
-    }
     bool operator==(const Number &other) const {
         return n == other.n;
     }
 
     int n;
 };
+QT_BEGIN_NAMESPACE
+Q_DECLARE_TYPEINFO(Number, Q_PRIMITIVE_TYPE);
+QT_END_NAMESPACE
 
 Q_DECLARE_METATYPE(Number)
 

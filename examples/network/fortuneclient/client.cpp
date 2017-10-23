@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -49,10 +59,7 @@ Client::Client(QWidget *parent)
     , hostCombo(new QComboBox)
     , portLineEdit(new QLineEdit)
     , getFortuneButton(new QPushButton(tr("Get Fortune")))
-//! [1]
     , tcpSocket(new QTcpSocket(this))
-//! [1]
-    , blockSize(0)
     , networkSession(Q_NULLPTR)
 {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -100,6 +107,11 @@ Client::Client(QWidget *parent)
     buttonBox->addButton(getFortuneButton, QDialogButtonBox::ActionRole);
     buttonBox->addButton(quitButton, QDialogButtonBox::RejectRole);
 
+//! [1]
+    in.setDevice(tcpSocket);
+    in.setVersion(QDataStream::Qt_4_0);
+//! [1]
+
     connect(hostCombo, &QComboBox::editTextChanged,
             this, &Client::enableGetFortuneButton);
     connect(portLineEdit, &QLineEdit::textChanged,
@@ -110,8 +122,7 @@ Client::Client(QWidget *parent)
 //! [2] //! [3]
     connect(tcpSocket, &QIODevice::readyRead, this, &Client::readFortune);
 //! [2] //! [4]
-    typedef void (QAbstractSocket::*QAbstractSocketErrorSignal)(QAbstractSocket::SocketError);
-    connect(tcpSocket, static_cast<QAbstractSocketErrorSignal>(&QAbstractSocket::error),
+    connect(tcpSocket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
 //! [3]
             this, &Client::displayError);
 //! [4]
@@ -171,7 +182,6 @@ Client::Client(QWidget *parent)
 void Client::requestNewFortune()
 {
     getFortuneButton->setEnabled(false);
-    blockSize = 0;
     tcpSocket->abort();
 //! [7]
     tcpSocket->connectToHost(hostCombo->currentText(),
@@ -183,39 +193,24 @@ void Client::requestNewFortune()
 //! [8]
 void Client::readFortune()
 {
-//! [9]
-    QDataStream in(tcpSocket);
-    in.setVersion(QDataStream::Qt_4_0);
-
-    if (blockSize == 0) {
-        if (tcpSocket->bytesAvailable() < (int)sizeof(quint16))
-            return;
-//! [8]
-
-//! [10]
-        in >> blockSize;
-    }
-
-    if (tcpSocket->bytesAvailable() < blockSize)
-        return;
-//! [10] //! [11]
+    in.startTransaction();
 
     QString nextFortune;
     in >> nextFortune;
+
+    if (!in.commitTransaction())
+        return;
 
     if (nextFortune == currentFortune) {
         QTimer::singleShot(0, this, &Client::requestNewFortune);
         return;
     }
-//! [11]
 
-//! [12]
     currentFortune = nextFortune;
-//! [9]
     statusLabel->setText(currentFortune);
     getFortuneButton->setEnabled(true);
 }
-//! [12]
+//! [8]
 
 //! [13]
 void Client::displayError(QAbstractSocket::SocketError socketError)

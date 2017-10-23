@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -516,13 +522,13 @@ static void getLineBreaks(const ushort *string, quint32 len, QCharAttributes *at
                 // do not change breaks before and after the expression
                 for (quint32 j = nestart + 1; j < pos; ++j)
                     attributes[j].lineBreak = false;
-                // fall through
+                Q_FALLTHROUGH();
             case LB::NS::None:
                 nelast = LB::NS::XX; // reset state
                 break;
             case LB::NS::Start:
                 nestart = i;
-                // fall through
+                Q_FALLTHROUGH();
             default:
                 nelast = necur;
                 break;
@@ -679,10 +685,10 @@ Q_CORE_EXPORT void initCharAttributes(const ushort *string, int length,
 Q_CORE_EXPORT void initScripts(const ushort *string, int length, uchar *scripts)
 {
     int sor = 0;
-    int eor = -1;
+    int eor = 0;
     uchar script = QChar::Script_Common;
-    for (int i = 0; i < length; ++i) {
-        eor = i;
+
+    for (int i = 0; i < length; ++i, eor = i) {
         uint ucs4 = string[i];
         if (QChar::isHighSurrogate(ucs4) && i + 1 < length) {
             ushort low = string[i + 1];
@@ -694,60 +700,37 @@ Q_CORE_EXPORT void initScripts(const ushort *string, int length, uchar *scripts)
 
         const QUnicodeTables::Properties *prop = QUnicodeTables::properties(ucs4);
 
-        if (Q_LIKELY(prop->script == script || prop->script <= QChar::Script_Inherited))
+        uchar nscript = prop->script;
+
+        if (Q_LIKELY(nscript == script || nscript <= QChar::Script_Common))
             continue;
 
+        // inherit preceding Common-s
+        if (Q_UNLIKELY(script <= QChar::Script_Common)) {
+            // also covers a case where the base character of Common script followed
+            // by one or more combining marks of non-Inherited, non-Common script
+            script = nscript;
+            continue;
+        }
+
         // Never break between a combining mark (gc= Mc, Mn or Me) and its base character.
-        // Thus, a combining mark — whatever its script property value is — should inherit
+        // Thus, a combining mark - whatever its script property value is - should inherit
         // the script property value of its base character.
         static const int test = (FLAG(QChar::Mark_NonSpacing) | FLAG(QChar::Mark_SpacingCombining) | FLAG(QChar::Mark_Enclosing));
-        if (Q_UNLIKELY(FLAG(prop->category) & test)) {
-            // In cases where the base character itself has the Common script property value,
-            // and it is followed by one or more combining marks with a specific script property value,
-            // it may be even better for processing to let the base acquire the script property value
-            // from the first mark. This approach can be generalized by treating all the characters
-            // of a combining character sequence as having the script property value
-            // of the first non-Inherited, non-Common character in the sequence if there is one,
-            // and otherwise treating all the characters as having the Common script property value.
-            if (Q_LIKELY(script > QChar::Script_Common || prop->script <= QChar::Script_Common))
-                continue;
+        if (Q_UNLIKELY(FLAG(prop->category) & test))
+            continue;
 
-            script = QChar::Script(prop->script);
-        }
+        Q_ASSERT(script > QChar::Script_Common);
+        Q_ASSERT(sor < eor);
+        ::memset(scripts + sor, script, (eor - sor) * sizeof(uchar));
+        sor = eor;
 
-#if 0 // ### Disabled due to regressions. The font selection algorithm is not prepared for this change.
-        if (Q_LIKELY(script != QChar::Script_Common)) {
-            // override preceding Common-s
-            while (sor > 0 && scripts[sor - 1] == QChar::Script_Common)
-                --sor;
-        } else {
-            // see if we are inheriting preceding run
-            if (sor > 0)
-                script = scripts[sor - 1];
-        }
-#endif
-
-        while (sor < eor)
-            scripts[sor++] = script;
-
-        script = prop->script;
+        script = nscript;
     }
-    eor = length;
 
-#if 0 // ### Disabled due to regressions. The font selection algorithm is not prepared for this change.
-    if (Q_LIKELY(script != QChar::Script_Common)) {
-        // override preceding Common-s
-        while (sor > 0 && scripts[sor - 1] == QChar::Script_Common)
-            --sor;
-    } else {
-        // see if we are inheriting preceding run
-        if (sor > 0)
-            script = scripts[sor - 1];
-    }
-#endif
-
-    while (sor < eor)
-        scripts[sor++] = script;
+    Q_ASSERT(script >= QChar::Script_Common);
+    Q_ASSERT(eor == length);
+    ::memset(scripts + sor, script, (eor - sor) * sizeof(uchar));
 }
 
 } // namespace QUnicodeTools

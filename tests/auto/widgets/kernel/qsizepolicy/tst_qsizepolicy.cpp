@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,9 +41,12 @@ class tst_QSizePolicy : public QObject
 private Q_SLOTS:
     void cleanup() { QVERIFY(QApplication::topLevelWidgets().isEmpty()); }
     void qtest();
+    void constExpr();
     void defaultValues();
     void getSetCheck_data() { data(); }
     void getSetCheck();
+    void transposed_data() { data(); }
+    void transposed();
     void dataStream();
     void horizontalStretch();
     void verticalStretch();
@@ -107,6 +105,24 @@ void tst_QSizePolicy::qtest()
 #undef CHECK2
 }
 
+void tst_QSizePolicy::constExpr()
+{
+/* gcc < 4.8.0 has problems with init'ing variant members in constexpr ctors */
+/* https://gcc.gnu.org/bugzilla/show_bug.cgi?id=54922 */
+#if !defined(Q_CC_GNU) || defined(Q_CC_INTEL) || defined(Q_CC_CLANG) || Q_CC_GNU >= 408
+    // check that certain ctors are constexpr (compile-only):
+    { Q_CONSTEXPR QSizePolicy sp; Q_UNUSED(sp); }
+    { Q_CONSTEXPR QSizePolicy sp = QSizePolicy(); Q_UNUSED(sp); }
+    { Q_CONSTEXPR QSizePolicy sp = QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred); Q_UNUSED(sp); }
+    { Q_CONSTEXPR QSizePolicy sp = QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Expanding, QSizePolicy::DefaultType);
+      Q_CONSTEXPR QSizePolicy tp = sp.transposed(); Q_UNUSED(tp); }
+    { Q_RELAXED_CONSTEXPR auto sp = QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed, QSizePolicy::CheckBox);
+      Q_RELAXED_CONSTEXPR auto tp = sp.transposed(); Q_UNUSED(tp); }
+#else
+    QSKIP("QSizePolicy cannot be constexpr with this version of the compiler.");
+#endif
+}
+
 void tst_QSizePolicy::defaultValues()
 {
     {
@@ -152,14 +168,34 @@ void tst_QSizePolicy::getSetCheck()
     QCOMPARE(sp.expandingDirections(), ed);
 }
 
+void tst_QSizePolicy::transposed()
+{
+    FETCH_TEST_DATA;
+
+    const QSizePolicy tr = sp.transposed();
+
+    QCOMPARE(tr.horizontalPolicy(),    vp);  // swapped
+    QCOMPARE(tr.verticalPolicy(),      hp);  // swapped
+    QCOMPARE(tr.horizontalStretch(),   vst); // swapped
+    QCOMPARE(tr.verticalStretch(),     hst); // swapped
+    QCOMPARE(tr.controlType(),         ct);  // not swapped
+    QCOMPARE(tr.hasHeightForWidth(),   hfw); // not swapped (historic behavior)
+    QCOMPARE(tr.hasWidthForHeight(),   wfh); // not swapped (historic behavior)
+    QCOMPARE(tr.expandingDirections(), ed);  // swapped
+
+    // destructive test - keep last:
+    sp.transpose();
+    QCOMPARE(sp, tr);
+}
+
 static void makeRow(QSizePolicy sp, QSizePolicy::Policy hp, QSizePolicy::Policy vp,
                     int hst, int vst, QSizePolicy::ControlType ct, bool hfw, bool wfh,
                     Qt::Orientations orients)
 {
-    QTest::newRow(qPrintable(QString::asprintf("%s-%s-%d-%d-%s-%s-%s",
-                                               PrettyPrint(hp).s(), PrettyPrint(vp).s(), hst, vst,
-                                               PrettyPrint(ct).s(),
-                                               hfw ? "true" : "false", wfh ? "true" : "false")))
+    QTest::addRow("%s-%s-%d-%d-%s-%s-%s",
+                  PrettyPrint(hp).s(), PrettyPrint(vp).s(), hst, vst,
+                  PrettyPrint(ct).s(),
+                  hfw ? "true" : "false", wfh ? "true" : "false")
             << sp << hp << vp << hst << vst << ct << hfw << wfh << orients;
 }
 

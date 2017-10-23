@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qdatawidgetmapper.h"
-
-#ifndef QT_NO_DATAWIDGETMAPPER
 
 #include "qabstractitemmodel.h"
 #include "qitemdelegate.h"
@@ -83,11 +87,11 @@ public:
             : model->index(itemPos, currentIdx(), rootIndex);
     }
 
-    inline void flipEventFilters(QAbstractItemDelegate *oldDelegate,
-                                 QAbstractItemDelegate *newDelegate)
+    void flipEventFilters(QAbstractItemDelegate *oldDelegate,
+                          QAbstractItemDelegate *newDelegate) const
     {
-        for (QList<WidgetMapper>::const_iterator it = widgetMap.cbegin(), end = widgetMap.cend(); it != end; ++it) {
-            QWidget *w = it->widget;
+        for (const WidgetMapper &e : widgetMap) {
+            QWidget *w = e.widget;
             if (!w)
                 continue;
             w->removeEventFilter(oldDelegate);
@@ -105,11 +109,6 @@ public:
 
     struct WidgetMapper
     {
-        inline WidgetMapper(QWidget *w = 0, int c = 0, const QModelIndex &i = QModelIndex())
-            : widget(w), section(c), currentIndex(i) {}
-        inline WidgetMapper(QWidget *w, int c, const QModelIndex &i, const QByteArray &p)
-            : widget(w), section(c), currentIndex(i), property(p) {}
-
         QPointer<QWidget> widget;
         int section;
         QPersistentModelIndex currentIndex;
@@ -121,14 +120,15 @@ public:
 
     bool commit(const WidgetMapper &m);
 
-    QList<WidgetMapper> widgetMap;
+    std::vector<WidgetMapper> widgetMap;
 };
+Q_DECLARE_TYPEINFO(QDataWidgetMapperPrivate::WidgetMapper, Q_MOVABLE_TYPE);
 
 int QDataWidgetMapperPrivate::findWidget(QWidget *w) const
 {
-    for (QList<WidgetMapper>::const_iterator it = widgetMap.cbegin(), end = widgetMap.cend(); it != end; ++it) {
-        if (it->widget == w)
-            return int(std::distance(widgetMap.cbegin(), it));
+    for (const WidgetMapper &e : widgetMap) {
+        if (e.widget == w)
+            return int(&e - &widgetMap.front());
     }
     return -1;
 }
@@ -165,8 +165,8 @@ void QDataWidgetMapperPrivate::populate(WidgetMapper &m)
 
 void QDataWidgetMapperPrivate::populate()
 {
-    for (QList<WidgetMapper>::iterator it = widgetMap.begin(), end = widgetMap.end(); it != end; ++it)
-        populate(*it);
+    for (WidgetMapper &e : widgetMap)
+        populate(e);
 }
 
 static bool qContainsIndex(const QModelIndex &idx, const QModelIndex &topLeft,
@@ -181,9 +181,9 @@ void QDataWidgetMapperPrivate::_q_dataChanged(const QModelIndex &topLeft, const 
     if (topLeft.parent() != rootIndex)
         return; // not in our hierarchy
 
-    for (QList<WidgetMapper>::iterator it = widgetMap.begin(), end = widgetMap.end(); it != end; ++it) {
-        if (qContainsIndex(it->currentIndex, topLeft, bottomRight))
-            populate(*it);
+    for (WidgetMapper &e : widgetMap) {
+        if (qContainsIndex(e.currentIndex, topLeft, bottomRight))
+            populate(e);
     }
 }
 
@@ -196,7 +196,7 @@ void QDataWidgetMapperPrivate::_q_commitData(QWidget *w)
     if (idx == -1)
         return; // not our widget
 
-    commit(widgetMap.at(idx));
+    commit(widgetMap[idx]);
 }
 
 void QDataWidgetMapperPrivate::_q_closeEditor(QWidget *w, QAbstractItemDelegate::EndEditHint hint)
@@ -473,7 +473,7 @@ void QDataWidgetMapper::addMapping(QWidget *widget, int section)
     Q_D(QDataWidgetMapper);
 
     removeMapping(widget);
-    d->widgetMap.append(QDataWidgetMapperPrivate::WidgetMapper(widget, section, d->indexAt(section)));
+    d->widgetMap.push_back({widget, section, d->indexAt(section), QByteArray()});
     widget->installEventFilter(d->delegate);
 }
 
@@ -491,7 +491,7 @@ void QDataWidgetMapper::addMapping(QWidget *widget, int section, const QByteArra
     Q_D(QDataWidgetMapper);
 
     removeMapping(widget);
-    d->widgetMap.append(QDataWidgetMapperPrivate::WidgetMapper(widget, section, d->indexAt(section), propertyName));
+    d->widgetMap.push_back({widget, section, d->indexAt(section), propertyName});
     widget->installEventFilter(d->delegate);
 }
 
@@ -508,7 +508,7 @@ void QDataWidgetMapper::removeMapping(QWidget *widget)
     if (idx == -1)
         return;
 
-    d->widgetMap.removeAt(idx);
+    d->widgetMap.erase(d->widgetMap.begin() + idx);
     widget->removeEventFilter(d->delegate);
 }
 
@@ -526,7 +526,7 @@ int QDataWidgetMapper::mappedSection(QWidget *widget) const
     if (idx == -1)
         return -1;
 
-    return d->widgetMap.at(idx).section;
+    return d->widgetMap[idx].section;
 }
 
 /*!
@@ -544,7 +544,7 @@ QByteArray QDataWidgetMapper::mappedPropertyName(QWidget *widget) const
     int idx = d->findWidget(widget);
     if (idx == -1)
         return QByteArray();
-    const QDataWidgetMapperPrivate::WidgetMapper &m = d->widgetMap.at(idx);
+    const auto &m = d->widgetMap[idx];
     if (m.property.isEmpty())
         return m.widget->metaObject()->userProperty().name();
     else
@@ -561,9 +561,9 @@ QWidget *QDataWidgetMapper::mappedWidgetAt(int section) const
 {
     Q_D(const QDataWidgetMapper);
 
-    for (QList<QDataWidgetMapperPrivate::WidgetMapper>::const_iterator it = d->widgetMap.cbegin(), end = d->widgetMap.cend(); it != end; ++it) {
-        if (it->section == section)
-            return it->widget;
+    for (auto &e : d->widgetMap) {
+        if (e.section == section)
+            return e.widget;
     }
 
     return 0;
@@ -600,8 +600,8 @@ bool QDataWidgetMapper::submit()
 {
     Q_D(QDataWidgetMapper);
 
-    for (QList<QDataWidgetMapperPrivate::WidgetMapper>::const_iterator it = d->widgetMap.cbegin(), end = d->widgetMap.cend(); it != end; ++it) {
-        if (!d->commit(*it))
+    for (auto &e : d->widgetMap) {
+        if (!d->commit(e))
             return false;
     }
 
@@ -740,9 +740,9 @@ void QDataWidgetMapper::clearMapping()
 {
     Q_D(QDataWidgetMapper);
 
-    QList<QDataWidgetMapperPrivate::WidgetMapper> copy;
+    decltype(d->widgetMap) copy;
     d->widgetMap.swap(copy); // a C++98 move
-    for (QList<QDataWidgetMapperPrivate::WidgetMapper>::const_reverse_iterator it = copy.crbegin(), end = copy.crend(); it != end; ++it) {
+    for (auto it = copy.crbegin(), end = copy.crend(); it != end; ++it) {
         if (it->widget)
             it->widget->removeEventFilter(d->delegate);
     }
@@ -825,5 +825,3 @@ QDataWidgetMapper::SubmitPolicy QDataWidgetMapper::submitPolicy() const
 QT_END_NAMESPACE
 
 #include "moc_qdatawidgetmapper.cpp"
-
-#endif // QT_NO_DATAWIDGETMAPPER

@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -42,7 +52,7 @@
 #define VARIANTDELEGATE_H
 
 #include <QItemDelegate>
-#include <QRegExp>
+#include <QRegularExpression>
 
 class VariantDelegate : public QItemDelegate
 {
@@ -52,30 +62,30 @@ public:
     VariantDelegate(QObject *parent = 0);
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
-               const QModelIndex &index) const Q_DECL_OVERRIDE;
+               const QModelIndex &index) const override;
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
-                          const QModelIndex &index) const Q_DECL_OVERRIDE;
-    void setEditorData(QWidget *editor, const QModelIndex &index) const Q_DECL_OVERRIDE;
+                          const QModelIndex &index) const override;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
     void setModelData(QWidget *editor, QAbstractItemModel *model,
-                      const QModelIndex &index) const Q_DECL_OVERRIDE;
+                      const QModelIndex &index) const override;
 
     static bool isSupportedType(QVariant::Type type);
     static QString displayText(const QVariant &value);
 
 private:
-    mutable QRegExp boolExp;
-    mutable QRegExp byteArrayExp;
-    mutable QRegExp charExp;
-    mutable QRegExp colorExp;
-    mutable QRegExp dateExp;
-    mutable QRegExp dateTimeExp;
-    mutable QRegExp doubleExp;
-    mutable QRegExp pointExp;
-    mutable QRegExp rectExp;
-    mutable QRegExp signedIntegerExp;
-    mutable QRegExp sizeExp;
-    mutable QRegExp timeExp;
-    mutable QRegExp unsignedIntegerExp;
+    mutable QRegularExpression boolExp;
+    mutable QRegularExpression byteArrayExp;
+    mutable QRegularExpression charExp;
+    mutable QRegularExpression colorExp;
+    mutable QRegularExpression dateExp;
+    mutable QRegularExpression dateTimeExp;
+    mutable QRegularExpression doubleExp;
+    mutable QRegularExpression pointExp;
+    mutable QRegularExpression rectExp;
+    mutable QRegularExpression signedIntegerExp;
+    mutable QRegularExpression sizeExp;
+    mutable QRegularExpression timeExp;
+    mutable QRegularExpression unsignedIntegerExp;
 };
 
 #endif

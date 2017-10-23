@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include <QtWidgets/qaccessiblewidget.h>
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -125,7 +132,7 @@ protected:
     virtual QWidget *viewport() const = 0;
 };
 
-#ifndef QT_NO_TEXTEDIT
+#if QT_CONFIG(textedit)
 class QAccessiblePlainTextEdit : public QAccessibleTextWidget
 {
 public:
@@ -177,7 +184,7 @@ protected:
     QTextDocument *textDocument() const Q_DECL_OVERRIDE;
     QWidget *viewport() const Q_DECL_OVERRIDE;
 };
-#endif // QT_NO_TEXTEDIT
+#endif // QT_CONFIG(textedit)
 #endif  //QT_NO_CURSOR
 
 class QAccessibleStackedWidget : public QAccessibleWidget
@@ -209,7 +216,7 @@ protected:
     QToolBox *toolBox() const;
 };
 
-#ifndef QT_NO_MDIAREA
+#if QT_CONFIG(mdiarea)
 class QAccessibleMdiArea : public QAccessibleWidget
 {
 public:
@@ -239,15 +246,17 @@ public:
 protected:
     QMdiSubWindow *mdiSubWindow() const;
 };
-#endif // QT_NO_MDIAREA
+#endif // QT_CONFIG(mdiarea)
 
+#if QT_CONFIG(dialogbuttonbox)
 class QAccessibleDialogButtonBox : public QAccessibleWidget
 {
 public:
     explicit QAccessibleDialogButtonBox(QWidget *widget);
 };
+#endif
 
-#if !defined(QT_NO_TEXTBROWSER) && !defined(QT_NO_CURSOR)
+#if QT_CONFIG(textbrowser) && !defined(QT_NO_CURSOR)
 class QAccessibleTextBrowser : public QAccessibleTextEdit
 {
 public:
@@ -255,9 +264,9 @@ public:
 
     QAccessible::Role role() const Q_DECL_OVERRIDE;
 };
-#endif // QT_NO_TEXTBROWSER && QT_NO_CURSOR
+#endif // QT_CONFIG(textbrowser) && QT_NO_CURSOR
 
-#ifndef QT_NO_CALENDARWIDGET
+#if QT_CONFIG(calendarwidget)
 class QAccessibleCalendarWidget : public QAccessibleWidget
 {
 public:
@@ -275,9 +284,9 @@ private:
     QAbstractItemView *calendarView() const;
     QWidget *navigationBar() const;
 };
-#endif // QT_NO_CALENDARWIDGET
+#endif // QT_CONFIG(calendarwidget)
 
-#ifndef QT_NO_DOCKWIDGET
+#if QT_CONFIG(dockwidget)
 class QAccessibleDockWidget: public QAccessibleWidget
 {
 public:
@@ -293,9 +302,9 @@ protected:
     QDockWidgetLayout *dockWidgetLayout() const;
 };
 
-#endif // QT_NO_DOCKWIDGET
+#endif // QT_CONFIG(dockwidget)
 
-#ifndef QT_NO_MAINWINDOW
+#if QT_CONFIG(mainwindow)
 class QAccessibleMainWindow : public QAccessibleWidget
 {
 public:
@@ -308,7 +317,7 @@ public:
     QMainWindow *mainWindow() const;
 
 };
-#endif //QT_NO_MAINWINDOW
+#endif // QT_CONFIG(mainwindow)
 
 #endif // QT_NO_ACCESSIBILITY
 

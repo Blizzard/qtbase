@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,13 +39,13 @@
 
 #include "qerrormessage.h"
 
-#ifndef QT_NO_ERRORMESSAGE
-
 #include "qapplication.h"
 #include "qcheckbox.h"
 #include "qlabel.h"
 #include "qlayout.h"
+#if QT_CONFIG(messagebox)
 #include "qmessagebox.h"
+#endif
 #include "qpushbutton.h"
 #include "qstringlist.h"
 #include "qtextedit.h"
@@ -54,12 +60,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef Q_OS_WINCE
-extern bool qt_wince_is_mobile();    //defined in qguifunctions_wince.cpp
-extern bool qt_wince_is_high_dpi();  //defined in qguifunctions_wince.cpp
-#endif
-
 QT_BEGIN_NAMESPACE
+
+namespace {
+struct Message {
+    QString content;
+    QString type;
+};
+}
 
 class QErrorMessagePrivate : public QDialogPrivate
 {
@@ -69,7 +77,7 @@ public:
     QCheckBox * again;
     QTextEdit * errors;
     QLabel * icon;
-    std::queue<QPair<QString, QString> > pending;
+    std::queue<Message> pending;
     QSet<QString> doNotShow;
     QSet<QString> doNotShowType;
     QString currentMessage;
@@ -94,32 +102,12 @@ public:
 
 QSize QErrorMessageTextView::minimumSizeHint() const
 {
-#ifdef Q_OS_WINCE
-    if (qt_wince_is_mobile())
-         if (qt_wince_is_high_dpi())
-            return QSize(200, 200);
-         else
-             return QSize(100, 100);
-    else
-      return QSize(70, 70);
-#else
     return QSize(50, 50);
-#endif
 }
 
 QSize QErrorMessageTextView::sizeHint() const
 {
-#ifdef Q_OS_WINCE
-    if (qt_wince_is_mobile())
-         if (qt_wince_is_high_dpi())
-            return QSize(400, 200);
-         else
-             return QSize(320, 120);
-    else
-      return QSize(300, 100);
-#else
     return QSize(250, 75);
-#endif //Q_OS_WINCE
 }
 
 /*!
@@ -173,26 +161,35 @@ static void deleteStaticcQErrorMessage() // post-routine
 
 static bool metFatal = false;
 
+static QString msgType2i18nString(QtMsgType t)
+{
+    Q_STATIC_ASSERT(QtDebugMsg == 0);
+    Q_STATIC_ASSERT(QtWarningMsg == 1);
+    Q_STATIC_ASSERT(QtCriticalMsg == 2);
+    Q_STATIC_ASSERT(QtFatalMsg == 3);
+    Q_STATIC_ASSERT(QtInfoMsg == 4);
+
+    // adjust the array below if any of the above fire...
+
+    const char * const messages[] = {
+        QT_TRANSLATE_NOOP("QErrorMessage", "Debug Message:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Warning:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Critical Error:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Fatal Error:"),
+        QT_TRANSLATE_NOOP("QErrorMessage", "Information:"),
+    };
+    Q_ASSERT(size_t(t) < sizeof messages / sizeof *messages);
+
+    return QCoreApplication::translate("QErrorMessage", messages[t]);
+}
+
 static void jump(QtMsgType t, const QMessageLogContext & /*context*/, const QString &m)
 {
     if (!qtMessageHandler)
         return;
 
-    QString rich;
-
-    switch (t) {
-    case QtDebugMsg:
-    default:
-        rich = QErrorMessage::tr("Debug Message:");
-        break;
-    case QtWarningMsg:
-        rich = QErrorMessage::tr("Warning:");
-        break;
-    case QtFatalMsg:
-        rich = QErrorMessage::tr("Fatal Error:");
-    }
-    rich = QString::fromLatin1("<p><b>%1</b></p>").arg(rich);
-    rich += Qt::convertFromPlainText(m, Qt::WhiteSpaceNormal);
+    QString rich = QLatin1String("<p><b>") + msgType2i18nString(t) + QLatin1String("</b></p>")
+                   + Qt::convertFromPlainText(m, Qt::WhiteSpaceNormal);
 
     // ### work around text engine quirk
     if (rich.endsWith(QLatin1String("</p>")))
@@ -237,14 +234,11 @@ QErrorMessage::QErrorMessage(QWidget * parent)
     grid->setColumnStretch(1, 42);
     grid->setRowStretch(0, 42);
 
-#ifndef QT_NO_MESSAGEBOX
+#if QT_CONFIG(messagebox)
     d->icon->setPixmap(QMessageBox::standardIcon(QMessageBox::Information));
     d->icon->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
 #endif
     d->again->setChecked(true);
-#if defined(Q_OS_WINCE)
-    d->ok->setFixedSize(0,0);
-#endif
     d->ok->setFocus();
 
     d->retranslateStrings();
@@ -319,9 +313,8 @@ bool QErrorMessagePrivate::isMessageToBeShown(const QString &message, const QStr
 bool QErrorMessagePrivate::nextPending()
 {
     while (!pending.empty()) {
-        QPair<QString,QString> &pendingMessage = pending.front();
-        QString message = qMove(pendingMessage.first);
-        QString type = qMove(pendingMessage.second);
+        QString message = std::move(pending.front().content);
+        QString type = std::move(pending.front().type);
         pending.pop();
         if (isMessageToBeShown(message, type)) {
 #ifndef QT_NO_TEXTHTMLPARSER
@@ -371,7 +364,7 @@ void QErrorMessage::showMessage(const QString &message, const QString &type)
     Q_D(QErrorMessage);
     if (!d->isMessageToBeShown(message, type))
         return;
-    d->pending.push(qMakePair(message, type));
+    d->pending.push({message, type});
     if (!isVisible() && d->nextPending())
         show();
 }
@@ -397,5 +390,3 @@ void QErrorMessagePrivate::retranslateStrings()
 QT_END_NAMESPACE
 
 #include "moc_qerrormessage.cpp"
-
-#endif // QT_NO_ERRORMESSAGE

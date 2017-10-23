@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -56,14 +51,8 @@ class tst_QWizard : public QObject
 {
     Q_OBJECT
 
-public:
-    tst_QWizard();
-
-public slots:
-    void init();
-    void cleanup();
-
 private slots:
+    void cleanup();
     void buttonText();
     void setButtonLayout();
     void setButton();
@@ -135,17 +124,6 @@ private slots:
         8. Test mutual exclusiveness of Next and Commit buttons.
     */
 };
-
-tst_QWizard::tst_QWizard()
-{
-}
-
-void tst_QWizard::init()
-{
-#ifdef Q_OS_WINCE //disable magic for WindowsCE
-    qApp->setAutoMaximizeThreshold(-1);
-#endif
-}
 
 void tst_QWizard::cleanup()
 {
@@ -547,8 +525,8 @@ void tst_QWizard::setDefaultProperty()
 
     // make sure the data structure is reasonable
     for (int i = 0; i < 200000; ++i) {
-        wizard.setDefaultProperty("QLineEdit", QByteArray("x" + QByteArray::number(i)).constData(), 0);
-        wizard.setDefaultProperty("QLabel", QByteArray("y" + QByteArray::number(i)).constData(), 0);
+        wizard.setDefaultProperty("QLineEdit", QByteArray('x' + QByteArray::number(i)).constData(), 0);
+        wizard.setDefaultProperty("QLabel", QByteArray('y' + QByteArray::number(i)).constData(), 0);
     }
 }
 
@@ -974,9 +952,6 @@ void tst_QWizard::setOption_IndependentPages()
 
 void tst_QWizard::setOption_IgnoreSubTitles()
 {
-#if defined(Q_OS_WINCE)
-    QSKIP("Skipped because of limited resources and potential crash. (Task: 166824)");
-#endif
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     const int kPixels = (availableGeometry.width() + 500) / 1000;
     const int frame = 50 * kPixels;
@@ -1085,9 +1060,6 @@ void tst_QWizard::setOption_IgnoreSubTitles()
 
 void tst_QWizard::setOption_ExtendedWatermarkPixmap()
 {
-#if defined(Q_OS_WINCE)
-    QSKIP("Skipped because of limited resources and potential crash. (Task: 166824)");
-#endif
     QPixmap watermarkPixmap(200, 400);
     watermarkPixmap.fill(Qt::black);
 
@@ -1625,29 +1597,45 @@ class SetPage : public Operation
         for (int j = 0; j < page; ++j)
             wizard->next();
     }
-    QString describe() const { return QString("set page %1").arg(page); }
-    const int page;
+    QString describe() const { return QLatin1String("set page ") + QString::number(page); }
+    int page;
 public:
-    SetPage(int page) : page(page) {}
+    static QSharedPointer<SetPage> create(int page)
+    {
+        QSharedPointer<SetPage> o = QSharedPointer<SetPage>::create();
+        o->page = page;
+        return o;
+    }
 };
 
 class SetStyle : public Operation
 {
     void apply(QWizard *wizard) const { wizard->setWizardStyle(style); }
-    QString describe() const { return QString("set style %1").arg(style); }
-    const QWizard::WizardStyle style;
+    QString describe() const { return QLatin1String("set style ") + QString::number(style); }
+    QWizard::WizardStyle style;
 public:
-    SetStyle(QWizard::WizardStyle style) : style(style) {}
+    static QSharedPointer<SetStyle> create(QWizard::WizardStyle style)
+    {
+        QSharedPointer<SetStyle> o = QSharedPointer<SetStyle>::create();
+        o->style = style;
+        return o;
+    }
 };
 
 class SetOption : public Operation
 {
     void apply(QWizard *wizard) const { wizard->setOption(option, on); }
     QString describe() const;
-    const QWizard::WizardOption option;
-    const bool on;
+    QWizard::WizardOption option;
+    bool on;
 public:
-    SetOption(QWizard::WizardOption option, bool on) : option(option), on(on) {}
+    static QSharedPointer<SetOption> create(QWizard::WizardOption option, bool on)
+    {
+        QSharedPointer<SetOption> o = QSharedPointer<SetOption>::create();
+        o->option = option;
+        o->on = on;
+        return o;
+    }
 };
 
 class OptionInfo
@@ -1672,16 +1660,16 @@ class OptionInfo
         tags[QWizard::HaveCustomButton3]            = "15/CB3";
 
         for (int i = 0; i < 2; ++i) {
-            QMap<QWizard::WizardOption, Operation *> operations_;
+            QMap<QWizard::WizardOption, QSharedPointer<Operation> > operations_;
             foreach (QWizard::WizardOption option, tags.keys())
-                operations_[option] = new SetOption(option, i == 1);
+                operations_[option] = SetOption::create(option, i == 1);
             operations << operations_;
         }
     }
     OptionInfo(OptionInfo const&);
     OptionInfo& operator=(OptionInfo const&);
     QMap<QWizard::WizardOption, QString> tags;
-    QList<QMap<QWizard::WizardOption, Operation *> > operations;
+    QList<QMap<QWizard::WizardOption, QSharedPointer<Operation> > > operations;
 public:
     static OptionInfo &instance()
     {
@@ -1690,20 +1678,18 @@ public:
     }
 
     QString tag(QWizard::WizardOption option) const { return tags.value(option); }
-    Operation * operation(QWizard::WizardOption option, bool on) const
+    QSharedPointer<Operation> operation(QWizard::WizardOption option, bool on) const
     { return operations.at(on).value(option); }
     QList<QWizard::WizardOption> options() const { return tags.keys(); }
 };
 
 QString SetOption::describe() const
 {
-    return QString("set opt %1 %2").arg(OptionInfo::instance().tag(option)).arg(on);
+    return QLatin1String("set opt ") + OptionInfo::instance().tag(option)
+        + QLatin1Char(on ? '1' : '0');
 }
 
-Q_DECLARE_METATYPE(Operation *)
-Q_DECLARE_METATYPE(SetPage *)
-Q_DECLARE_METATYPE(SetStyle *)
-Q_DECLARE_METATYPE(SetOption *)
+Q_DECLARE_METATYPE(QVector<QSharedPointer<Operation> >)
 
 class TestGroup
 {
@@ -1720,14 +1706,17 @@ public:
         combinations.clear();
     }
 
-    QList<Operation *> &add()
-    { combinations << new QList<Operation *>; return *(combinations.last()); }
+    QVector<QSharedPointer<Operation> > &add()
+    {
+        combinations.resize(combinations.size() + 1);
+        return combinations.last();
+    }
 
     void createTestRows()
     {
         for (int i = 0; i < combinations.count(); ++i) {
-            QTest::newRow((name + QString(", row %1").arg(i)).toLatin1().data())
-                << (i == 0) << (type == Equality) << *(combinations.at(i));
+            QTest::newRow((name.toLatin1() + ", row " + QByteArray::number(i)).constData())
+                << (i == 0) << (type == Equality) << combinations.at(i);
             ++nRows_;
         }
     }
@@ -1738,7 +1727,7 @@ private:
     QString name;
     Type type;
     int nRows_;
-    QList<QList<Operation *> *> combinations;
+    QVector<QVector<QSharedPointer<Operation> > > combinations;
 };
 
 class IntroPage : public QWizardPage
@@ -1822,12 +1811,12 @@ public:
         }
     }
 
-    void applyOperations(const QList<Operation *> &operations)
+    void applyOperations(const QVector<QSharedPointer<Operation> > &operations)
     {
-        foreach (Operation * op, operations) {
+        foreach (const QSharedPointer<Operation> &op, operations) {
             if (op) {
                 op->apply(this);
-                opsDescr += QString("(%1) ").arg(op->describe());
+                opsDescr += QLatin1Char('(') + op->describe() + QLatin1String(") ");
             }
         }
     }
@@ -1844,31 +1833,29 @@ public:
 class CombinationsTestData
 {
     TestGroup testGroup;
-    QList<Operation *> pageOps;
-    QList<Operation *> styleOps;
-    QMap<bool, QList<Operation *> *> setAllOptions;
+    QVector<QSharedPointer<Operation> > pageOps;
+    QVector<QSharedPointer<Operation> > styleOps;
+    QMap<bool, QVector<QSharedPointer<Operation> > > setAllOptions;
 public:
     CombinationsTestData()
     {
         QTest::addColumn<bool>("ref");
         QTest::addColumn<bool>("testEquality");
-        QTest::addColumn<QList<Operation *> >("operations");
-        pageOps << new SetPage(0) << new SetPage(1) << new SetPage(2);
-        styleOps << new SetStyle(QWizard::ClassicStyle) << new SetStyle(QWizard::ModernStyle)
-                 << new SetStyle(QWizard::MacStyle);
+        QTest::addColumn<QVector<QSharedPointer<Operation> > >("operations");
+        pageOps << SetPage::create(0) << SetPage::create(1) << SetPage::create(2);
+        styleOps << SetStyle::create(QWizard::ClassicStyle) << SetStyle::create(QWizard::ModernStyle)
+                 << SetStyle::create(QWizard::MacStyle);
 #define SETPAGE(page) pageOps.at(page)
 #define SETSTYLE(style) styleOps.at(style)
 #define OPT(option, on) OptionInfo::instance().operation(option, on)
 #define CLROPT(option) OPT(option, false)
 #define SETOPT(option) OPT(option, true)
-        setAllOptions[false] = new QList<Operation *>;
-        setAllOptions[true]  = new QList<Operation *>;
         foreach (QWizard::WizardOption option, OptionInfo::instance().options()) {
-            *setAllOptions.value(false) << CLROPT(option);
-            *setAllOptions.value(true) << SETOPT(option);
+            setAllOptions[false] << CLROPT(option);
+            setAllOptions[true]  << SETOPT(option);
         }
-#define CLRALLOPTS *setAllOptions.value(false)
-#define SETALLOPTS *setAllOptions.value(true)
+#define CLRALLOPTS setAllOptions.value(false)
+#define SETALLOPTS setAllOptions.value(true)
     }
 
     int nRows() const { return testGroup.nRows(); }
@@ -1920,7 +1907,7 @@ public:
         testGroup.createTestRows();
 
         for (int i = 0; i < 2; ++i) {
-            QList<Operation *> setOptions = *setAllOptions.value(i == 1);
+            QVector<QSharedPointer<Operation> > setOptions = setAllOptions.value(i == 1);
 
             testGroup.reset("testAll 3.1");
             testGroup.add() << setOptions;
@@ -1937,21 +1924,21 @@ public:
             testGroup.createTestRows();
         }
 
-        foreach (Operation *pageOp, pageOps) {
+        foreach (const QSharedPointer<Operation> &pageOp, pageOps) {
             testGroup.reset("testAll 4.1");
             testGroup.add() << pageOp;
             testGroup.add() << pageOp << pageOp;
             testGroup.createTestRows();
 
             for (int i = 0; i < 2; ++i) {
-                QList<Operation *> optionOps = *setAllOptions.value(i == 1);
+                QVector<QSharedPointer<Operation> > optionOps = setAllOptions.value(i == 1);
                 testGroup.reset("testAll 4.2");
                 testGroup.add() << optionOps << pageOp;
                 testGroup.add() << pageOp << optionOps;
                 testGroup.createTestRows();
 
                 foreach (QWizard::WizardOption option, OptionInfo::instance().options()) {
-                    Operation *optionOp = OPT(option, i == 1);
+                    QSharedPointer<Operation> optionOp = OPT(option, i == 1);
                     testGroup.reset("testAll 4.3");
                     testGroup.add() << optionOp << pageOp;
                     testGroup.add() << pageOp << optionOp;
@@ -1960,21 +1947,21 @@ public:
             }
         }
 
-        foreach (Operation *styleOp, styleOps) {
+        foreach (const QSharedPointer<Operation> &styleOp, styleOps) {
             testGroup.reset("testAll 5.1");
             testGroup.add() << styleOp;
             testGroup.add() << styleOp << styleOp;
             testGroup.createTestRows();
 
             for (int i = 0; i < 2; ++i) {
-                QList<Operation *> optionOps = *setAllOptions.value(i == 1);
+                QVector<QSharedPointer<Operation> > optionOps = setAllOptions.value(i == 1);
                 testGroup.reset("testAll 5.2");
                 testGroup.add() << optionOps << styleOp;
                 testGroup.add() << styleOp << optionOps;
                 testGroup.createTestRows();
 
                 foreach (QWizard::WizardOption option, OptionInfo::instance().options()) {
-                    Operation *optionOp = OPT(option, i == 1);
+                    QSharedPointer<Operation> optionOp = OPT(option, i == 1);
                     testGroup.reset("testAll 5.3");
                     testGroup.add() << optionOp << styleOp;
                     testGroup.add() << styleOp << optionOp;
@@ -1983,8 +1970,8 @@ public:
             }
         }
 
-        foreach (Operation *pageOp, pageOps) {
-            foreach (Operation *styleOp, styleOps) {
+        foreach (const QSharedPointer<Operation> &pageOp, pageOps) {
+            foreach (const QSharedPointer<Operation> &styleOp, styleOps) {
 
                 testGroup.reset("testAll 6.1");
                 testGroup.add() << pageOp;
@@ -2002,7 +1989,7 @@ public:
                 testGroup.createTestRows();
 
                 for (int i = 0; i < 2; ++i) {
-                    QList<Operation *> optionOps = *setAllOptions.value(i == 1);
+                    QVector<QSharedPointer<Operation> > optionOps = setAllOptions.value(i == 1);
                     testGroup.reset("testAll 6.4");
                     testGroup.add() << optionOps << pageOp << styleOp;
                     testGroup.add() << pageOp << optionOps << styleOp;
@@ -2013,7 +2000,7 @@ public:
                     testGroup.createTestRows();
 
                     foreach (QWizard::WizardOption option, OptionInfo::instance().options()) {
-                        Operation *optionOp = OPT(option, i == 1);
+                        QSharedPointer<Operation> optionOp = OPT(option, i == 1);
                         testGroup.reset("testAll 6.5");
                         testGroup.add() << optionOp << pageOp << styleOp;
                         testGroup.add() << pageOp << optionOp << styleOp;
@@ -2073,13 +2060,9 @@ void tst_QWizard::combinations_data()
 
 void tst_QWizard::combinations()
 {
-#ifdef Q_OS_WINCE
-    QSKIP("Too much memory usage for testing on CE emulator");
-#endif
-
     QFETCH(bool, ref);
     QFETCH(bool, testEquality);
-    QFETCH(QList<Operation *>, operations);
+    QFETCH(QVector<QSharedPointer<Operation> >, operations);
 
     TestWizard wizard;
 #if !defined(QT_NO_STYLE_WINDOWSVISTA)
@@ -2115,7 +2098,7 @@ void tst_QWizard::combinations()
     }
 
     if (minSizeTest)
-        qDebug() << "minimum sizes" << reason.latin1() << ";" << wizard.minimumSizeHint()
+        qDebug() << "minimum sizes" << reason.latin1() << ';' << wizard.minimumSizeHint()
                  << otor.latin1() << refMinSize;
 
     if (imageTest)
@@ -2417,7 +2400,7 @@ void tst_QWizard::removePage()
     QCOMPARE(arguments.at(0).toInt(), 3);
     QVERIFY(wizard.visitedPages().empty());
     QVERIFY(wizard.pageIds().empty());
-    QCOMPARE(wizard.currentPage(), static_cast<QWizardPage *>(0));
+    QCOMPARE(wizard.currentPage(), nullptr);
 }
 
 void tst_QWizard::sideWidget()
@@ -2612,9 +2595,6 @@ void tst_QWizard::task161658_alignments()
 
 void tst_QWizard::task177022_setFixedSize()
 {
-#ifdef Q_OS_BLACKBERRY
-    QSKIP("Window is forced fullscreen");
-#endif
     int width = 300;
     int height = 200;
     QWizard wiz;

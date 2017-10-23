@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -113,11 +120,11 @@ QSharedDataPointer<QNetworkInterfacePrivate> QNetworkInterfaceManager::interface
 
 QList<QSharedDataPointer<QNetworkInterfacePrivate> > QNetworkInterfaceManager::allInterfaces()
 {
-    QList<QNetworkInterfacePrivate *> list = postProcess(scan());
+    const QList<QNetworkInterfacePrivate *> list = postProcess(scan());
     QList<QSharedDataPointer<QNetworkInterfacePrivate> > result;
     result.reserve(list.size());
 
-    foreach (QNetworkInterfacePrivate *ptr, list)
+    for (QNetworkInterfacePrivate *ptr : list)
         result << QSharedDataPointer<QNetworkInterfacePrivate>(ptr);
 
     return result;
@@ -519,6 +526,31 @@ QList<QNetworkAddressEntry> QNetworkInterface::addressEntries() const
 }
 
 /*!
+    \since 5.7
+
+    Returns the index of the interface whose name is \a name or 0 if there is
+    no interface with that name. This function should produce the same result
+    as the following code, but will probably execute faster.
+
+    \code
+        QNetworkInterface::interfaceFromName(name).index()
+    \endcode
+
+    \sa interfaceFromName(), interfaceNameFromIndex(), QNetworkDatagram::interfaceIndex()
+*/
+int QNetworkInterface::interfaceIndexFromName(const QString &name)
+{
+    if (name.isEmpty())
+        return 0;
+
+    bool ok;
+    uint id = name.toUInt(&ok);
+    if (!ok)
+        id = QNetworkInterfaceManager::interfaceIndexFromName(name);
+    return int(id);
+}
+
+/*!
     Returns a QNetworkInterface object for the interface named \a
     name. If no such interface exists, this function returns an
     invalid QNetworkInterface object.
@@ -553,15 +585,36 @@ QNetworkInterface QNetworkInterface::interfaceFromIndex(int index)
 }
 
 /*!
+    \since 5.7
+
+    Returns the name of the interface whose index is \a index or an empty
+    string if there is no interface with that index. This function should
+    produce the same result as the following code, but will probably execute
+    faster.
+
+    \code
+        QNetworkInterface::interfaceFromIndex(index).name()
+    \endcode
+
+    \sa interfaceFromIndex(), interfaceIndexFromName(), QNetworkDatagram::interfaceIndex()
+*/
+QString QNetworkInterface::interfaceNameFromIndex(int index)
+{
+    if (!index)
+        return QString();
+    return QNetworkInterfaceManager::interfaceNameFromIndex(index);
+}
+
+/*!
     Returns a listing of all the network interfaces found on the host
     machine.  In case of failure it returns a list with zero elements.
 */
 QList<QNetworkInterface> QNetworkInterface::allInterfaces()
 {
-    QList<QSharedDataPointer<QNetworkInterfacePrivate> > privs = manager()->allInterfaces();
+    const QList<QSharedDataPointer<QNetworkInterfacePrivate> > privs = manager()->allInterfaces();
     QList<QNetworkInterface> result;
     result.reserve(privs.size());
-    foreach (const QSharedDataPointer<QNetworkInterfacePrivate> &p, privs) {
+    for (const auto &p : privs) {
         QNetworkInterface item;
         item.d = p;
         result << item;
@@ -578,10 +631,10 @@ QList<QNetworkInterface> QNetworkInterface::allInterfaces()
 */
 QList<QHostAddress> QNetworkInterface::allAddresses()
 {
-    QList<QSharedDataPointer<QNetworkInterfacePrivate> > privs = manager()->allInterfaces();
+    const QList<QSharedDataPointer<QNetworkInterfacePrivate> > privs = manager()->allInterfaces();
     QList<QHostAddress> result;
-    foreach (const QSharedDataPointer<QNetworkInterfacePrivate> &p, privs) {
-        foreach (const QNetworkAddressEntry &entry, p->addressEntries)
+    for (const auto &p : privs) {
+        for (const QNetworkAddressEntry &entry : qAsConst(p->addressEntries))
             result += entry.ip();
     }
 

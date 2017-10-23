@@ -2,31 +2,37 @@
 **
 ** Copyright (C) 2013 Laszlo Papp <lpapp@kde.org>
 ** Copyright (C) 2013 David Faure <faure@kde.org>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,7 +44,7 @@
 #include <qhash.h>
 #include <qvector.h>
 #include <qdebug.h>
-#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINRT)
 #  include <qt_windows.h>
 #endif
 #include <stdio.h>
@@ -291,7 +297,9 @@ QCommandLineParser::~QCommandLineParser()
     i.e. as the long option named \c{abc}. This is how Qt's own tools
     (uic, rcc...) have always been parsing arguments. This mode should be
     used for preserving compatibility in applications that were parsing
-    arguments in such a way.
+    arguments in such a way. There is an exception if the \c{a} option has the
+    QCommandLineOption::ShortOptionStyle flag set, in which case it is still
+    interpreted as \c{-a bc}.
 
     \sa setSingleDashWordOptionMode()
 */
@@ -350,10 +358,10 @@ void QCommandLineParser::setOptionsAfterPositionalArgumentsMode(QCommandLinePars
  */
 bool QCommandLineParser::addOption(const QCommandLineOption &option)
 {
-    QStringList optionNames = option.names();
+    const QStringList optionNames = option.names();
 
     if (!optionNames.isEmpty()) {
-        foreach (const QString &name, optionNames) {
+        for (const QString &name : optionNames) {
             if (d->nameHash.contains(name))
                 return false;
         }
@@ -361,7 +369,7 @@ bool QCommandLineParser::addOption(const QCommandLineOption &option)
         d->commandLineOptionList.append(option);
 
         const int offset = d->commandLineOptionList.size() - 1;
-        foreach (const QString &name, optionNames)
+        for (const QString &name : optionNames)
             d->nameHash.insert(name, offset);
 
         return true;
@@ -526,7 +534,7 @@ QString QCommandLineParser::errorText() const
 
 enum MessageType { UsageMessage, ErrorMessage };
 
-#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINRT)
 // Return whether to use a message box. Use handles if a console can be obtained
 // or we are run with redirected handles (for example, by QProcess).
 static inline bool displayMessageBox()
@@ -548,7 +556,7 @@ static void showParserMessage(const QString &message, MessageType type)
     else
         qCritical(qPrintable(message));
     return;
-#elif defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED) && !defined(Q_OS_WINCE)
+#elif defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
     if (displayMessageBox()) {
         const UINT flags = MB_OK | MB_TOPMOST | MB_SETFOREGROUND
             | (type == UsageMessage ? MB_ICONINFORMATION : MB_ICONERROR);
@@ -561,7 +569,7 @@ static void showParserMessage(const QString &message, MessageType type)
                     reinterpret_cast<const wchar_t *>(title.utf16()), flags);
         return;
     }
-#endif // Q_OS_WIN && !QT_BOOTSTRAPPED && !Q_OS_WINCE
+#endif // Q_OS_WIN && !QT_BOOTSTRAPPED
     fputs(qPrintable(message), type == UsageMessage ? stdout : stderr);
 }
 
@@ -759,6 +767,18 @@ bool QCommandLineParserPrivate::parse(const QStringList &args)
             }
             case QCommandLineParser::ParseAsLongOptions:
             {
+                if (argument.size() > 2) {
+                    const QString possibleShortOptionStyleName = argument.mid(1, 1);
+                    const auto shortOptionIt = nameHash.constFind(possibleShortOptionStyleName);
+                    if (shortOptionIt != nameHash.constEnd()) {
+                        const auto &arg = commandLineOptionList.at(*shortOptionIt);
+                        if (arg.flags() & QCommandLineOption::ShortOptionStyle) {
+                            registerFoundOption(possibleShortOptionStyleName);
+                            optionValuesHash[*shortOptionIt].append(argument.mid(2));
+                            break;
+                        }
+                    }
+                }
                 const QString optionName = argument.mid(1).section(assignChar, 0, 0);
                 if (registerFoundOption(optionName)) {
                     if (!parseOptionValue(optionName, argument, &argumentIterator, args.end()))
@@ -800,7 +820,7 @@ bool QCommandLineParser::isSet(const QString &name) const
     if (d->optionNames.contains(name))
         return true;
     const QStringList aliases = d->aliases(name);
-    foreach (const QString &optionName, d->optionNames) {
+    for (const QString &optionName : qAsConst(d->optionNames)) {
         if (aliases.contains(optionName))
             return true;
     }
@@ -884,7 +904,8 @@ QStringList QCommandLineParser::values(const QString &optionName) const
 bool QCommandLineParser::isSet(const QCommandLineOption &option) const
 {
     // option.names() might be empty if the constructor failed
-    return !option.names().isEmpty() && isSet(option.names().first());
+    const auto names = option.names();
+    return !names.isEmpty() && isSet(names.first());
 }
 
 /*!
@@ -902,7 +923,7 @@ bool QCommandLineParser::isSet(const QCommandLineOption &option) const
 */
 QString QCommandLineParser::value(const QCommandLineOption &option) const
 {
-    return value(option.names().first());
+    return value(option.names().constFirst());
 }
 
 /*!
@@ -920,7 +941,7 @@ QString QCommandLineParser::value(const QCommandLineOption &option) const
 */
 QStringList QCommandLineParser::values(const QCommandLineOption &option) const
 {
-    return values(option.names().first());
+    return values(option.names().constFirst());
 }
 
 /*!
@@ -1028,7 +1049,7 @@ QString QCommandLineParser::helpText() const
 static QString wrapText(const QString &names, int longestOptionNameString, const QString &description)
 {
     const QLatin1Char nl('\n');
-    QString text = QStringLiteral("  ") + names.leftJustified(longestOptionNameString) + QLatin1Char(' ');
+    QString text = QLatin1String("  ") + names.leftJustified(longestOptionNameString) + QLatin1Char(' ');
     const int indent = text.length();
     int lineStart = 0;
     int lastBreakable = -1;
@@ -1080,16 +1101,12 @@ QString QCommandLineParserPrivate::helpText() const
 {
     const QLatin1Char nl('\n');
     QString text;
-    const QString exeName = QCoreApplication::instance()->arguments().first();
-    QString usage = exeName;
-    if (!commandLineOptionList.isEmpty()) {
-        usage += QLatin1Char(' ');
-        usage += QCommandLineParser::tr("[options]");
-    }
-    foreach (const PositionalArgumentDefinition &arg, positionalArgumentDefinitions) {
-        usage += QLatin1Char(' ');
-        usage += arg.syntax;
-    }
+    QString usage;
+    usage += QCoreApplication::instance()->arguments().constFirst(); // executable name
+    if (!commandLineOptionList.isEmpty())
+        usage += QLatin1Char(' ') + QCommandLineParser::tr("[options]");
+    for (const PositionalArgumentDefinition &arg : positionalArgumentDefinitions)
+        usage += QLatin1Char(' ') + arg.syntax;
     text += QCommandLineParser::tr("Usage: %1").arg(usage) + nl;
     if (!description.isEmpty())
        text += description + nl;
@@ -1097,35 +1114,39 @@ QString QCommandLineParserPrivate::helpText() const
     if (!commandLineOptionList.isEmpty())
         text += QCommandLineParser::tr("Options:") + nl;
     QStringList optionNameList;
+    optionNameList.reserve(commandLineOptionList.size());
     int longestOptionNameString = 0;
-    foreach (const QCommandLineOption &option, commandLineOptionList) {
-        QStringList optionNames;
-        foreach (const QString &optionName, option.names()) {
-            if (optionName.length() == 1)
-                optionNames.append(QLatin1Char('-') + optionName);
-            else
-                optionNames.append(QStringLiteral("--") + optionName);
+    for (const QCommandLineOption &option : commandLineOptionList) {
+        if (option.flags() & QCommandLineOption::HiddenFromHelp)
+            continue;
+        const QStringList optionNames = option.names();
+        QString optionNamesString;
+        for (const QString &optionName : optionNames) {
+            const int numDashes = optionName.length() == 1 ? 1 : 2;
+            optionNamesString += QLatin1String("--", numDashes) + optionName + QLatin1String(", ");
         }
-        QString optionNamesString = optionNames.join(QStringLiteral(", "));
-        if (!option.valueName().isEmpty())
-            optionNamesString += QStringLiteral(" <") + option.valueName() + QLatin1Char('>');
+        if (!optionNames.isEmpty())
+            optionNamesString.chop(2); // remove trailing ", "
+        const auto valueName = option.valueName();
+        if (!valueName.isEmpty())
+            optionNamesString += QLatin1String(" <") + valueName + QLatin1Char('>');
         optionNameList.append(optionNamesString);
         longestOptionNameString = qMax(longestOptionNameString, optionNamesString.length());
     }
     ++longestOptionNameString;
-    for (int i = 0; i < commandLineOptionList.count(); ++i) {
-        const QCommandLineOption &option = commandLineOptionList.at(i);
-        if (option.isHidden())
+    auto optionNameIterator = optionNameList.cbegin();
+    for (const QCommandLineOption &option : commandLineOptionList) {
+        if (option.flags() & QCommandLineOption::HiddenFromHelp)
             continue;
-        text += wrapText(optionNameList.at(i), longestOptionNameString, option.description());
+        text += wrapText(*optionNameIterator, longestOptionNameString, option.description());
+        ++optionNameIterator;
     }
     if (!positionalArgumentDefinitions.isEmpty()) {
         if (!commandLineOptionList.isEmpty())
             text += nl;
         text += QCommandLineParser::tr("Arguments:") + nl;
-        foreach (const PositionalArgumentDefinition &arg, positionalArgumentDefinitions) {
+        for (const PositionalArgumentDefinition &arg : positionalArgumentDefinitions)
             text += wrapText(arg.name, longestOptionNameString, arg.description);
-        }
     }
     return text;
 }

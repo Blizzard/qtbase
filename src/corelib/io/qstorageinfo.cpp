@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -254,11 +260,31 @@ QByteArray QStorageInfo::fileSystemType() const
     devpath like \c /dev/sda0 for local storages. On Windows, it returns the UNC
     path starting with \c \\\\?\\ for local storages (in other words, the volume GUID).
 
-    \sa rootPath()
+    \sa rootPath(), subvolume()
 */
 QByteArray QStorageInfo::device() const
 {
     return d->device;
+}
+
+/*!
+    \since 5.9
+    Returns the subvolume name for this volume.
+
+    Some filesystem types allow multiple subvolumes inside one device, which
+    may be mounted in different paths. If the subvolume could be detected, it
+    is returned here. The format of the subvolume name is specific to each
+    filesystem type.
+
+    If this volume was not mounted from a subvolume of a larger filesystem or
+    if the subvolume could not be detected, this function returns an empty byte
+    array.
+
+    \sa device()
+*/
+QByteArray QStorageInfo::subvolume() const
+{
+    return d->subvolume;
 }
 
 /*!

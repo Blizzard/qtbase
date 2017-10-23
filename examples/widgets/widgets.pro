@@ -22,11 +22,9 @@ SUBDIRS       = \
                 tutorials \
                 widgets
 
-contains(QT_CONFIG, opengl(es2)?) {
+qtHaveModule(gui):qtConfig(opengl): \
     SUBDIRS += windowcontainer
-}
 
-!contains(QT_CONFIG, opengl(es2)?): SUBDIRS -= windowcontainer
 contains(DEFINES, QT_NO_CURSOR): SUBDIRS -= mainwindows
 contains(DEFINES, QT_NO_DRAGANDDROP): SUBDIRS -= draganddrop
 mac:SUBDIRS += mac

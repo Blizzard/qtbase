@@ -2,7 +2,7 @@ TARGET = cocoaprintersupport
 MODULE = cocoaprintersupport
 
 QT += gui-private printsupport-private
-LIBS += -framework Cocoa
+LIBS += -framework AppKit
 
 SOURCES += main.cpp
 

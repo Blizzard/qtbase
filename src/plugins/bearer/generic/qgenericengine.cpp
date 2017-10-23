@@ -1,35 +1,44 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+
+// see comment in ../platformdefs_win.h.
+#define WIN32_LEAN_AND_MEAN 1
 
 #include "qgenericengine.h"
 #include "../qnetworksession_impl.h"
@@ -44,16 +53,15 @@
 #include <QtCore/qdebug.h>
 #include <QtCore/private/qcoreapplication_p.h>
 
-#if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN32)
+// PMIB_TCPTABLE2 is only available since Vista
+#if _WIN32_WINNT < 0x0600
+#  undef _WIN32_WINNT
+#  define _WIN32_WINNT 0x0600
+#endif // _WIN32_WINNT < 0x0600
 #include "../platformdefs_win.h"
+#include <iphlpapi.h>
 #endif
-
-#ifdef Q_OS_WINCE
-typedef ULONG NDIS_OID, *PNDIS_OID;
-#  ifndef QT_NO_WINCE_NUIOUSER
-#    include <nuiouser.h>
-#  endif
-#endif // Q_OS_WINCE
 
 #ifdef Q_OS_WINRT
 #include <qfunctions_winrt.h>
@@ -69,9 +77,10 @@ using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Foundation::Collections;
 using namespace ABI::Windows::Networking;
 using namespace ABI::Windows::Networking::Connectivity;
+#endif // Q_OS_WINRT
+
 // needed as interface is used as parameter name in qGetInterfaceType
 #undef interface
-#endif // Q_OS_WINRT
 
 #ifdef Q_OS_LINUX
 #include <sys/socket.h>
@@ -86,90 +95,39 @@ QT_BEGIN_NAMESPACE
 #ifndef QT_NO_NETWORKINTERFACE
 static QNetworkConfiguration::BearerType qGetInterfaceType(const QString &interface)
 {
-#if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)
-    DWORD bytesWritten;
-    NDIS_MEDIUM medium;
-    NDIS_PHYSICAL_MEDIUM physicalMedium;
-
-#if defined(Q_OS_WINCE) && !defined(QT_NO_WINCE_NUIOUSER)
-    NDISUIO_QUERY_OID nicGetOid;
-    HANDLE handle = CreateFile((PTCHAR)NDISUIO_DEVICE_NAME, 0,
-                               FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
-#else
-    unsigned long oid;
-    HANDLE handle = CreateFile((TCHAR *)QString::fromLatin1("\\\\.\\%1").arg(interface).utf16(), 0,
-                               FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
-#endif
-    if (handle == INVALID_HANDLE_VALUE)
+#if defined(Q_OS_WIN32)
+    // QNetworkInterface::name returns a more friendly name on Windows. That name is not
+    // accepted as an identifier for CreateFile so we have to obtain the Luid.
+    std::wstring buf = interface.toStdWString();
+    if (buf.size() == 0)
         return QNetworkConfiguration::BearerUnknown;
 
-    bytesWritten = 0;
+    NET_LUID luid;
+    NETIO_STATUS status = ConvertInterfaceNameToLuidW(buf.c_str(), &luid);
+    if (status != NO_ERROR)
+        return QNetworkConfiguration::BearerUnknown;
 
-#if defined(Q_OS_WINCE) && !defined(QT_NO_WINCE_NUIOUSER)
-    ZeroMemory(&nicGetOid, sizeof(NDISUIO_QUERY_OID));
-    nicGetOid.Oid = OID_GEN_MEDIA_SUPPORTED;
-    nicGetOid.ptcDeviceName = (PTCHAR)interface.utf16();
-    bool result = DeviceIoControl(handle, IOCTL_NDISUIO_QUERY_OID_VALUE, &nicGetOid, sizeof(nicGetOid),
-                                  &nicGetOid, sizeof(nicGetOid), &bytesWritten, 0);
-#else
-    oid = OID_GEN_MEDIA_SUPPORTED;
-    bool result = DeviceIoControl(handle, IOCTL_NDIS_QUERY_GLOBAL_STATS, &oid, sizeof(oid),
-                                  &medium, sizeof(medium), &bytesWritten, 0);
+    switch (luid.Info.IfType) {
+    case IF_TYPE_ETHERNET_CSMACD:
+    case IF_TYPE_ISO88025_TOKENRING:
+    case IF_TYPE_PPP:
+    case IF_TYPE_SOFTWARE_LOOPBACK:
+        return QNetworkConfiguration::BearerEthernet;
+    case IF_TYPE_IEEE80211:
+        return QNetworkConfiguration::BearerWLAN;
+    case IF_TYPE_ATM:
+    case IF_TYPE_IEEE1394:
+    case IF_TYPE_OTHER:
+    case IF_TYPE_TUNNEL:
+        return QNetworkConfiguration::BearerUnknown;
+    default:
+#ifdef BEARER_MANAGEMENT_DEBUG
+        qDebug() << "Interface Type" << luid.Info.IfType;
 #endif
-    if (!result) {
-        CloseHandle(handle);
         return QNetworkConfiguration::BearerUnknown;
     }
+    return QNetworkConfiguration::BearerUnknown;
 
-    bytesWritten = 0;
-
-#if defined(Q_OS_WINCE) && !defined(QT_NO_WINCE_NUIOUSER)
-    medium = NDIS_MEDIUM( *(LPDWORD)nicGetOid.Data );
-
-    ZeroMemory(&nicGetOid, sizeof(NDISUIO_QUERY_OID));
-    nicGetOid.Oid = OID_GEN_PHYSICAL_MEDIUM;
-    nicGetOid.ptcDeviceName = (PTCHAR)interface.utf16();
-
-    result = DeviceIoControl(handle, IOCTL_NDISUIO_QUERY_OID_VALUE, &nicGetOid, sizeof(nicGetOid),
-                             &nicGetOid, sizeof(nicGetOid), &bytesWritten, 0);
-
-    physicalMedium = NDIS_PHYSICAL_MEDIUM( *(LPDWORD)nicGetOid.Data );
-#else
-    oid = OID_GEN_PHYSICAL_MEDIUM;
-    result = DeviceIoControl(handle, IOCTL_NDIS_QUERY_GLOBAL_STATS, &oid, sizeof(oid),
-                             &physicalMedium, sizeof(physicalMedium), &bytesWritten, 0);
-#endif
-
-    if (!result) {
-        CloseHandle(handle);
-
-        if (medium == NdisMedium802_3)
-            return QNetworkConfiguration::BearerEthernet;
-        else
-            return QNetworkConfiguration::BearerUnknown;
-    }
-
-    CloseHandle(handle);
-
-    if (medium == NdisMedium802_3) {
-        switch (physicalMedium) {
-        case NdisPhysicalMediumWirelessLan:
-            return QNetworkConfiguration::BearerWLAN;
-        case NdisPhysicalMediumBluetooth:
-            return QNetworkConfiguration::BearerBluetooth;
-        case NdisPhysicalMediumWiMax:
-            return QNetworkConfiguration::BearerWiMAX;
-        default:
-#ifdef BEARER_MANAGEMENT_DEBUG
-            qDebug() << "Physical Medium" << physicalMedium;
-#endif
-            return QNetworkConfiguration::BearerEthernet;
-        }
-    }
-
-#ifdef BEARER_MANAGEMENT_DEBUG
-    qDebug() << medium << physicalMedium;
-#endif
 #elif defined(Q_OS_LINUX)
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
 

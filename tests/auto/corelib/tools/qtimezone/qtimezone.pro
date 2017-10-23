@@ -1,8 +1,12 @@
-CONFIG += testcase parallel_test
+CONFIG += testcase
 TARGET = tst_qtimezone
 QT = core-private testlib
 SOURCES = tst_qtimezone.cpp
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0
-contains(QT_CONFIG,icu) {
+qtConfig(icu) {
     DEFINES += QT_USE_ICU
+}
+
+darwin {
+    OBJECTIVE_SOURCES += tst_qtimezone_darwin.mm
+    LIBS += -framework Foundation
 }

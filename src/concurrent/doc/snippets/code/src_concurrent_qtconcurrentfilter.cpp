@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -103,9 +113,9 @@ QSet<QString> dictionary = QtConcurrent::blockingFilteredReduced(strings, allLow
 //! [7]
 // keep only images with an alpha channel
 QList<QImage> images = ...;
-QFuture<void> alphaImages = QtConcurrent::filter(strings, &QImage::hasAlphaChannel);
+QFuture<void> alphaImages = QtConcurrent::filter(images, &QImage::hasAlphaChannel);
 
-// keep only gray scale images
+// retrieve gray scale images
 QList<QImage> images = ...;
 QFuture<QImage> grayscaleImages = QtConcurrent::filtered(images, &QImage::isGrayscale);
 
@@ -131,23 +141,15 @@ QFuture<QImage> collage = QtConcurrent::filteredReduced(images, &QImage::isGrays
 
 
 //! [9]
-bool QString::contains(const QRegExp &regexp) const;
+bool QString::contains(const QRegularExpression &regexp) const;
 //! [9]
-
-
-//! [10]
-std::bind(&QString::contains, QRegExp("^\\S+$")); // matches strings without whitespace
-//! [10]
-
-
-//! [11]
-bool contains(const QString &string)
-//! [11]
 
 
 //! [12]
 QStringList strings = ...;
-std::bind(static_cast<bool(QString::*)(const QRegExp&)>( &QString::contains ), QRegExp("..." ));
+QFuture<QString> future = QtConcurrent::filtered(list, [](const QString &str) {
+    return str.contains(QRegularExpression("^\\S+$")); // matches strings without whitespace
+});
 //! [12]
 
 //! [13]

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,9 +52,11 @@
 #include <QMap>
 #include <QApplication>
 #include <QAbstractScrollArea>
+#if QT_CONFIG(graphicsview)
 #include <QGraphicsObject>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#endif
 #include <QDesktopWidget>
 #include <QVector2D>
 #include <QtCore/qmath.h>
@@ -159,8 +167,8 @@ static qreal differentialForProgress(const QEasingCurve &curve, qreal pos)
 
 static qreal progressForValue(const QEasingCurve &curve, qreal value)
 {
-    if (curve.type() >= QEasingCurve::InElastic &&
-        curve.type() < QEasingCurve::Custom) {
+    if (Q_UNLIKELY(curve.type() >= QEasingCurve::InElastic &&
+                   curve.type() < QEasingCurve::Custom)) {
         qWarning("progressForValue(): QEasingCurves of type %d do not have an inverse, since they are not injective.", curve.type());
         return value;
     }
@@ -423,12 +431,12 @@ Qt::GestureType QScroller::grabGesture(QObject *target, ScrollerGestureType scro
         widget->grabGesture(sp->recognizerType);
         if (scrollGestureType == TouchGesture)
             widget->setAttribute(Qt::WA_AcceptTouchEvents);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else if (QGraphicsObject *go = qobject_cast<QGraphicsObject*>(target)) {
         if (scrollGestureType == TouchGesture)
             go->setAcceptTouchEvents(true);
         go->grabGesture(sp->recognizerType);
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
     }
     return sp->recognizerType;
 }
@@ -467,7 +475,7 @@ void QScroller::ungrabGesture(QObject *target)
     if (target->isWidgetType()) {
         QWidget *widget = static_cast<QWidget *>(target);
         widget->ungrabGesture(sp->recognizerType);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     } else if (QGraphicsObject *go = qobject_cast<QGraphicsObject*>(target)) {
         go->ungrabGesture(sp->recognizerType);
 #endif
@@ -565,12 +573,15 @@ QPointF QScroller::pixelPerMeter() const
     Q_D(const QScroller);
     QPointF ppm = d->pixelPerMeter;
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     if (QGraphicsObject *go = qobject_cast<QGraphicsObject *>(d->target)) {
         QTransform viewtr;
         //TODO: the first view isn't really correct - maybe use an additional field in the prepare event?
-        if (go->scene() && !go->scene()->views().isEmpty())
-            viewtr = go->scene()->views().first()->viewportTransform();
+        if (const auto *scene = go->scene()) {
+            const auto views = scene->views();
+            if (!views.isEmpty())
+                viewtr = views.first()->viewportTransform();
+        }
         QTransform tr = go->deviceTransform(viewtr);
         if (tr.isScaling()) {
             QPointF p0 = tr.map(QPointF(0, 0));
@@ -580,7 +591,7 @@ QPointF QScroller::pixelPerMeter() const
             ppm.ry() /= QLineF(p0, py).length();
         }
     }
-#endif // QT_NO_GRAPHICSVIEW
+#endif // QT_CONFIG(graphicsview)
     return ppm;
 }
 
@@ -1002,12 +1013,12 @@ bool QScroller::handleInput(Input input, const QPointF &position, qint64 timesta
     return false;
 }
 
-#if !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
 // the Mac version is implemented in qscroller_mac.mm
 
-QPointF QScrollerPrivate::realDpi(int screen)
+QPointF QScrollerPrivate::realDpi(int screen) const
 {
-#  if defined(Q_DEAD_CODE_FROM_QT4_X11) && !defined(QT_NO_XRANDR)
+#  if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && !defined(QT_NO_XRANDR)
     if (X11 && X11->use_xrandr && X11->ptrXRRSizes && X11->ptrXRRRootToScreen) {
         int nsizes = 0;
         // QDesktopWidget is based on Xinerama screens, which do not always
@@ -1033,7 +1044,7 @@ QPointF QScrollerPrivate::realDpi(int screen)
     return QPointF(w->physicalDpiX(), w->physicalDpiY());
 }
 
-#endif // !Q_DEAD_CODE_FROM_QT4_MAC
+#endif
 
 
 /*! \internal
@@ -1115,12 +1126,15 @@ void QScrollerPrivate::pushSegment(ScrollType type, qreal deltaTime, qreal stopP
         return;
 
     ScrollSegment s;
-    if (orientation == Qt::Horizontal && !xSegments.isEmpty())
-        s.startTime = xSegments.last().startTime + xSegments.last().deltaTime * xSegments.last().stopProgress;
-    else if (orientation == Qt::Vertical && !ySegments.isEmpty())
-        s.startTime = ySegments.last().startTime + ySegments.last().deltaTime * ySegments.last().stopProgress;
-    else
+    if (orientation == Qt::Horizontal && !xSegments.isEmpty()) {
+        const auto &lastX = xSegments.constLast();
+        s.startTime = lastX.startTime + lastX.deltaTime * lastX.stopProgress;
+    } else if (orientation == Qt::Vertical && !ySegments.isEmpty()) {
+        const auto &lastY = ySegments.constLast();
+        s.startTime = lastY.startTime + lastY.deltaTime * lastY.stopProgress;
+    } else {
         s.startTime = monotonicTimer.elapsed();
+    }
 
     s.startPos = startPos;
     s.deltaPos = deltaPos;
@@ -1176,9 +1190,9 @@ qreal QScrollerPrivate::scrollingSegmentsEndPos(Qt::Orientation orientation) con
 /*! \internal
     Checks if the scroller segment end in a valid position.
 */
-bool QScrollerPrivate::scrollingSegmentsValid(Qt::Orientation orientation)
+bool QScrollerPrivate::scrollingSegmentsValid(Qt::Orientation orientation) const
 {
-    QQueue<ScrollSegment> *segments;
+    const QQueue<ScrollSegment> *segments;
     qreal minPos;
     qreal maxPos;
 
@@ -1454,11 +1468,14 @@ bool QScrollerPrivate::prepareScrolling(const QPointF &position)
 
         if (QWidget *w = qobject_cast<QWidget *>(target))
             setDpiFromWidget(w);
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
         if (QGraphicsObject *go = qobject_cast<QGraphicsObject *>(target)) {
             //TODO: the first view isn't really correct - maybe use an additional field in the prepare event?
-            if (go->scene() && !go->scene()->views().isEmpty())
-                setDpiFromWidget(go->scene()->views().first());
+            if (const auto *scene = go->scene()) {
+                const auto views = scene->views();
+                if (!views.isEmpty())
+                    setDpiFromWidget(views.first());
+            }
         }
 #endif
 
@@ -1893,7 +1910,7 @@ void QScrollerPrivate::setContentPositionHelperScrolling()
     on a snap point.
     Returns the nearest snap position or NaN if no such point could be found.
  */
-qreal QScrollerPrivate::nextSnapPos(qreal p, int dir, Qt::Orientation orientation)
+qreal QScrollerPrivate::nextSnapPos(qreal p, int dir, Qt::Orientation orientation) const
 {
     qreal bestSnapPos = Q_QNAN;
     qreal bestSnapPosDist = Q_INFINITY;

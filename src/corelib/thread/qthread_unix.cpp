@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,17 +45,15 @@
 #include <private/qcoreapplication_p.h>
 #include <private/qcore_unix_p.h>
 
-#if defined(Q_OS_BLACKBERRY)
-#  include <private/qeventdispatcher_blackberry_p.h>
-#elif defined(Q_OS_OSX)
+#if defined(Q_OS_DARWIN)
 #  include <private/qeventdispatcher_cf_p.h>
-#  include <private/qeventdispatcher_unix_p.h>
 #else
 #  if !defined(QT_NO_GLIB)
 #    include "../kernel/qeventdispatcher_glib_p.h"
 #  endif
-#  include <private/qeventdispatcher_unix_p.h>
 #endif
+
+#include <private/qeventdispatcher_unix_p.h>
 
 #include "qthreadstorage.h"
 
@@ -96,7 +101,7 @@
 # define SCHED_IDLE    5
 #endif
 
-#if defined(Q_OS_DARWIN) || !defined(Q_OS_OPENBSD) && defined(_POSIX_THREAD_PRIORITY_SCHEDULING) && (_POSIX_THREAD_PRIORITY_SCHEDULING-0 >= 0)
+#if defined(Q_OS_DARWIN) || !defined(Q_OS_ANDROID) && !defined(Q_OS_OPENBSD) && defined(_POSIX_THREAD_PRIORITY_SCHEDULING) && (_POSIX_THREAD_PRIORITY_SCHEDULING-0 >= 0)
 #define QT_HAS_THREAD_PRIORITY_SCHEDULING
 #endif
 
@@ -206,25 +211,25 @@ static void clear_thread_data()
 }
 
 template <typename T>
-static typename QtPrivate::QEnableIf<QTypeInfo<T>::isIntegral, Qt::HANDLE>::Type to_HANDLE(T id)
+static typename std::enable_if<QTypeInfo<T>::isIntegral, Qt::HANDLE>::type to_HANDLE(T id)
 {
     return reinterpret_cast<Qt::HANDLE>(static_cast<intptr_t>(id));
 }
 
 template <typename T>
-static typename QtPrivate::QEnableIf<QTypeInfo<T>::isIntegral, T>::Type from_HANDLE(Qt::HANDLE id)
+static typename std::enable_if<QTypeInfo<T>::isIntegral, T>::type from_HANDLE(Qt::HANDLE id)
 {
     return static_cast<T>(reinterpret_cast<intptr_t>(id));
 }
 
 template <typename T>
-static typename QtPrivate::QEnableIf<QTypeInfo<T>::isPointer, Qt::HANDLE>::Type to_HANDLE(T id)
+static typename std::enable_if<QTypeInfo<T>::isPointer, Qt::HANDLE>::type to_HANDLE(T id)
 {
     return id;
 }
 
 template <typename T>
-static typename QtPrivate::QEnableIf<QTypeInfo<T>::isPointer, T>::Type from_HANDLE(Qt::HANDLE id)
+static typename std::enable_if<QTypeInfo<T>::isPointer, T>::type from_HANDLE(Qt::HANDLE id)
 {
     return static_cast<T>(id);
 }
@@ -250,7 +255,7 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         }
         data->deref();
         data->isAdopted = true;
-        data->threadId = to_HANDLE(pthread_self());
+        data->threadId.store(to_HANDLE(pthread_self()));
         if (!QCoreApplicationPrivate::theMainThread)
             QCoreApplicationPrivate::theMainThread = data->thread.load();
     }
@@ -274,16 +279,14 @@ typedef void*(*QtThreadCallback)(void*);
 
 void QThreadPrivate::createEventDispatcher(QThreadData *data)
 {
-#if defined(Q_OS_BLACKBERRY)
-    data->eventDispatcher.storeRelease(new QEventDispatcherBlackberry);
-#  elif defined(Q_OS_OSX)
+#if defined(Q_OS_DARWIN)
     bool ok = false;
     int value = qEnvironmentVariableIntValue("QT_EVENT_DISPATCHER_CORE_FOUNDATION", &ok);
     if (ok && value > 0)
         data->eventDispatcher.storeRelease(new QEventDispatcherCoreFoundation);
     else
         data->eventDispatcher.storeRelease(new QEventDispatcherUNIX);
-#  elif !defined(QT_NO_GLIB)
+#elif !defined(QT_NO_GLIB)
     if (qEnvironmentVariableIsEmpty("QT_NO_GLIB")
         && qEnvironmentVariableIsEmpty("QT_NO_THREADED_GLIB")
         && QEventDispatcherGlib::versionSupported())
@@ -332,7 +335,7 @@ void *QThreadPrivate::start(void *arg)
             thr->d_func()->setPriority(QThread::Priority(thr->d_func()->priority & ~ThreadPriorityResetFlag));
         }
 
-        data->threadId = to_HANDLE(pthread_self());
+        data->threadId.store(to_HANDLE(pthread_self()));
         set_thread_data(data);
 
         data->ref();
@@ -349,7 +352,7 @@ void *QThreadPrivate::start(void *arg)
         // sets the name of the current thread.
         QString objectName = thr->objectName();
 
-        pthread_t thread_id = from_HANDLE<pthread_t>(data->threadId);
+        pthread_t thread_id = from_HANDLE<pthread_t>(data->threadId.load());
         if (Q_LIKELY(objectName.isEmpty()))
             setCurrentThreadName(thread_id, thr->metaObject()->className());
         else
@@ -648,7 +651,7 @@ void QThread::start(Priority priority)
 #endif
         code = pthread_create(&threadId, &attr, QThreadPrivate::start, this);
     }
-    d->data->threadId = to_HANDLE(threadId);
+    d->data->threadId.store(to_HANDLE(threadId));
 
     pthread_attr_destroy(&attr);
 
@@ -657,7 +660,7 @@ void QThread::start(Priority priority)
 
         d->running = false;
         d->finished = false;
-        d->data->threadId = 0;
+        d->data->threadId.store(nullptr);
     }
 }
 
@@ -667,10 +670,10 @@ void QThread::terminate()
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (!d->data->threadId)
+    if (!d->data->threadId.load())
         return;
 
-    int code = pthread_cancel(from_HANDLE<pthread_t>(d->data->threadId));
+    int code = pthread_cancel(from_HANDLE<pthread_t>(d->data->threadId.load()));
     if (code) {
         qWarning("QThread::start: Thread termination error: %s",
                  qPrintable(qt_error_string((code))));
@@ -683,7 +686,7 @@ bool QThread::wait(unsigned long time)
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (from_HANDLE<pthread_t>(d->data->threadId) == pthread_self()) {
+    if (from_HANDLE<pthread_t>(d->data->threadId.load()) == pthread_self()) {
         qWarning("QThread::wait: Thread tried to wait on itself");
         return false;
     }
@@ -725,7 +728,7 @@ void QThreadPrivate::setPriority(QThread::Priority threadPriority)
     int sched_policy;
     sched_param param;
 
-    if (pthread_getschedparam(from_HANDLE<pthread_t>(data->threadId), &sched_policy, &param) != 0) {
+    if (pthread_getschedparam(from_HANDLE<pthread_t>(data->threadId.load()), &sched_policy, &param) != 0) {
         // failed to get the scheduling policy, don't bother setting
         // the priority
         qWarning("QThread::setPriority: Cannot get scheduler parameters");
@@ -741,15 +744,15 @@ void QThreadPrivate::setPriority(QThread::Priority threadPriority)
     }
 
     param.sched_priority = prio;
-    int status = pthread_setschedparam(from_HANDLE<pthread_t>(data->threadId), sched_policy, &param);
+    int status = pthread_setschedparam(from_HANDLE<pthread_t>(data->threadId.load()), sched_policy, &param);
 
 # ifdef SCHED_IDLE
     // were we trying to set to idle priority and failed?
     if (status == -1 && sched_policy == SCHED_IDLE && errno == EINVAL) {
         // reset to lowest priority possible
-        pthread_getschedparam(from_HANDLE<pthread_t>(data->threadId), &sched_policy, &param);
+        pthread_getschedparam(from_HANDLE<pthread_t>(data->threadId.load()), &sched_policy, &param);
         param.sched_priority = sched_get_priority_min(sched_policy);
-        pthread_setschedparam(from_HANDLE<pthread_t>(data->threadId), sched_policy, &param);
+        pthread_setschedparam(from_HANDLE<pthread_t>(data->threadId.load()), sched_policy, &param);
     }
 # else
     Q_UNUSED(status);

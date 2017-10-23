@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,23 +44,26 @@
 #include <QtCore/qthread.h>
 #include <QtCore/private/qcoreapplication_p.h>
 #include <QtCore/private/qcore_unix_p.h>
-#include <QtCore/private/qcore_mac_p.h>
 #include <QtCore/private/qthread_p.h>
 
 #include <limits>
 
 #ifdef Q_OS_OSX
 #  include <AppKit/NSApplication.h>
+#elif defined(Q_OS_WATCHOS)
+#  include <WatchKit/WatchKit.h>
 #else
 #  include <UIKit/UIApplication.h>
 #endif
 
 QT_USE_NAMESPACE
 
-@interface RunLoopModeTracker : NSObject {
+@interface QT_MANGLE_NAMESPACE(RunLoopModeTracker) : NSObject {
     QStack<CFStringRef> m_runLoopModes;
 }
 @end
+
+QT_NAMESPACE_ALIAS_OBJC_CLASS(RunLoopModeTracker);
 
 @implementation RunLoopModeTracker
 
@@ -69,8 +78,11 @@ QT_USE_NAMESPACE
             name:nil
 #ifdef Q_OS_OSX
             object:[NSApplication sharedApplication]];
+#elif defined(Q_OS_WATCHOS)
+            object:[WKExtension sharedExtension]];
 #else
-            object:[UIApplication sharedApplication]];
+            // Use performSelector so this can work in an App Extension
+            object:[[UIApplication class] performSelector:@selector(sharedApplication)]];
 #endif
     }
 
@@ -107,7 +119,7 @@ static CFStringRef runLoopMode(NSDictionary *dictionary)
         if (CFStringCompare(mode, [self currentMode], 0) == kCFCompareEqualTo)
             m_runLoopModes.pop();
         else
-            qWarning("Tried to pop run loop mode '%s' that was never pushed!", qPrintable(QCFString::toQString(mode)));
+            qWarning("Tried to pop run loop mode '%s' that was never pushed!", qPrintable(QString::fromCFString(mode)));
 
         Q_ASSERT(m_runLoopModes.size() >= 1);
      }
@@ -204,6 +216,13 @@ QEventDispatcherCoreFoundation::~QEventDispatcherCoreFoundation()
     m_cfSocketNotifier.removeSocketNotifiers();
 }
 
+QEventLoop *QEventDispatcherCoreFoundation::currentEventLoop() const
+{
+    QEventLoop *eventLoop = QThreadData::current()->eventLoops.top();
+    Q_ASSERT(eventLoop);
+    return eventLoop;
+}
+
 /*!
     Processes all pending events that match \a flags until there are no
     more events to process. Returns \c true if pending events were handled;
@@ -268,7 +287,7 @@ bool QEventDispatcherCoreFoundation::processEvents(QEventLoop::ProcessEventsFlag
         CFTimeInterval duration = (m_processEvents.flags & QEventLoop::WaitForMoreEvents) ?
             kCFTimeIntervalDistantFuture : kCFTimeIntervalMinimum;
 
-        qEventDispatcherDebug() << "Calling CFRunLoopRunInMode = " << qPrintable(QCFString::toQString(mode))
+        qEventDispatcherDebug() << "Calling CFRunLoopRunInMode = " << qPrintable(QString::fromCFString(mode))
             << " for " << duration << " ms, processing single source = " << returnAfterSingleSourceHandled; qIndent();
 
         SInt32 result = CFRunLoopRunInMode(mode, duration, returnAfterSingleSourceHandled);
@@ -296,10 +315,7 @@ bool QEventDispatcherCoreFoundation::processEvents(QEventLoop::ProcessEventsFlag
                 // to exit, and then unwind back to the previous event loop which will break
                 // immediately, since it has already been exited.
 
-                QEventLoop *currentEventLoop = QThreadData::current()->eventLoops.top();
-                Q_ASSERT(currentEventLoop);
-
-                if (!currentEventLoop->isRunning()) {
+                if (!currentEventLoop()->isRunning()) {
                     qEventDispatcherDebug() << "Top level event loop was exited";
                     break;
                 } else {

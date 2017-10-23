@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -47,6 +53,8 @@
 #include "qdir.h"
 #include "qimagereader.h"
 #include "qimagewriter.h"
+#include "qplatformscreen.h"
+#include "qplatformwindow.h"
 
 #include <QtCore/QEventLoop>
 #include <QtCore/QDebug>
@@ -109,9 +117,9 @@ void QBasicDrag::disableEventFilter()
 }
 
 
-static inline QPoint getNativeMousePos(QEvent *e, QObject *o)
+static inline QPoint getNativeMousePos(QEvent *e, QWindow *window)
 {
-    return QHighDpi::toNativePixels(static_cast<QMouseEvent *>(e)->globalPos(), qobject_cast<QWindow*>(o));
+    return QHighDpi::toNativePixels(static_cast<QMouseEvent *>(e)->globalPos(), window);
 }
 
 bool QBasicDrag::eventFilter(QObject *o, QEvent *e)
@@ -148,14 +156,14 @@ bool QBasicDrag::eventFilter(QObject *o, QEvent *e)
 
         case QEvent::MouseMove:
         {
-            QPoint nativePosition = getNativeMousePos(e, o);
+            QPoint nativePosition = getNativeMousePos(e, m_drag_icon_window);
             move(nativePosition);
             return true; // Eat all mouse move events
         }
         case QEvent::MouseButtonRelease:
             disableEventFilter();
             if (canDrop()) {
-                QPoint nativePosition = getNativeMousePos(e, o);
+                QPoint nativePosition = getNativeMousePos(e, m_drag_icon_window);
                 drop(nativePosition);
             } else {
                 cancel();
@@ -190,6 +198,14 @@ Qt::DropAction QBasicDrag::drag(QDrag *o)
     m_drag = 0;
     endDrag();
     return m_executed_drop_action;
+}
+
+void QBasicDrag::cancelDrag()
+{
+    if (m_eventLoop) {
+        cancel();
+        m_eventLoop->quit();
+    }
 }
 
 void QBasicDrag::restoreCursor()
@@ -302,6 +318,25 @@ void QBasicDrag::updateCursor(Qt::DropAction action)
     updateAction(action);
 }
 
+
+static inline QPoint fromNativeGlobalPixels(const QPoint &point)
+{
+#ifndef QT_NO_HIGHDPISCALING
+    QPoint res = point;
+    if (QHighDpiScaling::isActive()) {
+        for (const QScreen *s : qAsConst(QGuiApplicationPrivate::screen_list)) {
+            if (s->handle()->geometry().contains(point)) {
+                res = QHighDpi::fromNativePixels(point, s);
+                break;
+            }
+        }
+    }
+    return res;
+#else
+    return point;
+#endif
+}
+
 /*!
     \class QSimpleDrag
     \brief QSimpleDrag implements QBasicDrag for Drag and Drop operations within the Qt Application itself.
@@ -330,7 +365,7 @@ void QSimpleDrag::startDrag()
     QBasicDrag::startDrag();
     m_current_window = topLevelAt(QCursor::pos());
     if (m_current_window) {
-        QPlatformDragQtResponse response = QWindowSystemInterface::handleDrag(m_current_window, drag()->mimeData(), QCursor::pos(), drag()->supportedActions());
+        QPlatformDragQtResponse response = QWindowSystemInterface::handleDrag(m_current_window, drag()->mimeData(), QHighDpi::toNativePixels(QCursor::pos(), m_current_window), drag()->supportedActions());
         setCanDrop(response.isAccepted());
         updateCursor(response.acceptedAction());
     } else {
@@ -349,15 +384,15 @@ void QSimpleDrag::cancel()
     }
 }
 
-void QSimpleDrag::move(const QPoint &globalPos)
+void QSimpleDrag::move(const QPoint &nativeGlobalPos)
 {
-    //### not high-DPI aware
+    QPoint globalPos = fromNativeGlobalPixels(nativeGlobalPos);
     moveShapedPixmapWindow(globalPos);
     QWindow *window = topLevelAt(globalPos);
     if (!window)
         return;
 
-    const QPoint pos = globalPos - window->geometry().topLeft();
+    const QPoint pos = nativeGlobalPos - window->handle()->geometry().topLeft();
     const QPlatformDragQtResponse qt_response =
         QWindowSystemInterface::handleDrag(window, drag()->mimeData(), pos, drag()->supportedActions());
 
@@ -365,16 +400,16 @@ void QSimpleDrag::move(const QPoint &globalPos)
     setCanDrop(qt_response.isAccepted());
 }
 
-void QSimpleDrag::drop(const QPoint &globalPos)
+void QSimpleDrag::drop(const QPoint &nativeGlobalPos)
 {
-    //### not high-DPI aware
+    QPoint globalPos = fromNativeGlobalPixels(nativeGlobalPos);
 
-    QBasicDrag::drop(globalPos);
+    QBasicDrag::drop(nativeGlobalPos);
     QWindow *window = topLevelAt(globalPos);
     if (!window)
         return;
 
-    const QPoint pos = globalPos - window->geometry().topLeft();
+    const QPoint pos = nativeGlobalPos - window->handle()->geometry().topLeft();
     const QPlatformDropQtResponse response =
             QWindowSystemInterface::handleDrop(window, drag()->mimeData(),pos, drag()->supportedActions());
     if (response.isAccepted()) {

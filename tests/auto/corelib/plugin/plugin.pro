@@ -1,10 +1,12 @@
 TEMPLATE=subdirs
 SUBDIRS=\
     qfactoryloader \
-    qlibrary \
-    qplugin \
-    qpluginloader \
     quuid
+
+qtConfig(library): SUBDIRS += \
+    qpluginloader \
+    qplugin \
+    qlibrary
 
 contains(CONFIG, static) {
     message(Disabling tests requiring shared build of Qt)

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -397,11 +403,9 @@ QDebug operator<<(QDebug d, const FORMATETC &tc)
     case CF_UNICODETEXT:
         d << "CF_UNICODETEXT";
         break;
-#ifndef Q_OS_WINCE
     case CF_ENHMETAFILE:
         d << "CF_ENHMETAFILE";
         break;
-#endif // !Q_OS_WINCE
     default:
         d << QWindowsMimeConverter::clipboardFormatName(tc.cfFormat);
         break;
@@ -692,7 +696,7 @@ QVariant QWindowsMimeText::convertToMime(const QString &mime, LPDATAOBJECT pData
         QByteArray data = getData(CF_UNICODETEXT, pDataObj);
         if (!data.isEmpty()) {
             str = QString::fromWCharArray(reinterpret_cast<const wchar_t *>(data.constData()));
-            str.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+            str.replace(QLatin1String("\r\n"), QLatin1String("\n"));
         } else {
             data = getData(CF_TEXT, pDataObj);
             if (!data.isEmpty()) {
@@ -713,7 +717,7 @@ QVariant QWindowsMimeText::convertToMime(const QString &mime, LPDATAOBJECT pData
         if (preferredType == QVariant::String)
             ret = str;
         else
-            ret = str.toUtf8();
+            ret = std::move(str).toUtf8();
     }
     qCDebug(lcQpaMime) << __FUNCTION__ << ret;
     return ret;
@@ -889,14 +893,14 @@ public:
     QWindowsMimeHtml();
 
     // for converting from Qt
-    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
-    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const Q_DECL_OVERRIDE;
-    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
+    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const override;
+    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const override;
+    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const override;
 
     // for converting to Qt
-    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const Q_DECL_OVERRIDE;
-    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const Q_DECL_OVERRIDE;
-    QString mimeForFormat(const FORMATETC &formatetc) const Q_DECL_OVERRIDE;
+    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const override;
+    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const override;
+    QString mimeForFormat(const FORMATETC &formatetc) const override;
 
 private:
     int CF_HTML;
@@ -1021,14 +1025,14 @@ class QWindowsMimeImage : public QWindowsMime
 public:
     QWindowsMimeImage();
     // for converting from Qt
-    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
-    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const Q_DECL_OVERRIDE;
-    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
+    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const override;
+    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const override;
+    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const override;
 
     // for converting to Qt
-    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const Q_DECL_OVERRIDE;
-    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const Q_DECL_OVERRIDE;
-    QString mimeForFormat(const FORMATETC &formatetc) const Q_DECL_OVERRIDE;
+    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const override;
+    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const override;
+    QString mimeForFormat(const FORMATETC &formatetc) const override;
 private:
     bool hasOriginalDIBV5(IDataObject *pDataObj) const;
     UINT CF_PNG;
@@ -1175,14 +1179,14 @@ public:
     QBuiltInMimes();
 
     // for converting from Qt
-    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
-    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const Q_DECL_OVERRIDE;
-    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
+    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const override;
+    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const override;
+    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const override;
 
     // for converting to Qt
-    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const Q_DECL_OVERRIDE;
-    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const Q_DECL_OVERRIDE;
-    QString mimeForFormat(const FORMATETC &formatetc) const Q_DECL_OVERRIDE;
+    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const override;
+    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const override;
+    QString mimeForFormat(const FORMATETC &formatetc) const override;
 
 private:
     QMap<int, QString> outFormats;
@@ -1242,7 +1246,7 @@ bool QBuiltInMimes::convertFromMime(const FORMATETC &formatetc, const QMimeData 
             r[byteLength+1] = 0;
             data = r;
         } else {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
             data = QInternalMimeData::renderDataHelper(outFormats.value(getCf(formatetc)), mimeData);
 #endif //QT_NO_DRAGANDDROP
         }
@@ -1295,14 +1299,14 @@ public:
 
     QLastResortMimes();
     // for converting from Qt
-    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
-    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const Q_DECL_OVERRIDE;
-    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const Q_DECL_OVERRIDE;
+    bool canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const override;
+    bool convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const override;
+    QVector<FORMATETC> formatsForMime(const QString &mimeType, const QMimeData *mimeData) const override;
 
     // for converting to Qt
-    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const Q_DECL_OVERRIDE;
-    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const Q_DECL_OVERRIDE;
-    QString mimeForFormat(const FORMATETC &formatetc) const Q_DECL_OVERRIDE;
+    bool canConvertToMime(const QString &mimeType, IDataObject *pDataObj) const override;
+    QVariant convertToMime(const QString &mime, IDataObject *pDataObj, QVariant::Type preferredType) const override;
+    QString mimeForFormat(const FORMATETC &formatetc) const override;
 
 private:
     QMap<int, QString> formats;
@@ -1342,7 +1346,7 @@ QLastResortMimes::QLastResortMimes()
 bool QLastResortMimes::canConvertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData) const
 {
     // really check
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     return formatetc.tymed & TYMED_HGLOBAL
         && (formats.contains(formatetc.cfFormat)
         && QInternalMimeData::hasFormatHelper(formats.value(formatetc.cfFormat), mimeData));
@@ -1356,7 +1360,7 @@ bool QLastResortMimes::canConvertFromMime(const FORMATETC &formatetc, const QMim
 
 bool QLastResortMimes::convertFromMime(const FORMATETC &formatetc, const QMimeData *mimeData, STGMEDIUM * pmedium) const
 {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
     return canConvertFromMime(formatetc, mimeData)
         && setData(QInternalMimeData::renderDataHelper(formats.value(getCf(formatetc)), mimeData), pmedium);
 #else
@@ -1457,7 +1461,7 @@ QString QLastResortMimes::mimeForFormat(const FORMATETC &formatetc) const
 
     const QString clipFormat = QWindowsMimeConverter::clipboardFormatName(getCf(formatetc));
     if (!clipFormat.isEmpty()) {
-#ifndef QT_NO_DRAGANDDROP
+#if QT_CONFIG(draganddrop)
         if (QInternalMimeData::canReadData(clipFormat))
             format = clipFormat;
         else if((formatetc.cfFormat >= 0xC000)){
@@ -1492,9 +1496,7 @@ QString QLastResortMimes::mimeForFormat(const FORMATETC &formatetc) const
     \sa QWindowsMime
 */
 
-QWindowsMimeConverter::QWindowsMimeConverter() : m_internalMimeCount(0)
-{
-}
+QWindowsMimeConverter::QWindowsMimeConverter() = default;
 
 QWindowsMimeConverter::~QWindowsMimeConverter()
 {

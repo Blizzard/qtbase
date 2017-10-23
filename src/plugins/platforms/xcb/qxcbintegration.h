@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #ifndef QXCBINTEGRATION_H
 #define QXCBINTEGRATION_H
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformscreen.h>
 
@@ -54,55 +61,58 @@ public:
     QXcbIntegration(const QStringList &parameters, int &argc, char **argv);
     ~QXcbIntegration();
 
-    QPlatformWindow *createPlatformWindow(QWindow *window) const Q_DECL_OVERRIDE;
+    QPlatformWindow *createPlatformWindow(QWindow *window) const override;
+    QPlatformWindow *createForeignWindow(QWindow *window, WId nativeHandle) const override;
 #ifndef QT_NO_OPENGL
-    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const Q_DECL_OVERRIDE;
+    QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const override;
 #endif
-    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const Q_DECL_OVERRIDE;
+    QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const override;
 
-    QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *surface) const Q_DECL_OVERRIDE;
+    QPlatformOffscreenSurface *createPlatformOffscreenSurface(QOffscreenSurface *surface) const override;
 
-    bool hasCapability(Capability cap) const Q_DECL_OVERRIDE;
-    QAbstractEventDispatcher *createEventDispatcher() const Q_DECL_OVERRIDE;
-    void initialize() Q_DECL_OVERRIDE;
+    bool hasCapability(Capability cap) const override;
+    QAbstractEventDispatcher *createEventDispatcher() const override;
+    void initialize() override;
 
     void moveToScreen(QWindow *window, int screen);
 
-    QPlatformFontDatabase *fontDatabase() const Q_DECL_OVERRIDE;
+    QPlatformFontDatabase *fontDatabase() const override;
 
-    QPlatformNativeInterface *nativeInterface()const Q_DECL_OVERRIDE;
+    QPlatformNativeInterface *nativeInterface()const override;
 
 #ifndef QT_NO_CLIPBOARD
-    QPlatformClipboard *clipboard() const Q_DECL_OVERRIDE;
+    QPlatformClipboard *clipboard() const override;
 #endif
 #ifndef QT_NO_DRAGANDDROP
-    QPlatformDrag *drag() const Q_DECL_OVERRIDE;
+    QPlatformDrag *drag() const override;
 #endif
 
-    QPlatformInputContext *inputContext() const Q_DECL_OVERRIDE;
+    QPlatformInputContext *inputContext() const override;
 
 #ifndef QT_NO_ACCESSIBILITY
-    QPlatformAccessibility *accessibility() const Q_DECL_OVERRIDE;
+    QPlatformAccessibility *accessibility() const override;
 #endif
 
-    QPlatformServices *services() const Q_DECL_OVERRIDE;
+    QPlatformServices *services() const override;
 
-    Qt::KeyboardModifiers queryKeyboardModifiers() const Q_DECL_OVERRIDE;
-    QList<int> possibleKeys(const QKeyEvent *e) const Q_DECL_OVERRIDE;
+    Qt::KeyboardModifiers queryKeyboardModifiers() const override;
+    QList<int> possibleKeys(const QKeyEvent *e) const override;
 
-    QStringList themeNames() const Q_DECL_OVERRIDE;
-    QPlatformTheme *createPlatformTheme(const QString &name) const Q_DECL_OVERRIDE;
-    QVariant styleHint(StyleHint hint) const Q_DECL_OVERRIDE;
+    QStringList themeNames() const override;
+    QPlatformTheme *createPlatformTheme(const QString &name) const override;
+    QVariant styleHint(StyleHint hint) const override;
 
     QXcbConnection *defaultConnection() const { return m_connections.first(); }
 
     QByteArray wmClass() const;
 
-#if !defined(QT_NO_SESSIONMANAGER) && defined(XCB_USE_SM)
-    QPlatformSessionManager *createPlatformSessionManager(const QString &id, const QString &key) const Q_DECL_OVERRIDE;
+#if QT_CONFIG(xcb_sm)
+    QPlatformSessionManager *createPlatformSessionManager(const QString &id, const QString &key) const override;
 #endif
 
-    void sync() Q_DECL_OVERRIDE;
+    void sync() override;
+
+    void beep() const override;
 
     static QXcbIntegration *instance() { return m_instance; }
 

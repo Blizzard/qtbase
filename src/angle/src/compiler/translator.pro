@@ -1,5 +1,6 @@
 CONFIG += static
-contains(QT_CONFIG, dynamicgl): CONFIG += not_installed
+include($$OUT_PWD/../../../gui/qtgui-config.pri)
+qtConfig(dynamicgl): CONFIG += not_installed
 include(../config.pri)
 
 INCLUDEPATH += \
@@ -21,21 +22,22 @@ HEADERS += \
     $$ANGLE_DIR/src/common/platform.h \
     $$ANGLE_DIR/src/common/tls.h \
     $$ANGLE_DIR/src/common/utilities.h \
+    $$ANGLE_DIR/src/compiler/translator/ArrayReturnValueToOutParameter.h \
+    $$ANGLE_DIR/src/compiler/translator/ASTMetadataHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/blocklayout.h \
     $$ANGLE_DIR/src/compiler/translator/blocklayoutHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/BaseTypes.h \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulator.h \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulatorGLSL.h \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulatorHLSL.h \
+    $$ANGLE_DIR/src/compiler/translator/Cache.h \
+    $$ANGLE_DIR/src/compiler/translator/CallDAG.h \
     $$ANGLE_DIR/src/compiler/translator/Common.h \
-    $$ANGLE_DIR/src/compiler/translator/compilerdebug.h \
     $$ANGLE_DIR/src/compiler/translator/Compiler.h \
     $$ANGLE_DIR/src/compiler/translator/ConstantUnion.h \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraphBuilder.h \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraph.h \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraphOutput.h \
-    $$ANGLE_DIR/src/compiler/translator/DetectCallDepth.h \
-    $$ANGLE_DIR/src/compiler/translator/DetectDiscontinuity.h \
     $$ANGLE_DIR/src/compiler/translator/Diagnostics.h \
     $$ANGLE_DIR/src/compiler/translator/DirectiveHandler.h \
     $$ANGLE_DIR/src/compiler/translator/ExtensionBehavior.h \
@@ -61,16 +63,21 @@ HEADERS += \
     $$ANGLE_DIR/src/compiler/translator/OutputHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/ParseContext.h \
     $$ANGLE_DIR/src/compiler/translator/PoolAlloc.h \
+    $$ANGLE_DIR/src/compiler/translator/PruneEmptyDeclarations.h \
     $$ANGLE_DIR/src/compiler/translator/Pragma.h \
-    $$ANGLE_DIR/src/compiler/translator/QualifierAlive.h \
     $$ANGLE_DIR/src/compiler/translator/RegenerateStructNames.h \
+    $$ANGLE_DIR/src/compiler/translator/RemovePow.h \
+    $$ANGLE_DIR/src/compiler/translator/RemoveDynamicIndexing.h \
     $$ANGLE_DIR/src/compiler/translator/RemoveSwitchFallThrough.h \
     $$ANGLE_DIR/src/compiler/translator/RenameFunction.h \
+    $$ANGLE_DIR/src/compiler/translator/RewriteDoWhile.h \
     $$ANGLE_DIR/src/compiler/translator/RewriteElseBlocks.h \
+    $$ANGLE_DIR/src/compiler/translator/SeparateArrayInitialization.h \
+    $$ANGLE_DIR/src/compiler/translator/SeparateDeclarations.h \
     $$ANGLE_DIR/src/compiler/translator/ScalarizeVecAndMatConstructorArgs.h \
     $$ANGLE_DIR/src/compiler/translator/SearchSymbol.h \
     $$ANGLE_DIR/src/compiler/translator/ShHandle.h \
-    $$ANGLE_DIR/src/compiler/translator/SimplifyArrayAssignment.h \
+    $$ANGLE_DIR/src/compiler/translator/SeparateExpressionsReturningArrays.h \
     $$ANGLE_DIR/src/compiler/translator/StructureHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/SymbolTable.h \
     $$ANGLE_DIR/src/compiler/translator/timing/RestrictFragmentShaderTiming.h \
@@ -80,10 +87,11 @@ HEADERS += \
     $$ANGLE_DIR/src/compiler/translator/TranslatorHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/Types.h \
     $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuitAST.h \
-    $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuit.h \
+    $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuitToIf.h \
     $$ANGLE_DIR/src/compiler/translator/UniformHLSL.h \
     $$ANGLE_DIR/src/compiler/translator/util.h \
     $$ANGLE_DIR/src/compiler/translator/UtilsHLSL.h \
+    $$ANGLE_DIR/src/compiler/translator/ValidateGlobalInitializer.h \
     $$ANGLE_DIR/src/compiler/translator/ValidateLimitations.h \
     $$ANGLE_DIR/src/compiler/translator/ValidateOutputs.h \
     $$ANGLE_DIR/src/compiler/translator/ValidateSwitch.h \
@@ -94,21 +102,23 @@ HEADERS += \
 
 
 SOURCES += \
+    $$ANGLE_DIR/src/common/debug.cpp \
     $$ANGLE_DIR/src/common/tls.cpp \
+    $$ANGLE_DIR/src/compiler/translator/ArrayReturnValueToOutParameter.cpp \
+    $$ANGLE_DIR/src/compiler/translator/ASTMetadataHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/blocklayout.cpp \
     $$ANGLE_DIR/src/compiler/translator/blocklayoutHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulator.cpp \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulatorGLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/BuiltInFunctionEmulatorHLSL.cpp \
+    $$ANGLE_DIR/src/compiler/translator/Cache.cpp \
+    $$ANGLE_DIR/src/compiler/translator/CallDAG.cpp \
     $$ANGLE_DIR/src/compiler/translator/CodeGen.cpp \
     $$ANGLE_DIR/src/compiler/translator/Compiler.cpp \
-    $$ANGLE_DIR/src/compiler/translator/compilerdebug.cpp \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraph.cpp \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraphBuilder.cpp \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraphOutput.cpp \
     $$ANGLE_DIR/src/compiler/translator/depgraph/DependencyGraphTraverse.cpp \
-    $$ANGLE_DIR/src/compiler/translator/DetectCallDepth.cpp \
-    $$ANGLE_DIR/src/compiler/translator/DetectDiscontinuity.cpp \
     $$ANGLE_DIR/src/compiler/translator/Diagnostics.cpp \
     $$ANGLE_DIR/src/compiler/translator/DirectiveHandler.cpp \
     $$ANGLE_DIR/src/compiler/translator/EmulatePrecision.cpp \
@@ -129,18 +139,22 @@ SOURCES += \
     $$ANGLE_DIR/src/compiler/translator/OutputGLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/OutputGLSLBase.cpp \
     $$ANGLE_DIR/src/compiler/translator/OutputHLSL.cpp \
-    $$ANGLE_DIR/src/compiler/translator/parseConst.cpp \
     $$ANGLE_DIR/src/compiler/translator/ParseContext.cpp \
     $$ANGLE_DIR/src/compiler/translator/PoolAlloc.cpp \
-    $$ANGLE_DIR/src/compiler/translator/QualifierAlive.cpp \
+    $$ANGLE_DIR/src/compiler/translator/PruneEmptyDeclarations.cpp \
     $$ANGLE_DIR/src/compiler/translator/RegenerateStructNames.cpp \
+    $$ANGLE_DIR/src/compiler/translator/RemovePow.cpp \
+    $$ANGLE_DIR/src/compiler/translator/RemoveDynamicIndexing.cpp \
     $$ANGLE_DIR/src/compiler/translator/RemoveSwitchFallThrough.cpp \
+    $$ANGLE_DIR/src/compiler/translator/RewriteDoWhile.cpp \
     $$ANGLE_DIR/src/compiler/translator/RewriteElseBlocks.cpp \
+    $$ANGLE_DIR/src/compiler/translator/SeparateArrayInitialization.cpp \
+    $$ANGLE_DIR/src/compiler/translator/SeparateDeclarations.cpp \
     $$ANGLE_DIR/src/compiler/translator/ScalarizeVecAndMatConstructorArgs.cpp \
     $$ANGLE_DIR/src/compiler/translator/SearchSymbol.cpp \
     $$ANGLE_DIR/src/compiler/translator/ShaderLang.cpp \
     $$ANGLE_DIR/src/compiler/translator/ShaderVars.cpp \
-    $$ANGLE_DIR/src/compiler/translator/SimplifyArrayAssignment.cpp \
+    $$ANGLE_DIR/src/compiler/translator/SeparateExpressionsReturningArrays.cpp \
     $$ANGLE_DIR/src/compiler/translator/StructureHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/SymbolTable.cpp \
     $$ANGLE_DIR/src/compiler/translator/timing/RestrictFragmentShaderTiming.cpp \
@@ -149,11 +163,12 @@ SOURCES += \
     $$ANGLE_DIR/src/compiler/translator/TranslatorGLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/TranslatorHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/Types.cpp \
-    $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuit.cpp \
+    $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuitToIf.cpp \
     $$ANGLE_DIR/src/compiler/translator/UnfoldShortCircuitAST.cpp \
     $$ANGLE_DIR/src/compiler/translator/UniformHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/UtilsHLSL.cpp \
     $$ANGLE_DIR/src/compiler/translator/util.cpp \
+    $$ANGLE_DIR/src/compiler/translator/ValidateGlobalInitializer.cpp \
     $$ANGLE_DIR/src/compiler/translator/ValidateLimitations.cpp \
     $$ANGLE_DIR/src/compiler/translator/ValidateOutputs.cpp \
     $$ANGLE_DIR/src/compiler/translator/ValidateSwitch.cpp \
@@ -174,7 +189,8 @@ QMAKE_EXTRA_COMPILERS += flex
 defineReplace(myDirName) { return($$dirname(1)) }
 bison.commands = $$addGnuPath(bison) --no-lines --skeleton=yacc.c --defines=${QMAKE_FILE_OUT} \
                 --output=${QMAKE_FUNC_FILE_OUT_myDirName}$$QMAKE_DIR_SEP${QMAKE_FILE_OUT_BASE}.cpp \
-                ${QMAKE_FILE_NAME}
+                ${QMAKE_FILE_NAME}$$escape_expand(\\n\\t) \
+                @echo // EOF>>${QMAKE_FUNC_FILE_OUT_myDirName}$$QMAKE_DIR_SEP${QMAKE_FILE_OUT_BASE}.cpp
 bison.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.h
 bison.input = BISON_SOURCES
 bison.dependency_type = TYPE_C
@@ -189,6 +205,5 @@ bison_impl.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.cpp
 bison_impl.input = BISON_SOURCES
 bison_impl.commands = $$MAKEFILE_NOOP_COMMAND
 bison_impl.depends = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.h
-bison_impl.output = $${BUILDSUBDIR}${QMAKE_FILE_BASE}_tab.cpp
 bison_impl.variable_out = GENERATED_SOURCES
 QMAKE_EXTRA_COMPILERS += bison_impl

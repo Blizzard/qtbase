@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2015 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -54,15 +60,6 @@ QT_BEGIN_NAMESPACE
 
 const QListData::Data QListData::shared_null = { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, { 0 } };
 
-static int grow(int size)
-{
-    if (size_t(size) > (MaxAllocSize - QListData::DataHeaderSize) / sizeof(void *))
-        qBadAlloc();
-    // dear compiler: don't optimize me out.
-    volatile int x = qAllocMore(size * sizeof(void *), QListData::DataHeaderSize) / sizeof(void *);
-    return x;
-}
-
 /*!
  *  Detaches the QListData by allocating new memory for a list which will be bigger
  *  than the copied one and is expected to grow further.
@@ -78,12 +75,12 @@ QListData::Data *QListData::detach_grow(int *idx, int num)
     Data *x = d;
     int l = x->end - x->begin;
     int nl = l + num;
-    int alloc = grow(nl);
-    Data* t = static_cast<Data *>(::malloc(DataHeaderSize + alloc * sizeof(void *)));
+    auto blockInfo = qCalculateGrowingBlockSize(nl, sizeof(void *), DataHeaderSize);
+    Data* t = static_cast<Data *>(::malloc(blockInfo.size));
     Q_CHECK_PTR(t);
+    t->alloc = int(uint(blockInfo.elementCount));
 
     t->ref.initializeOwned();
-    t->alloc = alloc;
     // The space reservation algorithm's optimization is biased towards appending:
     // Something which looks like an append will put the data at the beginning,
     // while something which looks like a prepend will put it in the middle
@@ -93,12 +90,12 @@ QListData::Data *QListData::detach_grow(int *idx, int num)
     int bg;
     if (*idx < 0) {
         *idx = 0;
-        bg = (alloc - nl) >> 1;
+        bg = (t->alloc - nl) >> 1;
     } else if (*idx > l) {
         *idx = l;
         bg = 0;
     } else if (*idx < (l >> 1)) {
-        bg = (alloc - nl) >> 1;
+        bg = (t->alloc - nl) >> 1;
     } else {
         bg = 0;
     }
@@ -120,7 +117,7 @@ QListData::Data *QListData::detach_grow(int *idx, int num)
 QListData::Data *QListData::detach(int alloc)
 {
     Data *x = d;
-    Data* t = static_cast<Data *>(::malloc(DataHeaderSize + alloc * sizeof(void *)));
+    Data* t = static_cast<Data *>(::malloc(qCalculateBlockSize(alloc, sizeof(void*), DataHeaderSize)));
     Q_CHECK_PTR(t);
 
     t->ref.initializeOwned();
@@ -140,7 +137,7 @@ QListData::Data *QListData::detach(int alloc)
 void QListData::realloc(int alloc)
 {
     Q_ASSERT(!d->ref.isShared());
-    Data *x = static_cast<Data *>(::realloc(d, DataHeaderSize + alloc * sizeof(void *)));
+    Data *x = static_cast<Data *>(::realloc(d, qCalculateBlockSize(alloc, sizeof(void *), DataHeaderSize)));
     Q_CHECK_PTR(x);
 
     d = x;
@@ -152,12 +149,12 @@ void QListData::realloc(int alloc)
 void QListData::realloc_grow(int growth)
 {
     Q_ASSERT(!d->ref.isShared());
-    int alloc = grow(d->alloc + growth);
-    Data *x = static_cast<Data *>(::realloc(d, DataHeaderSize + alloc * sizeof(void *)));
+    auto r = qCalculateGrowingBlockSize(d->alloc + growth, sizeof(void *), DataHeaderSize);
+    Data *x = static_cast<Data *>(::realloc(d, r.size));
     Q_CHECK_PTR(x);
 
     d = x;
-    d->alloc = alloc;
+    d->alloc = int(uint(r.elementCount));
 }
 
 void QListData::dispose(Data *d)
@@ -373,7 +370,7 @@ void **QListData::erase(void **xi)
     application must interface with a C API.
 
     \note Iterators into a QLinkedList and references into
-    heap-allocating QLists remain valid long as the referenced items
+    heap-allocating QLists remain valid as long as the referenced items
     remain in the container. This is not true for iterators and
     references into a QVector and non-heap-allocating QLists.
 

@@ -15,3 +15,9 @@ SUBDIRS       = \
                 undoframework
 
 contains(DEFINES, QT_NO_TRANSLATION): SUBDIRS -= i18n
+
+!qtConfig(library) {
+    SUBDIRS -= \
+        echoplugin \
+        plugandpaint
+}

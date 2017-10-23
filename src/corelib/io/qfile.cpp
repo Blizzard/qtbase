@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -232,7 +238,7 @@ QFile::QFile(QFilePrivate &dd)
 }
 #else
 /*!
-    \internal
+    Constructs a QFile object.
 */
 QFile::QFile()
     : QFileDevice(*new QFilePrivate, 0)
@@ -561,9 +567,13 @@ QFile::rename(const QString &newName)
     }
     // If the file exists and it is a case-changing rename ("foo" -> "Foo"),
     // compare Ids to make sure it really is a different file.
-    if (QFile::exists(newName)) {
-        if (d->fileName.compare(newName, Qt::CaseInsensitive)
-            || QFileSystemEngine::id(QFileSystemEntry(d->fileName)) != QFileSystemEngine::id(QFileSystemEntry(newName))) {
+    // Note: this does not take file engines into account.
+    QByteArray targetId = QFileSystemEngine::id(QFileSystemEntry(newName));
+    if (!targetId.isNull()) {
+        QByteArray fileId = d->fileEngine ?
+                    d->fileEngine->id() :
+                    QFileSystemEngine::id(QFileSystemEntry(d->fileName));
+        if (fileId != targetId || d->fileName.compare(newName, Qt::CaseInsensitive)) {
             // ### Race condition. If a file is moved in after this, it /will/ be
             // overwritten. On Unix, the proper solution is to use hardlinks:
             // return ::link(old, new) && ::remove(old);
@@ -575,7 +585,7 @@ QFile::rename(const QString &newName)
 #ifdef Q_OS_LINUX
         // rename() on Linux simply does nothing when renaming "foo" to "Foo" on a case-insensitive
         // FS, such as FAT32. Move the file away and rename in 2 steps to work around.
-        QTemporaryFile tempFile(d->fileName + QStringLiteral(".XXXXXX"));
+        QTemporaryFile tempFile(d->fileName + QLatin1String(".XXXXXX"));
         tempFile.setAutoRemove(false);
         if (!tempFile.open(QIODevice::ReadWrite)) {
             d->setError(QFile::RenameError, tempFile.errorString());
@@ -917,8 +927,6 @@ bool QFile::open(OpenMode mode)
            you cannot use this QFile with a QFileInfo.
     \endlist
 
-    \note For Windows CE you may not be able to call resize().
-
     \sa close()
 
     \b{Note for the Windows Platform}
@@ -986,9 +994,6 @@ bool QFile::open(FILE *fh, OpenMode mode, FileHandleFlags handleFlags)
     those cases, size() returns \c 0.  See QIODevice::isSequential()
     for more information.
 
-    \warning For Windows CE you may not be able to call seek(), and size()
-             returns \c 0.
-
     \warning Since this function opens the file without specifying the file name,
              you cannot use this QFile with a QFileInfo.
 
@@ -1033,10 +1038,12 @@ bool QFile::resize(qint64 sz)
 /*!
     \overload
 
-    Sets \a fileName to size (in bytes) \a sz. Returns \c true if the file if
+    Sets \a fileName to size (in bytes) \a sz. Returns \c true if
     the resize succeeds; false otherwise. If \a sz is larger than \a
     fileName currently is the new bytes will be set to 0, if \a sz is
     smaller the file is simply truncated.
+
+    \warning This function can fail if the file doesn't exist.
 
     \sa resize()
 */
@@ -1105,3 +1112,7 @@ qint64 QFile::size() const
 }
 
 QT_END_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+#include "moc_qfile.cpp"
+#endif

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -39,9 +34,14 @@
 #include <QtNetwork/qhostaddress.h>
 #include <QtNetwork/qnetworkproxy.h>
 
-#if !defined(QT_NO_SSL) && defined(QT_BUILD_INTERNAL)
-#include "private/qsslkey_p.h"
-#define TEST_CRYPTO
+#ifdef QT_BUILD_INTERNAL
+    #ifndef QT_NO_SSL
+        #include "private/qsslkey_p.h"
+        #define TEST_CRYPTO
+    #endif
+    #ifndef QT_NO_OPENSSL
+        #include "private/qsslsocket_openssl_symbols_p.h"
+    #endif
 #endif
 
 class tst_QSslKey : public QObject
@@ -63,7 +63,7 @@ class tst_QSslKey : public QObject
 
     QList<KeyInfo> keyInfoList;
 
-    void createPlainTestRows();
+    void createPlainTestRows(bool filter = false, QSsl::EncodingFormat format = QSsl::EncodingFormat::Pem);
 
 public slots:
     void initTestCase();
@@ -74,6 +74,10 @@ private slots:
     void emptyConstructor();
     void constructor_data();
     void constructor();
+#ifndef QT_NO_OPENSSL
+    void constructorHandle_data();
+    void constructorHandle();
+#endif
     void copyAndAssign_data();
     void copyAndAssign();
     void equalsOperator();
@@ -147,7 +151,7 @@ Q_DECLARE_METATYPE(QSsl::KeyAlgorithm)
 Q_DECLARE_METATYPE(QSsl::KeyType)
 Q_DECLARE_METATYPE(QSsl::EncodingFormat)
 
-void tst_QSslKey::createPlainTestRows()
+void tst_QSslKey::createPlainTestRows(bool filter, QSsl::EncodingFormat format)
 {
     QTest::addColumn<QString>("absFilePath");
     QTest::addColumn<QSsl::KeyAlgorithm>("algorithm");
@@ -155,6 +159,9 @@ void tst_QSslKey::createPlainTestRows()
     QTest::addColumn<int>("length");
     QTest::addColumn<QSsl::EncodingFormat>("format");
     foreach (KeyInfo keyInfo, keyInfoList) {
+        if (filter && keyInfo.format != format)
+            continue;
+
         QTest::newRow(keyInfo.fileInfo.fileName().toLatin1())
             << keyInfo.fileInfo.absoluteFilePath() << keyInfo.algorithm << keyInfo.type
             << keyInfo.length << keyInfo.format;
@@ -180,6 +187,45 @@ void tst_QSslKey::constructor()
     QSslKey key(encoded, algorithm, format, type);
     QVERIFY(!key.isNull());
 }
+
+#ifndef QT_NO_OPENSSL
+
+void tst_QSslKey::constructorHandle_data()
+{
+    createPlainTestRows(true);
+}
+
+void tst_QSslKey::constructorHandle()
+{
+#ifndef QT_BUILD_INTERNAL
+    QSKIP("This test requires -developer-build.");
+#else
+    if (!QSslSocket::supportsSsl())
+        return;
+
+    QFETCH(QString, absFilePath);
+    QFETCH(QSsl::KeyAlgorithm, algorithm);
+    QFETCH(QSsl::KeyType, type);
+    QFETCH(int, length);
+
+    QByteArray pem = readFile(absFilePath);
+    auto func = (type == QSsl::KeyType::PublicKey
+                 ? q_PEM_read_bio_PUBKEY
+                 : q_PEM_read_bio_PrivateKey);
+
+    BIO* bio = q_BIO_new(q_BIO_s_mem());
+    q_BIO_write(bio, pem.constData(), pem.length());
+    QSslKey key(func(bio, nullptr, nullptr, nullptr), type);
+    q_BIO_free(bio);
+
+    QVERIFY(!key.isNull());
+    QCOMPARE(key.algorithm(), algorithm);
+    QCOMPARE(key.type(), type);
+    QCOMPARE(key.length(), length);
+#endif
+}
+
+#endif
 
 void tst_QSslKey::copyAndAssign_data()
 {
@@ -279,13 +325,13 @@ void tst_QSslKey::toEncryptedPemOrDer_data()
               << "aAzZ`1234567890-=~!@#$%^&*()_+[]{}\\|;:'\",.<>/?"; // ### add more (?)
     foreach (KeyInfo keyInfo, keyInfoList) {
         foreach (QString password, passwords) {
-            QString testName = QString("%1-%2-%3-%4-%5").arg(keyInfo.fileInfo.fileName())
-                .arg(keyInfo.algorithm == QSsl::Rsa ? "RSA" :
-                    (keyInfo.algorithm == QSsl::Dsa ? "DSA" : "EC"))
-                .arg(keyInfo.type == QSsl::PrivateKey ? "PrivateKey" : "PublicKey")
-                .arg(keyInfo.format == QSsl::Pem ? "PEM" : "DER")
-                .arg(password);
-            QTest::newRow(testName.toLatin1())
+            const QByteArray testName = keyInfo.fileInfo.fileName().toLatin1()
+            + '-' + (keyInfo.algorithm == QSsl::Rsa ? "RSA" :
+                                                      (keyInfo.algorithm == QSsl::Dsa ? "DSA" : "EC"))
+            + '-' + (keyInfo.type == QSsl::PrivateKey ? "PrivateKey" : "PublicKey")
+            + '-' + (keyInfo.format == QSsl::Pem ? "PEM" : "DER")
+            + password.toLatin1();
+            QTest::newRow(testName.constData())
                 << keyInfo.fileInfo.absoluteFilePath() << keyInfo.algorithm << keyInfo.type
                 << keyInfo.format << password;
         }

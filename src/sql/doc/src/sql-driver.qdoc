@@ -1,7 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
@@ -11,8 +11,8 @@
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Free Documentation License Usage
 ** Alternatively, this file may be used under the terms of the GNU Free
@@ -20,7 +20,7 @@
 ** Foundation and appearing in the file included in the packaging of
 ** this file. Please review the following information to ensure
 ** the GNU Free Documentation License version 1.3 requirements
-** will be met: http://www.gnu.org/copyleft/fdl.html.
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -62,7 +62,7 @@
     \endtable
 
     SQLite is the in-process database system with the best test coverage
-    and support on all platforms. Oracle via OCI, and PostreSQL and MySQL
+    and support on all platforms. Oracle via OCI, PostgreSQL, and MySQL
     through either ODBC or a native driver are well-tested on Windows and
     Linux. The completeness of the support for other systems depends on the
     availability and quality of client libraries.
@@ -92,7 +92,7 @@
     on Windows), then pass the following parameter to configure: \c
     -I/usr/local/mysql (or \c{-I C:\mysql\include} for Windows).
 
-    On Windows the \c -I parameter doesn't accept spaces in
+    On Windows, the \c -I parameter doesn't accept spaces in
     filenames, so use the 8.3 name instead; for example, use
     \c{C:\progra~1\mysql} instead of \c{C:\Program Files\mysql}.
 
@@ -110,7 +110,7 @@
     \section3 QMYSQL Stored Procedure Support
 
     MySQL 5 introduces stored procedure support at the SQL level, but no
-    API to control IN, OUT and INOUT parameters. Therefore, parameters
+    API to control IN, OUT, and INOUT parameters. Therefore, parameters
     have to be set and read using SQL commands instead of QSqlQuery::bindValue().
 
     Example stored procedure:
@@ -141,8 +141,8 @@
 
     \section3 How to Build the QMYSQL Plugin on Unix and \macos
 
-    You need the MySQL header files and as well as the shared library
-    \c{libmysqlclient.so}. Depending on your Linux distribution you may
+    You need the MySQL header files, as well as the shared library
+    \c{libmysqlclient.so}. Depending on your Linux distribution, you may
     need to install a package which is usually called "mysql-devel".
 
     Tell \l qmake where to find the MySQL header files and shared
@@ -168,12 +168,10 @@
     If you are not using a Microsoft compiler, replace \c nmake with \c
     make in the line above.
 
-    \note This database plugin is not supported for Windows CE.
-
-    \note Including \c{"-o Makefile"} as an argument to \l qmake to
-    tell it where to build the makefile can cause the plugin to be
-    built in release mode only. If you are expecting a debug version
-    to be built as well, don't use the \c{"-o Makefile"} option.
+    \note Including \c{"-o Makefile"} as an argument to \l qmake, to
+    tell it where to build the makefile, can cause the plugin to be
+    built in release mode only. If you intend to build a debug version
+    as well, don't use the \c{"-o Makefile"} option.
 
     \target QOCI
     \section2 QOCI for the Oracle Call Interface (OCI)
@@ -186,7 +184,7 @@
 
     It's possible to connect to a Oracle database without a tnsnames.ora file.
     This requires that the database SID is passed to the driver as the database
-    name and that a hostname is given.
+    name, and that a hostname is given.
 
     \section3 OCI User Authentication
 
@@ -232,13 +230,13 @@
     \snippet code/doc_src_sql-driver.qdoc 7
 
     \b{Note:} If you are using the Oracle Instant Client package,
-    you will need to set LD_LIBRARY_PATH when building the OCI SQL plugin
+    you will need to set LD_LIBRARY_PATH when building the OCI SQL plugin,
     and when running an application that uses the OCI SQL plugin. You can
-    avoid this requirement by setting and RPATH and listing all of the
+    avoid this requirement by setting RPATH, and listing all of the
     libraries to link to. Here is an example:
     \snippet code/doc_src_sql-driver.qdoc 32
 
-    If you wish to build the OCI plugin manually with this method the procedure looks like this:
+    If you wish to build the OCI plugin manually with this method, the procedure looks like this:
     \snippet code/doc_src_sql-driver.qdoc 33
 
     \section3 How to Build the OCI Plugin on Windows
@@ -256,12 +254,10 @@
     If you are not using a Microsoft compiler, replace \c nmake with \c
     make in the line above.
 
-    When you run your application you will also need to add the \c oci.dll
+    When you run your application, you will also need to add the \c oci.dll
     path to your \c PATH environment variable:
 
     \snippet code/doc_src_sql-driver.qdoc 9
-
-    \b{Note:} This database plugin is not supported for Windows CE.
 
     \target QODBC
     \section2 QODBC for Open Database Connectivity (ODBC)
@@ -275,25 +271,25 @@
     driver manager that is installed on your system. The QODBC plugin
     then allows you to use these data sources in your Qt applications.
 
-    \b{Note:} You should use native drivers in preference to the ODBC
-    driver where they are available. ODBC support can be used as a fallback
-    for compliant databases if no native drivers are available.
+    \b{Note:} You should use the native driver, if it is available, instead
+    of the ODBC driver. ODBC support can be used as a fallback for compliant
+    databases if no native driver is available.
 
-    On Windows an ODBC driver manager should be installed by default.
-    For Unix systems there are some implementations which must be
+    On Windows, an ODBC driver manager should be installed by default.
+    For Unix systems, there are some implementations which must be
     installed first. Note that every client that uses your application is
     required to have an ODBC driver manager installed, otherwise the
     QODBC plugin will not work.
 
-    Be aware that when connecting to an ODBC datasource you must pass in
-    the name of the ODBC datasource to the QSqlDatabase::setDatabaseName()
-    function rather than the actual database name.
+    When connecting to an ODBC datasource, you should pass the name
+    of the ODBC datasource to the QSqlDatabase::setDatabaseName()
+    function, rather than the actual database name.
 
     The QODBC Plugin needs an ODBC compliant driver manager version 2.0 or
-    later to work. Some ODBC drivers claim to be version 2.0 compliant,
+    later. Some ODBC drivers claim to be version-2.0-compliant,
     but do not offer all the necessary functionality. The QODBC plugin
     therefore checks whether the data source can be used after a
-    connection has been established and refuses to work if the check
+    connection has been established, and refuses to work if the check
     fails. If you don't like this behavior, you can remove the \c{#define
     ODBC_CHECK_DRIVER} line from the file \c{qsql_odbc.cpp}. Do this at
     your own risk!
@@ -336,7 +332,7 @@
     driver and the DBMS must also support Unicode.
 
     Some driver managers and drivers don't support UNICODE. To use the
-    QODBC plugin with such drivers it has to be compiled with the
+    QODBC plugin with such drivers, it has to be compiled with
     Q_ODBC_VERSION_2 defined.
 
     For the Oracle 9 ODBC driver (Windows), it is necessary to check
@@ -365,8 +361,6 @@
     If you are not using a Microsoft compiler, replace \c nmake with \c
     make in the line above.
 
-    \b{Note:} This database plugin is not officially supported for Windows CE.
-
     \target QPSQL
     \section2 QPSQL for PostgreSQL (Version 7.3 and Above)
 
@@ -374,9 +368,9 @@
 
     The QPSQL driver supports version 7.3 and higher of the PostgreSQL server.
     We recommend that you use a client library from version 7.3.15, 7.4.13,
-    8.0.8, 8.1.4 or more recent as these versions contain security fixes, and
+    8.0.8, 8.1.4, or more recent, as these versions contain security fixes, and
     as the QPSQL driver might not build with older versions of the client
-    library depending on your platform.
+    library, depending on your platform.
 
     For more information about PostgreSQL visit \l http://www.postgresql.org.
 
@@ -426,8 +420,6 @@
     Users of MinGW may wish to consult the following online document:
     \l{http://www.postgresql.org/docs/current/static/installation-platform-notes.html#INSTALLATION-NOTES-MINGW}{PostgreSQL MinGW/Native Windows}.
 
-    \b{Note:} This database plugin is not supported for Windows CE.
-
     \target QTDS
     \section2 QTDS for Sybase Adaptive Server
 
@@ -475,8 +467,6 @@
     are not using a Microsoft compiler, replace \c nmake with \c make in
     the line above.
 
-    \b{Note:} This database plugin is not supported for Windows CE.
-
     \target QDB2
     \section2 QDB2 for IBM DB2 (Version 7.1 and Above)
 
@@ -511,8 +501,6 @@
 
     If you are not using a Microsoft compiler, replace \c nmake
     with \c make in the line above.
-
-    \b{Note:} This database plugin is not supported for Windows CE.
 
     \target QSQLITE2
     \section2 QSQLITE2 for SQLite Version 2
@@ -673,8 +661,6 @@
     with \c make in the line above.
 
     Note that \c{C:\interbase\bin} must be in the \c PATH.
-
-    \b{Note:} This database plugin is not supported for Windows CE.
 
     \target troubleshooting
     \section1 Troubleshooting

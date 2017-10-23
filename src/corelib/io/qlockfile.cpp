@@ -1,32 +1,38 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 David Faure <faure+bluesystems@kde.org>
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,8 +42,9 @@
 #include "qlockfile_p.h"
 
 #include <QtCore/qthread.h>
-#include <QtCore/qelapsedtimer.h>
+#include <QtCore/qdeadlinetimer.h>
 #include <QtCore/qdatetime.h>
+#include <QtCore/qfileinfo.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -78,6 +85,9 @@ QT_BEGIN_NAMESPACE
     For the use case of protecting a resource over a long time, you should therefore call
     setStaleLockTime(0), and when tryLock() returns LockFailedError, inform the user
     that the document is locked, possibly using getLockInfo() for more details.
+
+    \note On Windows, this class has problems detecting a stale lock if the
+    machine's hostname contains characters outside the US-ASCII character set.
 */
 
 /*!
@@ -204,9 +214,7 @@ bool QLockFile::lock()
 bool QLockFile::tryLock(int timeout)
 {
     Q_D(QLockFile);
-    QElapsedTimer timer;
-    if (timeout > 0)
-        timer.start();
+    QDeadlineTimer timer(qMax(timeout, -1));    // QDT only takes -1 as "forever"
     int sleepTime = 100;
     forever {
         d->lockError = d->tryLock_sys();
@@ -219,9 +227,11 @@ bool QLockFile::tryLock(int timeout)
             return false;
         case LockFailedError:
             if (!d->isLocked && d->isApparentlyStale()) {
+                if (Q_UNLIKELY(QFileInfo(d->fileName).lastModified() > QDateTime::currentDateTime()))
+                    qInfo("QLockFile: Lock file '%ls' has a modification time in the future", qUtf16Printable(d->fileName));
                 // Stale lock from another thread/process
                 // Ensure two processes don't remove it at the same time
-                QLockFile rmlock(d->fileName + QStringLiteral(".rmlock"));
+                QLockFile rmlock(d->fileName + QLatin1String(".rmlock"));
                 if (rmlock.tryLock()) {
                     if (d->isApparentlyStale() && d->removeStaleLock())
                         continue;
@@ -229,8 +239,13 @@ bool QLockFile::tryLock(int timeout)
             }
             break;
         }
-        if (timeout == 0 || (timeout > 0 && timer.hasExpired(timeout)))
+
+        int remainingTime = timer.remainingTime();
+        if (remainingTime == 0)
             return false;
+        else if (uint(sleepTime) > uint(remainingTime))
+            sleepTime = remainingTime;
+
         QThread::msleep(sleepTime);
         if (sleepTime < 5 * 1000)
             sleepTime *= 2;
@@ -287,12 +302,12 @@ bool QLockFilePrivate::getLockInfo(qint64 *pid, QString *hostname, QString *appn
 
     QByteArray pidLine = reader.readLine();
     pidLine.chop(1);
+    if (pidLine.isEmpty())
+        return false;
     QByteArray appNameLine = reader.readLine();
     appNameLine.chop(1);
     QByteArray hostNameLine = reader.readLine();
     hostNameLine.chop(1);
-    if (pidLine.isEmpty())
-        return false;
 
     qint64 thePid = pidLine.toLongLong();
     if (pid)

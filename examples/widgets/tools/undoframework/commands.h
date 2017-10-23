@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -54,10 +64,10 @@ public:
     MoveCommand(DiagramItem *diagramItem, const QPointF &oldPos,
                 QUndoCommand *parent = 0);
 
-    void undo() Q_DECL_OVERRIDE;
-    void redo() Q_DECL_OVERRIDE;
-    bool mergeWith(const QUndoCommand *command) Q_DECL_OVERRIDE;
-    int id() const Q_DECL_OVERRIDE { return Id; }
+    void undo() override;
+    void redo() override;
+    bool mergeWith(const QUndoCommand *command) override;
+    int id() const override { return Id; }
 
 private:
     DiagramItem *myDiagramItem;
@@ -72,8 +82,8 @@ class DeleteCommand : public QUndoCommand
 public:
     explicit DeleteCommand(QGraphicsScene *graphicsScene, QUndoCommand *parent = 0);
 
-    void undo() Q_DECL_OVERRIDE;
-    void redo() Q_DECL_OVERRIDE;
+    void undo() override;
+    void redo() override;
 
 private:
     DiagramItem *myDiagramItem;
@@ -89,8 +99,8 @@ public:
                QUndoCommand *parent = 0);
     ~AddCommand();
 
-    void undo() Q_DECL_OVERRIDE;
-    void redo() Q_DECL_OVERRIDE;
+    void undo() override;
+    void redo() override;
 
 private:
     DiagramItem *myDiagramItem;

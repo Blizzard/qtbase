@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,7 +43,7 @@
 #include "qwindowsintegration.h"
 #include "qwindowscursor.h"
 
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 #include <QtCore/QSettings>
 #include <QtGui/QPixmap>
@@ -50,19 +56,10 @@
 
 QT_BEGIN_NAMESPACE
 
-QWindowsScreenData::QWindowsScreenData() :
-    dpi(96, 96), depth(32), format(QImage::Format_ARGB32_Premultiplied),
-    flags(VirtualDesktop), orientation(Qt::LandscapeOrientation),
-    refreshRateHz(60)
-{
-}
-
 static inline QDpi deviceDPI(HDC hdc)
 {
     return QDpi(GetDeviceCaps(hdc, LOGPIXELSX), GetDeviceCaps(hdc, LOGPIXELSY));
 }
-
-#ifndef Q_OS_WINCE
 
 static inline QDpi monitorDPI(HMONITOR hMonitor)
 {
@@ -75,8 +72,6 @@ static inline QDpi monitorDPI(HMONITOR hMonitor)
     return QDpi(0, 0);
 }
 
-#endif // !Q_OS_WINCE
-
 typedef QList<QWindowsScreenData> WindowsScreenDataList;
 
 static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
@@ -87,26 +82,16 @@ static bool monitorData(HMONITOR hMonitor, QWindowsScreenData *data)
     if (GetMonitorInfo(hMonitor, &info) == FALSE)
         return false;
 
+    data->hMonitor = hMonitor;
     data->geometry = QRect(QPoint(info.rcMonitor.left, info.rcMonitor.top), QPoint(info.rcMonitor.right - 1, info.rcMonitor.bottom - 1));
     data->availableGeometry = QRect(QPoint(info.rcWork.left, info.rcWork.top), QPoint(info.rcWork.right - 1, info.rcWork.bottom - 1));
     data->name = QString::fromWCharArray(info.szDevice);
     if (data->name == QLatin1String("WinDisc")) {
         data->flags |= QWindowsScreenData::LockScreen;
     } else {
-#ifdef Q_OS_WINCE
-        //Windows CE, just supports one Display and expects to get only DISPLAY,
-        //instead of DISPLAY0 and so on, which are passed by info.szDevice
-        HDC hdc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
-#else
-        HDC hdc = CreateDC(info.szDevice, NULL, NULL, NULL);
-#endif
-        if (hdc) {
-#ifndef Q_OS_WINCE
+        if (const HDC hdc = CreateDC(info.szDevice, NULL, NULL, NULL)) {
             const QDpi dpi = monitorDPI(hMonitor);
             data->dpi = dpi.first ? dpi : deviceDPI(hdc);
-#else
-            data->dpi = deviceDPI(hdc);
-#endif
             data->depth = GetDeviceCaps(hdc, BITSPIXEL);
             data->format = data->depth == 16 ? QImage::Format_RGB16 : QImage::Format_RGB32;
             data->physicalSizeMM = QSizeF(GetDeviceCaps(hdc, HORZSIZE), GetDeviceCaps(hdc, VERTSIZE));
@@ -168,7 +153,8 @@ static QDebug operator<<(QDebug dbg, const QWindowsScreenData &d)
         << d.availableGeometry.width() << 'x' << d.availableGeometry.height() << '+' << d.availableGeometry.x() << '+' << d.availableGeometry.y()
         << " physical: " << d.physicalSizeMM.width() << 'x' << d.physicalSizeMM.height()
         << " DPI: " << d.dpi.first << 'x' << d.dpi.second << " Depth: " << d.depth
-        << " Format: " << d.format;
+        << " Format: " << d.format
+        << " hMonitor: " << d.hMonitor;
     if (d.flags & QWindowsScreenData::PrimaryScreen)
         dbg << " primary";
     if (d.flags & QWindowsScreenData::VirtualDesktop)
@@ -197,14 +183,30 @@ QWindowsScreen::QWindowsScreen(const QWindowsScreenData &data) :
 
 Q_GUI_EXPORT QPixmap qt_pixmapFromWinHBITMAP(HBITMAP bitmap, int hbitmapFormat = 0);
 
-QPixmap QWindowsScreen::grabWindow(WId window, int x, int y, int width, int height) const
+QPixmap QWindowsScreen::grabWindow(WId window, int xIn, int yIn, int width, int height) const
 {
-    RECT r;
-    HWND hwnd = window ? reinterpret_cast<HWND>(window) : GetDesktopWindow();
-    GetClientRect(hwnd, &r);
+    QSize windowSize;
+    int x = xIn;
+    int y = yIn;
+    HWND hwnd = reinterpret_cast<HWND>(window);
+    if (hwnd) {
+        RECT r;
+        GetClientRect(hwnd, &r);
+        windowSize = QSize(r.right - r.left, r.bottom - r.top);
+    } else {
+        // Grab current screen. The client rectangle of GetDesktopWindow() is the
+        // primary screen, but it is possible to grab other screens from it.
+        hwnd = GetDesktopWindow();
+        const QRect screenGeometry = geometry();
+        windowSize = screenGeometry.size();
+        x += screenGeometry.x();
+        y += screenGeometry.y();
+    }
 
-    if (width < 0) width = r.right - r.left;
-    if (height < 0) height = r.bottom - r.top;
+    if (width < 0)
+        width = windowSize.width() - xIn;
+    if (height < 0)
+        height = windowSize.height() - yIn;
 
     // Create and setup bitmap
     HDC display_dc = GetDC(0);
@@ -258,7 +260,7 @@ qreal QWindowsScreen::pixelDensity() const
     // the pixel density since it is reflects the Windows UI scaling.
     // High DPI auto scaling should be disabled when the user chooses
     // small fonts on a High DPI monitor, resulting in lower logical DPI.
-    return qRound(logicalDpi().first / 96);
+    return qMax(1, qRound(logicalDpi().first / 96));
 }
 
 /*!
@@ -288,6 +290,13 @@ QList<QPlatformScreen *> QWindowsScreen::virtualSiblings() const
 void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
 {
     m_data.physicalSizeMM = newData.physicalSizeMM;
+
+    if (m_data.hMonitor != newData.hMonitor) {
+        qCDebug(lcQpaWindows) << "Monitor" << m_data.name
+            << "has had its hMonitor handle changed from"
+            << m_data.hMonitor << "to" << newData.hMonitor;
+        m_data.hMonitor = newData.hMonitor;
+    }
 
     if (m_data.geometry != newData.geometry || m_data.availableGeometry != newData.availableGeometry) {
         m_data.geometry = newData.geometry;
@@ -324,7 +333,6 @@ enum OrientationPreference // matching Win32 API ORIENTATION_PREFERENCE
 bool QWindowsScreen::setOrientationPreference(Qt::ScreenOrientation o)
 {
     bool result = false;
-#ifndef Q_OS_WINCE
     if (QWindowsContext::user32dll.setDisplayAutoRotationPreferences) {
         DWORD orientationPreference = 0;
         switch (o) {
@@ -346,14 +354,12 @@ bool QWindowsScreen::setOrientationPreference(Qt::ScreenOrientation o)
         }
         result = QWindowsContext::user32dll.setDisplayAutoRotationPreferences(orientationPreference);
     }
-#endif // !Q_OS_WINCE
     return result;
 }
 
 Qt::ScreenOrientation QWindowsScreen::orientationPreference()
 {
     Qt::ScreenOrientation result = Qt::PrimaryOrientation;
-#ifndef Q_OS_WINCE
     if (QWindowsContext::user32dll.getDisplayAutoRotationPreferences) {
         DWORD orientationPreference = 0;
         if (QWindowsContext::user32dll.getDisplayAutoRotationPreferences(&orientationPreference)) {
@@ -373,7 +379,6 @@ Qt::ScreenOrientation QWindowsScreen::orientationPreference()
             }
         }
     }
-#endif // !Q_OS_WINCE
     return result;
 }
 
@@ -382,7 +387,7 @@ Qt::ScreenOrientation QWindowsScreen::orientationPreference()
 */
 QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTypeHint() const
 {
-#if defined(Q_OS_WINCE) || !defined(FT_LCD_FILTER_H) || !defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
+#if !defined(FT_LCD_FILTER_H) || !defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
     return QPlatformScreen::Subpixel_None;
 #else
     QPlatformScreen::SubpixelAntialiasingType type = QPlatformScreen::subpixelAntialiasingTypeHint();
@@ -420,10 +425,7 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
     \ingroup qt-lighthouse-win
 */
 
-QWindowsScreenManager::QWindowsScreenManager() :
-    m_lastDepth(-1), m_lastHorizontalResolution(0), m_lastVerticalResolution(0)
-{
-}
+QWindowsScreenManager::QWindowsScreenManager() = default;
 
 /*!
     \brief Triggers synchronization of screens (WM_DISPLAYCHANGE).
@@ -562,6 +564,21 @@ const QWindowsScreen *QWindowsScreenManager::screenAtDp(const QPoint &p) const
             return scr;
     }
     return Q_NULLPTR;
+}
+
+const QWindowsScreen *QWindowsScreenManager::screenForHwnd(HWND hwnd) const
+{
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+    if (hMonitor == NULL)
+        return nullptr;
+    const auto it =
+        std::find_if(m_screens.cbegin(), m_screens.cend(),
+                     [hMonitor](const QWindowsScreen *s)
+                     {
+                         return s->data().hMonitor == hMonitor
+                             && (s->data().flags & QWindowsScreenData::VirtualDesktop) != 0;
+                     });
+    return it != m_screens.cend() ? *it : nullptr;
 }
 
 QT_END_NAMESPACE

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -84,6 +90,8 @@ static const uchar magic[MagicLength] = {
     0x3c, 0xb8, 0x64, 0x18, 0xca, 0xef, 0x9c, 0x95,
     0xcd, 0x21, 0x1c, 0xbf, 0x60, 0xa1, 0xbd, 0xdd
 };
+
+static inline QString dotQmLiteral() { return QStringLiteral(".qm"); }
 
 static bool match(const uchar *found, uint foundLen, const char *target, uint targetLen)
 {
@@ -478,15 +486,15 @@ bool QTranslator::load(const QString & filename, const QString & directory,
             prefix += QLatin1Char('/');
     }
 
-    QString fname = filename;
+    const QString suffixOrDotQM = suffix.isNull() ? dotQmLiteral() : suffix;
+    QStringRef fname(&filename);
     QString realname;
-    QString delims;
-    delims = search_delimiters.isNull() ? QString::fromLatin1("_.") : search_delimiters;
+    const QString delims = search_delimiters.isNull() ? QStringLiteral("_.") : search_delimiters;
 
     for (;;) {
         QFileInfo fi;
 
-        realname = prefix + fname + (suffix.isNull() ? QString::fromLatin1(".qm") : suffix);
+        realname = prefix + fname + suffixOrDotQM;
         fi.setFile(realname);
         if (fi.isReadable() && fi.isFile())
             break;
@@ -519,7 +527,7 @@ bool QTranslatorPrivate::do_load(const QString &realname, const QString &directo
     QTranslatorPrivate *d = this;
     bool ok = false;
 
-    if (realname.startsWith(':')) {
+    if (realname.startsWith(QLatin1Char(':'))) {
         // If the translation is in a non-compressed resource file, the data is already in
         // memory, so no need to use QFile to copy it again.
         Q_ASSERT(!d->resource);
@@ -613,6 +621,13 @@ bool QTranslatorPrivate::do_load(const QString &realname, const QString &directo
     return false;
 }
 
+Q_NEVER_INLINE
+static bool is_readable_file(const QString &name)
+{
+    const QFileInfo fi(name);
+    return fi.isReadable() && fi.isFile();
+}
+
 static QString find_translation(const QLocale & locale,
                                 const QString & filename,
                                 const QString & prefix,
@@ -625,9 +640,11 @@ static QString find_translation(const QLocale & locale,
         if (!path.isEmpty() && !path.endsWith(QLatin1Char('/')))
             path += QLatin1Char('/');
     }
+    const QString suffixOrDotQM = suffix.isNull() ? dotQmLiteral() : suffix;
 
-    QFileInfo fi;
     QString realname;
+    realname += path + filename + prefix; // using += in the hope for some reserve capacity
+    const int realNameBaseSize = realname.size();
     QStringList fuzzyLocales;
 
     // see http://www.unicode.org/reports/tr35/#LanguageMatching for inspiration
@@ -643,24 +660,24 @@ static QString find_translation(const QLocale & locale,
 #endif
 
     // try explicit locales names first
-    foreach (QString localeName, languages) {
+    for (QString localeName : qAsConst(languages)) {
         localeName.replace(QLatin1Char('-'), QLatin1Char('_'));
 
-        realname = path + filename + prefix + localeName + (suffix.isNull() ? QLatin1String(".qm") : suffix);
-        fi.setFile(realname);
-        if (fi.isReadable() && fi.isFile())
+        realname += localeName + suffixOrDotQM;
+        if (is_readable_file(realname))
             return realname;
 
-        realname = path + filename + prefix + localeName;
-        fi.setFile(realname);
-        if (fi.isReadable() && fi.isFile())
+        realname.truncate(realNameBaseSize + localeName.size());
+        if (is_readable_file(realname))
             return realname;
 
+        realname.truncate(realNameBaseSize);
         fuzzyLocales.append(localeName);
     }
 
     // start guessing
-    foreach (QString localeName, fuzzyLocales) {
+    for (const QString &fuzzyLocale : qAsConst(fuzzyLocales)) {
+        QStringRef localeName(&fuzzyLocale);
         for (;;) {
             int rightmost = localeName.lastIndexOf(QLatin1Char('_'));
             // no truncations? fail
@@ -668,36 +685,40 @@ static QString find_translation(const QLocale & locale,
                 break;
             localeName.truncate(rightmost);
 
-            realname = path + filename + prefix + localeName + (suffix.isNull() ? QLatin1String(".qm") : suffix);
-            fi.setFile(realname);
-            if (fi.isReadable() && fi.isFile())
+            realname += localeName + suffixOrDotQM;
+            if (is_readable_file(realname))
                 return realname;
 
-            realname = path + filename + prefix + localeName;
-            fi.setFile(realname);
-            if (fi.isReadable() && fi.isFile())
+            realname.truncate(realNameBaseSize + localeName.size());
+            if (is_readable_file(realname))
                 return realname;
+
+            realname.truncate(realNameBaseSize);
         }
     }
 
+    const int realNameBaseSizeFallbacks = path.size() + filename.size();
+
+    // realname == path + filename + prefix;
     if (!suffix.isNull()) {
-        realname = path + filename + suffix;
-        fi.setFile(realname);
-        if (fi.isReadable() && fi.isFile())
+        realname.replace(realNameBaseSizeFallbacks, prefix.size(), suffix);
+        // realname == path + filename;
+        if (is_readable_file(realname))
             return realname;
+        realname.replace(realNameBaseSizeFallbacks, suffix.size(), prefix);
     }
 
-    realname = path + filename + prefix;
-    fi.setFile(realname);
-    if (fi.isReadable() && fi.isFile())
+    // realname == path + filename + prefix;
+    if (is_readable_file(realname))
         return realname;
 
-    realname = path + filename;
-    fi.setFile(realname);
-    if (fi.isReadable() && fi.isFile())
+    realname.truncate(realNameBaseSizeFallbacks);
+    // realname == path + filename;
+    if (is_readable_file(realname))
         return realname;
 
-    return QString();
+    realname.truncate(0);
+    return realname;
 }
 
 /*!
@@ -1035,7 +1056,7 @@ QString QTranslatorPrivate::do_translate(const char *context, const char *source
     }
 
 searchDependencies:
-    foreach (QTranslator *translator, subTranslators) {
+    for (QTranslator *translator : subTranslators) {
         QString tn = translator->translate(context, sourceText, comment, n);
         if (!tn.isNull())
             return tn;
@@ -1121,5 +1142,7 @@ bool QTranslator::isEmpty() const
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qtranslator.cpp"
 
 #endif // QT_NO_TRANSLATION

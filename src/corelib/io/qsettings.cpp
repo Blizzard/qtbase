@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -75,7 +81,6 @@
 #include <stdlib.h>
 
 #ifdef Q_OS_WIN // for homedirpath reading from registry
-#  include <private/qsystemlibrary_p.h>
 #  include <qt_windows.h>
 #  ifndef Q_OS_WINRT
 #    include <shlobj.h>
@@ -92,19 +97,11 @@ using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Storage;
 #endif
 
-#ifndef CSIDL_COMMON_APPDATA
-#define CSIDL_COMMON_APPDATA    0x0023  // All Users\Application Data
-#endif
-
-#ifndef CSIDL_APPDATA
-#define CSIDL_APPDATA           0x001a  // <username>\Application Data
-#endif
-
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_BLACKBERRY) && !defined(Q_OS_ANDROID)
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_ANDROID)
 #define Q_XDG_PLATFORM
 #endif
 
-#if !defined(QT_NO_STANDARDPATHS) && (defined(Q_XDG_PLATFORM) || defined(Q_OS_IOS))
+#if !defined(QT_NO_STANDARDPATHS) && (defined(Q_XDG_PLATFORM) || defined(QT_PLATFORM_UIKIT))
 #define QSETTINGS_USE_QSTANDARDPATHS
 #endif
 
@@ -131,7 +128,18 @@ Q_DECLARE_TYPEINFO(QConfFileCustomFormat, Q_MOVABLE_TYPE);
 
 typedef QHash<QString, QConfFile *> ConfFileHash;
 typedef QCache<QString, QConfFile> ConfFileCache;
-typedef QHash<int, QString> PathHash;
+namespace {
+    struct Path
+    {
+        // Note: Defining constructors explicitly because of buggy C++11
+        // implementation in MSVC (uniform initialization).
+        Path() {}
+        Path(const QString & p, bool ud) : path(p), userDefined(ud) {}
+        QString path;
+        bool userDefined; //!< true - user defined, overridden by setPath
+    };
+}
+typedef QHash<int, Path> PathHash;
 typedef QVector<QConfFileCustomFormat> CustomFormatVector;
 
 Q_GLOBAL_STATIC(ConfFileHash, usedHashFunc)
@@ -223,7 +231,7 @@ void QConfFile::clearCache()
 // QSettingsPrivate
 
 QSettingsPrivate::QSettingsPrivate(QSettings::Format format)
-    : format(format), scope(QSettings::UserScope /* nothing better to put */), iniCodec(0), spec(0), fallbacks(true),
+    : format(format), scope(QSettings::UserScope /* nothing better to put */), iniCodec(0), fallbacks(true),
       pendingChanges(false), status(QSettings::NoError)
 {
 }
@@ -231,7 +239,7 @@ QSettingsPrivate::QSettingsPrivate(QSettings::Format format)
 QSettingsPrivate::QSettingsPrivate(QSettings::Format format, QSettings::Scope scope,
                                    const QString &organization, const QString &application)
     : format(format), scope(scope), organizationName(organization), applicationName(application),
-      iniCodec(0), spec(0), fallbacks(true), pendingChanges(false), status(QSettings::NoError)
+      iniCodec(0), fallbacks(true), pendingChanges(false), status(QSettings::NoError)
 {
 }
 
@@ -243,8 +251,7 @@ QString QSettingsPrivate::actualKey(const QString &key) const
 {
     QString n = normalizedKey(key);
     Q_ASSERT_X(!n.isEmpty(), "QSettings", "empty key");
-    n.prepend(groupPrefix);
-    return n;
+    return groupPrefix + n;
 }
 
 /*
@@ -319,10 +326,9 @@ void QSettingsPrivate::processChild(QStringRef key, ChildSpec spec, QStringList 
 void QSettingsPrivate::beginGroupOrArray(const QSettingsGroup &group)
 {
     groupStack.push(group);
-    if (!group.name().isEmpty()) {
-        groupPrefix += group.name();
-        groupPrefix += QLatin1Char('/');
-    }
+    const QString name = group.name();
+    if (!name.isEmpty())
+        groupPrefix += name + QLatin1Char('/');
 }
 
 /*
@@ -398,9 +404,9 @@ QString QSettingsPrivate::variantToString(const QVariant &v)
 
         case QVariant::ByteArray: {
             QByteArray a = v.toByteArray();
-            result = QLatin1String("@ByteArray(");
-            result += QString::fromLatin1(a.constData(), a.size());
-            result += QLatin1Char(')');
+            result = QLatin1String("@ByteArray(")
+                     + QLatin1String(a.constData(), a.size())
+                     + QLatin1Char(')');
             break;
         }
 
@@ -413,40 +419,26 @@ QString QSettingsPrivate::variantToString(const QVariant &v)
         case QVariant::Double:
         case QVariant::KeySequence: {
             result = v.toString();
-            if (result.startsWith(QLatin1Char('@')))
+            if (result.contains(QChar::Null))
+                result = QLatin1String("@String(") + result + QLatin1Char(')');
+            else if (result.startsWith(QLatin1Char('@')))
                 result.prepend(QLatin1Char('@'));
             break;
         }
 #ifndef QT_NO_GEOM_VARIANT
         case QVariant::Rect: {
             QRect r = qvariant_cast<QRect>(v);
-            result += QLatin1String("@Rect(");
-            result += QString::number(r.x());
-            result += QLatin1Char(' ');
-            result += QString::number(r.y());
-            result += QLatin1Char(' ');
-            result += QString::number(r.width());
-            result += QLatin1Char(' ');
-            result += QString::number(r.height());
-            result += QLatin1Char(')');
+            result = QString::asprintf("@Rect(%d %d %d %d)", r.x(), r.y(), r.width(), r.height());
             break;
         }
         case QVariant::Size: {
             QSize s = qvariant_cast<QSize>(v);
-            result += QLatin1String("@Size(");
-            result += QString::number(s.width());
-            result += QLatin1Char(' ');
-            result += QString::number(s.height());
-            result += QLatin1Char(')');
+            result = QString::asprintf("@Size(%d %d)", s.width(), s.height());
             break;
         }
         case QVariant::Point: {
             QPoint p = qvariant_cast<QPoint>(v);
-            result += QLatin1String("@Point(");
-            result += QString::number(p.x());
-            result += QLatin1Char(' ');
-            result += QString::number(p.y());
-            result += QLatin1Char(')');
+            result = QString::asprintf("@Point(%d %d)", p.x(), p.y());
             break;
         }
 #endif // !QT_NO_GEOM_VARIANT
@@ -469,9 +461,9 @@ QString QSettingsPrivate::variantToString(const QVariant &v)
                 s << v;
             }
 
-            result = QLatin1String(typeSpec);
-            result += QString::fromLatin1(a.constData(), a.size());
-            result += QLatin1Char(')');
+            result = QLatin1String(typeSpec)
+                     + QLatin1String(a.constData(), a.size())
+                     + QLatin1Char(')');
 #else
             Q_ASSERT(!"QSettings: Cannot save custom types without QDataStream support");
 #endif
@@ -489,6 +481,8 @@ QVariant QSettingsPrivate::stringToVariant(const QString &s)
         if (s.endsWith(QLatin1Char(')'))) {
             if (s.startsWith(QLatin1String("@ByteArray("))) {
                 return QVariant(s.midRef(11, s.size() - 12).toLatin1());
+            } else if (s.startsWith(QLatin1String("@String("))) {
+                return QVariant(s.midRef(8, s.size() - 9).toString());
             } else if (s.startsWith(QLatin1String("@Variant("))
                        || s.startsWith(QLatin1String("@DateTime("))) {
 #ifndef QT_NO_DATASTREAM
@@ -642,8 +636,7 @@ void QSettingsPrivate::iniEscapedString(const QString &str, QByteArray &result, 
                 && ((ch >= '0' && ch <= '9')
                     || (ch >= 'a' && ch <= 'f')
                     || (ch >= 'A' && ch <= 'F'))) {
-            result += "\\x";
-            result += QByteArray::number(ch, 16);
+            result += "\\x" + QByteArray::number(ch, 16);
             continue;
         }
 
@@ -682,8 +675,7 @@ void QSettingsPrivate::iniEscapedString(const QString &str, QByteArray &result, 
             break;
         default:
             if (ch <= 0x1F || (ch >= 0x7F && !useCodec)) {
-                result += "\\x";
-                result += QByteArray::number(ch, 16);
+                result += "\\x" + QByteArray::number(ch, 16);
                 escapeNextIfDigit = true;
 #ifndef QT_NO_TEXTCODEC
             } else if (useCodec) {
@@ -828,7 +820,7 @@ StNormal:
                 ++i;
                 goto StSkipSpaces;
             }
-            // fallthrough
+            Q_FALLTHROUGH();
         default: {
             int j = i + 1;
             while (j < to) {
@@ -959,7 +951,7 @@ void QConfFileSettingsPrivate::initFormat()
 
 void QConfFileSettingsPrivate::initAccess()
 {
-    if (confFiles[spec]) {
+    if (!confFiles.isEmpty()) {
         if (format > QSettings::IniFormat) {
             if (!readFunc)
                 setStatus(QSettings::AccessError);
@@ -970,40 +962,34 @@ void QConfFileSettingsPrivate::initAccess()
 }
 
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
-static QString windowsConfigPath(int type)
+static QString windowsConfigPath(const KNOWNFOLDERID &type)
 {
     QString result;
 
-    wchar_t path[MAX_PATH];
-    if (SHGetSpecialFolderPath(0, path, type, false))
+    PWSTR path = nullptr;
+    if (SHGetKnownFolderPath(type, KF_FLAG_DONT_VERIFY, NULL, &path) == S_OK) {
         result = QString::fromWCharArray(path);
+        CoTaskMemFree(path);
+    }
 
     if (result.isEmpty()) {
-        switch (type) {
-#ifndef Q_OS_WINCE
-        case CSIDL_COMMON_APPDATA:
+        if (type == FOLDERID_ProgramData) {
             result = QLatin1String("C:\\temp\\qt-common");
-            break;
-        case CSIDL_APPDATA:
+        } else if (type == FOLDERID_RoamingAppData) {
             result = QLatin1String("C:\\temp\\qt-user");
-            break;
-#else
-        case CSIDL_COMMON_APPDATA:
-            result = QLatin1String("\\Temp\\qt-common");
-            break;
-        case CSIDL_APPDATA:
-            result = QLatin1String("\\Temp\\qt-user");
-            break;
-#endif
-        default:
-            ;
         }
     }
 
     return result;
 }
 #elif defined(Q_OS_WINRT) // Q_OS_WIN && !Q_OS_WINRT
-static QString windowsConfigPath(int type)
+
+enum ConfigPathType {
+    ConfigPath_CommonAppData,
+    ConfigPath_UserAppData
+};
+
+static QString windowsConfigPath(ConfigPathType type)
 {
     static QString result;
     while (result.isEmpty()) {
@@ -1026,12 +1012,10 @@ static QString windowsConfigPath(int type)
     }
 
     switch (type) {
-    case CSIDL_COMMON_APPDATA:
+    case ConfigPath_CommonAppData:
         return result + QLatin1String("\\qt-common");
-    case CSIDL_APPDATA:
+    case ConfigPath_UserAppData:
         return result + QLatin1String("\\qt-user");
-    default:
-        break;
     }
     return result;
 }
@@ -1042,10 +1026,33 @@ static inline int pathHashKey(QSettings::Format format, QSettings::Scope scope)
     return int((uint(format) << 1) | uint(scope == QSettings::SystemScope));
 }
 
+#ifndef Q_OS_WIN
+static QString make_user_path()
+{
+    static Q_CONSTEXPR QChar sep = QLatin1Char('/');
+#ifndef QSETTINGS_USE_QSTANDARDPATHS
+    // Non XDG platforms (OS X, iOS, Android...) have used this code path erroneously
+    // for some time now. Moving away from that would require migrating existing settings.
+    QByteArray env = qgetenv("XDG_CONFIG_HOME");
+    if (env.isEmpty()) {
+        return QDir::homePath() + QLatin1String("/.config/");
+    } else if (env.startsWith('/')) {
+        return QFile::decodeName(env) + sep;
+    } else {
+        return QDir::homePath() + sep + QFile::decodeName(env) + sep;
+    }
+#else
+    // When using a proper XDG platform, use QStandardPaths rather than the above hand-written code;
+    // it makes the use of test mode from unit tests possible.
+    // Ideally all platforms should use this, but see above for the migration issue.
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + sep;
+#endif
+}
+#endif // !Q_OS_WIN
+
 static void initDefaultPaths(QMutexLocker *locker)
 {
     PathHash *pathHash = pathHashFunc();
-    QString systemPath;
 
     locker->unlock();
 
@@ -1054,8 +1061,7 @@ static void initDefaultPaths(QMutexLocker *locker)
        avoid a dead-lock, we can't hold the global mutex while
        calling it.
     */
-    systemPath = QLibraryInfo::location(QLibraryInfo::SettingsPath);
-    systemPath += QLatin1Char('/');
+    QString systemPath = QLibraryInfo::location(QLibraryInfo::SettingsPath) + QLatin1Char('/');
 
     locker->relock();
     if (pathHash->isEmpty()) {
@@ -1066,47 +1072,31 @@ static void initDefaultPaths(QMutexLocker *locker)
            Windows registry and the Mac CFPreferences.)
        */
 #ifdef Q_OS_WIN
+
+#  ifdef Q_OS_WINRT
+        const QString roamingAppDataFolder = windowsConfigPath(ConfigPath_UserAppData);
+        const QString programDataFolder = windowsConfigPath(ConfigPath_CommonAppData);
+#  else
+        const QString roamingAppDataFolder = windowsConfigPath(FOLDERID_RoamingAppData);
+        const QString programDataFolder = windowsConfigPath(FOLDERID_ProgramData);
+#  endif
         pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::UserScope),
-                         windowsConfigPath(CSIDL_APPDATA) + QDir::separator());
+                         Path(roamingAppDataFolder + QDir::separator(), false));
         pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::SystemScope),
-                         windowsConfigPath(CSIDL_COMMON_APPDATA) + QDir::separator());
+                         Path(programDataFolder + QDir::separator(), false));
 #else
-
-#ifndef QSETTINGS_USE_QSTANDARDPATHS
-        // Non XDG platforms (OS X, iOS, Blackberry, Android...) have used this code path erroneously
-        // for some time now. Moving away from that would require migrating existing settings.
-        QString userPath;
-        QByteArray env = qgetenv("XDG_CONFIG_HOME");
-        if (env.isEmpty()) {
-            userPath = QDir::homePath();
-            userPath += QLatin1Char('/');
-            userPath += QLatin1String(".config");
-        } else if (env.startsWith('/')) {
-            userPath = QFile::decodeName(env);
-        } else {
-            userPath = QDir::homePath();
-            userPath += QLatin1Char('/');
-            userPath += QFile::decodeName(env);
-        }
-#else
-        // When using a proper XDG platform, use QStandardPaths rather than the above hand-written code;
-        // it makes the use of test mode from unit tests possible.
-        // Ideally all platforms should use this, but see above for the migration issue.
-        QString userPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-#endif
-        userPath += QLatin1Char('/');
-
-        pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::UserScope), userPath);
-        pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::SystemScope), systemPath);
+        const QString userPath = make_user_path();
+        pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::UserScope), Path(userPath, false));
+        pathHash->insert(pathHashKey(QSettings::IniFormat, QSettings::SystemScope), Path(systemPath, false));
 #ifndef Q_OS_MAC
-        pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::UserScope), userPath);
-        pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::SystemScope), systemPath);
+        pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::UserScope), Path(userPath, false));
+        pathHash->insert(pathHashKey(QSettings::NativeFormat, QSettings::SystemScope), Path(systemPath, false));
 #endif
-#endif
+#endif // Q_OS_WIN
     }
 }
 
-static QString getPath(QSettings::Format format, QSettings::Scope scope)
+static Path getPath(QSettings::Format format, QSettings::Scope scope)
 {
     Q_ASSERT((int)QSettings::NativeFormat == 0);
     Q_ASSERT((int)QSettings::IniFormat == 1);
@@ -1116,13 +1106,22 @@ static QString getPath(QSettings::Format format, QSettings::Scope scope)
     if (pathHash->isEmpty())
         initDefaultPaths(&locker);
 
-    QString result = pathHash->value(pathHashKey(format, scope));
-    if (!result.isEmpty())
+    Path result = pathHash->value(pathHashKey(format, scope));
+    if (!result.path.isEmpty())
         return result;
 
     // fall back on INI path
     return pathHash->value(pathHashKey(QSettings::IniFormat, scope));
 }
+
+#if defined(QT_BUILD_INTERNAL) && defined(Q_XDG_PLATFORM) && !defined(QT_NO_STANDARDPATHS)
+// Note: Suitable only for autotests.
+void Q_AUTOTEST_EXPORT clearDefaultPaths()
+{
+    QMutexLocker locker(&settingsGlobalMutex);
+    pathHashFunc()->clear();
+}
+#endif // QT_BUILD_INTERNAL && Q_XDG_PLATFORM && !QT_NO_STANDARDPATHS
 
 QConfFileSettingsPrivate::QConfFileSettingsPrivate(QSettings::Format format,
                                                    QSettings::Scope scope,
@@ -1131,7 +1130,6 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(QSettings::Format format,
     : QSettingsPrivate(format, scope, organization, application),
       nextPosition(0x40000000) // big positive number
 {
-    int i;
     initFormat();
 
     QString org = organization;
@@ -1140,34 +1138,47 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(QSettings::Format format,
         org = QLatin1String("Unknown Organization");
     }
 
-#if !defined(Q_OS_BLACKBERRY)
     QString appFile = org + QDir::separator() + application + extension;
     QString orgFile = org + extension;
 
     if (scope == QSettings::UserScope) {
-        QString userPath = getPath(format, QSettings::UserScope);
+        Path userPath = getPath(format, QSettings::UserScope);
         if (!application.isEmpty())
-            confFiles[F_User | F_Application].reset(QConfFile::fromName(userPath + appFile, true));
-        confFiles[F_User | F_Organization].reset(QConfFile::fromName(userPath + orgFile, true));
+            confFiles.append(QConfFile::fromName(userPath.path + appFile, true));
+        confFiles.append(QConfFile::fromName(userPath.path + orgFile, true));
     }
 
-    QString systemPath = getPath(format, QSettings::SystemScope);
-    if (!application.isEmpty())
-        confFiles[F_System | F_Application].reset(QConfFile::fromName(systemPath + appFile, false));
-    confFiles[F_System | F_Organization].reset(QConfFile::fromName(systemPath + orgFile, false));
-#else
-    QString confName = getPath(format, QSettings::UserScope) + org;
-    if (!application.isEmpty())
-        confName += QDir::separator() + application;
-    confName += extension;
-    confFiles[SandboxConfFile].reset(QConfFile::fromName(confName, true));
-#endif
-
-    for (i = 0; i < NumConfFiles; ++i) {
-        if (confFiles[i]) {
-            spec = i;
-            break;
+    Path systemPath = getPath(format, QSettings::SystemScope);
+#if defined(Q_XDG_PLATFORM) && !defined(QT_NO_STANDARDPATHS)
+    // check if the systemPath wasn't overridden by QSettings::setPath()
+    if (!systemPath.userDefined) {
+        // Note: We can't use QStandardPaths::locateAll() as we need all the
+        // possible files (not just the existing ones) and there is no way
+        // to exclude user specific (XDG_CONFIG_HOME) directory from the search.
+        QStringList dirs = QStandardPaths::standardLocations(QStandardPaths::GenericConfigLocation);
+        // remove the QStandardLocation::writableLocation() (XDG_CONFIG_HOME)
+        if (!dirs.isEmpty())
+            dirs.takeFirst();
+        QStringList paths;
+        if (!application.isEmpty()) {
+            paths.reserve(dirs.size() * 2);
+            for (const auto &dir : qAsConst(dirs))
+                paths.append(dir + QLatin1Char('/') + appFile);
+        } else {
+            paths.reserve(dirs.size());
         }
+        for (const auto &dir : qAsConst(dirs))
+            paths.append(dir + QLatin1Char('/') + orgFile);
+
+        // Note: No check for existence of files is done intentionaly.
+        for (const auto &path : qAsConst(paths))
+            confFiles.append(QConfFile::fromName(path, false));
+    } else
+#endif // Q_XDG_PLATFORM && !QT_NO_STANDARDPATHS
+    {
+        if (!application.isEmpty())
+            confFiles.append(QConfFile::fromName(systemPath.path + appFile, false));
+        confFiles.append(QConfFile::fromName(systemPath.path + orgFile, false));
     }
 
     initAccess();
@@ -1180,7 +1191,7 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(const QString &fileName,
 {
     initFormat();
 
-    confFiles[0].reset(QConfFile::fromName(fileName, true));
+    confFiles.append(QConfFile::fromName(fileName, true));
 
     initAccess();
 }
@@ -1191,39 +1202,38 @@ QConfFileSettingsPrivate::~QConfFileSettingsPrivate()
     ConfFileHash *usedHash = usedHashFunc();
     ConfFileCache *unusedCache = unusedCacheFunc();
 
-    for (int i = 0; i < NumConfFiles; ++i) {
-        if (confFiles[i] && !confFiles[i]->ref.deref()) {
-            if (confFiles[i]->size == 0) {
-                delete confFiles[i].take();
+    for (auto conf_file : qAsConst(confFiles)) {
+        if (!conf_file->ref.deref()) {
+            if (conf_file->size == 0) {
+                delete conf_file;
             } else {
                 if (usedHash)
-                    usedHash->remove(confFiles[i]->name);
+                    usedHash->remove(conf_file->name);
                 if (unusedCache) {
                     QT_TRY {
                         // compute a better size?
-                        unusedCache->insert(confFiles[i]->name, confFiles[i].data(),
-                                        10 + (confFiles[i]->originalKeys.size() / 4));
-                        confFiles[i].take();
+                        unusedCache->insert(conf_file->name, conf_file,
+                                            10 + (conf_file->originalKeys.size() / 4));
                     } QT_CATCH(...) {
                         // out of memory. Do not cache the file.
-                        delete confFiles[i].take();
+                        delete conf_file;
                     }
                 } else {
                     // unusedCache is gone - delete the entry to prevent a memory leak
-                    delete confFiles[i].take();
+                    delete conf_file;
                 }
             }
         }
-        // prevent the ScopedPointer to deref it again.
-        confFiles[i].take();
     }
 }
 
 void QConfFileSettingsPrivate::remove(const QString &key)
 {
-    QConfFile *confFile = confFiles[spec].data();
-    if (!confFile)
+    if (confFiles.isEmpty())
         return;
+
+    // Note: First config file is always the most specific.
+    QConfFile *confFile = confFiles.at(0);
 
     QSettingsKey theKey(key, caseSensitivity);
     QSettingsKey prefix(key + QLatin1Char('/'), caseSensitivity);
@@ -1248,9 +1258,11 @@ void QConfFileSettingsPrivate::remove(const QString &key)
 
 void QConfFileSettingsPrivate::set(const QString &key, const QVariant &value)
 {
-    QConfFile *confFile = confFiles[spec].data();
-    if (!confFile)
+    if (confFiles.isEmpty())
         return;
+
+    // Note: First config file is always the most specific.
+    QConfFile *confFile = confFiles.at(0);
 
     QSettingsKey theKey(key, caseSensitivity, nextPosition++);
     QMutexLocker locker(&confFile->mutex);
@@ -1264,29 +1276,27 @@ bool QConfFileSettingsPrivate::get(const QString &key, QVariant *value) const
     ParsedSettingsMap::const_iterator j;
     bool found = false;
 
-    for (int i = 0; i < NumConfFiles; ++i) {
-        if (QConfFile *confFile = confFiles[i].data()) {
-            QMutexLocker locker(&confFile->mutex);
+    for (auto confFile : qAsConst(confFiles)) {
+        QMutexLocker locker(&confFile->mutex);
 
-            if (!confFile->addedKeys.isEmpty()) {
-                j = confFile->addedKeys.constFind(theKey);
-                found = (j != confFile->addedKeys.constEnd());
-            }
-            if (!found) {
-                ensureSectionParsed(confFile, theKey);
-                j = confFile->originalKeys.constFind(theKey);
-                found = (j != confFile->originalKeys.constEnd()
-                         && !confFile->removedKeys.contains(theKey));
-            }
-
-            if (found && value)
-                *value = *j;
-
-            if (found)
-                return true;
-            if (!fallbacks)
-                break;
+        if (!confFile->addedKeys.isEmpty()) {
+            j = confFile->addedKeys.constFind(theKey);
+            found = (j != confFile->addedKeys.constEnd());
         }
+        if (!found) {
+            ensureSectionParsed(confFile, theKey);
+            j = confFile->originalKeys.constFind(theKey);
+            found = (j != confFile->originalKeys.constEnd()
+                     && !confFile->removedKeys.contains(theKey));
+        }
+
+        if (found && value)
+            *value = *j;
+
+        if (found)
+            return true;
+        if (!fallbacks)
+            break;
     }
     return false;
 }
@@ -1299,34 +1309,31 @@ QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec 
     QSettingsKey thePrefix(prefix, caseSensitivity);
     int startPos = prefix.size();
 
-    for (int i = 0; i < NumConfFiles; ++i) {
-        if (QConfFile *confFile = confFiles[i].data()) {
-            QMutexLocker locker(&confFile->mutex);
+    for (auto confFile : qAsConst(confFiles)) {
+        QMutexLocker locker(&confFile->mutex);
 
-            if (thePrefix.isEmpty()) {
-                ensureAllSectionsParsed(confFile);
-            } else {
-                ensureSectionParsed(confFile, thePrefix);
-            }
+        if (thePrefix.isEmpty())
+            ensureAllSectionsParsed(confFile);
+        else
+            ensureSectionParsed(confFile, thePrefix);
 
-            j = const_cast<const ParsedSettingsMap *>(
-                    &confFile->originalKeys)->lowerBound( thePrefix);
-            while (j != confFile->originalKeys.constEnd() && j.key().startsWith(thePrefix)) {
-                if (!confFile->removedKeys.contains(j.key()))
-                    processChild(j.key().originalCaseKey().midRef(startPos), spec, result);
-                ++j;
-            }
-
-            j = const_cast<const ParsedSettingsMap *>(
-                    &confFile->addedKeys)->lowerBound(thePrefix);
-            while (j != confFile->addedKeys.constEnd() && j.key().startsWith(thePrefix)) {
+        j = const_cast<const ParsedSettingsMap *>(
+                &confFile->originalKeys)->lowerBound( thePrefix);
+        while (j != confFile->originalKeys.constEnd() && j.key().startsWith(thePrefix)) {
+            if (!confFile->removedKeys.contains(j.key()))
                 processChild(j.key().originalCaseKey().midRef(startPos), spec, result);
-                ++j;
-            }
-
-            if (!fallbacks)
-                break;
+            ++j;
         }
+
+        j = const_cast<const ParsedSettingsMap *>(
+                &confFile->addedKeys)->lowerBound(thePrefix);
+        while (j != confFile->addedKeys.constEnd() && j.key().startsWith(thePrefix)) {
+            processChild(j.key().originalCaseKey().midRef(startPos), spec, result);
+            ++j;
+        }
+
+        if (!fallbacks)
+            break;
     }
     std::sort(result.begin(), result.end());
     result.erase(std::unique(result.begin(), result.end()),
@@ -1336,9 +1343,11 @@ QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec 
 
 void QConfFileSettingsPrivate::clear()
 {
-    QConfFile *confFile = confFiles[spec].data();
-    if (!confFile)
+    if (confFiles.isEmpty())
         return;
+
+    // Note: First config file is always the most specific.
+    QConfFile *confFile = confFiles.at(0);
 
     QMutexLocker locker(&confFile->mutex);
     ensureAllSectionsParsed(confFile);
@@ -1351,12 +1360,9 @@ void QConfFileSettingsPrivate::sync()
     // people probably won't be checking the status a whole lot, so in case of
     // error we just try to go on and make the best of it
 
-    for (int i = 0; i < NumConfFiles; ++i) {
-        QConfFile *confFile = confFiles[i].data();
-        if (confFile) {
-            QMutexLocker locker(&confFile->mutex);
-            syncConfFile(i);
-        }
+    for (auto confFile : qAsConst(confFiles)) {
+        QMutexLocker locker(&confFile->mutex);
+        syncConfFile(confFile);
     }
 }
 
@@ -1367,10 +1373,11 @@ void QConfFileSettingsPrivate::flush()
 
 QString QConfFileSettingsPrivate::fileName() const
 {
-    QConfFile *confFile = confFiles[spec].data();
-    if (!confFile)
+    if (confFiles.isEmpty())
         return QString();
-    return confFile->name;
+
+    // Note: First config file is always the most specific.
+    return confFiles.at(0)->name;
 }
 
 bool QConfFileSettingsPrivate::isWritable() const
@@ -1378,18 +1385,15 @@ bool QConfFileSettingsPrivate::isWritable() const
     if (format > QSettings::IniFormat && !writeFunc)
         return false;
 
-    QConfFile *confFile = confFiles[spec].data();
-    if (!confFile)
+    if (confFiles.isEmpty())
         return false;
 
-    return confFile->isWritable();
+    return confFiles.at(0)->isWritable();
 }
 
-void QConfFileSettingsPrivate::syncConfFile(int confFileNo)
+void QConfFileSettingsPrivate::syncConfFile(QConfFile *confFile)
 {
-    QConfFile *confFile = confFiles[confFileNo].data();
     bool readOnly = confFile->addedKeys.isEmpty() && confFile->removedKeys.isEmpty();
-    bool ok;
 
     /*
         We can often optimize the read-only case, if the file on disk
@@ -1449,31 +1453,26 @@ void QConfFileSettingsPrivate::syncConfFile(int confFileNo)
             because they don't exist) are treated as empty files.
         */
         if (file.isReadable() && fileInfo.size() != 0) {
+            bool ok = false;
 #ifdef Q_OS_MAC
             if (format == QSettings::NativeFormat) {
-                ok = readPlistFile(confFile->name, &confFile->originalKeys);
+                QByteArray data = file.readAll();
+                ok = readPlistFile(data, &confFile->originalKeys);
             } else
 #endif
-            {
-                if (format <= QSettings::IniFormat) {
-                    QByteArray data = file.readAll();
-                    ok = readIniFile(data, &confFile->unparsedIniSections);
-                } else {
-                    if (readFunc) {
-                        QSettings::SettingsMap tempNewKeys;
-                        ok = readFunc(file, tempNewKeys);
+            if (format <= QSettings::IniFormat) {
+                QByteArray data = file.readAll();
+                ok = readIniFile(data, &confFile->unparsedIniSections);
+            } else if (readFunc) {
+                QSettings::SettingsMap tempNewKeys;
+                ok = readFunc(file, tempNewKeys);
 
-                        if (ok) {
-                            QSettings::SettingsMap::const_iterator i = tempNewKeys.constBegin();
-                            while (i != tempNewKeys.constEnd()) {
-                                confFile->originalKeys.insert(QSettingsKey(i.key(),
-                                                                           caseSensitivity),
-                                                              i.value());
-                                ++i;
-                            }
-                        }
-                    } else {
-                        ok = false;
+                if (ok) {
+                    QSettings::SettingsMap::const_iterator i = tempNewKeys.constBegin();
+                    while (i != tempNewKeys.constEnd()) {
+                        confFile->originalKeys.insert(QSettingsKey(i.key(), caseSensitivity),
+                                                      i.value());
+                        ++i;
                     }
                 }
             }
@@ -1491,44 +1490,42 @@ void QConfFileSettingsPrivate::syncConfFile(int confFileNo)
         so everything is under control.
     */
     if (!readOnly) {
+        bool ok = false;
         ensureAllSectionsParsed(confFile);
         ParsedSettingsMap mergedKeys = confFile->mergedKeyMap();
 
+#if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(temporaryfile)
+        QSaveFile sf(confFile->name);
+#else
+        QFile sf(confFile->name);
+#endif
+        if (!sf.open(QIODevice::WriteOnly)) {
+            setStatus(QSettings::AccessError);
+            return;
+        }
+
 #ifdef Q_OS_MAC
         if (format == QSettings::NativeFormat) {
-            ok = writePlistFile(confFile->name, mergedKeys);
+            ok = writePlistFile(sf, mergedKeys);
         } else
 #endif
-        {
-#ifndef QT_BOOTSTRAPPED
-            QSaveFile sf(confFile->name);
-#else
-            QFile sf(confFile->name);
-#endif
-            if (!sf.open(QIODevice::WriteOnly)) {
-                setStatus(QSettings::AccessError);
-                ok = false;
-            } else if (format <= QSettings::IniFormat) {
-                ok = writeIniFile(sf, mergedKeys);
-            } else {
-                if (writeFunc) {
-                    QSettings::SettingsMap tempOriginalKeys;
+        if (format <= QSettings::IniFormat) {
+            ok = writeIniFile(sf, mergedKeys);
+        } else if (writeFunc) {
+            QSettings::SettingsMap tempOriginalKeys;
 
-                    ParsedSettingsMap::const_iterator i = mergedKeys.constBegin();
-                    while (i != mergedKeys.constEnd()) {
-                        tempOriginalKeys.insert(i.key(), i.value());
-                        ++i;
-                    }
-                    ok = writeFunc(sf, tempOriginalKeys);
-                } else {
-                    ok = false;
-                }
+            ParsedSettingsMap::const_iterator i = mergedKeys.constBegin();
+            while (i != mergedKeys.constEnd()) {
+                tempOriginalKeys.insert(i.key(), i.value());
+                ++i;
             }
-#ifndef QT_BOOTSTRAPPED
-            if (ok)
-                ok = sf.commit();
-#endif
+            ok = writeFunc(sf, tempOriginalKeys);
         }
+
+#if !defined(QT_BOOTSTRAPPED) && QT_CONFIG(temporaryfile)
+        if (ok)
+            ok = sf.commit();
+#endif
 
         if (ok) {
             confFile->unparsedIniSections.clear();
@@ -2225,9 +2222,10 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     \list 1
     \li \c{$HOME/.config/MySoft/Star Runner.conf} (Qt for Embedded Linux: \c{$HOME/Settings/MySoft/Star Runner.conf})
     \li \c{$HOME/.config/MySoft.conf} (Qt for Embedded Linux: \c{$HOME/Settings/MySoft.conf})
-    \li \c{/etc/xdg/MySoft/Star Runner.conf}
-    \li \c{/etc/xdg/MySoft.conf}
+    \li for each directory <dir> in $XDG_CONFIG_DIRS: \c{<dir>/MySoft/Star Runner.conf}
+    \li for each directory <dir> in $XDG_CONFIG_DIRS: \c{<dir>/MySoft.conf}
     \endlist
+    \note If XDG_CONFIG_DIRS is unset, the default value of \c{/etc/xdg} is used.
 
     On \macos versions 10.2 and 10.3, these files are used by
     default:
@@ -2253,7 +2251,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     stored in the following registry path:
     \c{HKEY_LOCAL_MACHINE\Software\WOW6432node}.
 
-    On BlackBerry only a single file is used (see \l{Platform Limitations}).
     If the file format is NativeFormat, this is "Settings/MySoft/Star Runner.conf"
     in the application's home directory.
 
@@ -2263,29 +2260,29 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
     \list 1
     \li \c{$HOME/.config/MySoft/Star Runner.ini} (Qt for Embedded Linux: \c{$HOME/Settings/MySoft/Star Runner.ini})
     \li \c{$HOME/.config/MySoft.ini} (Qt for Embedded Linux: \c{$HOME/Settings/MySoft.ini})
-    \li \c{/etc/xdg/MySoft/Star Runner.ini}
-    \li \c{/etc/xdg/MySoft.ini}
+    \li for each directory <dir> in $XDG_CONFIG_DIRS: \c{<dir>/MySoft/Star Runner.ini}
+    \li for each directory <dir> in $XDG_CONFIG_DIRS: \c{<dir>/MySoft.ini}
     \endlist
+    \note If XDG_CONFIG_DIRS is unset, the default value of \c{/etc/xdg} is used.
 
     On Windows, the following files are used:
 
     \list 1
-    \li \c{CSIDL_APPDATA\MySoft\Star Runner.ini}
-    \li \c{CSIDL_APPDATA\MySoft.ini}
-    \li \c{CSIDL_COMMON_APPDATA\MySoft\Star Runner.ini}
-    \li \c{CSIDL_COMMON_APPDATA\MySoft.ini}
+    \li \c{FOLDERID_RoamingAppData\MySoft\Star Runner.ini}
+    \li \c{FOLDERID_RoamingAppData\MySoft.ini}
+    \li \c{FOLDERID_ProgramData\MySoft\Star Runner.ini}
+    \li \c{FOLDERID_ProgramData\MySoft.ini}
     \endlist
 
-    The identifiers prefixed by \c{CSIDL_} are special item ID lists to be passed
-    to the Win32 API function \c{SHGetSpecialFolderPath()} to obtain the
+    The identifiers prefixed by \c{FOLDERID_} are special item ID lists to be passed
+    to the Win32 API function \c{SHGetKnownFolderPath()} to obtain the
     corresponding path.
 
-    \c{CSIDL_APPDATA} usually points to \tt{C:\\Users\\\e{User Name}\\AppData\\Roaming},
+    \c{FOLDERID_RoamingAppData} usually points to \tt{C:\\Users\\\e{User Name}\\AppData\\Roaming},
     also shown by the environment variable \c{%APPDATA%}.
 
-    \c{CSIDL_COMMON_APPDATA} usually points to \tt{C:\\ProgramData}.
+    \c{FOLDERID_ProgramData} usually points to \tt{C:\\ProgramData}.
 
-    On BlackBerry only a single file is used (see \l{Platform Limitations}).
     If the file format is IniFormat, this is "Settings/MySoft/Star Runner.ini"
     in the application's home directory.
 
@@ -2390,17 +2387,6 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
        10.8 (Mountain Lion), only root can. However, 10.9 (Mavericks) changes
        that rule again but only for the native format (plist files).
 
-    \li On the BlackBerry platform, applications run in a sandbox. They are not
-       allowed to read or write outside of this sandbox. This involves the
-       following limitations:
-       \list
-       \li As there is only a single scope the scope is simply ignored,
-           i.e. there is no difference between SystemScope and UserScope.
-       \li The \l{Fallback Mechanism} is not applied, i.e. only a single
-          location is considered.
-       \li It is advised against setting and using custom file paths.
-       \endlist
-
     \endlist
 
     \sa QVariant, QSessionManager, {Settings Editor Example}, {Application Example}
@@ -2421,14 +2407,24 @@ void QConfFileSettingsPrivate::ensureSectionParsed(QConfFile *confFile,
 
     This enum type specifies the storage format used by QSettings.
 
-    \value NativeFormat  Store the settings using the most
-                         appropriate storage format for the platform.
-                         On Windows, this means the system registry;
-                         on \macos and iOS, this means the CFPreferences
-                         API; on Unix, this means textual
-                         configuration files in INI format.
-    \value IniFormat  Store the settings in INI files.
-    \value InvalidFormat Special value returned by registerFormat().
+    \value NativeFormat     Store the settings using the most
+                            appropriate storage format for the platform.
+                            On Windows, this means the system registry;
+                            on \macos and iOS, this means the CFPreferences
+                            API; on Unix, this means textual
+                            configuration files in INI format.
+    \value Registry32Format Windows only: Explicitly access the 32-bit system registry
+                            from a 64-bit application running on 64-bit Windows.
+                            On 32-bit Windows or from a 32-bit application on 64-bit Windows,
+                            this works the same as specifying NativeFormat.
+                            This enum value was added in Qt 5.7.
+    \value Registry64Format Windows only: Explicitly access the 64-bit system registry
+                            from a 32-bit application running on 64-bit Windows.
+                            On 32-bit Windows or from a 64-bit application on 64-bit Windows,
+                            this works the same as specifying NativeFormat.
+                            This enum value was added in Qt 5.7.
+    \value IniFormat        Store the settings in INI files.
+    \value InvalidFormat    Special value returned by registerFormat().
     \omitvalue CustomFormat1
     \omitvalue CustomFormat2
     \omitvalue CustomFormat3
@@ -2745,6 +2741,7 @@ void QSettings::sync()
 {
     Q_D(QSettings);
     d->sync();
+    d->pendingChanges = false;
 }
 
 /*!
@@ -3389,8 +3386,8 @@ void QSettings::setUserIniPath(const QString &dir)
 
     \table
     \header \li Platform         \li Format                       \li Scope       \li Path
-    \row    \li{1,2} Windows     \li{1,2} IniFormat               \li UserScope   \li \c CSIDL_APPDATA
-    \row                                                        \li SystemScope \li \c CSIDL_COMMON_APPDATA
+    \row    \li{1,2} Windows     \li{1,2} IniFormat               \li UserScope   \li \c FOLDERID_RoamingAppData
+    \row                                                        \li SystemScope \li \c FOLDERID_ProgramData
     \row    \li{1,2} Unix        \li{1,2} NativeFormat, IniFormat \li UserScope   \li \c $HOME/.config
     \row                                                        \li SystemScope \li \c /etc/xdg
     \row    \li{1,2} Qt for Embedded Linux \li{1,2} NativeFormat, IniFormat \li UserScope   \li \c $HOME/Settings
@@ -3419,7 +3416,7 @@ void QSettings::setPath(Format format, Scope scope, const QString &path)
     PathHash *pathHash = pathHashFunc();
     if (pathHash->isEmpty())
         initDefaultPaths(&locker);
-    pathHash->insert(pathHashKey(format, scope), path + QDir::separator());
+    pathHash->insert(pathHashKey(format, scope), Path(path + QDir::separator(), true));
 }
 
 /*!
@@ -3505,8 +3502,7 @@ QSettings::Format QSettings::registerFormat(const QString &extension, ReadFunc r
         return QSettings::InvalidFormat;
 
     QConfFileCustomFormat info;
-    info.extension = QLatin1Char('.');
-    info.extension += extension;
+    info.extension = QLatin1Char('.') + extension;
     info.readFunc = readFunc;
     info.writeFunc = writeFunc;
     info.caseSensitivity = caseSensitivity;
@@ -3516,5 +3512,9 @@ QSettings::Format QSettings::registerFormat(const QString &extension, ReadFunc r
 }
 
 QT_END_NAMESPACE
+
+#ifndef QT_BOOTSTRAPPED
+#include "moc_qsettings.cpp"
+#endif
 
 #endif // QT_NO_SETTINGS

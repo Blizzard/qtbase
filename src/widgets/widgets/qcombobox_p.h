@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,9 +51,9 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qcombobox.h"
 
-#ifndef QT_NO_COMBOBOX
 #include "QtWidgets/qabstractslider.h"
 #include "QtWidgets/qapplication.h"
 #include "QtWidgets/qitemdelegate.h"
@@ -61,11 +67,15 @@
 #include "QtCore/qtimer.h"
 #include "private/qwidget_p.h"
 #include "QtCore/qpointer.h"
+#if QT_CONFIG(completer)
 #include "QtWidgets/qcompleter.h"
+#endif
 #include "QtGui/qevent.h"
 #include "QtCore/qdebug.h"
 
 #include <limits.h>
+
+QT_REQUIRE_CONFIG(combobox);
 
 QT_BEGIN_NAMESPACE
 
@@ -79,13 +89,13 @@ public:
     QComboBoxListView(QComboBox *cmb = 0) : combo(cmb) {}
 
 protected:
-    void resizeEvent(QResizeEvent *event)
+    void resizeEvent(QResizeEvent *event) override
     {
         resizeContents(viewport()->width(), contentsSize().height());
         QListView::resizeEvent(event);
     }
 
-    QStyleOptionViewItem viewOptions() const
+    QStyleOptionViewItem viewOptions() const override
     {
         QStyleOptionViewItem option = QListView::viewOptions();
         option.showDecorationSelected = true;
@@ -94,7 +104,7 @@ protected:
         return option;
     }
 
-    void paintEvent(QPaintEvent *e)
+    void paintEvent(QPaintEvent *e) override
     {
         if (combo) {
             QStyleOptionComboBox opt;
@@ -135,7 +145,7 @@ public:
         setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
         setAttribute(Qt::WA_NoMousePropagation);
     }
-    QSize sizeHint() const {
+    QSize sizeHint() const override {
         return QSize(20, style()->pixelMetric(QStyle::PM_MenuScrollerHeight));
     }
 
@@ -149,14 +159,14 @@ protected:
         fast = false;
     }
 
-    void enterEvent(QEvent *) {
+    void enterEvent(QEvent *) override {
         startTimer();
     }
 
-    void leaveEvent(QEvent *) {
+    void leaveEvent(QEvent *) override {
         stopTimer();
     }
-    void timerEvent(QTimerEvent *e) {
+    void timerEvent(QTimerEvent *e) override {
         if (e->timerId() == timer.timerId()) {
             emit doScroll(sliderAction);
             if (fast) {
@@ -165,11 +175,11 @@ protected:
             }
         }
     }
-    void hideEvent(QHideEvent *) {
+    void hideEvent(QHideEvent *) override {
         stopTimer();
     }
 
-    void mouseMoveEvent(QMouseEvent *e)
+    void mouseMoveEvent(QMouseEvent *e) override
     {
         // Enable fast scrolling if the cursor is directly above or below the popup.
         const int mouseX = e->pos().x();
@@ -181,7 +191,7 @@ protected:
         fast = horizontallyInside && verticallyOutside;
     }
 
-    void paintEvent(QPaintEvent *) {
+    void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         QStyleOptionMenuItem menuOpt;
         menuOpt.init(this);
@@ -228,15 +238,15 @@ public Q_SLOTS:
     void viewDestroyed();
 
 protected:
-    void changeEvent(QEvent *e);
-    bool eventFilter(QObject *o, QEvent *e);
-    void mousePressEvent(QMouseEvent *e);
-    void mouseReleaseEvent(QMouseEvent *e);
-    void showEvent(QShowEvent *e);
-    void hideEvent(QHideEvent *e);
-    void timerEvent(QTimerEvent *timerEvent);
-    void leaveEvent(QEvent *e);
-    void resizeEvent(QResizeEvent *e);
+    void changeEvent(QEvent *e) override;
+    bool eventFilter(QObject *o, QEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseReleaseEvent(QMouseEvent *e) override;
+    void showEvent(QShowEvent *e) override;
+    void hideEvent(QHideEvent *e) override;
+    void timerEvent(QTimerEvent *timerEvent) override;
+    void leaveEvent(QEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;
     QStyleOptionComboBox comboStyleOption() const;
 
 Q_SIGNALS:
@@ -263,13 +273,13 @@ public:
 protected:
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const {
+               const QModelIndex &index) const override {
         QStyleOptionMenuItem opt = getStyleOption(option, index);
         painter->fillRect(option.rect, opt.palette.background());
         mCombo->style()->drawControl(QStyle::CE_MenuItem, &opt, painter, mCombo);
     }
     QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const {
+                   const QModelIndex &index) const override {
         QStyleOptionMenuItem opt = getStyleOption(option, index);
         return mCombo->style()->sizeFromContents(
             QStyle::CT_MenuItem, &opt, option.rect.size(), mCombo);
@@ -302,7 +312,7 @@ public:
 protected:
     void paint(QPainter *painter,
                const QStyleOptionViewItem &option,
-               const QModelIndex &index) const {
+               const QModelIndex &index) const override {
         if (isSeparator(index)) {
             QRect rect = option.rect;
             if (const QAbstractItemView *view = qobject_cast<const QAbstractItemView*>(option.widget))
@@ -316,7 +326,7 @@ protected:
     }
 
     QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const {
+                   const QModelIndex &index) const override {
         if (isSeparator(index)) {
             int pm = mCombo->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, 0, mCombo);
             return QSize(pm, pm);
@@ -347,7 +357,7 @@ public:
     void _q_emitCurrentIndexChanged(const QModelIndex &index);
     void _q_modelDestroyed();
     void _q_modelReset();
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     void _q_completerActivated(const QModelIndex &index);
 #endif
     void _q_resetButton();
@@ -407,7 +417,7 @@ public:
 #ifdef Q_OS_MAC
     QPlatformMenu *m_platformMenu;
 #endif
-#ifndef QT_NO_COMPLETER
+#if QT_CONFIG(completer)
     QPointer<QCompleter> completer;
 #endif
     static QPalette viewContainerPalette(QComboBox *cmb)
@@ -415,7 +425,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_COMBOBOX
 
 #endif // QCOMBOBOX_P_H

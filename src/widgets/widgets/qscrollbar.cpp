@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,10 +44,10 @@
 #include "qscrollbar.h"
 #include "qstyle.h"
 #include "qstyleoption.h"
+#if QT_CONFIG(menu)
 #include "qmenu.h"
+#endif
 #include <QtCore/qelapsedtimer.h>
-
-#ifndef QT_NO_SCROLLBAR
 
 #ifndef QT_NO_ACCESSIBILITY
 #include "qaccessible.h"
@@ -180,15 +186,6 @@ QT_BEGIN_NAMESPACE
 
     Most GUI styles use the pageStep() value to calculate the size of the
     slider.
-
-    \table 100%
-    \row \li \inlineimage macintosh-horizontalscrollbar.png Screenshot of a Macintosh style scroll bar
-         \li A scroll bar shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \row \li \inlineimage windowsvista-horizontalscrollbar.png Screenshot of a Windows Vista style scroll bar
-         \li A scroll bar shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row \li \inlineimage fusion-horizontalscrollbar.png Screenshot of a Fusion style scroll bar
-         \li A scroll bar shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
 
     \sa QScrollArea, QSlider, QDial, QSpinBox, {fowler}{GUI Design Handbook: Scroll Bar}, {Sliders Example}
 */
@@ -342,10 +339,8 @@ void QScrollBar::initStyleOption(QStyleOptionSlider *option) const
     initial \l {QAbstractSlider::value} {value} of 0.
 */
 QScrollBar::QScrollBar(QWidget *parent)
-    : QAbstractSlider(*new QScrollBarPrivate, parent)
+    : QScrollBar(Qt::Vertical, parent)
 {
-    d_func()->orientation = Qt::Vertical;
-    d_func()->init();
 }
 
 /*!
@@ -391,12 +386,6 @@ void QScrollBarPrivate::init()
     q->setSizePolicy(sp);
     q->setAttribute(Qt::WA_WState_OwnSizePolicy, false);
     q->setAttribute(Qt::WA_OpaquePaintEvent);
-
-#if !defined(QT_NO_CONTEXTMENU) && defined(Q_OS_WINCE)
-    if (!q->style()->styleHint(QStyle::SH_ScrollBar_ContextMenu, 0, q)) {
-        q->setContextMenuPolicy(Qt::PreventContextMenu);
-    }
-#endif
 }
 
 #ifndef QT_NO_CONTEXTMENU
@@ -408,7 +397,7 @@ void QScrollBar::contextMenuEvent(QContextMenuEvent *event)
         return ;
     }
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
     bool horiz = HORIZONTAL;
     QPointer<QMenu> menu = new QMenu(this);
     QAction *actScrollHere = menu->addAction(tr("Scroll here"));
@@ -439,7 +428,7 @@ void QScrollBar::contextMenuEvent(QContextMenuEvent *event)
         triggerAction(QAbstractSlider::SliderSingleStepSub);
     else if (actionSelected == actScrollDn)
         triggerAction(QAbstractSlider::SliderSingleStepAdd);
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 }
 #endif // QT_NO_CONTEXTMENU
 
@@ -504,7 +493,7 @@ bool QScrollBar::event(QEvent *event)
 /*!
     \reimp
 */
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void QScrollBar::wheelEvent(QWheelEvent *event)
 {
     event->ignore();
@@ -739,5 +728,3 @@ Q_WIDGETS_EXPORT QStyleOptionSlider qt_qscrollbarStyleOption(QScrollBar *scrollb
 QT_END_NAMESPACE
 
 #include "moc_qscrollbar.cpp"
-
-#endif // QT_NO_SCROLLBAR

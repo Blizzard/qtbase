@@ -1,41 +1,48 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qwizard.h"
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 
-#ifndef QT_NO_WIZARD
-
+#if QT_CONFIG(spinbox)
 #include "qabstractspinbox.h"
+#endif
 #include "qalgorithms.h"
 #include "qapplication.h"
 #include "qboxlayout.h"
@@ -44,7 +51,9 @@
 #include "qevent.h"
 #include "qframe.h"
 #include "qlabel.h"
+#if QT_CONFIG(lineedit)
 #include "qlineedit.h"
+#endif
 #include "qpainter.h"
 #include "qwindow.h"
 #include "qpushbutton.h"
@@ -55,17 +64,13 @@
 #include <QtCore/QMetaMethod>
 #include <QtGui/QGuiApplication>
 #include <qpa/qplatformnativeinterface.h>
-#elif !defined(QT_NO_STYLE_WINDOWSVISTA)
+#elif QT_CONFIG(style_windowsvista)
 #include "qwizard_win_p.h"
 #include "qtimer.h"
 #endif
 
 #include "private/qdialog_p.h"
 #include <qdebug.h>
-
-#ifdef Q_OS_WINCE
-extern bool qt_wince_is_mobile();     //defined in qguifunctions_wce.cpp
-#endif
 
 #include <string.h>     // for memset()
 #include <algorithm>
@@ -293,7 +298,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 private:
     bool vistaDisabled() const;
 #endif
@@ -340,7 +345,7 @@ QWizardHeader::QWizardHeader(QWidget *parent)
     layout->addWidget(logoLabel, 1, 5, 5, 1);
 }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 bool QWizardHeader::vistaDisabled() const
 {
     bool styleDisabled = false;
@@ -360,7 +365,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
                           Qt::TextFormat titleFormat, Qt::TextFormat subTitleFormat)
 {
     bool modern = ((info.wizStyle == QWizard::ModernStyle)
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         || ((info.wizStyle == QWizard::AeroStyle
             && QVistaHelper::vistaState() == QVistaHelper::Classic) || vistaDisabled())
 #endif
@@ -449,7 +454,7 @@ public:
     }
 
     QSize minimumSizeHint() const Q_DECL_OVERRIDE {
-        if (!pixmap() && !pixmap()->isNull())
+        if (pixmap() && !pixmap()->isNull())
             return pixmap()->size();
         return QFrame::minimumSizeHint();
     }
@@ -523,7 +528,7 @@ void QWizardPagePrivate::_q_updateCachedCompleteState()
 class QWizardAntiFlickerWidget : public QWidget
 {
 public:
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     QWizardPrivate *wizardPrivate;
     QWizardAntiFlickerWidget(QWizard *wizard, QWizardPrivate *wizardPrivate)
         : QWidget(wizard)
@@ -570,7 +575,7 @@ public:
         , titleLabel(0)
         , subTitleLabel(0)
         , bottomRuler(0)
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         , vistaHelper(0)
         , vistaInitPending(false)
         , vistaState(QVistaHelper::Dirty)
@@ -584,7 +589,7 @@ public:
     {
         std::fill(btns, btns + QWizard::NButtons, static_cast<QAbstractButton *>(0));
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         if (QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA
             && (QSysInfo::WindowsVersion & QSysInfo::WV_NT_based))
             vistaInitPending = true;
@@ -609,7 +614,7 @@ public:
     void setButtonLayout(const QWizard::WizardButton *array, int size);
     bool buttonLayoutContains(QWizard::WizardButton which);
     void updatePixmap(QWizard::WizardPixmap which);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     bool vistaDisabled() const;
     bool isVistaThemeEnabled(QVistaHelper::VistaState state) const;
     bool handleAeroStyleChange();
@@ -675,7 +680,7 @@ public:
     QHBoxLayout *buttonLayout;
     QGridLayout *mainLayout;
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     QVistaHelper *vistaHelper;
     bool vistaInitPending;
     QVistaHelper::VistaState vistaState;
@@ -690,7 +695,7 @@ public:
 
 static QString buttonDefaultText(int wstyle, int which, const QWizardPrivate *wizardPrivate)
 {
-#if defined(QT_NO_STYLE_WINDOWSVISTA)
+#if !QT_CONFIG(style_windowsvista)
     Q_UNUSED(wizardPrivate);
 #endif
     const bool macStyle = (wstyle == QWizard::MacStyle);
@@ -728,7 +733,7 @@ void QWizardPrivate::init()
         opts = QWizard::HelpButtonOnRight;
     }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     vistaHelper = new QVistaHelper(q);
 #endif
 
@@ -799,8 +804,8 @@ void QWizardPrivate::addField(const QWizardField &field)
     QWizardField myField = field;
     myField.resolve(defaultPropertyTable);
 
-    if (fieldIndexMap.contains(myField.name)) {
-        qWarning("QWizardPage::addField: Duplicate field '%s'", qPrintable(myField.name));
+    if (Q_UNLIKELY(fieldIndexMap.contains(myField.name))) {
+        qWarning("QWizardPage::addField: Duplicate field '%ls'", qUtf16Printable(myField.name));
         return;
     }
 
@@ -844,9 +849,9 @@ void QWizardPrivate::switchToPage(int newId, Direction direction)
                 q->cleanupPage(oldId);
                 initialized.remove(oldId);
             }
-            Q_ASSERT(history.last() == oldId);
+            Q_ASSERT(history.constLast() == oldId);
             history.removeLast();
-            Q_ASSERT(history.last() == newId);
+            Q_ASSERT(history.constLast() == newId);
         }
     }
 
@@ -957,7 +962,7 @@ QWizardLayoutInfo QWizardPrivate::layoutInfoForCurrentPage()
 
     info.wizStyle = wizStyle;
     if (info.wizStyle == QWizard::AeroStyle
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         && (QVistaHelper::vistaState() == QVistaHelper::Classic || vistaDisabled())
 #endif
         )
@@ -1086,7 +1091,7 @@ void QWizardPrivate::recreateLayout(const QWizardLayoutInfo &info)
             // ### hardcoded for now:
             titleFont = QFont(QLatin1String("Segoe UI"), 12);
             QPalette pal(titleLabel->palette());
-            pal.setColor(QPalette::Text, "#003399");
+            pal.setColor(QPalette::Text, QColor(0x00, 0x33, 0x99));
             titleLabel->setPalette(pal);
         }
 
@@ -1335,7 +1340,7 @@ void QWizardPrivate::updateMinMaxSizes(const QWizardLayoutInfo &info)
     Q_Q(QWizard);
 
     int extraHeight = 0;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (isVistaThemeEnabled())
         extraHeight = vistaHelper->titleBarSize() + vistaHelper->topOffset();
 #endif
@@ -1462,8 +1467,10 @@ void QWizardPrivate::updateButtonTexts()
     // Vista: Add shortcut for 'next'. Note: native dialogs use ALT-Right
     // even in RTL mode, so do the same, even if it might be counter-intuitive.
     // The shortcut for 'back' is set in class QVistaBackButton.
+#if QT_CONFIG(shortcut)
     if (btns[QWizard::NextButton])
         btns[QWizard::NextButton]->setShortcut(isVistaThemeEnabled() ? QKeySequence(Qt::ALT | Qt::Key_Right) : QKeySequence());
+#endif
 }
 
 void QWizardPrivate::updateButtonLayout()
@@ -1558,7 +1565,7 @@ void QWizardPrivate::updatePixmap(QWizard::WizardPixmap which)
     }
 }
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 bool QWizardPrivate::vistaDisabled() const
 {
     Q_Q(const QWizard);
@@ -1640,7 +1647,7 @@ bool QWizardPrivate::handleAeroStyleChange()
 
 bool QWizardPrivate::isVistaThemeEnabled() const
 {
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     return isVistaThemeEnabled(QVistaHelper::VistaAero)
         || isVistaThemeEnabled(QVistaHelper::VistaBasic);
 #else
@@ -1718,7 +1725,7 @@ void QWizardPrivate::_q_updateButtonStates()
     if (QPushButton *finishPush = qobject_cast<QPushButton *>(btn.finish))
         finishPush->setDefault(!canContinue && useDefault);
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (isVistaThemeEnabled()) {
         vistaHelper->backButton()->setEnabled(btn.back->isEnabled());
         vistaHelper->backButton()->setVisible(backButtonVisible);
@@ -1786,7 +1793,7 @@ QPixmap QWizardPrivate::findDefaultBackgroundPixmap()
 
 #endif
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
 void QWizardAntiFlickerWidget::paintEvent(QPaintEvent *)
 {
     if (wizardPrivate->isVistaThemeEnabled()) {
@@ -2209,10 +2216,6 @@ QWizard::QWizard(QWidget *parent, Qt::WindowFlags flags)
 {
     Q_D(QWizard);
     d->init();
-#ifdef Q_OS_WINCE
-    if (!qt_wince_is_mobile())
-        setWindowFlags(windowFlags() & ~Qt::WindowOkButtonHint);
-#endif
 }
 
 /*!
@@ -2256,17 +2259,17 @@ void QWizard::setPage(int theid, QWizardPage *page)
 {
     Q_D(QWizard);
 
-    if (!page) {
+    if (Q_UNLIKELY(!page)) {
         qWarning("QWizard::setPage: Cannot insert null page");
         return;
     }
 
-    if (theid == -1) {
+    if (Q_UNLIKELY(theid == -1)) {
         qWarning("QWizard::setPage: Cannot insert page with ID -1");
         return;
     }
 
-    if (d->pageMap.contains(theid)) {
+    if (Q_UNLIKELY(d->pageMap.contains(theid))) {
         qWarning("QWizard::setPage: Page with duplicate ID %d ignored", theid);
         return;
     }
@@ -2450,7 +2453,7 @@ void QWizard::setStartId(int theid)
         return;
     }
 
-    if (!d->pageMap.contains(newStart)) {
+    if (Q_UNLIKELY(!d->pageMap.contains(newStart))) {
         qWarning("QWizard::setStartId: Invalid page ID %d", newStart);
         return;
     }
@@ -2508,15 +2511,15 @@ void QWizard::setField(const QString &name, const QVariant &value)
     Q_D(QWizard);
 
     int index = d->fieldIndexMap.value(name, -1);
-    if (index != -1) {
-        const QWizardField &field = d->fields.at(index);
-        if (!field.object->setProperty(field.property, value))
-            qWarning("QWizard::setField: Couldn't write to property '%s'",
-                     field.property.constData());
+    if (Q_UNLIKELY(index == -1)) {
+        qWarning("QWizard::setField: No such field '%ls'", qUtf16Printable(name));
         return;
     }
 
-    qWarning("QWizard::setField: No such field '%s'", qPrintable(name));
+    const QWizardField &field = d->fields.at(index);
+    if (Q_UNLIKELY(!field.object->setProperty(field.property, value)))
+        qWarning("QWizard::setField: Couldn't write to property '%s'",
+                 field.property.constData());
 }
 
 /*!
@@ -2531,13 +2534,13 @@ QVariant QWizard::field(const QString &name) const
     Q_D(const QWizard);
 
     int index = d->fieldIndexMap.value(name, -1);
-    if (index != -1) {
-        const QWizardField &field = d->fields.at(index);
-        return field.object->property(field.property);
+    if (Q_UNLIKELY(index == -1)) {
+        qWarning("QWizard::field: No such field '%ls'", qUtf16Printable(name));
+        return QVariant();
     }
 
-    qWarning("QWizard::field: No such field '%s'", qPrintable(name));
-    return QVariant();
+    const QWizardField &field = d->fields.at(index);
+    return field.object->property(field.property);
 }
 
 /*!
@@ -2558,7 +2561,7 @@ void QWizard::setWizardStyle(WizardStyle style)
 
     const bool styleChange = style != d->wizStyle;
 
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     const bool aeroStyleChange =
         d->vistaInitPending || d->vistaStateChanged || (styleChange && (style == AeroStyle || d->wizStyle == AeroStyle));
     d->vistaStateChanged = false;
@@ -2566,14 +2569,14 @@ void QWizard::setWizardStyle(WizardStyle style)
 #endif
 
     if (styleChange
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         || aeroStyleChange
 #endif
         ) {
         d->disableUpdates();
         d->wizStyle = style;
         d->updateButtonTexts();
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         if (aeroStyleChange) {
             //Send a resizeevent since the antiflicker widget probably needs a new size
             //because of the backbutton in the window title
@@ -2584,7 +2587,7 @@ void QWizard::setWizardStyle(WizardStyle style)
         d->updateLayout();
         updateGeometry();
         d->enableUpdates();
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
         // Delay initialization when activating Aero style fails due to missing native window.
         if (aeroStyleChange && !d->handleAeroStyleChange() && d->wizStyle == AeroStyle)
             d->vistaInitPending = true;
@@ -2763,7 +2766,7 @@ void QWizard::setButtonLayout(const QList<WizardButton> &layout)
         // O(n^2), but n is very small
         for (int j = 0; j < i; ++j) {
             WizardButton button2 = layout.at(j);
-            if (button2 == button1) {
+            if (Q_UNLIKELY(button2 == button1)) {
                 qWarning("QWizard::setButtonLayout: Duplicate button in layout");
                 return;
             }
@@ -2818,7 +2821,7 @@ void QWizard::setButton(WizardButton which, QAbstractButton *button)
 QAbstractButton *QWizard::button(WizardButton which) const
 {
     Q_D(const QWizard);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->wizStyle == AeroStyle && which == BackButton)
         return d->vistaHelper->backButton();
 #endif
@@ -3140,11 +3143,11 @@ void QWizard::next()
     if (validateCurrentPage()) {
         int next = nextId();
         if (next != -1) {
-            if (d->history.contains(next)) {
+            if (Q_UNLIKELY(d->history.contains(next))) {
                 qWarning("QWizard::next: Page %d already met", next);
                 return;
             }
-            if (!d->pageMap.contains(next)) {
+            if (Q_UNLIKELY(!d->pageMap.contains(next))) {
                 qWarning("QWizard::next: No such page %d", next);
                 return;
             }
@@ -3178,7 +3181,7 @@ bool QWizard::event(QEvent *event)
         d->setStyle(style());
         d->updateLayout();
     }
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     else if (event->type() == QEvent::Show && d->vistaInitPending) {
         d->vistaInitPending = false;
         // Do not force AeroStyle when in Classic theme.
@@ -3213,7 +3216,7 @@ void QWizard::resizeEvent(QResizeEvent *event)
 {
     Q_D(QWizard);
     int heightOffset = 0;
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->isVistaThemeEnabled()) {
         heightOffset = d->vistaHelper->topOffset();
         if (d->isVistaThemeEnabled(QVistaHelper::VistaAero))
@@ -3221,7 +3224,7 @@ void QWizard::resizeEvent(QResizeEvent *event)
     }
 #endif
     d->antiFlickerWidget->resize(event->size().width(), event->size().height() - heightOffset);
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     if (d->isVistaThemeEnabled())
         d->vistaHelper->resizeEvent(event);
 #endif
@@ -3242,7 +3245,7 @@ void QWizard::paintEvent(QPaintEvent * event)
         QPainter painter(this);
         painter.drawPixmap(0, (height() - backgroundPixmap.height()) / 2, backgroundPixmap);
     }
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     else if (d->isVistaThemeEnabled()) {
         if (d->isVistaThemeEnabled(QVistaHelper::VistaBasic)) {
             QPainter painter(this);
@@ -3256,13 +3259,13 @@ void QWizard::paintEvent(QPaintEvent * event)
 #endif
 }
 
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
 /*!
     \reimp
 */
 bool QWizard::nativeEvent(const QByteArray &eventType, void *message, long *result)
 {
-#if !defined(QT_NO_STYLE_WINDOWSVISTA)
+#if QT_CONFIG(style_windowsvista)
     Q_D(QWizard);
     if (d->isVistaThemeEnabled() && eventType == "windows_generic_MSG") {
         MSG *windowsMessage = static_cast<MSG *>(message);
@@ -3622,9 +3625,8 @@ void QWizardPage::cleanupPage()
 {
     Q_D(QWizardPage);
     if (d->wizard) {
-        QVector<QWizardField> &fields = d->wizard->d_func()->fields;
-        for (int i = 0; i < fields.count(); ++i) {
-            const QWizardField &field = fields.at(i);
+        const QVector<QWizardField> &fields = d->wizard->d_func()->fields;
+        for (const auto &field : fields) {
             if (field.page == this)
                 field.object->setProperty(field.property, field.initialValue);
         }
@@ -3682,13 +3684,13 @@ bool QWizardPage::isComplete() const
             if (value == field.initialValue)
                 return false;
 
-#ifndef QT_NO_LINEEDIT
+#if QT_CONFIG(lineedit)
             if (QLineEdit *lineEdit = qobject_cast<QLineEdit *>(field.object)) {
                 if (!lineEdit->hasAcceptableInput())
                     return false;
             }
 #endif
-#ifndef QT_NO_SPINBOX
+#if QT_CONFIG(spinbox)
             if (QAbstractSpinBox *spinBox = qobject_cast<QAbstractSpinBox *>(field.object)) {
                 if (!spinBox->hasAcceptableInput())
                     return false;
@@ -3987,5 +3989,3 @@ QWizard *QWizardPage::wizard() const
 QT_END_NAMESPACE
 
 #include "moc_qwizard.cpp"
-
-#endif // QT_NO_WIZARD

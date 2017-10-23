@@ -1,5 +1,8 @@
 gcc {
-    !clang:!intel_icc:greaterThan(QMAKE_HOST.cpu_count, 1) {
+    # on Windows, MinGW's support for -flto=N is broken
+    intel_icc {
+        QMAKE_LFLAGS_LTCG ~= s/-ipo/-ipo=$$QMAKE_HOST.cpu_count/
+    } else: !clang:!equals(QMAKE_HOST.os, Windows):greaterThan(QMAKE_HOST.cpu_count, 1) {
         # Override LTO number of jobs
         QMAKE_LFLAGS_LTCG ~= s/^-flto$/-flto=$$QMAKE_HOST.cpu_count/
     }

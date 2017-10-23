@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -105,6 +100,8 @@ private slots:
     void eventNotificationIBase();
     void eventNotificationPSQL_data() { generic_data("QPSQL"); }
     void eventNotificationPSQL();
+    void eventNotificationSQLite_data() { generic_data("QSQLITE"); }
+    void eventNotificationSQLite();
 
     //database specific 64 bit integer test
     void bigIntField_data() { generic_data(); }
@@ -218,7 +215,7 @@ struct FieldDef {
     {
         QString rt = typeName;
         rt.replace(QRegExp("\\s"), QString("_"));
-        int i = rt.indexOf("(");
+        int i = rt.indexOf(QLatin1Char('('));
         if (i == -1)
             i = rt.length();
         if (i > 20)
@@ -753,8 +750,8 @@ void tst_QSqlDatabase::recordOCI()
         FieldDef("long raw", QVariant::ByteArray,       QByteArray("blah5")),
         FieldDef("raw(2000)", QVariant::ByteArray,      QByteArray("blah6"), false),
         FieldDef("blob", QVariant::ByteArray,           QByteArray("blah7")),
-        FieldDef("clob", QVariant::String,             QString("blah8")),
-        FieldDef("nclob", QVariant::String,            QString("blah9")),
+        FieldDef("clob", QVariant::ByteArray, QByteArray("blah8")),
+        FieldDef("nclob", QVariant::ByteArray, QByteArray("blah9")),
 //        FieldDef("bfile", QVariant::ByteArray,         QByteArray("blah10")),
 
         intytm,
@@ -2114,6 +2111,35 @@ void tst_QSqlDatabase::eventNotificationPSQL()
     QVERIFY_SQL(driver, unsubscribeFromNotification(procedureName));
 }
 
+void tst_QSqlDatabase::eventNotificationSQLite()
+{
+    QFETCH(QString, dbName);
+    QSqlDatabase db = QSqlDatabase::database(dbName);
+    CHECK_DATABASE(db);
+    if (db.driverName().compare(QLatin1String("QSQLITE"), Qt::CaseInsensitive)) {
+        QSKIP("QSQLITE specific test");
+    }
+    const QString tableName(qTableName("sqlitnotifytest", __FILE__, db));
+    tst_Databases::safeDropTable(db, tableName);
+
+    QSignalSpy notificationSpy(db.driver(), SIGNAL(notification(QString)));
+    QSignalSpy notificationSpyExt(db.driver(), SIGNAL(notification(QString,QSqlDriver::NotificationSource,QVariant)));
+    QSqlQuery q(db);
+    QVERIFY_SQL(q, exec("CREATE TABLE " + tableName + " (id INTEGER, realVal REAL)"));
+    db.driver()->subscribeToNotification(tableName);
+    QVERIFY_SQL(q, exec("INSERT INTO " + tableName + " (id, realVal) VALUES (1, 2.3)"));
+    QTRY_COMPARE(notificationSpy.count(), 1);
+    QTRY_COMPARE(notificationSpyExt.count(), 1);
+    QList<QVariant> arguments = notificationSpy.takeFirst();
+    QCOMPARE(arguments.at(0).toString(), tableName);
+    arguments = notificationSpyExt.takeFirst();
+    QCOMPARE(arguments.at(0).toString(), tableName);
+    db.driver()->unsubscribeFromNotification(tableName);
+    QVERIFY_SQL(q, exec("INSERT INTO " + tableName + " (id, realVal) VALUES (1, 2.3)"));
+    QTRY_COMPARE(notificationSpy.count(), 0);
+    QTRY_COMPARE(notificationSpyExt.count(), 0);
+}
+
 void tst_QSqlDatabase::sqlite_bindAndFetchUInt()
 {
     QFETCH(QString, dbName);
@@ -2165,7 +2191,7 @@ void tst_QSqlDatabase::sqlStatementUseIsNull_189093()
     CHECK_DATABASE(db);
 
     // select a record with NULL value
-    QSqlQuery q(QString::null, db);
+    QSqlQuery q(QString(), db);
     QVERIFY_SQL(q, exec("select * from " + qTableName("qtest", __FILE__, db) + " where id = 4"));
     QVERIFY_SQL(q, next());
 

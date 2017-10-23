@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,7 +35,9 @@
 #include <QtCore/QAbstractEventDispatcher>
 #include <QtCore/QFileInfo>
 #include <QtCore/QDir>
-#include <QtCore/QProcess>
+#if QT_CONFIG(process)
+# include <QtCore/QProcess>
+#endif
 #include <QtCore/private/qeventloop_p.h>
 
 #include <QtGui/QFontDatabase>
@@ -57,14 +54,8 @@
 #include <QtWidgets/private/qapplication_p.h>
 #include <QtWidgets/QStyle>
 
-#ifdef Q_OS_WINCE
-#include <windows.h>
-#endif
-
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qhighdpiscaling_p.h>
-
-#include "../../../qtest-config.h"
 
 QT_BEGIN_NAMESPACE
 static QWindowSystemInterface::TouchPoint touchPoint(const QTouchEvent::TouchPoint& pt)
@@ -103,13 +94,10 @@ Q_OBJECT
 
 public:
     tst_QApplication();
-    virtual ~tst_QApplication();
 
-public slots:
-    void initTestCase();
-    void init();
-    void cleanup();
 private slots:
+    void initTestCase();
+    void cleanup();
     void sendEventsOnProcessEvents(); // this must be the first test
     void staticSetup();
 
@@ -133,9 +121,11 @@ private slots:
     void testDeleteLater();
     void testDeleteLaterProcessEvents();
 
+#if QT_CONFIG(library)
     void libraryPaths();
     void libraryPaths_qt_plugin_path();
     void libraryPaths_qt_plugin_path_2();
+#endif
 
     void sendPostedEvents();
 
@@ -150,7 +140,7 @@ private slots:
 
     void execAfterExit();
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelScrollLines();
 #endif
 
@@ -241,21 +231,6 @@ static  char *argv0;
 tst_QApplication::tst_QApplication()
     : quitApplicationTriggered(false)
 {
-#ifdef Q_OS_WINCE
-    // Clean up environment previously to launching test
-    qputenv("QT_PLUGIN_PATH", QByteArray());
-#endif
-}
-
-tst_QApplication::~tst_QApplication()
-{
-
-}
-
-void tst_QApplication::init()
-{
-// TODO: Add initialization code here.
-// This will be executed immediately before each test is run.
 }
 
 void tst_QApplication::cleanup()
@@ -398,11 +373,12 @@ void tst_QApplication::setFont_data()
                 if (!sizes.size())
                     sizes = fdb.standardSizes();
                 if (sizes.size() > 0) {
-                    QTest::newRow(QString("data%1a").arg(cnt).toLatin1().constData())
+                    const QByteArray cntB = QByteArray::number(cnt);
+                    QTest::newRow(("data" + cntB + "a").constData())
                         << family
                         << sizes.first()
                         << false;
-                    QTest::newRow(QString("data%1b").arg(cnt).toLatin1().constData())
+                    QTest::newRow(("data" + cntB + "b").constData())
                         << family
                         << sizes.first()
                         << true;
@@ -500,7 +476,7 @@ static QString cstrings2QString( char **args )
     while ( args[i] ) {
         string += args[i];
         if ( args[i+1] )
-            string += " ";
+            string += QLatin1Char(' ');
         ++i;
     }
     return string;
@@ -909,22 +885,12 @@ bool isPathListIncluded(const QStringList &l, const QStringList &r)
     return j == r.count();
 }
 
+#if QT_CONFIG(library)
 #define QT_TST_QAPP_DEBUG
 void tst_QApplication::libraryPaths()
 {
-#ifndef Q_OS_WINCE
         const QString testDir = QFileInfo(QFINDTESTDATA("test/test.pro")).absolutePath();
         QVERIFY(!testDir.isEmpty());
-#else // !Q_OS_WINCE
-        // On Windows CE we need QApplication object to have valid
-        // current Path. Therefore we need to identify it ourselves
-        // here for the test.
-        QFileInfo filePath;
-        wchar_t module_name[MAX_PATH];
-        GetModuleFileName(0, module_name, MAX_PATH);
-        filePath = QString::fromWCharArray(module_name);
-        const QString testDir = filePath.path() + "/test";
-#endif // Q_OS_WINCE
     {
         QApplication::setLibraryPaths(QStringList() << testDir);
         QCOMPARE(QApplication::libraryPaths(), (QStringList() << testDir));
@@ -1015,11 +981,7 @@ void tst_QApplication::libraryPaths()
         QString appDirPath = app.applicationDirPath();
 
         app.addLibraryPath(appDirPath);
-#ifdef Q_OS_WINCE
-        app.addLibraryPath(appDirPath + "/../..");
-#else
         app.addLibraryPath(appDirPath + "/..");
-#endif
 #ifdef QT_TST_QAPP_DEBUG
         qDebug() << "appDirPath" << appDirPath;
         qDebug() << "After adding appDirPath && appDirPath + /..:" << app.libraryPaths();
@@ -1057,17 +1019,11 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
 #ifdef Q_OS_UNIX
     QByteArray validPath = QDir("/tmp").canonicalPath().toLatin1();
     QByteArray nonExistentPath = "/nonexistent";
-    QByteArray pluginPath = validPath + ":" + nonExistentPath;
+    QByteArray pluginPath = validPath + ':' + nonExistentPath;
 #elif defined(Q_OS_WIN)
-# ifdef Q_OS_WINCE
-    QByteArray validPath = "/Temp";
-    QByteArray nonExistentPath = "/nonexistent";
-    QByteArray pluginPath = validPath + ";" + nonExistentPath;
-# else
     QByteArray validPath = "C:\\windows";
     QByteArray nonExistentPath = "Z:\\nonexistent";
-    QByteArray pluginPath = validPath + ";" + nonExistentPath;
-# endif
+    QByteArray pluginPath = validPath + ';' + nonExistentPath;
 #endif
 
     {
@@ -1084,9 +1040,7 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
             << QLibraryInfo::location(QLibraryInfo::PluginsPath)
             << QDir(app.applicationDirPath()).canonicalPath()
             << QDir(QDir::fromNativeSeparators(QString::fromLatin1(validPath))).canonicalPath();
-# ifdef Q_OS_WINCE
-        expected = QSet<QString>::fromList(expected).toList();
-# endif
+
         QVERIFY2(isPathListIncluded(app.libraryPaths(), expected),
                  qPrintable("actual:\n - " + app.libraryPaths().join("\n - ") +
                             "\nexpected:\n - " + expected.join("\n - ")));
@@ -1106,14 +1060,12 @@ void tst_QApplication::libraryPaths_qt_plugin_path_2()
             QStringList()
             << QLibraryInfo::location(QLibraryInfo::PluginsPath)
             << app.applicationDirPath();
-# ifdef Q_OS_WINCE
-        expected = QSet<QString>::fromList(expected).toList();
-# endif
         QVERIFY(isPathListIncluded(app.libraryPaths(), expected));
 
         qputenv("QT_PLUGIN_PATH", QByteArray());
     }
 }
+#endif
 
 class SendPostedEventsTester : public QObject
 {
@@ -1482,7 +1434,7 @@ void tst_QApplication::testDeleteLaterProcessEvents()
 */
 void tst_QApplication::desktopSettingsAware()
 {
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
     QString path;
     {
         // We need an application object for QFINDTESTDATA to work
@@ -1493,10 +1445,6 @@ void tst_QApplication::desktopSettingsAware()
     }
     QVERIFY2(!path.isEmpty(), "Cannot locate desktopsettingsaware helper application");
     path += "desktopsettingsaware";
-#ifdef Q_OS_WINCE
-    int argc = 0;
-    QApplication tmpApp(argc, 0);
-#endif
     QProcess testProcess;
     testProcess.start(path);
     QVERIFY2(testProcess.waitForStarted(),
@@ -1769,25 +1717,6 @@ void tst_QApplication::focusOut()
     QTest::qWait(2000);
 }
 
-class SpontaneousEvent
-{
-    Q_GADGET
-    QDOC_PROPERTY(bool accepted READ isAccepted WRITE setAccepted)
-    Q_ENUMS(Type)
-public:
-    enum Type {
-        Void
-    };
-
-    virtual ~SpontaneousEvent() {}
-
-    QEventPrivate *d;
-    ushort t;
-
-    ushort posted : 1;
-    ushort spont : 1;
-};
-
 void tst_QApplication::focusMouseClick()
 {
     int argc = 1;
@@ -1805,14 +1734,14 @@ void tst_QApplication::focusMouseClick()
     // now send a mouse button press event and check what happens with the focus
     // it should be given to the parent widget
     QMouseEvent ev(QEvent::MouseButtonPress, QPointF(), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QCOMPARE(QApplication::focusWidget(), &w);
 
     // then we give the inner widget strong focus -> it should get focus
     w2.setFocusPolicy(Qt::StrongFocus);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QTRY_COMPARE(QApplication::focusWidget(), &w2);
@@ -1820,7 +1749,7 @@ void tst_QApplication::focusMouseClick()
     // now back to tab focus and click again (it already had focus) -> focus should stay
     // (focus was revoked as of QTBUG-34042)
     w2.setFocusPolicy(Qt::TabFocus);
-    reinterpret_cast<SpontaneousEvent *>(&ev)->spont = 1;
+    QSpontaneKeyEvent::setSpontaneous(&ev);
     QVERIFY(ev.spontaneous());
     qApp->notify(&w2, &ev);
     QCOMPARE(QApplication::focusWidget(), &w2);
@@ -1844,7 +1773,7 @@ void tst_QApplication::execAfterExit()
     QCOMPARE(exitCode, 0);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void tst_QApplication::wheelScrollLines()
 {
     int argc = 1;
@@ -1852,7 +1781,7 @@ void tst_QApplication::wheelScrollLines()
     // If wheelScrollLines returns 0, the mose wheel will be disabled.
     QVERIFY(app.wheelScrollLines() > 0);
 }
-#endif // !QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 void tst_QApplication::style()
 {
@@ -1988,9 +1917,7 @@ void tst_QApplication::touchEventPropagation()
     release.setState(Qt::TouchPointReleased);
     releasedTouchPoints << release;
 
-    QTouchDevice *device = new QTouchDevice;
-    device->setType(QTouchDevice::TouchScreen);
-    QWindowSystemInterface::registerTouchDevice(device);
+    QTouchDevice *device = QTest::createTouchDevice();
 
     {
         // touch event behavior on a window
@@ -2060,7 +1987,7 @@ void tst_QApplication::touchEventPropagation()
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         const QPoint deviceGlobalPos =
-            QHighDpi::toNativePixels(window.mapToGlobal(QPoint(50, 50)), window.windowHandle()->screen());
+            QHighDpi::toNativePixels(window.mapToGlobal(QPoint(50, 150)), window.windowHandle()->screen());
         pressedTouchPoints[0].setScreenPos(deviceGlobalPos);
         releasedTouchPoints[0].setScreenPos(deviceGlobalPos);
 
@@ -2196,7 +2123,7 @@ void tst_QApplication::qtbug_12673()
     QVERIFY2(!path.isEmpty(), "Cannot locate modal helper application");
     path += "modal";
 
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
     QProcess testProcess;
     QStringList arguments;
     testProcess.start(path, arguments);
@@ -2230,8 +2157,8 @@ void tst_QApplication::noQuitOnHide()
 {
     int argc = 0;
     QApplication app(argc, 0);
-    QWidget *window1 = new NoQuitOnHideWidget;
-    window1->show();
+    NoQuitOnHideWidget window1;
+    window1.show();
     QCOMPARE(app.exec(), 1);
 }
 
@@ -2265,12 +2192,12 @@ void tst_QApplication::abortQuitOnShow()
 {
     int argc = 0;
     QApplication app(argc, 0);
-    QWidget *window1 = new ShowCloseShowWidget(false);
-    window1->show();
+    ShowCloseShowWidget window1(false);
+    window1.show();
     QCOMPARE(app.exec(), 0);
 
-    QWidget *window2 = new ShowCloseShowWidget(true);
-    window2->show();
+    ShowCloseShowWidget window2(true);
+    window2.show();
     QCOMPARE(app.exec(), 1);
 }
 
@@ -2329,7 +2256,7 @@ void tst_QApplication::settableStyleHints()
     executed *after* the destruction of QApplication.
  */
 Q_GLOBAL_STATIC(QLocale, tst_qapp_locale);
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
 Q_GLOBAL_STATIC(QProcess, tst_qapp_process);
 #endif
 #ifndef QT_NO_FILESYSTEMWATCHER
@@ -2345,7 +2272,7 @@ Q_GLOBAL_STATIC(QPixmap, tst_qapp_pixmap);
 Q_GLOBAL_STATIC(QFont, tst_qapp_font);
 Q_GLOBAL_STATIC(QRegion, tst_qapp_region);
 Q_GLOBAL_STATIC(QFontDatabase, tst_qapp_fontDatabase);
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 Q_GLOBAL_STATIC(QCursor, tst_qapp_cursor);
 #endif
 
@@ -2354,7 +2281,7 @@ void tst_QApplication::globalStaticObjectDestruction()
     int argc = 1;
     QApplication app(argc, &argv0);
     QVERIFY(tst_qapp_locale());
-#ifndef QT_NO_PROCESS
+#if QT_CONFIG(process)
     QVERIFY(tst_qapp_process());
 #endif
 #ifndef QT_NO_FILESYSTEMWATCHER
@@ -2370,7 +2297,7 @@ void tst_QApplication::globalStaticObjectDestruction()
     QVERIFY(tst_qapp_font());
     QVERIFY(tst_qapp_region());
     QVERIFY(tst_qapp_fontDatabase());
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     QVERIFY(tst_qapp_cursor());
 #endif
 }

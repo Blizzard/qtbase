@@ -1,5 +1,6 @@
 CONFIG += static
-contains(QT_CONFIG, dynamicgl): CONFIG += not_installed
+include($$OUT_PWD/../../../../gui/qtgui-config.pri)
+qtConfig(dynamicgl): CONFIG += not_installed
 include(../../config.pri)
 
 INCLUDEPATH = $$ANGLE_DIR/src/compiler/preprocessor

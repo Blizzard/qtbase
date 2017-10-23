@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -51,44 +61,44 @@ class PieView : public QAbstractItemView
 public:
     PieView(QWidget *parent = 0);
 
-    QRect visualRect(const QModelIndex &index) const Q_DECL_OVERRIDE;
-    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) Q_DECL_OVERRIDE;
-    QModelIndex indexAt(const QPoint &point) const Q_DECL_OVERRIDE;
+    QRect visualRect(const QModelIndex &index) const override;
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override;
+    QModelIndex indexAt(const QPoint &point) const override;
 
 protected slots:
     void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight,
-                     const QVector<int> &roles = QVector<int>()) Q_DECL_OVERRIDE;
-    void rowsInserted(const QModelIndex &parent, int start, int end) Q_DECL_OVERRIDE;
-    void rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end) Q_DECL_OVERRIDE;
+                     const QVector<int> &roles = QVector<int>()) override;
+    void rowsInserted(const QModelIndex &parent, int start, int end) override;
+    void rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end) override;
 
 protected:
-    bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event) Q_DECL_OVERRIDE;
+    bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event) override;
     QModelIndex moveCursor(QAbstractItemView::CursorAction cursorAction,
-                           Qt::KeyboardModifiers modifiers) Q_DECL_OVERRIDE;
+                           Qt::KeyboardModifiers modifiers) override;
 
-    int horizontalOffset() const Q_DECL_OVERRIDE;
-    int verticalOffset() const Q_DECL_OVERRIDE;
+    int horizontalOffset() const override;
+    int verticalOffset() const override;
 
-    bool isIndexHidden(const QModelIndex &index) const Q_DECL_OVERRIDE;
+    bool isIndexHidden(const QModelIndex &index) const override;
 
-    void setSelection(const QRect&, QItemSelectionModel::SelectionFlags command) Q_DECL_OVERRIDE;
+    void setSelection(const QRect&, QItemSelectionModel::SelectionFlags command) override;
 
-    void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void mousePressEvent(QMouseEvent *event) override;
 
-    void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
-    void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
 
-    void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
-    void resizeEvent(QResizeEvent *event) Q_DECL_OVERRIDE;
-    void scrollContentsBy(int dx, int dy) Q_DECL_OVERRIDE;
+    void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void scrollContentsBy(int dx, int dy) override;
 
-    QRegion visualRegionForSelection(const QItemSelection &selection) const Q_DECL_OVERRIDE;
+    QRegion visualRegionForSelection(const QItemSelection &selection) const override;
 
 private:
     QRect itemRect(const QModelIndex &item) const;
     QRegion itemRegion(const QModelIndex &index) const;
     int rows(const QModelIndex &index = QModelIndex()) const;
-    void updateGeometries() Q_DECL_OVERRIDE;
+    void updateGeometries() override;
 
     int margin;
     int totalSize;

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +43,7 @@
 #include <xcb/xcb.h>
 #include <xcb/randr.h>
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "qxcbexport.h"
 #include <QHash>
 #include <QList>
@@ -47,20 +54,21 @@
 #include <QVarLengthArray>
 #include <qpa/qwindowsysteminterface.h>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/private/qglobal_p.h>
 
 // This is needed to make Qt compile together with XKB. xkb.h is using a variable
 // which is called 'explicit', this is a reserved keyword in c++
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
 #define explicit dont_use_cxx_explicit
 #include <xcb/xkb.h>
 #undef explicit
 #endif
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 #include <QTabletEvent>
 #endif
 
-#if XCB_USE_XINPUT2
+#if QT_CONFIG(xinput2)
 #include <X11/extensions/XI2.h>
 #ifdef XIScrollClass
 #define XCB_USE_XINPUT21    // XI 2.1 adds smooth scrolling support
@@ -69,7 +77,7 @@
 #endif
 #endif
 struct XInput2TouchDeviceData;
-#endif // XCB_USE_XINPUT2
+#endif // QT_CONFIG(xinput2)
 
 struct xcb_randr_get_output_info_reply_t;
 
@@ -307,7 +315,7 @@ class QXcbEventReader : public QThread
 public:
     QXcbEventReader(QXcbConnection *connection);
 
-    void run() Q_DECL_OVERRIDE;
+    void run() override;
 
     QXcbEventArray *lock();
     void unlock();
@@ -380,6 +388,7 @@ public:
     ~QXcbConnection();
 
     QXcbConnection *connection() const { return const_cast<QXcbConnection *>(this); }
+    bool isConnected() const;
 
     const QList<QXcbVirtualDesktop *> &virtualDesktops() const { return m_virtualDesktops; }
     const QList<QXcbScreen *> &screens() const { return m_screens; }
@@ -413,13 +422,14 @@ public:
     bool hasDefaultVisualId() const { return m_defaultVisualId != UINT_MAX; }
     xcb_visualid_t defaultVisualId() const { return m_defaultVisualId; }
 
-#ifdef XCB_USE_XLIB
+#if QT_CONFIG(xcb_xlib)
     void *xlib_display() const;
     void *createVisualInfoForDefaultVisualId() const;
 #endif
 
-#if defined(XCB_USE_XINPUT2)
+#if QT_CONFIG(xinput2)
     void xi2Select(xcb_window_t window);
+    void xi2SelectStateEvents();
 #endif
 #ifdef XCB_USE_XINPUT21
     bool isAtLeastXI21() const { return m_xi2Enabled && m_xi2Minor >= 1; }
@@ -442,7 +452,6 @@ public:
     QXcbWindowEventListener *windowEventListenerFromId(xcb_window_t id);
     QXcbWindow *platformWindowFromId(xcb_window_t id);
 
-    xcb_generic_event_t *checkEvent(int type);
     template<typename T>
     inline xcb_generic_event_t *checkEvent(T &checker);
 
@@ -468,12 +477,12 @@ public:
     xcb_window_t getSelectionOwner(xcb_atom_t atom) const;
     xcb_window_t getQtSelectionOwner();
 
-    void setButton(Qt::MouseButton button, bool down) { if (down) m_buttons |= button; else m_buttons &= ~button; }
+    void setButton(Qt::MouseButton button, bool down) { m_buttons.setFlag(button, down); }
     Qt::MouseButtons buttons() const { return m_buttons; }
     Qt::MouseButton translateMouseButton(xcb_button_t s);
 
     QXcbWindow *focusWindow() const { return m_focusWindow; }
-    void setFocusWindow(QXcbWindow *);
+    void setFocusWindow(QWindow *);
     QXcbWindow *mouseGrabber() const { return m_mouseGrabber; }
     void setMouseGrabber(QXcbWindow *);
     QXcbWindow *mousePressWindow() const { return m_mousePressWindow; }
@@ -497,6 +506,7 @@ public:
 #endif
 
 #ifdef XCB_USE_XINPUT22
+    bool startSystemResizeForTouchBegin(xcb_window_t window, const QPoint &point, Qt::Corner corner);
     bool xi2SetMouseGrabEnabled(xcb_window_t w, bool grab);
 #endif
     Qt::MouseButton xiToQtMouseButton(uint32_t b);
@@ -509,10 +519,11 @@ public:
 
 #ifdef XCB_USE_XINPUT22
     bool xi2MouseEvents() const;
+    bool isTouchScreen(int id) const;
 #endif
 
 protected:
-    bool event(QEvent *e) Q_DECL_OVERRIDE;
+    bool event(QEvent *e) override;
 
 public slots:
     void flush() { xcb_flush(m_connection); }
@@ -530,9 +541,9 @@ private:
     void initializeXShape();
     void initializeXKB();
     void handleClientMessageEvent(const xcb_client_message_event_t *event);
-    QXcbScreen* findScreenForCrtc(xcb_window_t rootWindow, xcb_randr_crtc_t crtc);
-    QXcbScreen* findScreenForOutput(xcb_window_t rootWindow, xcb_randr_output_t output);
-    QXcbVirtualDesktop* virtualDesktopForRootWindow(xcb_window_t rootWindow);
+    QXcbScreen* findScreenForCrtc(xcb_window_t rootWindow, xcb_randr_crtc_t crtc) const;
+    QXcbScreen* findScreenForOutput(xcb_window_t rootWindow, xcb_randr_output_t output) const;
+    QXcbVirtualDesktop* virtualDesktopForRootWindow(xcb_window_t rootWindow) const;
     void updateScreens(const xcb_randr_notify_event_t *event);
     bool checkOutputIsPrimary(xcb_window_t rootWindow, xcb_randr_output_t output);
     void updateScreen(QXcbScreen *screen, const xcb_randr_output_change_t &outputChange);
@@ -542,10 +553,9 @@ private:
     void destroyScreen(QXcbScreen *screen);
     void initializeScreens();
     bool compressEvent(xcb_generic_event_t *event, int currentIndex, QXcbEventArray *eventqueue) const;
-
-#ifdef XCB_USE_XINPUT2
-    bool m_xi2Enabled;
-    int m_xi2Minor;
+#if QT_CONFIG(xinput2)
+    bool m_xi2Enabled = false;
+    int m_xi2Minor = 2;
     void initializeXInput2();
     void finalizeXInput2();
     void xi2SetupDevices();
@@ -557,79 +567,87 @@ private:
 #ifdef XCB_USE_XINPUT22
     void xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindow);
 #endif // XCB_USE_XINPUT22
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     struct TabletData {
-        TabletData() : deviceId(0), pointerType(QTabletEvent::UnknownPointer),
-            tool(QTabletEvent::Stylus), buttons(0), serialId(0), inProximity(false) { }
-        int deviceId;
-        QTabletEvent::PointerType pointerType;
-        QTabletEvent::TabletDevice tool;
-        Qt::MouseButtons buttons;
-        qint64 serialId;
-        bool inProximity;
+        int deviceId = 0;
+        QTabletEvent::PointerType pointerType = QTabletEvent::UnknownPointer;
+        QTabletEvent::TabletDevice tool = QTabletEvent::Stylus;
+        Qt::MouseButtons buttons = 0;
+        qint64 serialId = 0;
+        bool inProximity = false;
         struct ValuatorClassInfo {
-            ValuatorClassInfo() : minVal(0.), maxVal(0.), curVal(0.) { }
-            double minVal;
-            double maxVal;
-            double curVal;
-            int number;
+            double minVal = 0;
+            double maxVal = 0;
+            double curVal = 0;
+            int number = -1;
         };
         QHash<int, ValuatorClassInfo> valuatorInfo;
     };
-    bool xi2HandleTabletEvent(void *event, TabletData *tabletData, QXcbWindowEventListener *eventListener);
-    void xi2ReportTabletEvent(TabletData &tabletData, void *event);
+    friend class QTypeInfo<TabletData>;
+    friend class QTypeInfo<TabletData::ValuatorClassInfo>;
+    bool xi2HandleTabletEvent(const void *event, TabletData *tabletData);
+    void xi2ReportTabletEvent(const void *event, TabletData *tabletData);
     QVector<TabletData> m_tabletData;
     TabletData *tabletDataForDevice(int id);
-#endif // !QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
     struct ScrollingDevice {
-        ScrollingDevice() : deviceId(0), verticalIndex(0), horizontalIndex(0), orientations(0), legacyOrientations(0) { }
-        int deviceId;
-        int verticalIndex, horizontalIndex;
-        double verticalIncrement, horizontalIncrement;
-        Qt::Orientations orientations;
-        Qt::Orientations legacyOrientations;
+        int deviceId = 0;
+        int verticalIndex = 0;
+        int horizontalIndex = 0;
+        double verticalIncrement = 0;
+        double horizontalIncrement = 0;
+        Qt::Orientations orientations = 0;
+        Qt::Orientations legacyOrientations = 0;
         QPointF lastScrollPosition;
     };
     void updateScrollingDevice(ScrollingDevice& scrollingDevice, int num_classes, void *classes);
     void xi2HandleScrollEvent(void *event, ScrollingDevice &scrollingDevice);
     QHash<int, ScrollingDevice> m_scrollingDevices;
 
-    static bool xi2GetValuatorValueIfSet(void *event, int valuatorNum, double *value);
+    static bool xi2GetValuatorValueIfSet(const void *event, int valuatorNum, double *value);
     static void xi2PrepareXIGenericDeviceEvent(xcb_ge_event_t *event);
 #endif
 
-    xcb_connection_t *m_connection;
-    const xcb_setup_t *m_setup;
-    bool m_canGrabServer;
-    xcb_visualid_t m_defaultVisualId;
+    xcb_connection_t *m_connection = nullptr;
+    const xcb_setup_t *m_setup = nullptr;
+    const bool m_canGrabServer;
+    const xcb_visualid_t m_defaultVisualId;
 
     QList<QXcbVirtualDesktop *> m_virtualDesktops;
     QList<QXcbScreen *> m_screens;
-    int m_primaryScreenNumber;
+    int m_primaryScreenNumber = 0;
 
     xcb_atom_t m_allAtoms[QXcbAtom::NAtoms];
 
-    xcb_timestamp_t m_time;
-    xcb_timestamp_t m_netWmUserTime;
+    xcb_timestamp_t m_time = XCB_CURRENT_TIME;
+    xcb_timestamp_t m_netWmUserTime = XCB_CURRENT_TIME;
 
     QByteArray m_displayName;
 
-    QXcbKeyboard *m_keyboard;
+    QXcbKeyboard *m_keyboard = nullptr;
 #ifndef QT_NO_CLIPBOARD
-    QXcbClipboard *m_clipboard;
+    QXcbClipboard *m_clipboard = nullptr;
 #endif
 #ifndef QT_NO_DRAGANDDROP
-    QXcbDrag *m_drag;
+    QXcbDrag *m_drag = nullptr;
 #endif
     QScopedPointer<QXcbWMSupport> m_wmSupport;
-    QXcbNativeInterface *m_nativeInterface;
+    QXcbNativeInterface *m_nativeInterface = nullptr;
 
-#if defined(XCB_USE_XLIB)
-    void *m_xlib_display;
+#if QT_CONFIG(xcb_xlib)
+    void *m_xlib_display = nullptr;
 #endif
-    QXcbEventReader *m_reader;
-#if defined(XCB_USE_XINPUT2)
+    QXcbEventReader *m_reader = nullptr;
+#if QT_CONFIG(xinput2)
     QHash<int, XInput2TouchDeviceData*> m_touchDevices;
+#ifdef XCB_USE_XINPUT22
+    struct StartSystemResizeInfo {
+        xcb_window_t window;
+        uint16_t deviceid;
+        uint32_t pointid;
+        Qt::Corner corner;
+    } m_startSystemResizeInfo;
+#endif
 #endif
 #ifdef Q_XCB_DEBUG
     struct CallInfo {
@@ -641,41 +659,51 @@ private:
     QMutex m_callLogMutex;
     void log(const char *file, int line, int sequence);
     template <typename cookie_t>
-    friend cookie_t q_xcb_call_template(const cookie_t &cookie, QXcbConnection *connection, const char *file, int line);
+    friend cookie_t q_xcb_call_template(const cookie_t &cookie, QXcbConnection *connection,
+                                        const char *file, int line);
+    template <typename reply_t>
+    friend reply_t *q_xcb_call_template(reply_t *reply, QXcbConnection *connection,
+                                        const char *file, int line);
 #endif
 
     WindowMapper m_mapper;
 
     QVector<PeekFunc> m_peekFuncs;
 
-    uint32_t xfixes_first_event;
-    uint32_t xrandr_first_event;
-    uint32_t xkb_first_event;
+    uint32_t xfixes_first_event = 0;
+    uint32_t xrandr_first_event = 0;
+    uint32_t xkb_first_event = 0;
 
-    bool has_xinerama_extension;
-    bool has_shape_extension;
-    bool has_randr_extension;
+    bool has_xinerama_extension = false;
+    bool has_shape_extension = false;
+    bool has_randr_extension = false;
     bool has_input_shape;
-    bool has_xkb;
+    bool has_xkb = false;
 
-    Qt::MouseButtons m_buttons;
+    Qt::MouseButtons m_buttons = 0;
 
-    QXcbWindow *m_focusWindow;
-    QXcbWindow *m_mouseGrabber;
-    QXcbWindow *m_mousePressWindow;
+    QXcbWindow *m_focusWindow = nullptr;
+    QXcbWindow *m_mouseGrabber = nullptr;
+    QXcbWindow *m_mousePressWindow = nullptr;
 
-    xcb_window_t m_clientLeader;
+    xcb_window_t m_clientLeader = 0;
     QByteArray m_startupId;
-    QXcbSystemTrayTracker *m_systemTrayTracker;
-    QXcbGlIntegration *m_glIntegration;
-    bool m_xiGrab;
+    QXcbSystemTrayTracker *m_systemTrayTracker = nullptr;
+    QXcbGlIntegration *m_glIntegration = nullptr;
+    bool m_xiGrab = false;
 
-    xcb_window_t m_qtSelectionOwner;
+    xcb_window_t m_qtSelectionOwner = 0;
 
     friend class QXcbEventReader;
 };
+#if QT_CONFIG(xinput2)
+#if QT_CONFIG(tabletevent)
+Q_DECLARE_TYPEINFO(QXcbConnection::TabletData::ValuatorClassInfo, Q_PRIMITIVE_TYPE);
+Q_DECLARE_TYPEINFO(QXcbConnection::TabletData, Q_MOVABLE_TYPE);
+#endif
+#endif
 
-#define DISPLAY_FROM_XCB(object) ((Display *)(object->connection()->xlib_display()))
+#define DISPLAY_FROM_XCB(object) (reinterpret_cast<Display *>(object->connection()->xlib_display()))
 #define CREATE_VISUALINFO_FROM_DEFAULT_VISUALID(object) ((XVisualInfo *)(object->connection()->createVisualInfoForDefaultVisualId()))
 
 template<typename T>
@@ -705,12 +733,33 @@ private:
     QXcbConnection *m_connection;
 };
 
+template <typename T>
+union q_padded_xcb_event {
+  T event;
+  char padding[32];
+};
+
+// The xcb_send_event() requires all events to have 32 bytes. It calls memcpy() on the
+// passed in event. If the passed in event is less than 32 bytes, memcpy() reaches into
+// unrelated memory.
+#define Q_DECLARE_XCB_EVENT(event_var, event_type) \
+    q_padded_xcb_event<event_type> store = {}; \
+    auto &event_var = store.event;
+
 #ifdef Q_XCB_DEBUG
 template <typename cookie_t>
-cookie_t q_xcb_call_template(const cookie_t &cookie, QXcbConnection *connection, const char *file, int line)
+cookie_t q_xcb_call_template(const cookie_t &cookie, QXcbConnection *connection, const char *file,
+                             int line)
 {
     connection->log(file, line, cookie.sequence);
     return cookie;
+}
+
+template <typename reply_t>
+reply_t *q_xcb_call_template(reply_t *reply, QXcbConnection *connection, const char *file, int line)
+{
+    connection->log(file, line, reply->sequence);
+    return reply;
 }
 #define Q_XCB_CALL(x) q_xcb_call_template(x, connection(), __FILE__, __LINE__)
 #define Q_XCB_CALL2(x, connection) q_xcb_call_template(x, connection, __FILE__, __LINE__)

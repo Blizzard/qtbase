@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,8 +33,6 @@
 #include <QMetaObject>
 
 #include <private/qstylesheetstyle_p.h>
-
-#include "../../../qtest-config.h"
 
 static inline void centerOnScreen(QWidget *w)
 {
@@ -55,6 +48,7 @@ public:
     ~tst_QStyleSheetStyle();
 
 private slots:
+    void init();
     void repolish();
     void numinstances();
     void widgetsBeforeAppStyleSheet();
@@ -71,12 +65,16 @@ private slots:
     void layoutSpacing();
 #endif
     void qproperty();
+    void palettePropagation_data();
     void palettePropagation();
+    void fontPropagation_data();
     void fontPropagation();
+    void widgetStylePropagation_data();
+    void widgetStylePropagation();
     void onWidgetDestroyed();
     void fontPrecedence();
     void focusColors();
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void hoverColors();
 #endif
     void background();
@@ -135,6 +133,12 @@ tst_QStyleSheetStyle::tst_QStyleSheetStyle()
 
 tst_QStyleSheetStyle::~tst_QStyleSheetStyle()
 {
+}
+
+void tst_QStyleSheetStyle::init()
+{
+    qApp->setStyleSheet(QString());
+    QCoreApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, false);
 }
 
 void tst_QStyleSheetStyle::numinstances()
@@ -484,12 +488,12 @@ void tst_QStyleSheetStyle::widgetStyle()
     window1->setStyleSheet(""); // remove stylesheet
     QCOMPARE(window1->style(), qApp->style()); // is this cool or what
     QCOMPARE(widget1->style(), qApp->style()); // annoying child follows...
-    QStyle *wndStyle = QStyleFactory::create("Windows");
-    window1->setStyle(wndStyle);
+    QScopedPointer<QStyle> wndStyle(QStyleFactory::create("Windows"));
+    window1->setStyle(wndStyle.data());
     QCOMPARE(window1->style()->metaObject()->className(), "QStyleSheetStyle"); // auto wraps it
     QCOMPARE(widget1->style(), window1->style()); // and auto propagates to child
     qApp->setStyleSheet(""); // remove the app stylesheet
-    QCOMPARE(window1->style(), wndStyle); // auto dewrap
+    QCOMPARE(window1->style(), wndStyle.data()); // auto dewrap
     QCOMPARE(widget1->style(), qApp->style()); // and child state is restored
     window1->setStyle(0); // let sanity prevail
     qApp->setStyle(0);
@@ -627,31 +631,80 @@ void tst_QStyleSheetStyle::namespaces()
     QCOMPARE(BACKGROUND(pb2), red);
 }
 
+void tst_QStyleSheetStyle::palettePropagation_data()
+{
+    QTest::addColumn<QString>("applicationStyleSheet");
+    QTest::addColumn<bool>("widgetStylePropagation");
+    QTest::newRow("Widget style propagation") << " " << true;
+    QTest::newRow("Widget style propagation, no application style sheet") << QString() << true;
+    QTest::newRow("Default propagation") << " " << false;
+    QTest::newRow("Default propagation, no application style sheet") << QString() << false;
+}
+
 void tst_QStyleSheetStyle::palettePropagation()
 {
-    qApp->setStyleSheet("");
+    QFETCH(QString, applicationStyleSheet);
+    QFETCH(bool, widgetStylePropagation);
+
+    qApp->setStyleSheet(applicationStyleSheet);
+    QCoreApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, widgetStylePropagation);
+
     QGroupBox gb;
-    QPushButton *push = new QPushButton(&gb);
-    QPushButton &pb = *push;
-    push->setText("AsdF");
+    QLabel *label = new QLabel(&gb);
+    QLabel &lb = *label;
+    label->setText("AsdF");
 
     gb.setStyleSheet("QGroupBox { color: red }");
-    QVERIFY(COLOR(gb) == Qt::red);
-    QVERIFY(COLOR(pb) == APPCOLOR(pb)); // palette shouldn't propagate
-    gb.setStyleSheet("QGroupBox * { color: red }");
+    QCOMPARE(COLOR(gb), QColor(Qt::red));
 
-    QVERIFY(COLOR(pb) == Qt::red);
-    QVERIFY(COLOR(gb) == APPCOLOR(gb));
+    if (widgetStylePropagation) {
+        QCOMPARE(COLOR(lb), QColor(Qt::red)); // palette should propagate in standard mode
+    } else {
+        QCOMPARE(COLOR(lb), APPCOLOR(lb)); // palette shouldn't propagate
+    }
 
     QWidget window;
+    lb.setParent(&window);
+    if (widgetStylePropagation) {
+        // In standard propagation mode, widgets that are not explicitly
+        // targeted do not have their propagated palette unset when they are
+        // unpolished by changing parents.  This is consistent with regular Qt
+        // widgets, who also maintain their propagated palette when changing
+        // parents
+        QCOMPARE(COLOR(lb), QColor(Qt::red));
+    } else {
+        QCOMPARE(COLOR(lb), APPCOLOR(lb));
+    }
+    lb.setParent(&gb);
+
+    gb.setStyleSheet("QGroupBox * { color: red }");
+
+    QCOMPARE(COLOR(lb), QColor(Qt::red));
+    QCOMPARE(COLOR(gb), APPCOLOR(gb));
+
     window.setStyleSheet("* { color: white; }");
-    pb.setParent(&window);
-    QVERIFY(COLOR(pb) == Qt::white);
+    lb.setParent(&window);
+    QCOMPARE(COLOR(lb), QColor(Qt::white));
+}
+
+void tst_QStyleSheetStyle::fontPropagation_data()
+{
+    QTest::addColumn<QString>("applicationStyleSheet");
+    QTest::addColumn<bool>("widgetStylePropagation");
+    QTest::newRow("Widget style propagation") << " " << true;
+    QTest::newRow("Widget style propagation, no application style sheet") << QString() << true;
+    QTest::newRow("Default propagation") << " " << false;
+    QTest::newRow("Default propagation, no application style sheet") << QString() << false;
 }
 
 void tst_QStyleSheetStyle::fontPropagation()
 {
-    qApp->setStyleSheet("");
+    QFETCH(QString, applicationStyleSheet);
+    QFETCH(bool, widgetStylePropagation);
+
+    qApp->setStyleSheet(applicationStyleSheet);
+    QCoreApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, widgetStylePropagation);
+
     QComboBox cb;
     cb.addItem("item1");
     cb.addItem("item2");
@@ -661,7 +714,11 @@ void tst_QStyleSheetStyle::fontPropagation()
 
     cb.setStyleSheet("QComboBox { font-size: 20pt; }");
     QCOMPARE(FONTSIZE(cb), 20);
-    QCOMPARE(FONTSIZE(*popup), viewFontSize);
+    if (widgetStylePropagation) {
+        QCOMPARE(FONTSIZE(*popup), 20);
+    } else {
+        QCOMPARE(FONTSIZE(*popup), viewFontSize);
+    }
     QGroupBox gb;
     QPushButton *push = new QPushButton(&gb);
     QPushButton &pb = *push;
@@ -670,7 +727,11 @@ void tst_QStyleSheetStyle::fontPropagation()
 
     gb.setStyleSheet("QGroupBox { font-size: 20pt }");
     QCOMPARE(FONTSIZE(gb), 20);
-    QVERIFY(FONTSIZE(pb) == buttonFontSize); // font does not propagate
+    if (widgetStylePropagation) {
+        QCOMPARE(FONTSIZE(pb), 20);
+    } else {
+        QCOMPARE(FONTSIZE(pb), buttonFontSize); // font does not propagate
+    }
     gb.setStyleSheet("QGroupBox * { font-size: 20pt; }");
     QCOMPARE(FONTSIZE(gb), gbFontSize);
     QCOMPARE(FONTSIZE(pb), 20);
@@ -756,6 +817,47 @@ static bool testForColors(const QImage& image, const QColor& color, bool ensureP
     return false;
 }
 
+class TestDialog : public QDialog {
+public:
+    explicit TestDialog(const QString &styleSheet);
+
+    QWidgetList widgets() const { return m_widgets; }
+    QLineEdit *focusDummy() const { return m_focusDummy; }
+
+private:
+    void addWidget(QWidget *w)
+    {
+        w->setStyleSheet(m_styleSheet);
+        m_layout->addWidget(w);
+        m_widgets.append(w);
+    }
+
+    const QString m_styleSheet;
+    QVBoxLayout* m_layout;
+    QLineEdit *m_focusDummy;
+    QWidgetList m_widgets;
+};
+
+TestDialog::TestDialog(const QString &styleSheet) :
+    m_styleSheet(styleSheet),
+    m_layout(new QVBoxLayout(this)),
+    m_focusDummy(new QLineEdit)
+{
+    m_layout->addWidget(m_focusDummy); // Avoids initial focus.
+    addWidget(new QPushButton("TESTING TESTING"));
+    addWidget(new QLineEdit("TESTING TESTING"));
+    addWidget(new QLabel("TESTING TESTING"));
+    QSpinBox *spinbox = new QSpinBox;
+    spinbox->setMaximum(1000000000);
+    spinbox->setValue(123456789);
+    addWidget(spinbox);
+    QComboBox *combobox = new QComboBox;
+    combobox->setEditable(true);
+    combobox->addItems(QStringList() << "TESTING TESTING");
+    addWidget(spinbox);
+    addWidget(new QLabel("<b>TESTING TESTING</b>"));
+}
+
 void tst_QStyleSheetStyle::focusColors()
 {
     // Tests if colors can be changed by altering the focus of the widget.
@@ -772,42 +874,22 @@ void tst_QStyleSheetStyle::focusColors()
           " (for example, QTBUG-33959)."
           "That doesn't mean that the feature doesn't work in practice.");
 #endif
-    QList<QWidget *> widgets;
-    widgets << new QPushButton("TESTING TESTING");
-    widgets << new QLineEdit("TESTING TESTING");
-    widgets << new QLabel("TESTING TESTING");
-    QSpinBox *spinbox = new QSpinBox;
-    spinbox->setMaximum(1000000000);
-    spinbox->setValue(123456789);
-    widgets << spinbox;
-    QComboBox *combobox = new QComboBox;
-    combobox->setEditable(true);
-    combobox->addItems(QStringList() << "TESTING TESTING");
-    widgets << combobox;
-    widgets << new QLabel("TESTING TESTING");
 
+    TestDialog frame(QStringLiteral("*:focus { border:none; background: #e8ff66; color: #ff0084 }"));
+    frame.setWindowTitle(QTest::currentTestFunction());
 
-    foreach (QWidget *widget, widgets) {
-        QDialog frame;
-        QLayout* layout = new QGridLayout;
+    centerOnScreen(&frame);
+    frame.show();
 
-        QLineEdit* dummy = new QLineEdit; // Avoids initial focus.
+    QApplication::setActiveWindow(&frame);
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
 
-        widget->setStyleSheet("*:focus { border:none; background: #e8ff66; color: #ff0084 }");
-
-        layout->addWidget(dummy);
-        layout->addWidget(widget);
-        frame.setLayout(layout);
-
-        centerOnScreen(&frame);
-        frame.show();
-        QApplication::setActiveWindow(&frame);
-        QVERIFY(QTest::qWaitForWindowActive(&frame));
+    for (QWidget *widget : frame.widgets()) {
         widget->setFocus();
         QApplication::processEvents();
 
-        QImage image(frame.width(), frame.height(), QImage::Format_ARGB32);
-        frame.render(&image);
+        QImage image(widget->width(), widget->height(), QImage::Format_ARGB32);
+        widget->render(&image);
         if (image.depth() < 24)
             QSKIP("Test doesn't support color depth < 24");
 
@@ -824,51 +906,41 @@ void tst_QStyleSheetStyle::focusColors()
     }
 }
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QStyleSheetStyle::hoverColors()
 {
 #ifdef Q_OS_OSX
     QSKIP("This test is fragile on Mac, most likely due to QTBUG-33959.");
 #endif
-    QList<QWidget *> widgets;
-    widgets << new QPushButton("TESTING TESTING");
-    widgets << new QLineEdit("TESTING TESTING");
-    widgets << new QLabel("TESTING TESTING");
-    QSpinBox *spinbox = new QSpinBox;
-    spinbox->setMaximum(1000000000);
-    spinbox->setValue(123456789);
-    widgets << spinbox;
-    QComboBox *combobox = new QComboBox;
-    combobox->setEditable(true);
-    combobox->addItems(QStringList() << "TESTING TESTING");
-    widgets << combobox;
-    widgets << new QLabel("<b>TESTING TESTING</b>");
+    TestDialog frame(QStringLiteral("*:hover { border:none; background: #e8ff66; color: #ff0084 }"));
+    frame.setWindowTitle(QTest::currentTestFunction());
 
-    foreach (QWidget *widget, widgets) {
-        //without Qt::X11BypassWindowManagerHint the window manager may move the window after we moved the cursor
-        QDialog frame(0, Qt::X11BypassWindowManagerHint);
-        QLayout* layout = new QGridLayout;
+    centerOnScreen(&frame);
+    // Move the mouse cursor out of the way to suppress spontaneous QEvent::Enter
+    // events interfering with QApplicationPrivate::dispatchEnterLeave().
+    // Mouse events can then be sent directly to the QWindow instead of the
+    // QWidget, triggering the enter/leave handling within the dialog window,
+    // speeding up the test.
+    QCursor::setPos(frame.geometry().topLeft() - QPoint(100, 0));
+    frame.show();
 
-        QLineEdit* dummy = new QLineEdit;
+    QApplication::setActiveWindow(&frame);
+    QVERIFY(QTest::qWaitForWindowActive(&frame));
 
-        widget->setStyleSheet("*:hover { border:none; background: #e8ff66; color: #ff0084 }");
+    QWindow *frameWindow = frame.windowHandle();
+    QVERIFY(frameWindow);
 
-        layout->addWidget(dummy);
-        layout->addWidget(widget);
-        frame.setLayout(layout);
+    const QPoint dummyPos = frame.focusDummy()->geometry().center();
+    QTest::mouseMove(frameWindow, dummyPos);
 
-        centerOnScreen(&frame);
-        frame.show();
-
-        QApplication::setActiveWindow(&frame);
-        QVERIFY(QTest::qWaitForWindowActive(&frame));
+    for (QWidget *widget : frame.widgets()) {
         //move the mouse inside the widget, it should be colored
-        QTest::mouseMove ( widget, QPoint(6,6));
+        const QRect widgetGeometry = widget->geometry();
+        QTest::mouseMove(frameWindow, widgetGeometry.center());
+        QTRY_VERIFY2(widget->testAttribute(Qt::WA_UnderMouse), widget->metaObject()->className());
 
-        QTRY_VERIFY(widget->testAttribute(Qt::WA_UnderMouse));
-
-        QImage image(frame.width(), frame.height(), QImage::Format_ARGB32);
-        frame.render(&image);
+        QImage image(widgetGeometry.size(), QImage::Format_ARGB32);
+        widget->render(&image);
 
         QVERIFY2(testForColors(image, QColor(0xe8, 0xff, 0x66)),
                   (QString::fromLatin1(widget->metaObject()->className())
@@ -878,10 +950,10 @@ void tst_QStyleSheetStyle::hoverColors()
                   + " did not contain text color #ff0084").toLocal8Bit().constData());
 
         //move the mouse outside the widget, it should NOT be colored
-        QTest::mouseMove ( dummy, QPoint(5,5));
-        QTest::qWait(60);
+        QTest::mouseMove(frameWindow, dummyPos);
+        QTRY_VERIFY2(frame.focusDummy()->testAttribute(Qt::WA_UnderMouse), "FocusDummy");
 
-        frame.render(&image);
+        widget->render(&image);
 
         QVERIFY2(!testForColors(image, QColor(0xe8, 0xff, 0x66)),
                   (QString::fromLatin1(widget->metaObject()->className())
@@ -891,10 +963,10 @@ void tst_QStyleSheetStyle::hoverColors()
                   + " did contain text color #ff0084").toLocal8Bit().constData());
 
         //move the mouse again inside the widget, it should be colored
-        QTest::mouseMove (widget, QPoint(5,5));
-        QTRY_VERIFY(widget->testAttribute(Qt::WA_UnderMouse));
+        QTest::mouseMove (frameWindow, widgetGeometry.center());
+        QTRY_VERIFY2(widget->testAttribute(Qt::WA_UnderMouse), widget->metaObject()->className());
 
-        frame.render(&image);
+        widget->render(&image);
 
         QVERIFY2(testForColors(image, QColor(0xe8, 0xff, 0x66)),
                  (QString::fromLatin1(widget->metaObject()->className())
@@ -1471,12 +1543,14 @@ void tst_QStyleSheetStyle::embeddedFonts()
     QCOMPARE(spin.font().pixelSize(), 32);
     QCOMPARE(embedded->font().pixelSize(), 32);
 
+#ifndef QT_NO_CONTEXTMENU
     QMenu *menu = embedded->createStandardContextMenu();
     menu->show();
     QTest::qWait(20);
     QVERIFY(menu);
     QVERIFY(menu->font().pixelSize() != 32);
     QCOMPARE(menu->font().pixelSize(), qApp->font(menu).pixelSize());
+#endif // QT_NO_CONTEXTMENU
 
     //task 242556
     QComboBox box;
@@ -1744,8 +1818,11 @@ void tst_QStyleSheetStyle::QTBUG36933_brokenPseudoClassLookup()
     QTableWidget widget(rowCount, columnCount);
 
     for (int row = 0; row < rowCount; ++row) {
-        for (int column = 0; column < columnCount; ++column)
-            widget.setItem(row, column, new QTableWidgetItem(QStringLiteral("row %1 column %2").arg(row + 1).arg(column + 1)));
+        for (int column = 0; column < columnCount; ++column) {
+            const QString t = QLatin1String("row ") + QString::number(row + 1)
+                + QLatin1String(" column ") + QString::number(column + 1);
+            widget.setItem(row, column, new QTableWidgetItem(t));
+        }
 
         // put no visible text for the vertical headers, but still put some text or they will collapse
         widget.setVerticalHeaderItem(row, new QTableWidgetItem(QStringLiteral("    ")));
@@ -1792,6 +1869,138 @@ void tst_QStyleSheetStyle::styleSheetChangeBeforePolish()
     QImage image2(frame2->size(), QImage::Format_ARGB32);
     frame2->render(&image2);
     QVERIFY(testForColors(image2, QColor(0x00, 0xFF, 0x00)));
+}
+
+void tst_QStyleSheetStyle::widgetStylePropagation_data()
+{
+    QTest::addColumn<QString>("applicationStyleSheet");
+    QTest::addColumn<QString>("parentStyleSheet");
+    QTest::addColumn<QString>("childStyleSheet");
+    QTest::addColumn<QFont>("parentFont");
+    QTest::addColumn<QFont>("childFont");
+    QTest::addColumn<QPalette>("parentPalette");
+    QTest::addColumn<QPalette>("childPalette");
+    QTest::addColumn<int>("parentExpectedSize");
+    QTest::addColumn<int>("childExpectedSize");
+    QTest::addColumn<QColor>("parentExpectedColor");
+    QTest::addColumn<QColor>("childExpectedColor");
+
+    QFont noFont;
+    QFont font45; font45.setPointSize(45);
+    QFont font32; font32.setPointSize(32);
+
+    QPalette noPalette;
+    QPalette redPalette; redPalette.setColor(QPalette::WindowText, QColor("red"));
+    QPalette greenPalette; greenPalette.setColor(QPalette::WindowText, QColor("green"));
+
+    QLabel defaultLabel;
+
+    int defaultSize = defaultLabel.font().pointSize();
+    QColor defaultColor = defaultLabel.palette().color(defaultLabel.foregroundRole());
+    QColor redColor("red");
+    QColor greenColor("green");
+
+    // Check regular Qt propagation works as expected, with and without a
+    // non-interfering application stylesheet
+    QTest::newRow("defaults")
+        << QString() << QString() << QString()
+        << noFont << noFont << noPalette << noPalette
+        << defaultSize << defaultSize << defaultColor << defaultColor;
+    QTest::newRow("parent font propagation, no application style sheet")
+        << QString() << QString() << QString()
+        << font45 << noFont << noPalette << noPalette
+        << 45 << 45 << defaultColor << defaultColor;
+    QTest::newRow("parent font propagation, dummy application style sheet")
+        << "QGroupBox { font-size: 64pt }" << QString() << QString()
+        << font45 << noFont << noPalette << noPalette
+        << 45 << 45 << defaultColor << defaultColor;
+    QTest::newRow("parent color propagation, no application style sheet")
+        << QString() << QString() << QString()
+        << noFont << noFont << redPalette << noPalette
+        << defaultSize << defaultSize << redColor << redColor;
+    QTest::newRow("parent color propagation, dummy application style sheet")
+        << "QGroupBox { color: blue }" << QString() << QString()
+        << noFont << noFont << redPalette << noPalette
+        << defaultSize << defaultSize << redColor << redColor;
+
+    // Parent style sheet propagates to child if child has not explicitly
+    // set a value
+    QTest::newRow("parent style sheet color propagation")
+        << "#parentLabel { color: red }" << QString() << QString()
+        << noFont << noFont << noPalette << noPalette
+        << defaultSize << defaultSize << redColor << redColor;
+    QTest::newRow("parent style sheet font propagation")
+        << "#parentLabel { font-size: 45pt }" << QString() << QString()
+        << noFont << noFont << noPalette << noPalette
+        << 45 << 45 << defaultColor << defaultColor;
+
+    // Parent style sheet does not propagate to child if child has explicitly
+    // set a value
+    QTest::newRow("parent style sheet color propagation, child explicitly set")
+        << "#parentLabel { color: red }" << QString() << QString()
+        << noFont << noFont << noPalette << greenPalette
+        << defaultSize << defaultSize << redColor << greenColor;
+    QTest::newRow("parent style sheet font propagation, child explicitly set")
+        << "#parentLabel { font-size: 45pt }" << QString() << QString()
+        << noFont << font32 << noPalette << noPalette
+        << 45 << 32 << defaultColor << defaultColor;
+
+    // Parent does not propagate to child when child is target of style sheet
+    QTest::newRow("parent style sheet font propagation, child application style sheet")
+        << "#childLabel { font-size: 32pt }" << QString() << QString()
+        << font45 << noFont << noPalette << noPalette
+        << 45 << 32 << defaultColor << defaultColor;
+    QTest::newRow("parent style sheet color propagation, child application style sheet")
+        << "#childLabel { color: green }" << QString() << QString()
+        << noFont << noFont << redPalette << noPalette
+        << defaultSize << defaultSize << redColor << greenColor;
+}
+
+void tst_QStyleSheetStyle::widgetStylePropagation()
+{
+    QFETCH(QString, applicationStyleSheet);
+    QFETCH(QString, parentStyleSheet);
+    QFETCH(QString, childStyleSheet);
+
+    QFETCH(QFont, parentFont);
+    QFETCH(QFont, childFont);
+    QFETCH(QPalette, parentPalette);
+    QFETCH(QPalette, childPalette);
+
+    QFETCH(int, parentExpectedSize);
+    QFETCH(int, childExpectedSize);
+    QFETCH(QColor, parentExpectedColor);
+    QFETCH(QColor, childExpectedColor);
+
+    QCoreApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, true);
+
+    qApp->setStyleSheet(applicationStyleSheet);
+
+    QLabel parentLabel;
+    parentLabel.setObjectName("parentLabel");
+    QLabel childLabel(&parentLabel);
+    childLabel.setObjectName("childLabel");
+
+    if (parentFont.resolve())
+        parentLabel.setFont(parentFont);
+    if (childFont.resolve())
+        childLabel.setFont(childFont);
+    if (parentPalette.resolve())
+        parentLabel.setPalette(parentPalette);
+    if (childPalette.resolve())
+        childLabel.setPalette(childPalette);
+    if (!parentStyleSheet.isEmpty())
+        parentLabel.setStyleSheet(parentStyleSheet);
+    if (!childStyleSheet.isEmpty())
+        childLabel.setStyleSheet(childStyleSheet);
+
+    parentLabel.ensurePolished();
+    childLabel.ensurePolished();
+
+    QCOMPARE(FONTSIZE(parentLabel), parentExpectedSize);
+    QCOMPARE(FONTSIZE(childLabel), childExpectedSize);
+    QCOMPARE(COLOR(parentLabel), parentExpectedColor);
+    QCOMPARE(COLOR(childLabel), childExpectedColor);
 }
 
 QTEST_MAIN(tst_QStyleSheetStyle)

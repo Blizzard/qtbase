@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuite errors="0" failures="26" tests="16" name="tst_Cmptest">
+<testsuite errors="0" failures="30" tests="21" name="tst_Cmptest">
   <properties>
     <property value="@INSERT_QT_VERSION_HERE@" name="QTestVersion"/>
     <property value="@INSERT_QT_VERSION_HERE@" name="QtVersion"/>
@@ -14,7 +14,13 @@
    Actual   (Qt::Monday): Monday
    Expected (Qt::Sunday): Sunday" result="fail"/>
   </testcase>
+  <testcase result="fail" name="compare_class_enums">
+    <failure message="Compared values are not the same
+   Actual   (MyClassEnum::MyClassEnumValue1): MyClassEnumValue1
+   Expected (MyClassEnum::MyClassEnumValue2): MyClassEnumValue2" result="fail"/>
+  </testcase>
   <testcase result="pass" name="compare_boolfuncs"/>
+  <testcase result="pass" name="compare_to_nullptr"/>
   <testcase result="pass" name="compare_pointerfuncs"/>
   <testcase result="fail" name="compare_tostring">
     <failure tag="int, string" message="Compared values are not the same
@@ -57,6 +63,11 @@
    Actual   (double1): 1.5
    Expected (double2): 1" result="fail"/>
   </testcase>
+  <testcase result="fail" name="compareQColor">
+    <failure message="Compared values are not the same
+   Actual   (yellow): #ffff00
+   Expected (green) : #00ff00" result="fail"/>
+  </testcase>
   <testcase result="fail" name="compareQPixmaps">
     <failure tag="one null" message="Compared QPixmaps differ.
    Actual   (opA).isNull(): 1
@@ -84,6 +95,14 @@
    Expected (opB): 3" result="fail"/>
     <failure tag="different pixels" message="Compared values are not the same" result="fail"/>
   </testcase>
+  <testcase result="fail" name="compareQRegion">
+    <failure tag="1&#x002D;empty" message="Compared values are not the same
+   Actual   (rA): QRegion(200x50+10+10)
+   Expected (rB): QRegion(null)" result="fail"/>
+    <failure tag="different lists" message="Compared values are not the same
+   Actual   (rA): QRegion(200x50+10+10)
+   Expected (rB): QRegion(2 rectangles, 50x200+100+200, 200x50+10+10)" result="fail"/>
+  </testcase>
   <testcase result="fail" name="verify">
     <failure message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. ()" result="fail"/>
   </testcase>
@@ -96,6 +115,7 @@
   <testcase result="fail" name="tryVerify2">
     <failure message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. (42)" result="fail"/>
   </testcase>
+  <testcase result="pass" name="verifyExplicitOperatorBool"/>
   <testcase result="pass" name="cleanupTestCase"/>
   <system-err/>
 </testsuite>

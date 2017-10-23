@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -107,7 +113,7 @@ QMacPasteboard::QMacPasteboard(CFStringRef name, uchar mt)
     if (err == noErr) {
         PasteboardSetPromiseKeeper(paste, promiseKeeper, this);
     } else {
-        qDebug("PasteBoard: Error creating pasteboard: %s [%d]", QCFString::toQString(name).toLatin1().constData(), (int)err);
+        qDebug("PasteBoard: Error creating pasteboard: %s [%d]", QString::fromCFString(name).toLatin1().constData(), (int)err);
     }
     resolvingBeforeDestruction = false;
 }
@@ -133,10 +139,22 @@ OSStatus QMacPasteboard::promiseKeeper(PasteboardRef paste, PasteboardItemID id,
     const long promise_id = (long)id;
 
     // Find the kept promise
-    const QString flavorAsQString = QCFString::toQString(flavor);
+    QList<QMacInternalPasteboardMime*> availableConverters
+        = QMacInternalPasteboardMime::all(QMacInternalPasteboardMime::MIME_ALL);
+    const QString flavorAsQString = QString::fromCFString(flavor);
     QMacPasteboard::Promise promise;
     for (int i = 0; i < qpaste->promises.size(); i++){
         QMacPasteboard::Promise tmp = qpaste->promises[i];
+        if (!availableConverters.contains(tmp.convertor)) {
+            // promise.converter is a pointer initialized by the value found
+            // in QMacInternalPasteboardMime's global list of QMacInternalPasteboardMimes.
+            // We add pointers to this list in QMacInternalPasteboardMime's ctor;
+            // we remove these pointers in QMacInternalPasteboardMime's dtor.
+            // If tmp.converter was not found in this list, we probably have a
+            // dangling pointer so let's skip it.
+            continue;
+        }
+
         if (tmp.itemId == promise_id && tmp.convertor->canConvert(tmp.mime, flavorAsQString)){
             promise = tmp;
             break;
@@ -374,7 +392,7 @@ QMacPasteboard::formats() const
 
         const int type_count = CFArrayGetCount(types);
         for (int i = 0; i < type_count; ++i) {
-            const QString flavor = QCFString::toQString((CFStringRef)CFArrayGetValueAtIndex(types, i));
+            const QString flavor = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(types, i));
 #ifdef DEBUG_PASTEBOARD
             qDebug(" -%s", qPrintable(QString(flavor)));
 #endif
@@ -417,7 +435,7 @@ QMacPasteboard::hasFormat(const QString &format) const
 
         const int type_count = CFArrayGetCount(types);
         for (int i = 0; i < type_count; ++i) {
-            const QString flavor = QCFString::toQString((CFStringRef)CFArrayGetValueAtIndex(types, i));
+            const QString flavor = QString::fromCFString((CFStringRef)CFArrayGetValueAtIndex(types, i));
 #ifdef DEBUG_PASTEBOARD
             qDebug(" -%s [0x%x]", qPrintable(QString(flavor)), mime_type);
 #endif
@@ -481,13 +499,13 @@ QMacPasteboard::retrieveData(const QString &format, QVariant::Type) const
                 const int type_count = CFArrayGetCount(types);
                 for (int i = 0; i < type_count; ++i) {
                     CFStringRef flavor = static_cast<CFStringRef>(CFArrayGetValueAtIndex(types, i));
-                    if (c_flavor == QCFString::toQString(flavor)) {
+                    if (c_flavor == QString::fromCFString(flavor)) {
                         QCFType<CFDataRef> macBuffer;
                         if (PasteboardCopyItemFlavorData(paste, id, flavor, &macBuffer) == noErr) {
                             QByteArray buffer((const char *)CFDataGetBytePtr(macBuffer), CFDataGetLength(macBuffer));
                             if (!buffer.isEmpty()) {
 #ifdef DEBUG_PASTEBOARD
-                                qDebug("  - %s [%s] (%s)", qPrintable(format), qPrintable(QCFString::toQString(flavor)), qPrintable(c->convertorName()));
+                                qDebug("  - %s [%s] (%s)", qPrintable(format), qPrintable(QString::fromNSString(flavor)), qPrintable(c->convertorName()));
 #endif
                                 buffer.detach(); //detach since we release the macBuffer
                                 retList.append(buffer);
@@ -496,7 +514,7 @@ QMacPasteboard::retrieveData(const QString &format, QVariant::Type) const
                         }
                     } else {
 #ifdef DEBUG_PASTEBOARD
-                        qDebug("  - NoMatch %s [%s] (%s)", qPrintable(c_flavor), qPrintable(QCFString::toQString(flavor)), qPrintable(c->convertorName()));
+                        qDebug("  - NoMatch %s [%s] (%s)", qPrintable(c_flavor), qPrintable(QString::fromNSString(flavor)), qPrintable(c->convertorName()));
 #endif
                     }
                 }
@@ -559,7 +577,7 @@ QString qt_mac_get_pasteboardString(PasteboardRef paste)
     if (pb) {
         NSString *text = [pb stringForType:NSStringPboardType];
         if (text)
-            return QCFString::toQString(text);
+            return QString::fromNSString(text);
     }
     return QString();
 }

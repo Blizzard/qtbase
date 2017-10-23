@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2013 Richard J. Moore <rich@kde.org>.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -174,8 +180,57 @@ public:
         SHA3Context sha3Context;
 #endif
     };
+#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
+    enum class Sha3Variant
+    {
+        Sha3,
+        Keccak
+    };
+    void sha3Finish(int bitCount, Sha3Variant sha3Variant);
+#endif
     QByteArray result;
 };
+
+#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
+void QCryptographicHashPrivate::sha3Finish(int bitCount, Sha3Variant sha3Variant)
+{
+    /*
+        FIPS 202 §6.1 defines SHA-3 in terms of calculating the Keccak function
+        over the original message with the two-bit suffix "01" appended to it.
+        This variable stores that suffix (and it's fed into the calculations
+        when the hash is returned to users).
+
+        Only 2 bits of this variable are actually used (see the call to sha3Update
+        below). The Keccak implementation we're using will actually use the
+        *leftmost* 2 bits, and interpret them right-to-left. In other words, the
+        bits must appear in order of *increasing* significance; and as the two most
+        significant bits of the byte -- the rightmost 6 are ignored. (Yes, this
+        seems self-contradictory, but it's the way it is...)
+
+        Overall, this means:
+        * the leftmost two bits must be "10" (not "01"!);
+        * we don't care what the other six bits are set to (they can be set to
+        any value), but we arbitrarily set them to 0;
+
+        and for an unsigned char this gives us 0b10'00'00'00, or 0x80.
+    */
+    static const unsigned char sha3FinalSuffix = 0x80;
+
+    result.resize(bitCount / 8);
+
+    SHA3Context copy = sha3Context;
+
+    switch (sha3Variant) {
+    case Sha3Variant::Sha3:
+        sha3Update(&copy, reinterpret_cast<const BitSequence *>(&sha3FinalSuffix), 2);
+        break;
+    case Sha3Variant::Keccak:
+        break;
+    }
+
+    sha3Final(&copy, reinterpret_cast<BitSequence *>(result.data()));
+}
+#endif
 
 /*!
   \class QCryptographicHash
@@ -190,11 +245,18 @@ public:
 
   QCryptographicHash can be used to generate cryptographic hashes of binary or text data.
 
-  Currently MD4, MD5, SHA-1, SHA-224, SHA-256, SHA-384, and SHA-512 are supported.
+  Refer to the documentation of the \l QCryptographicHash::Algorithm enum for a
+  list of the supported algorithms.
 */
 
 /*!
   \enum QCryptographicHash::Algorithm
+
+  \note In Qt versions before 5.9, when asked to generate a SHA3 hash sum,
+  QCryptographicHash actually calculated Keccak. If you need compatibility with
+  SHA-3 hashes produced by those versions of Qt, use the \c{Keccak_}
+  enumerators. Alternatively, if source compatibility is required, define the
+  macro \c QT_SHA3_KECCAK_COMPAT.
 
   \value Md4 Generate an MD4 hash sum
   \value Md5 Generate an MD5 hash sum
@@ -207,6 +269,14 @@ public:
   \value Sha3_256 Generate an SHA3-256 hash sum. Introduced in Qt 5.1
   \value Sha3_384 Generate an SHA3-384 hash sum. Introduced in Qt 5.1
   \value Sha3_512 Generate an SHA3-512 hash sum. Introduced in Qt 5.1
+  \value Keccak_224 Generate a Keccak-224 hash sum. Introduced in Qt 5.9.2
+  \value Keccak_256 Generate a Keccak-256 hash sum. Introduced in Qt 5.9.2
+  \value Keccak_384 Generate a Keccak-384 hash sum. Introduced in Qt 5.9.2
+  \value Keccak_512 Generate a Keccak-512 hash sum. Introduced in Qt 5.9.2
+  \omitvalue RealSha3_224
+  \omitvalue RealSha3_256
+  \omitvalue RealSha3_384
+  \omitvalue RealSha3_512
 */
 
 /*!
@@ -260,16 +330,20 @@ void QCryptographicHash::reset()
     case Sha512:
         SHA512Reset(&d->sha512Context);
         break;
-    case Sha3_224:
+    case RealSha3_224:
+    case Keccak_224:
         sha3Init(&d->sha3Context, 224);
         break;
-    case Sha3_256:
+    case RealSha3_256:
+    case Keccak_256:
         sha3Init(&d->sha3Context, 256);
         break;
-    case Sha3_384:
+    case RealSha3_384:
+    case Keccak_384:
         sha3Init(&d->sha3Context, 384);
         break;
-    case Sha3_512:
+    case RealSha3_512:
+    case Keccak_512:
         sha3Init(&d->sha3Context, 512);
         break;
 #endif
@@ -311,16 +385,20 @@ void QCryptographicHash::addData(const char *data, int length)
     case Sha512:
         SHA512Input(&d->sha512Context, reinterpret_cast<const unsigned char *>(data), length);
         break;
-    case Sha3_224:
+    case RealSha3_224:
+    case Keccak_224:
         sha3Update(&d->sha3Context, reinterpret_cast<const BitSequence *>(data), length*8);
         break;
-    case Sha3_256:
+    case RealSha3_256:
+    case Keccak_256:
         sha3Update(&d->sha3Context, reinterpret_cast<const BitSequence *>(data), length*8);
         break;
-    case Sha3_384:
+    case RealSha3_384:
+    case Keccak_384:
         sha3Update(&d->sha3Context, reinterpret_cast<const BitSequence *>(data), length*8);
         break;
-    case Sha3_512:
+    case RealSha3_512:
+    case Keccak_512:
         sha3Update(&d->sha3Context, reinterpret_cast<const BitSequence *>(data), length*8);
         break;
 #endif
@@ -419,28 +497,36 @@ QByteArray QCryptographicHash::result() const
         SHA512Result(&copy, reinterpret_cast<unsigned char *>(d->result.data()));
         break;
     }
-    case Sha3_224: {
-        SHA3Context copy = d->sha3Context;
-        d->result.resize(224/8);
-        sha3Final(&copy, reinterpret_cast<BitSequence *>(d->result.data()));
+    case RealSha3_224: {
+        d->sha3Finish(224, QCryptographicHashPrivate::Sha3Variant::Sha3);
         break;
     }
-    case Sha3_256: {
-        SHA3Context copy = d->sha3Context;
-        d->result.resize(256/8);
-        sha3Final(&copy, reinterpret_cast<BitSequence *>(d->result.data()));
+    case RealSha3_256: {
+        d->sha3Finish(256, QCryptographicHashPrivate::Sha3Variant::Sha3);
         break;
     }
-    case Sha3_384: {
-        SHA3Context copy = d->sha3Context;
-        d->result.resize(384/8);
-        sha3Final(&copy, reinterpret_cast<BitSequence *>(d->result.data()));
+    case RealSha3_384: {
+        d->sha3Finish(384, QCryptographicHashPrivate::Sha3Variant::Sha3);
         break;
     }
-    case Sha3_512: {
-        SHA3Context copy = d->sha3Context;
-        d->result.resize(512/8);
-        sha3Final(&copy, reinterpret_cast<BitSequence *>(d->result.data()));
+    case RealSha3_512: {
+        d->sha3Finish(512, QCryptographicHashPrivate::Sha3Variant::Sha3);
+        break;
+    }
+    case Keccak_224: {
+        d->sha3Finish(224, QCryptographicHashPrivate::Sha3Variant::Keccak);
+        break;
+    }
+    case Keccak_256: {
+        d->sha3Finish(256, QCryptographicHashPrivate::Sha3Variant::Keccak);
+        break;
+    }
+    case Keccak_384: {
+        d->sha3Finish(384, QCryptographicHashPrivate::Sha3Variant::Keccak);
+        break;
+    }
+    case Keccak_512: {
+        d->sha3Finish(512, QCryptographicHashPrivate::Sha3Variant::Keccak);
         break;
     }
 #endif
@@ -459,3 +545,7 @@ QByteArray QCryptographicHash::hash(const QByteArray &data, Algorithm method)
 }
 
 QT_END_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+#include "moc_qcryptographichash.cpp"
+#endif

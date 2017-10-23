@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2014 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,7 +42,9 @@
 #define QGLOBAL_H
 
 #ifdef __cplusplus
+#  include <type_traits>
 #  include <cstddef>
+#  include <utility>
 #endif
 
 #include <stddef.h>
@@ -50,19 +58,32 @@
 */
 #define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
 
-#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE)
+#ifdef QT_BOOTSTRAPPED
+#include <QtCore/qconfig-bootstrapped.h>
+#else
 #include <QtCore/qconfig.h>
-#include <QtCore/qfeatures.h>
+#include <QtCore/qtcore-config.h>
 #endif
 
 // The QT_SUPPORTS macro is deprecated. Don't use it in new code.
-// Instead, use #ifdef/ndef QT_NO_feature.
+// Instead, use QT_CONFIG(feature)
 // ### Qt6: remove macro
 #ifdef _MSC_VER
 #  define QT_SUPPORTS(FEATURE) (!defined QT_NO_##FEATURE)
 #else
 #  define QT_SUPPORTS(FEATURE) (!defined(QT_NO_##FEATURE))
 #endif
+
+/*
+    The QT_CONFIG macro implements a safe compile time check for features of Qt.
+    Features can be in three states:
+        0 or undefined: This will lead to a compile error when testing for it
+        -1: The feature is not available
+        1: The feature is available
+*/
+#define QT_CONFIG(feature) (1/QT_FEATURE_##feature == 1)
+#define QT_REQUIRE_CONFIG(feature) Q_STATIC_ASSERT_X(QT_FEATURE_##feature == 1, "Required feature " #feature " for file " __FILE__ " not available.")
+
 #if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
 #  define QT_NO_UNSHARABLE_CONTAINERS
 #endif
@@ -290,26 +311,8 @@ typedef double qreal;
 #  else
 #    define Q_CORE_EXPORT Q_DECL_IMPORT
 #  endif
-#  if defined(QT_BUILD_GUI_LIB)
-#    define Q_GUI_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_GUI_EXPORT Q_DECL_IMPORT
-#  endif
-#  if defined(QT_BUILD_WIDGETS_LIB)
-#    define Q_WIDGETS_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_WIDGETS_EXPORT Q_DECL_IMPORT
-#  endif
-#  if defined(QT_BUILD_NETWORK_LIB)
-#    define Q_NETWORK_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_NETWORK_EXPORT Q_DECL_IMPORT
-#  endif
 #else
 #  define Q_CORE_EXPORT
-#  define Q_GUI_EXPORT
-#  define Q_WIDGETS_EXPORT
-#  define Q_NETWORK_EXPORT
 #endif
 
 /*
@@ -336,10 +339,10 @@ typedef double qreal;
 
 #define Q_INIT_RESOURCE(name) \
     do { extern int QT_MANGLE_NAMESPACE(qInitResources_ ## name) ();       \
-        QT_MANGLE_NAMESPACE(qInitResources_ ## name) (); } while (0)
+        QT_MANGLE_NAMESPACE(qInitResources_ ## name) (); } while (false)
 #define Q_CLEANUP_RESOURCE(name) \
     do { extern int QT_MANGLE_NAMESPACE(qCleanupResources_ ## name) ();    \
-        QT_MANGLE_NAMESPACE(qCleanupResources_ ## name) (); } while (0)
+        QT_MANGLE_NAMESPACE(qCleanupResources_ ## name) (); } while (false)
 
 /*
  * If we're compiling C++ code:
@@ -458,12 +461,12 @@ typedef qptrdiff qintptr;
 #endif
 
 #ifdef QT_ASCII_CAST_WARNINGS
-#  define QT_ASCII_CAST_WARN Q_DECL_DEPRECATED
+#  define QT_ASCII_CAST_WARN Q_DECL_DEPRECATED_X("Use fromUtf8, QStringLiteral, or QLatin1String")
 #else
 #  define QT_ASCII_CAST_WARN
 #endif
 
-#if defined(__i386__) || defined(_WIN32) || defined(_WIN32_WCE)
+#if defined(__i386__) || defined(_WIN32)
 #  if defined(Q_CC_GNU)
 #    define QT_FASTCALL __attribute__((regparm(3)))
 #  elif defined(Q_CC_MSVC)
@@ -523,23 +526,11 @@ Q_DECL_CONSTEXPR inline int qRound(double d)
 { return d >= 0.0 ? int(d + 0.5) : int(d - double(int(d-1)) + 0.5) + int(d-1); }
 Q_DECL_CONSTEXPR inline int qRound(float d)
 { return d >= 0.0f ? int(d + 0.5f) : int(d - float(int(d-1)) + 0.5f) + int(d-1); }
-#ifdef Q_QDOC
-/*
-    Just for documentation generation
-*/
-int qRound(qreal d);
-#endif
 
 Q_DECL_CONSTEXPR inline qint64 qRound64(double d)
 { return d >= 0.0 ? qint64(d + 0.5) : qint64(d - double(qint64(d-1)) + 0.5) + qint64(d-1); }
 Q_DECL_CONSTEXPR inline qint64 qRound64(float d)
 { return d >= 0.0f ? qint64(d + 0.5f) : qint64(d - float(qint64(d-1)) + 0.5f) + qint64(d-1); }
-#ifdef Q_QDOC
-/*
-    Just for documentation generation
-*/
-qint64 qRound64(qreal d);
-#endif
 
 template <typename T>
 Q_DECL_CONSTEXPR inline const T &qMin(const T &a, const T &b) { return (a < b) ? a : b; }
@@ -562,25 +553,53 @@ Q_DECL_CONSTEXPR inline const T &qBound(const T &min, const T &val, const T &max
 #ifndef Q_FORWARD_DECLARE_MUTABLE_CF_TYPE
 #  define Q_FORWARD_DECLARE_MUTABLE_CF_TYPE(type) typedef struct __ ## type * type ## Ref
 #endif
+#ifndef Q_FORWARD_DECLARE_CG_TYPE
+#define Q_FORWARD_DECLARE_CG_TYPE(type) typedef const struct type *type ## Ref;
+#endif
+#ifndef Q_FORWARD_DECLARE_MUTABLE_CG_TYPE
+#define Q_FORWARD_DECLARE_MUTABLE_CG_TYPE(type) typedef struct type *type ## Ref;
+#endif
 
-#ifdef Q_OS_MAC
-#  define QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(osx, ios) \
-    ((defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && osx != __MAC_NA && __MAC_OS_X_VERSION_MAX_ALLOWED >= osx) || \
-     (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MAX_ALLOWED >= ios))
+#ifdef Q_OS_DARWIN
+#  define QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(macos, ios, tvos, watchos) \
+    ((defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && macos != __MAC_NA && __MAC_OS_X_VERSION_MAX_ALLOWED >= macos) || \
+     (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MAX_ALLOWED >= ios) || \
+     (defined(__TV_OS_VERSION_MAX_ALLOWED) && tvos != __TVOS_NA && __TV_OS_VERSION_MAX_ALLOWED >= tvos) || \
+     (defined(__WATCH_OS_VERSION_MAX_ALLOWED) && watchos != __WATCHOS_NA && __WATCH_OS_VERSION_MAX_ALLOWED >= watchos))
 
-#  define QT_MAC_DEPLOYMENT_TARGET_BELOW(osx, ios) \
-    ((defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && osx != __MAC_NA && __MAC_OS_X_VERSION_MIN_REQUIRED < osx) || \
-     (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MIN_REQUIRED < ios))
+#  define QT_DARWIN_DEPLOYMENT_TARGET_BELOW(macos, ios, tvos, watchos) \
+    ((defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && macos != __MAC_NA && __MAC_OS_X_VERSION_MIN_REQUIRED < macos) || \
+     (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && ios != __IPHONE_NA && __IPHONE_OS_VERSION_MIN_REQUIRED < ios) || \
+     (defined(__TV_OS_VERSION_MIN_REQUIRED) && tvos != __TVOS_NA && __TV_OS_VERSION_MIN_REQUIRED < tvos) || \
+     (defined(__WATCH_OS_VERSION_MIN_REQUIRED) && watchos != __WATCHOS_NA && __WATCH_OS_VERSION_MIN_REQUIRED < watchos))
 
+#  define QT_MACOS_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(macos, ios) \
+      QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(macos, ios, __TVOS_NA, __WATCHOS_NA)
+#  define QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(macos) \
+      QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(macos, __IPHONE_NA, __TVOS_NA, __WATCHOS_NA)
 #  define QT_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(ios) \
-      QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_NA, ios)
-#  define QT_OSX_PLATFORM_SDK_EQUAL_OR_ABOVE(osx) \
-      QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(osx, __IPHONE_NA)
+      QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_NA, ios, __TVOS_NA, __WATCHOS_NA)
+#  define QT_TVOS_PLATFORM_SDK_EQUAL_OR_ABOVE(tvos) \
+      QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_NA, __IPHONE_NA, tvos, __WATCHOS_NA)
+#  define QT_WATCHOS_PLATFORM_SDK_EQUAL_OR_ABOVE(watchos) \
+      QT_DARWIN_PLATFORM_SDK_EQUAL_OR_ABOVE(__MAC_NA, __IPHONE_NA, __TVOS_NA, watchos)
 
+#  define QT_MACOS_IOS_DEPLOYMENT_TARGET_BELOW(macos, ios) \
+      QT_DARWIN_DEPLOYMENT_TARGET_BELOW(macos, ios, __TVOS_NA, __WATCHOS_NA)
+#  define QT_MACOS_DEPLOYMENT_TARGET_BELOW(macos) \
+      QT_DARWIN_DEPLOYMENT_TARGET_BELOW(macos, __IPHONE_NA, __TVOS_NA, __WATCHOS_NA)
 #  define QT_IOS_DEPLOYMENT_TARGET_BELOW(ios) \
-      QT_MAC_DEPLOYMENT_TARGET_BELOW(__MAC_NA, ios)
-#  define QT_OSX_DEPLOYMENT_TARGET_BELOW(osx) \
-      QT_MAC_DEPLOYMENT_TARGET_BELOW(osx, __IPHONE_NA)
+      QT_DARWIN_DEPLOYMENT_TARGET_BELOW(__MAC_NA, ios, __TVOS_NA, __WATCHOS_NA)
+#  define QT_TVOS_DEPLOYMENT_TARGET_BELOW(tvos) \
+      QT_DARWIN_DEPLOYMENT_TARGET_BELOW(__MAC_NA, __IPHONE_NA, tvos, __WATCHOS_NA)
+#  define QT_WATCHOS_DEPLOYMENT_TARGET_BELOW(watchos) \
+      QT_DARWIN_DEPLOYMENT_TARGET_BELOW(__MAC_NA, __IPHONE_NA, __TVOS_NA, watchos)
+
+// Compatibility synonyms, do not use
+#  define QT_MAC_PLATFORM_SDK_EQUAL_OR_ABOVE(osx, ios) QT_MACOS_IOS_PLATFORM_SDK_EQUAL_OR_ABOVE(osx, ios)
+#  define QT_MAC_DEPLOYMENT_TARGET_BELOW(osx, ios) QT_MACOS_IOS_DEPLOYMENT_TARGET_BELOW(osx, ios)
+#  define QT_OSX_PLATFORM_SDK_EQUAL_OR_ABOVE(osx) QT_MACOS_PLATFORM_SDK_EQUAL_OR_ABOVE(osx)
+#  define QT_OSX_DEPLOYMENT_TARGET_BELOW(osx) QT_MACOS_DEPLOYMENT_TARGET_BELOW(osx)
 
 // Implemented in qcore_mac_objc.mm
 class Q_CORE_EXPORT QMacAutoReleasePool
@@ -593,32 +612,13 @@ private:
     void *pool;
 };
 
-#endif // Q_OS_MAC
+#endif // Q_OS_DARWIN
 
 /*
    Data stream functions are provided by many classes (defined in qdatastream.h)
 */
 
 class QDataStream;
-
-#if defined(Q_OS_VXWORKS)
-#  define QT_NO_CRASHHANDLER     // no popen
-#  define QT_NO_PROCESS          // no exec*, no fork
-#  define QT_NO_SHAREDMEMORY     // only POSIX, no SysV and in the end...
-#  define QT_NO_SYSTEMSEMAPHORE  // not needed at all in a flat address space
-#endif
-
-#if defined(Q_OS_WINRT)
-#  define QT_NO_FILESYSTEMWATCHER
-#  define QT_NO_NETWORKPROXY
-#  define QT_NO_PROCESS
-#  define QT_NO_SOCKETNOTIFIER
-#  define QT_NO_SOCKS5
-#endif
-
-#if defined(Q_OS_IOS)
-#  define QT_NO_PROCESS
-#endif
 
 inline void qt_noop(void) {}
 
@@ -631,7 +631,12 @@ inline void qt_noop(void) {}
 */
 
 #if !defined(QT_NO_EXCEPTIONS)
-#  if defined(QT_BOOTSTRAPPED) || (defined(Q_CC_GNU) && !defined (__EXCEPTIONS) && !defined(Q_MOC_RUN))
+#  if !defined(Q_MOC_RUN)
+#    if (defined(Q_CC_CLANG) && !defined(Q_CC_INTEL) && !QT_HAS_FEATURE(cxx_exceptions)) || \
+        (defined(Q_CC_GNU) && !defined(__EXCEPTIONS))
+#      define QT_NO_EXCEPTIONS
+#    endif
+#  elif defined(QT_BOOTSTRAPPED)
 #    define QT_NO_EXCEPTIONS
 #  endif
 #endif
@@ -641,7 +646,7 @@ inline void qt_noop(void) {}
 #  define QT_CATCH(A) else
 #  define QT_THROW(A) qt_noop()
 #  define QT_RETHROW qt_noop()
-#  define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (0)
+#  define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (false)
 #else
 #  define QT_TRY try
 #  define QT_CATCH(A) catch (A)
@@ -649,9 +654,9 @@ inline void qt_noop(void) {}
 #  define QT_RETHROW throw
 Q_NORETURN Q_CORE_EXPORT void qTerminate() Q_DECL_NOTHROW;
 #  ifdef Q_COMPILER_NOEXCEPT
-#    define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (0)
+#    define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (false)
 #  else
-#    define QT_TERMINATE_ON_EXCEPTION(expr) do { try { expr; } catch (...) { qTerminate(); } } while (0)
+#    define QT_TERMINATE_ON_EXCEPTION(expr) do { try { expr; } catch (...) { qTerminate(); } } while (false)
 #  endif
 #endif
 
@@ -683,6 +688,15 @@ Q_CORE_EXPORT bool qSharedBuild() Q_DECL_NOTHROW;
 
 #ifndef qUtf8Printable
 #  define qUtf8Printable(string) QString(string).toUtf8().constData()
+#endif
+
+/*
+    Wrap QString::utf16() with enough casts to allow passing it
+    to QString::asprintf("%ls") without warnings.
+*/
+#ifndef qUtf16Printable
+#  define qUtf16Printable(string) \
+    static_cast<const wchar_t*>(static_cast<const void*>(QString(string).utf16()))
 #endif
 
 class QString;
@@ -739,17 +753,17 @@ template <> class QStaticAssertFailure<true> {};
 #define Q_STATIC_ASSERT_X(Condition, Message) Q_STATIC_ASSERT(Condition)
 #endif
 
-Q_CORE_EXPORT void qt_check_pointer(const char *, int);
+Q_NORETURN Q_CORE_EXPORT void qt_check_pointer(const char *, int) Q_DECL_NOTHROW;
 Q_CORE_EXPORT void qBadAlloc();
 
 #ifdef QT_NO_EXCEPTIONS
-#  if defined(QT_NO_DEBUG)
+#  if defined(QT_NO_DEBUG) && !defined(QT_FORCE_ASSERTS)
 #    define Q_CHECK_PTR(p) qt_noop()
 #  else
-#    define Q_CHECK_PTR(p) do {if(!(p))qt_check_pointer(__FILE__,__LINE__);} while (0)
+#    define Q_CHECK_PTR(p) do {if (!(p)) qt_check_pointer(__FILE__,__LINE__);} while (false)
 #  endif
 #else
-#  define Q_CHECK_PTR(p) do { if (!(p)) qBadAlloc(); } while (0)
+#  define Q_CHECK_PTR(p) do { if (!(p)) qBadAlloc(); } while (false)
 #endif
 
 template <typename T>
@@ -761,32 +775,22 @@ typedef void (*QFunctionPointer)();
 #  define Q_UNIMPLEMENTED() qWarning("Unimplemented code.")
 #endif
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(double p1, double p2)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyCompare(double p1, double p2)
 {
     return (qAbs(p1 - p2) * 1000000000000. <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyCompare(float p1, float p2)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyCompare(float p1, float p2)
 {
     return (qAbs(p1 - p2) * 100000.f <= qMin(qAbs(p1), qAbs(p2)));
 }
 
-/*!
-  \internal
-*/
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(double d)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED bool qFuzzyIsNull(double d)
 {
     return qAbs(d) <= 0.000000000001;
 }
 
-/*!
-  \internal
-*/
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
+Q_REQUIRED_RESULT Q_DECL_CONSTEXPR static inline Q_DECL_UNUSED  bool qFuzzyIsNull(float f)
 {
     return qAbs(f) <= 0.00001f;
 }
@@ -796,8 +800,7 @@ Q_DECL_CONSTEXPR static inline bool qFuzzyIsNull(float f)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(double d) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-static inline bool qIsNull(double d)
+Q_REQUIRED_RESULT static inline Q_DECL_UNUSED bool qIsNull(double d)
 {
     union U {
         double d;
@@ -813,8 +816,7 @@ static inline bool qIsNull(double d)
    check whether the actual value is 0 or close to 0, but whether
    it is binary 0, disregarding sign.
 */
-static inline bool qIsNull(float f) Q_REQUIRED_RESULT Q_DECL_UNUSED;
-static inline bool qIsNull(float f)
+Q_REQUIRED_RESULT static inline Q_DECL_UNUSED bool qIsNull(float f)
 {
     union U {
         float f;
@@ -913,29 +915,57 @@ QT_WARNING_DISABLE_MSVC(4530) /* C++ exception handler used, but unwind semantic
 #  endif
 #endif
 
-#if defined(Q_COMPILER_DECLTYPE) || defined(Q_CC_GNU)
-/* make use of decltype or GCC's __typeof__ extension */
+namespace QtPrivate {
+template <typename T> struct QAddConst { typedef const T Type; };
+}
+
+// this adds const to non-const objects (like std::as_const)
+template <typename T>
+Q_DECL_CONSTEXPR typename QtPrivate::QAddConst<T>::Type &qAsConst(T &t) Q_DECL_NOTHROW { return t; }
+// prevent rvalue arguments:
+template <typename T>
+void qAsConst(const T &&) Q_DECL_EQ_DELETE;
+
+#ifndef QT_NO_FOREACH
+
+namespace QtPrivate {
+
 template <typename T>
 class QForeachContainer {
-    QForeachContainer &operator=(const QForeachContainer &) Q_DECL_EQ_DELETE;
+    Q_DISABLE_COPY(QForeachContainer)
 public:
-    inline QForeachContainer(const T& t) : c(t), i(c.begin()), e(c.end()), control(1) { }
-    const T c;
+    QForeachContainer(const T &t) : c(t), i(qAsConst(c).begin()), e(qAsConst(c).end()) {}
+    QForeachContainer(T &&t) : c(std::move(t)), i(qAsConst(c).begin()), e(qAsConst(c).end())  {}
+
+    QForeachContainer(QForeachContainer &&other)
+        : c(std::move(other.c)),
+          i(qAsConst(c).begin()),
+          e(qAsConst(c).end()),
+          control(std::move(other.control))
+    {
+    }
+
+    QForeachContainer &operator=(QForeachContainer &&other)
+    {
+        c = std::move(other.c);
+        i = qAsConst(c).begin();
+        e = qAsConst(c).end();
+        control = std::move(other.control);
+        return *this;
+    }
+
+    T c;
     typename T::const_iterator i, e;
-    int control;
+    int control = 1;
 };
 
-// We need to use __typeof__ if we don't have decltype or if the compiler
-// hasn't been updated to the fix of Core Language Defect Report 382
-// (http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#382).
-// GCC 4.3 and 4.4 have support for decltype, but are affected by DR 382.
-#  if defined(Q_COMPILER_DECLTYPE) && \
-    (defined(Q_CC_CLANG) || defined(Q_CC_INTEL) || !defined(Q_CC_GNU) || Q_CC_GNU >= 405)
-#    define QT_FOREACH_DECLTYPE(x) typename QtPrivate::remove_reference<decltype(x)>::type
-#  else
-#    define QT_FOREACH_DECLTYPE(x) __typeof__((x))
-#  endif
+template<typename T>
+QForeachContainer<typename std::decay<T>::type> qMakeForeachContainer(T &&t)
+{
+    return QForeachContainer<typename std::decay<T>::type>(std::forward<T>(t));
+}
 
+}
 // Explanation of the control word:
 //  - it's initialized to 1
 //  - that means both the inner and outer loops start
@@ -945,66 +975,21 @@ public:
 //    the outer loop to continue executing
 //  - if there was a break inside the inner loop, it will exit with control still
 //    set to 1; in that case, the outer loop will invert it to 0 and will exit too
-#  define Q_FOREACH(variable, container)                                \
-for (QForeachContainer<QT_FOREACH_DECLTYPE(container)> _container_((container)); \
+#define Q_FOREACH(variable, container)                                \
+for (auto _container_ = QtPrivate::qMakeForeachContainer(container); \
      _container_.control && _container_.i != _container_.e;         \
      ++_container_.i, _container_.control ^= 1)                     \
     for (variable = *_container_.i; _container_.control; _container_.control = 0)
 
-#else
-
-struct QForeachContainerBase {};
-
-template <typename T>
-class QForeachContainer : public QForeachContainerBase {
-    QForeachContainer &operator=(const QForeachContainer &) Q_DECL_EQ_DELETE;
-public:
-    inline QForeachContainer(const T& t): c(t), brk(0), i(c.begin()), e(c.end()){}
-    QForeachContainer(const QForeachContainer &other)
-        : c(other.c), brk(other.brk), i(other.i), e(other.e) {}
-    const T c;
-    mutable int brk;
-    mutable typename T::const_iterator i, e;
-    inline bool condition() const { return (!brk++ && i != e); }
-};
-
-template <typename T> inline T *qForeachPointer(const T &) { return 0; }
-
-template <typename T> inline QForeachContainer<T> qForeachContainerNew(const T& t)
-{ return QForeachContainer<T>(t); }
-
-template <typename T>
-inline const QForeachContainer<T> *qForeachContainer(const QForeachContainerBase *base, const T *)
-{ return static_cast<const QForeachContainer<T> *>(base); }
-
-#if defined(Q_CC_DIAB)
-// VxWorks DIAB generates unresolvable symbols, if container is a function call
-#  define Q_FOREACH(variable,container)                                                             \
-    if(0){}else                                                                                     \
-    for (const QForeachContainerBase &_container_ = qForeachContainerNew(container);                \
-         qForeachContainer(&_container_, (__typeof__(container) *) 0)->condition();       \
-         ++qForeachContainer(&_container_, (__typeof__(container) *) 0)->i)               \
-        for (variable = *qForeachContainer(&_container_, (__typeof__(container) *) 0)->i; \
-             qForeachContainer(&_container_, (__typeof__(container) *) 0)->brk;           \
-             --qForeachContainer(&_container_, (__typeof__(container) *) 0)->brk)
-
-#else
-#  define Q_FOREACH(variable, container) \
-    for (const QForeachContainerBase &_container_ = qForeachContainerNew(container); \
-         qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->condition();       \
-         ++qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->i)               \
-        for (variable = *qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->i; \
-             qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->brk;           \
-             --qForeachContainer(&_container_, true ? 0 : qForeachPointer(container))->brk)
-#endif // MSVC6 || MIPSpro
-
-#endif
+#endif // QT_NO_FOREACH
 
 #define Q_FOREVER for(;;)
 #ifndef QT_NO_KEYWORDS
+# ifndef QT_NO_FOREACH
 #  ifndef foreach
 #    define foreach Q_FOREACH
 #  endif
+# endif // QT_NO_FOREACH
 #  ifndef forever
 #    define forever Q_FOREVER
 #  endif
@@ -1019,8 +1004,8 @@ template <typename Wrapper> static inline typename Wrapper::pointer qGetPtrHelpe
     friend class Class##Private;
 
 #define Q_DECLARE_PRIVATE_D(Dptr, Class) \
-    inline Class##Private* d_func() { return reinterpret_cast<Class##Private *>(Dptr); } \
-    inline const Class##Private* d_func() const { return reinterpret_cast<const Class##Private *>(Dptr); } \
+    inline Class##Private* d_func() { return reinterpret_cast<Class##Private *>(qGetPtrHelper(Dptr)); } \
+    inline const Class##Private* d_func() const { return reinterpret_cast<const Class##Private *>(qGetPtrHelper(Dptr)); } \
     friend class Class##Private;
 
 #define Q_DECLARE_PUBLIC(Class)                                    \
@@ -1061,6 +1046,69 @@ Q_CORE_EXPORT QString qtTrId(const char *id, int n = -1);
   T qt_dynamic_cast_check(X, T* = 0)
   { return T::dynamic_cast_will_always_fail_because_rtti_is_disabled; }
 #endif
+
+
+#ifdef Q_QDOC
+
+// Just for documentation generation
+template<typename T>
+auto qOverload(T functionPointer);
+template<typename T>
+auto qConstOverload(T memberFunctionPointer);
+template<typename T>
+auto qNonConstOverload(T memberFunctionPointer);
+
+#elif defined(Q_COMPILER_VARIADIC_TEMPLATES)
+
+template <typename... Args>
+struct QNonConstOverload
+{
+    template <typename R, typename T>
+    Q_DECL_CONSTEXPR auto operator()(R (T::*ptr)(Args...)) const Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+
+    template <typename R, typename T>
+    static Q_DECL_CONSTEXPR auto of(R (T::*ptr)(Args...)) Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+};
+
+template <typename... Args>
+struct QConstOverload
+{
+    template <typename R, typename T>
+    Q_DECL_CONSTEXPR auto operator()(R (T::*ptr)(Args...) const) const Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+
+    template <typename R, typename T>
+    static Q_DECL_CONSTEXPR auto of(R (T::*ptr)(Args...) const) Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+};
+
+template <typename... Args>
+struct QOverload : QConstOverload<Args...>, QNonConstOverload<Args...>
+{
+    using QConstOverload<Args...>::of;
+    using QConstOverload<Args...>::operator();
+    using QNonConstOverload<Args...>::of;
+    using QNonConstOverload<Args...>::operator();
+
+    template <typename R>
+    Q_DECL_CONSTEXPR auto operator()(R (*ptr)(Args...)) const Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+
+    template <typename R>
+    static Q_DECL_CONSTEXPR auto of(R (*ptr)(Args...)) Q_DECL_NOTHROW -> decltype(ptr)
+    { return ptr; }
+};
+
+#if defined(__cpp_variable_templates) && __cpp_variable_templates >= 201304 // C++14
+template <typename... Args> Q_CONSTEXPR Q_DECL_UNUSED QOverload<Args...> qOverload = {};
+template <typename... Args> Q_CONSTEXPR Q_DECL_UNUSED QConstOverload<Args...> qConstOverload = {};
+template <typename... Args> Q_CONSTEXPR Q_DECL_UNUSED QNonConstOverload<Args...> qNonConstOverload = {};
+#endif
+
+#endif
+
 
 class QByteArray;
 Q_CORE_EXPORT QByteArray qgetenv(const char *varName);

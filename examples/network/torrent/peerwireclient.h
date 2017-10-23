@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -112,14 +122,14 @@ public:
     qint64 uploadSpeed() const;
 
     bool canTransferMore() const;
-    qint64 bytesAvailable() const Q_DECL_OVERRIDE { return incomingBuffer.size() + QTcpSocket::bytesAvailable(); }
+    qint64 bytesAvailable() const override { return incomingBuffer.size() + QTcpSocket::bytesAvailable(); }
     qint64 socketBytesAvailable() const { return socket.bytesAvailable(); }
     qint64 socketBytesToWrite() const { return socket.bytesToWrite(); }
 
-    void setReadBufferSize(qint64 size) Q_DECL_OVERRIDE;
+    void setReadBufferSize(qint64 size) override;
 
     void connectToHost(const QHostAddress &address,
-                       quint16 port, OpenMode openMode = ReadWrite) Q_DECL_OVERRIDE;
+                       quint16 port, OpenMode openMode = ReadWrite) override;
     void diconnectFromHost();
 
 signals:
@@ -138,11 +148,11 @@ signals:
     void bytesReceived(qint64 size);
 
 protected:
-    void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *event) override;
 
-    qint64 readData(char *data, qint64 maxlen) Q_DECL_OVERRIDE;
-    qint64 readLineData(char *data, qint64 maxlen) Q_DECL_OVERRIDE;
-    qint64 writeData(const char *data, qint64 len) Q_DECL_OVERRIDE;
+    qint64 readData(char *data, qint64 maxlen) override;
+    qint64 readLineData(char *data, qint64 maxlen) override;
+    qint64 writeData(const char *data, qint64 len) override;
 
 private slots:
     void sendHandShake();

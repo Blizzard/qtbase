@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qsizegrip.h"
-
-#ifndef QT_NO_SIZEGRIP
 
 #include "qapplication.h"
 #include "qevent.h"
@@ -46,7 +50,7 @@
 #include "qdebug.h"
 #include <QDesktopWidget>
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 #include <private/qt_mac_p.h>
 #endif
 
@@ -76,7 +80,7 @@ public:
     Qt::Corner m_corner;
     bool gotMousePress;
     QPointer<QWidget> tlw;
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     void updateMacSizer(bool hide) const;
 #endif
     Qt::Corner corner() const;
@@ -114,7 +118,7 @@ public:
         updateTopLevelWidget();
         if (tlw && showSizeGrip) {
             Qt::WindowStates sizeGripNotVisibleState = Qt::WindowFullScreen;
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
             sizeGripNotVisibleState |= Qt::WindowMaximized;
 #endif
             // Don't show the size grip if the tlw is maximized or in full screen mode.
@@ -136,7 +140,7 @@ QSizeGripPrivate::QSizeGripPrivate()
 {
 }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
 void QSizeGripPrivate::updateMacSizer(bool hide) const
 {
     Q_Q(const QSizeGrip);
@@ -178,9 +182,12 @@ Qt::Corner QSizeGripPrivate::corner() const
     Put this widget anywhere in a widget tree and the user can use it
     to resize the top-level window or any widget with the Qt::SubWindow
     flag set. Generally, this should be in the lower right-hand corner.
+
     Note that QStatusBar already uses this widget, so if you have a
     status bar (e.g., you are using QMainWindow), then you don't need
-    to use this widget explicitly.
+    to use this widget explicitly. The same goes for QDialog, for which
+    you can just call \l {QDialog::setSizeGripEnabled()}
+    {QDialog::setSizeGripEnabled()}.
 
     On some platforms the size grip automatically hides itself when the
     window is shown full screen or maximised.
@@ -188,7 +195,7 @@ Qt::Corner QSizeGripPrivate::corner() const
     \table 50%
     \row \li \inlineimage fusion-statusbar-sizegrip.png Screenshot of a Fusion style size grip
     \li A size grip widget at the bottom-right corner of a main window, shown in the
-    \l{Fusion Style Widget Gallery}{Fusion widget style}.
+    \l{Qt Widget Gallery}{Fusion widget style}.
     \endtable
 
     The QSizeGrip class inherits QWidget and reimplements the \l
@@ -219,7 +226,7 @@ void QSizeGripPrivate::init()
     Q_Q(QSizeGrip);
     m_corner = q->isLeftToRight() ? Qt::BottomRightCorner : Qt::BottomLeftCorner;
 
-#if !defined(QT_NO_CURSOR) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if !defined(QT_NO_CURSOR) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
     q->setCursor(m_corner == Qt::TopLeftCorner || m_corner == Qt::BottomRightCorner
                  ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
 #endif
@@ -311,13 +318,13 @@ void QSizeGrip::mousePressEvent(QMouseEvent * e)
         // Check if tlw is inside QAbstractScrollArea/QScrollArea.
         // If that's the case tlw->parentWidget() will return the viewport
         // and tlw->parentWidget()->parentWidget() will return the scroll area.
-#ifndef QT_NO_SCROLLAREA
+#if QT_CONFIG(scrollarea)
         QAbstractScrollArea *scrollArea = qobject_cast<QAbstractScrollArea *>(tlwParent->parentWidget());
         if (scrollArea) {
             hasHorizontalSizeConstraint = scrollArea->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff;
             hasVerticalSizeConstraint = scrollArea->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff;
         }
-#endif // QT_NO_SCROLLAREA
+#endif // QT_CONFIG(scrollarea)
         availableGeometry = tlwParent->contentsRect();
     }
 
@@ -432,7 +439,7 @@ void QSizeGrip::moveEvent(QMoveEvent * /*moveEvent*/)
         return;
 
     d->m_corner = d->corner();
-#if !defined(QT_NO_CURSOR) && !defined(Q_DEAD_CODE_FROM_QT4_MAC)
+#if !defined(QT_NO_CURSOR) && !0 /* Used to be included in Qt4 for Q_WS_MAC */
     setCursor(d->m_corner == Qt::TopLeftCorner || d->m_corner == Qt::BottomRightCorner
               ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor);
 #endif
@@ -443,7 +450,7 @@ void QSizeGrip::moveEvent(QMoveEvent * /*moveEvent*/)
 */
 void QSizeGrip::showEvent(QShowEvent *showEvent)
 {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     d_func()->updateMacSizer(false);
 #endif
     QWidget::showEvent(showEvent);
@@ -454,7 +461,7 @@ void QSizeGrip::showEvent(QShowEvent *showEvent)
 */
 void QSizeGrip::hideEvent(QHideEvent *hideEvent)
 {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     d_func()->updateMacSizer(true);
 #endif
     QWidget::hideEvent(hideEvent);
@@ -478,7 +485,7 @@ bool QSizeGrip::eventFilter(QObject *o, QEvent *e)
         return QWidget::eventFilter(o, e);
     }
     Qt::WindowStates sizeGripNotVisibleState = Qt::WindowFullScreen;
-#ifndef Q_DEAD_CODE_FROM_QT4_MAC
+#if 1 // Used to be excluded in Qt4 for Q_WS_MAC
     sizeGripNotVisibleState |= Qt::WindowMaximized;
 #endif
     // Don't show the size grip if the tlw is maximized or in full screen mode.
@@ -498,5 +505,3 @@ bool QSizeGrip::event(QEvent *event)
 QT_END_NAMESPACE
 
 #include "moc_qsizegrip.cpp"
-
-#endif //QT_NO_SIZEGRIP

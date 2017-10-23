@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2014 Ivan Komissarov <ABBAPOH@gmail.com>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,36 +43,52 @@
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qvarlengtharray.h>
 
+#include "qfilesystementry_p.h"
+
 #include <qt_windows.h>
 
 QT_BEGIN_NAMESPACE
 
 static const int defaultBufferSize = MAX_PATH + 1;
 
-void QStorageInfoPrivate::initRootPath()
+static QString canonicalPath(const QString &rootPath)
 {
-    rootPath = QFileInfo(rootPath).canonicalFilePath();
-
-    if (rootPath.isEmpty())
-        return;
-
-    QString path = QDir::toNativeSeparators(rootPath);
-    rootPath.clear();
+    QString path = QDir::toNativeSeparators(QFileInfo(rootPath).canonicalFilePath());
+    if (path.isEmpty())
+        return path;
 
     if (path.startsWith(QLatin1String("\\\\?\\")))
         path.remove(0, 4);
     if (path.length() < 2 || path.at(1) != QLatin1Char(':'))
-        return;
+        return QString();
+
     path[0] = path[0].toUpper();
     if (!(path.at(0).unicode() >= 'A' && path.at(0).unicode() <= 'Z'))
-        return;
+        return QString();
     if (!path.endsWith(QLatin1Char('\\')))
         path.append(QLatin1Char('\\'));
+    return path;
+}
+
+void QStorageInfoPrivate::initRootPath()
+{
+    // Do not unnecessarily call QFileInfo::canonicalFilePath() if the path is
+    // already a drive root since it may hang on network drives.
+    const QString path = QFileSystemEntry::isDriveRootPath(rootPath)
+        ? QDir::toNativeSeparators(rootPath)
+        : canonicalPath(rootPath);
+
+    if (path.isEmpty()) {
+        valid = ready = false;
+        return;
+    }
 
     // ### test if disk mounted to folder on other disk
     wchar_t buffer[defaultBufferSize];
     if (::GetVolumePathName(reinterpret_cast<const wchar_t *>(path.utf16()), buffer, defaultBufferSize))
         rootPath = QDir::fromNativeSeparators(QString::fromWCharArray(buffer));
+    else
+        valid = ready = false;
 }
 
 static inline QByteArray getDevice(const QString &rootPath)
@@ -102,11 +124,14 @@ static inline QByteArray getDevice(const QString &rootPath)
 
 void QStorageInfoPrivate::doStat()
 {
+    valid = ready = true;
     initRootPath();
-    if (rootPath.isEmpty())
+    if (!valid || !ready)
         return;
 
     retrieveVolumeInfo();
+    if (!valid || !ready)
+        return;
     device = getDevice(rootPath);
     retrieveDiskFreeSpace();
 }
@@ -131,9 +156,6 @@ void QStorageInfoPrivate::retrieveVolumeInfo()
         ready = false;
         valid = ::GetLastError() == ERROR_NOT_READY;
     } else {
-        ready = true;
-        valid = true;
-
         fileSystemType = QString::fromWCharArray(fileSystemTypeBuffer).toLatin1();
         name = QString::fromWCharArray(nameBuffer);
 
@@ -148,10 +170,10 @@ void QStorageInfoPrivate::retrieveDiskFreeSpace()
     const UINT oldmode = ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
 
     const QString path = QDir::toNativeSeparators(rootPath);
-    ::GetDiskFreeSpaceEx(reinterpret_cast<const wchar_t *>(path.utf16()),
-                         PULARGE_INTEGER(&bytesAvailable),
-                         PULARGE_INTEGER(&bytesTotal),
-                         PULARGE_INTEGER(&bytesFree));
+    ready = ::GetDiskFreeSpaceEx(reinterpret_cast<const wchar_t *>(path.utf16()),
+                                 PULARGE_INTEGER(&bytesAvailable),
+                                 PULARGE_INTEGER(&bytesTotal),
+                                 PULARGE_INTEGER(&bytesFree));
 
     ::SetErrorMode(oldmode);
 }

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,6 +52,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "QtWidgets/qapplication.h"
 #include "QtGui/qevent.h"
 #include "QtGui/qfont.h"
@@ -84,15 +91,6 @@ extern Q_GUI_EXPORT bool qt_is_gui_used;
 extern QClipboard *qt_clipboard;
 #endif
 
-#if defined (Q_OS_WIN32) || defined (Q_OS_CYGWIN) || defined(Q_OS_WINCE)
-extern QSysInfo::WinVersion qt_winver;
-# ifdef Q_OS_WINCE
-  extern DWORD qt_cever;
-# endif
-#elif defined (Q_OS_MAC)
-extern QSysInfo::MacVersion qt_macver;
-#endif
-
 typedef QHash<QByteArray, QFont> FontHash;
 FontHash *qt_app_fonts_hash();
 
@@ -114,14 +112,11 @@ public:
     virtual bool shouldQuit() Q_DECL_OVERRIDE;
     bool tryCloseAllWindows() Q_DECL_OVERRIDE;
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
 #ifndef QT_NO_SETTINGS
     static bool x11_apply_settings();
 #endif
     static void reset_instance_pointer();
-#endif
-#ifdef Q_OS_WINCE
-    static int autoMaximizeThreshold;
 #endif
     static bool autoSipEnabled;
     static QString desktopStyleKey();
@@ -137,7 +132,7 @@ public:
     static bool isBlockedByModal(QWidget *widget);
     static bool modalState();
     static bool tryModalHelper(QWidget *widget, QWidget **rettop = 0);
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
     static QWidget *tryModalHelper_sys(QWidget *top);
     bool canQuit();
 #endif
@@ -151,25 +146,26 @@ public:
     bool notify_helper(QObject *receiver, QEvent * e);
 
     void init(
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
                    Display *dpy = 0, Qt::HANDLE visual = 0, Qt::HANDLE cmap = 0
 #endif
                    );
     void initialize();
     void process_cmdline();
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     static void x11_initialize_style();
 #endif
 
     static bool inPopupMode();
+    bool popupActive() Q_DECL_OVERRIDE { return inPopupMode(); }
     void closePopup(QWidget *popup);
     void openPopup(QWidget *popup);
     static void setFocusWidget(QWidget *focus, Qt::FocusReason reason);
     static QWidget *focusNextPrevChild_helper(QWidget *toplevel, bool next,
                                               bool *wrappingOccurred = 0);
 
-#ifndef QT_NO_GRAPHICSVIEW
+#if QT_CONFIG(graphicsview)
     // Maintain a list of all scenes to ensure font and palette propagation to
     // all scenes.
     QList<QGraphicsScene *> scene_list;
@@ -183,7 +179,6 @@ public:
     static QWidgetList *popupWidgets;
     static QStyle *app_style;
     static bool overrides_native_style;
-    static int app_cspec;
     static QPalette *sys_pal;
     static QPalette *set_pal;
 
@@ -200,7 +195,7 @@ public:
     static QWidget *focus_widget;
     static QWidget *hidden_focus_widget;
     static QWidget *active_window;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     static int  wheel_scroll_lines;
     static QPointer<QWidget> wheel_widget;
 #endif
@@ -214,7 +209,7 @@ public:
     static void initializeWidgetFontHash();
     static void setSystemFont(const QFont &font);
 
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     static void applyX11SpecificCommandLineArguments(QWidget *main_widget);
 #endif
 
@@ -225,7 +220,7 @@ public:
     static Qt::NavigationMode navigationMode;
 #endif
 
-#if defined(Q_DEAD_CODE_FROM_QT4_MAC) || defined(Q_DEAD_CODE_FROM_QT4_X11)
+#if 0 /* Used to be included in Qt4 for Q_WS_MAC */ || 0 /* Used to be included in Qt4 for Q_WS_X11 */
     void _q_alertTimeOut();
     QHash<QWidget *, QTimer *> alertTimerHash;
 #endif
@@ -265,12 +260,12 @@ public:
     QGestureManager *gestureManager;
     QWidget *gestureWidget;
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_X11) || defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ || 0 /* Used to be included in Qt4 for Q_WS_WIN */
     QPixmap *move_cursor;
     QPixmap *copy_cursor;
     QPixmap *link_cursor;
 #endif
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
     QPixmap *ignore_cursor;
 #endif
 
@@ -301,9 +296,9 @@ private:
     static bool isAlien(QWidget *);
 };
 
-#if defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
   extern void qt_win_set_cursor(QWidget *, bool);
-#elif defined(Q_DEAD_CODE_FROM_QT4_X11)
+#elif 0 // Used to be included in Qt4 for Q_WS_X11
   extern void qt_x11_enforce_cursor(QWidget *, bool);
   extern void qt_x11_enforce_cursor(QWidget *);
 #else

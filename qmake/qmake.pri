@@ -11,8 +11,7 @@ SOURCES += project.cpp property.cpp main.cpp \
            generators/win32/msvc_nmake.cpp generators/projectgenerator.cpp \
            generators/win32/msvc_vcproj.cpp \
            generators/win32/msvc_vcxproj.cpp \
-           generators/win32/msvc_objectmodel.cpp generators/win32/msbuild_objectmodel.cpp \
-           generators/win32/cesdkhandler.cpp
+           generators/win32/msvc_objectmodel.cpp generators/win32/msbuild_objectmodel.cpp
 
 HEADERS += project.h property.h \
            library/qmake_global.h library/ioutils.h library/proitems.h library/qmakevfs.h library/qmakeglobals.h \
@@ -24,8 +23,7 @@ HEADERS += project.h property.h \
            generators/xmloutput.h generators/win32/msvc_nmake.h \
            generators/win32/msvc_vcproj.h \
            generators/win32/msvc_vcxproj.h \
-           generators/win32/msvc_objectmodel.h generators/win32/msbuild_objectmodel.h \
-           generators/win32/cesdkhandler.h
+           generators/win32/msvc_objectmodel.h generators/win32/msbuild_objectmodel.h
 
 bootstrap { #Qt code
    SOURCES+= \
@@ -70,7 +68,6 @@ bootstrap { #Qt code
         qlibraryinfo.cpp \
         qsystemerror.cpp \
         qvariant.cpp \
-        qvector.cpp \
         qvsnprintf.cpp \
         qxmlstream.cpp \
         qxmlutils.cpp \
@@ -153,11 +150,7 @@ bootstrap { #Qt code
         LFLAGS += -lcpp
     }
 
-    DEFINES += \
-        QT_BOOTSTRAPPED \
-        QT_NO_TEXTCODEC QT_NO_UNICODETABLES QT_NO_COMPONENT QT_NO_COMPRESS \
-        QT_NO_THREAD QT_NO_QOBJECT QT_NO_GEOM_VARIANT QT_NO_DATASTREAM \
-        QT_CRYPTOGRAPHICHASH_ONLY_SHA1 QT_JSON_READONLY QT_NO_STANDARDPATHS
+    DEFINES += QT_BOOTSTRAPPED
 
     INCLUDEPATH += \
         $$QT.core.includes $$QT.core_private.includes \

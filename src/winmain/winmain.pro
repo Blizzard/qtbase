@@ -8,7 +8,9 @@ DESTDIR = $$QT.core.libs
 CONFIG += static
 QT = core
 
-contains(QT_CONFIG, debug_and_release): CONFIG += build_all
+DEFINES += QT_NO_FOREACH
+
+qtConfig(debug_and_release): CONFIG += build_all
 
 win32-msvc*:QMAKE_CFLAGS_DEBUG -= -Zi
 win32-msvc*:QMAKE_CXXFLAGS_DEBUG -= -Zi
@@ -21,7 +23,7 @@ winrt {
 } else {
     SOURCES = qtmain_win.cpp
 
-    !wince: LIBS += -lshell32
+    LIBS += -lshell32
 }
 
 load(qt_installs)
@@ -31,5 +33,3 @@ TARGET = $$qtLibraryTarget($$TARGET$$QT_LIBINFIX) #do this towards the end
 load(qt_targets)
 load(qt_build_paths)
 load(qt_common)
-
-wince: QMAKE_POST_LINK =

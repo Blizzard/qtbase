@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,10 +44,14 @@
 #include "qiosviewcontroller.h"
 #include "qiostextresponder.h"
 #include "qioswindow.h"
+#ifndef Q_OS_TVOS
 #include "qiosmenu.h"
+#endif
 
+#include <QtCore/qoperatingsystemversion.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qwindow_p.h>
+#include <qpa/qwindowsysteminterface_p.h>
 
 @implementation QUIView
 
@@ -50,9 +60,9 @@
     return [CAEAGLLayer class];
 }
 
-- (id)initWithQIOSWindow:(QIOSWindow *)window
+- (id)initWithQIOSWindow:(QT_PREPEND_NAMESPACE(QIOSWindow) *)window
 {
-    if (self = [self initWithFrame:toCGRect(window->geometry())])
+    if (self = [self initWithFrame:window->geometry().toCGRect()])
         m_qioswindow = window;
 
     m_accessibleElements = [[NSMutableArray alloc] init];
@@ -72,7 +82,9 @@
         if (isQtApplication())
             self.hidden = YES;
 
+#ifndef Q_OS_TVOS
         self.multipleTouchEnabled = YES;
+#endif
 
         if (QIOSIntegration::instance()->debugWindowManagement()) {
             static CGFloat hue = 0.0;
@@ -143,7 +155,7 @@
     // from what we end up with after applying window constraints.
     QRect requestedGeometry = m_qioswindow->geometry();
 
-    QRect actualGeometry = fromCGRect(self.frame).toRect();
+    QRect actualGeometry = QRectF::fromCGRect(self.frame).toRect();
 
     // Persist the actual/new geometry so that QWindow::geometry() can
     // be queried on the resize event.
@@ -153,8 +165,7 @@
             requestedGeometry : qt_window_private(m_qioswindow->window())->geometry;
 
     QWindow *window = m_qioswindow->window();
-    QWindowSystemInterface::handleGeometryChange(window, actualGeometry, previousGeometry);
-    QWindowSystemInterface::flushWindowSystemEvents(window->inherits("QWidgetWindow") ? QEventLoop::ExcludeUserInputEvents : QEventLoop::AllEvents);
+    QWindowSystemInterface::handleGeometryChange<QWindowSystemInterface::SynchronousDelivery>(window, actualGeometry, previousGeometry);
 
     if (actualGeometry.size() != previousGeometry.size()) {
         // Trigger expose event on resize
@@ -178,7 +189,7 @@
     QRegion region;
 
     if (m_qioswindow->isExposed()) {
-        QSize bounds = fromCGRect(self.layer.bounds).toRect().size();
+        QSize bounds = QRectF::fromCGRect(self.layer.bounds).toRect().size();
 
         Q_ASSERT(m_qioswindow->geometry().size() == bounds);
         Q_ASSERT(self.hidden == !m_qioswindow->window()->isVisible());
@@ -186,8 +197,7 @@
         region = QRect(QPoint(), bounds);
     }
 
-    QWindowSystemInterface::handleExposeEvent(m_qioswindow->window(), region);
-    QWindowSystemInterface::flushWindowSystemEvents();
+    QWindowSystemInterface::handleExposeEvent<QWindowSystemInterface::SynchronousDelivery>(m_qioswindow->window(), region);
 }
 
 // -------------------------------------------------------------------------
@@ -199,26 +209,28 @@
 
 - (BOOL)becomeFirstResponder
 {
-    FirstResponderCandidate firstResponderCandidate(self);
+    {
+        // Scope for the duration of becoming first responder only, as the window
+        // activation event may trigger new responders, which we don't want to be
+        // blocked by this guard.
+        FirstResponderCandidate firstResponderCandidate(self);
 
-    qImDebug() << "win:" << m_qioswindow->window() << "self:" << self
-        << "first:" << [UIResponder currentFirstResponder];
+        qImDebug() << "win:" << m_qioswindow->window() << "self:" << self
+            << "first:" << [UIResponder currentFirstResponder];
 
-    if (![super becomeFirstResponder]) {
-        qImDebug() << m_qioswindow->window()
-            << "was not allowed to become first responder";
-        return NO;
+        if (![super becomeFirstResponder]) {
+            qImDebug() << m_qioswindow->window()
+                << "was not allowed to become first responder";
+            return NO;
+        }
+
+        qImDebug() << m_qioswindow->window() << "became first responder";
     }
 
-    qImDebug() << m_qioswindow->window() << "became first responder";
-
-    if (qGuiApp->focusWindow() != m_qioswindow->window()) {
-        QWindowSystemInterface::handleWindowActivated(m_qioswindow->window());
-        QWindowSystemInterface::flushWindowSystemEvents();
-    } else {
-        qImDebug() << m_qioswindow->window()
-            << "already active, not sending window activation";
-    }
+    if (qGuiApp->focusWindow() != m_qioswindow->window())
+        QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(m_qioswindow->window());
+    else
+        qImDebug() << m_qioswindow->window() << "already active, not sending window activation";
 
     return YES;
 }
@@ -253,10 +265,8 @@
     qImDebug() << m_qioswindow->window() << "resigned first responder";
 
     UIResponder *newResponder = FirstResponderCandidate::currentCandidate();
-    if ([self responderShouldTriggerWindowDeactivation:newResponder]) {
-        QWindowSystemInterface::handleWindowActivated(0);
-        QWindowSystemInterface::flushWindowSystemEvents();
-    }
+    if ([self responderShouldTriggerWindowDeactivation:newResponder])
+        QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(0);
 
     return YES;
 }
@@ -287,7 +297,7 @@
     QTouchDevice *touchDevice = QIOSIntegration::instance()->touchDevice();
     QTouchDevice::Capabilities touchCapabilities = touchDevice->capabilities();
 
-    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_IOS_9_0) {
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::IOS, 9)) {
         if (self.traitCollection.forceTouchCapability == UIForceTouchCapabilityAvailable)
             touchCapabilities |= QTouchDevice::Pressure;
         else
@@ -318,7 +328,8 @@
             // Touch positions are expected to be in QScreen global coordinates, and
             // as we already have the QWindow positioned at the right place, we can
             // just map from the local view position to global coordinates.
-            QPoint localViewPosition = fromCGPoint([uiTouch locationInView:self]).toPoint();
+            // tvOS: all touches start at the center of the screen and move from there.
+            QPoint localViewPosition = QPointF::fromCGPoint([uiTouch locationInView:self]).toPoint();
             QPoint globalScreenPosition = m_qioswindow->mapToGlobal(localViewPosition);
 
             touchPoint.area = QRectF(globalScreenPosition, QSize(0, 0));
@@ -345,10 +356,8 @@
 
 - (void)sendTouchEventWithTimestamp:(ulong)timeStamp
 {
-    // Send touch event synchronously
     QIOSIntegration *iosIntegration = QIOSIntegration::instance();
-    QWindowSystemInterface::handleTouchEvent(m_qioswindow->window(), timeStamp, iosIntegration->touchDevice(), m_activeTouches.values());
-    QWindowSystemInterface::flushWindowSystemEvents();
+    QWindowSystemInterface::handleTouchEvent<QWindowSystemInterface::SynchronousDelivery>(m_qioswindow->window(), timeStamp, iosIntegration->touchDevice(), m_activeTouches.values());
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
@@ -417,7 +426,8 @@
     // We do this by assuming that there are no cases where a
     // sub-set of the active touch events are intentionally cancelled.
 
-    if (touches && (static_cast<NSInteger>([touches count]) != m_activeTouches.count()))
+    NSInteger count = static_cast<NSInteger>([touches count]);
+    if (count != 0 && count != m_activeTouches.count())
         qWarning("Subset of active touches cancelled by UIKit");
 
     m_activeTouches.clear();
@@ -425,22 +435,80 @@
 
     NSTimeInterval timestamp = event ? event.timestamp : [[NSProcessInfo processInfo] systemUptime];
 
-    // Send cancel touch event synchronously
     QIOSIntegration *iosIntegration = static_cast<QIOSIntegration *>(QGuiApplicationPrivate::platformIntegration());
-    QWindowSystemInterface::handleTouchCancelEvent(m_qioswindow->window(), ulong(timestamp * 1000), iosIntegration->touchDevice());
-    QWindowSystemInterface::flushWindowSystemEvents();
+    QWindowSystemInterface::handleTouchCancelEvent<QWindowSystemInterface::SynchronousDelivery>(m_qioswindow->window(), ulong(timestamp * 1000), iosIntegration->touchDevice());
+}
+
+- (int)mapPressTypeToKey:(UIPress*)press
+{
+    switch (press.type) {
+    case UIPressTypeUpArrow: return Qt::Key_Up;
+    case UIPressTypeDownArrow: return Qt::Key_Down;
+    case UIPressTypeLeftArrow: return Qt::Key_Left;
+    case UIPressTypeRightArrow: return Qt::Key_Right;
+    case UIPressTypeSelect: return Qt::Key_Select;
+    case UIPressTypeMenu: return Qt::Key_Menu;
+    case UIPressTypePlayPause: return Qt::Key_MediaTogglePlayPause;
+    }
+    return Qt::Key_unknown;
+}
+
+- (bool)processPresses:(NSSet *)presses withType:(QEvent::Type)type {
+    // Presses on Menu button will generate a Menu key event. By default, not handling
+    // this event will cause the application to return to Headboard (tvOS launcher).
+    // When handling the event (for example, as a back button), both press and
+    // release events must be handled accordingly.
+
+    bool handled = false;
+    for (UIPress* press in presses) {
+        int key = [self mapPressTypeToKey:press];
+        if (key == Qt::Key_unknown)
+            continue;
+        if (QWindowSystemInterface::handleKeyEvent<QWindowSystemInterface::SynchronousDelivery>(m_qioswindow->window(), type, key, Qt::NoModifier))
+            handled = true;
+    }
+
+    return handled;
+}
+
+- (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
+{
+    if (![self processPresses:presses withType:QEvent::KeyPress])
+        [super pressesBegan:presses withEvent:event];
+}
+
+- (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
+{
+    if (![self processPresses:presses withType:QEvent::KeyPress])
+        [super pressesChanged:presses withEvent:event];
+}
+
+- (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
+{
+    if (![self processPresses:presses withType:QEvent::KeyRelease])
+        [super pressesEnded:presses withEvent:event];
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender
 {
+#ifndef Q_OS_TVOS
     // Check first if QIOSMenu should handle the action before continuing up the responder chain
     return [QIOSMenu::menuActionTarget() targetForAction:action withSender:sender] != 0;
+#else
+    Q_UNUSED(action)
+    Q_UNUSED(sender)
+    return false;
+#endif
 }
 
 - (id)forwardingTargetForSelector:(SEL)selector
 {
     Q_UNUSED(selector)
+#ifndef Q_OS_TVOS
     return QIOSMenu::menuActionTarget();
+#else
+    return nil;
+#endif
 }
 
 @end
@@ -450,7 +518,7 @@
 - (QWindow *)qwindow
 {
     if ([self isKindOfClass:[QUIView class]]) {
-        if (QIOSWindow *w = static_cast<QUIView *>(self)->m_qioswindow)
+        if (QT_PREPEND_NAMESPACE(QIOSWindow) *w = static_cast<QUIView *>(self)->m_qioswindow)
             return w->window();
     }
     return nil;
@@ -477,5 +545,7 @@
 
 @end
 
+#ifndef QT_NO_ACCESSIBILITY
 // Include category as an alternative to using -ObjC (Apple QA1490)
 #include "quiview_accessibility.mm"
+#endif

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -1689,6 +1684,57 @@ void tst_qmakelib::addParseCustomFunctions()
     /*    22 */     << H(TokTerminator))
             << ""
             << true;
+
+    QTest::newRow("bypassNesting()-{return}")
+            << "defineTest(test) { bypassNesting() { return(true) } }"
+            << TS(
+    /*     0 */ << H(TokLine) << H(1)
+    /*     2 */ << H(TokTestDef) << HS(L"test")
+    /*    10 */ /* body */ << I(16)
+    /*    12 */     << H(TokLine) << H(1)
+    /*    14 */     << H(TokBypassNesting)
+    /*    15 */     /* block */ << I(10)
+    /*    17 */         << H(TokLine) << H(1)
+    /*    19 */         << H(TokLiteral | TokNewStr) << S(L"true")
+    /*    25 */         << H(TokReturn)
+    /*    26 */         << H(TokTerminator)
+    /*    27 */     << H(TokTerminator))
+            << ""
+            << true;
+
+    QTest::newRow("test-AND-bypassNesting()-{}")
+            << "defineTest(test) { test: bypassNesting() {} }"
+            << TS(
+    /*     0 */ << H(TokLine) << H(1)
+    /*     2 */ << H(TokTestDef) << HS(L"test")
+    /*    10 */ /* body */ << I(17)
+    /*    12 */     << H(TokLine) << H(1)
+    /*    14 */     << H(TokHashLiteral) << HS(L"test")
+    /*    22 */     << H(TokCondition)
+    /*    23 */     << H(TokAnd)
+    /*    24 */     << H(TokBypassNesting)
+    /*    25 */     /* block */ << I(1)
+    /*    27 */         << H(TokTerminator)
+    /*    28 */     << H(TokTerminator))
+            << ""
+            << true;
+
+    QTest::newRow("test-OR-bypassNesting()-{}")
+            << "defineTest(test) { test| bypassNesting() {} }"
+            << TS(
+    /*     0 */ << H(TokLine) << H(1)
+    /*     2 */ << H(TokTestDef) << HS(L"test")
+    /*    10 */ /* body */ << I(17)
+    /*    12 */     << H(TokLine) << H(1)
+    /*    14 */     << H(TokHashLiteral) << HS(L"test")
+    /*    22 */     << H(TokCondition)
+    /*    23 */     << H(TokOr)
+    /*    24 */     << H(TokBypassNesting)
+    /*    25 */     /* block */ << I(1)
+    /*    27 */         << H(TokTerminator)
+    /*    28 */     << H(TokTerminator))
+            << ""
+            << true;
 }
 
 void tst_qmakelib::addParseAbuse()
@@ -1739,6 +1785,24 @@ void tst_qmakelib::addParseAbuse()
             << "!defineTest(test) {}"
             << TS()
             << "in:1: Unexpected NOT operator in front of function definition."
+            << false;
+
+    QTest::newRow("outer-bypassNesting()-{}")
+            << "bypassNesting() {}"
+            << TS()
+            << "in:1: Unexpected bypassNesting()."
+            << false;
+
+    QTest::newRow("bypassNesting(arg)-{}")
+            << "defineTest(test) { bypassNesting(arg) {} }"
+            << TS()
+            << "in:1: bypassNesting() requires zero arguments."
+            << false;
+
+    QTest::newRow("NOT-bypassNesting()-{}")
+            << "defineTest(test) { !bypassNesting() {} }"
+            << TS()
+            << "in:1: Unexpected NOT operator in front of bypassNesting()."
             << false;
 
     QTest::newRow("AND-test")
@@ -1967,7 +2031,7 @@ void tst_qmakelib::proParser()
     handler.setExpectedMessages(msgs.split('\n', QString::SkipEmptyParts));
     QMakeVfs vfs;
     QMakeParser parser(0, &vfs, &handler);
-    ProFile *pro = parser.parsedProBlock(in, "in", 1, QMakeParser::FullGrammar);
+    ProFile *pro = parser.parsedProBlock(QStringRef(&in), "in", 1, QMakeParser::FullGrammar);
     if (handler.printedMessages()) {
         qWarning("Got unexpected message(s)");
         verified = false;

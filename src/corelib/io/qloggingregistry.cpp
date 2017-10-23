@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -180,9 +186,10 @@ void QLoggingRule::parse(const QStringRef &pattern)
 */
 void QLoggingSettingsParser::setContent(const QString &content)
 {
-    QString content_ = content;
-    QTextStream stream(&content_, QIODevice::ReadOnly);
-    setContent(stream);
+    _rules.clear();
+    const auto lines = content.splitRef(QLatin1Char('\n'));
+    for (const auto &line : lines)
+        parseNextLine(line);
 }
 
 /*!
@@ -192,42 +199,50 @@ void QLoggingSettingsParser::setContent(const QString &content)
 void QLoggingSettingsParser::setContent(QTextStream &stream)
 {
     _rules.clear();
-    while (!stream.atEnd()) {
-        QString line = stream.readLine();
+    QString line;
+    while (stream.readLineInto(&line))
+        parseNextLine(QStringRef(&line));
+}
 
-        // Remove all whitespace from line
-        line = line.simplified();
-        line.remove(QLatin1Char(' '));
+/*!
+    \internal
+    Parses one line of the configuation file
+*/
 
-        // comment
-        if (line.startsWith(QLatin1Char(';')))
-            continue;
+void QLoggingSettingsParser::parseNextLine(QStringRef line)
+{
+    // Remove whitespace at start and end of line:
+    line = line.trimmed();
 
-        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
-            // new section
-            _section = line.mid(1, line.size() - 2);
-            continue;
-        }
+    // comment
+    if (line.startsWith(QLatin1Char(';')))
+        return;
 
-        if (_section.toLower() == QLatin1String("rules")) {
-            int equalPos = line.indexOf(QLatin1Char('='));
-            if (equalPos != -1) {
-                if (line.lastIndexOf(QLatin1Char('=')) == equalPos) {
-                    const QStringRef pattern = line.leftRef(equalPos);
-                    const QStringRef valueStr = line.midRef(equalPos + 1);
-                    int value = -1;
-                    if (valueStr == QLatin1String("true"))
-                        value = 1;
-                    else if (valueStr == QLatin1String("false"))
-                        value = 0;
-                    QLoggingRule rule(pattern, (value == 1));
-                    if (rule.flags != 0 && (value != -1))
-                        _rules.append(rule);
-                    else
-                        warnMsg("Ignoring malformed logging rule: '%s'", line.toUtf8().constData());
-                } else {
+    if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+        // new section
+        auto sectionName = line.mid(1, line.size() - 2).trimmed();
+        m_inRulesSection = sectionName.compare(QLatin1String("rules"), Qt::CaseInsensitive) == 0;
+        return;
+    }
+
+    if (m_inRulesSection) {
+        int equalPos = line.indexOf(QLatin1Char('='));
+        if (equalPos != -1) {
+            if (line.lastIndexOf(QLatin1Char('=')) == equalPos) {
+                const auto pattern = line.left(equalPos).trimmed();
+                const auto valueStr = line.mid(equalPos + 1).trimmed();
+                int value = -1;
+                if (valueStr == QLatin1String("true"))
+                    value = 1;
+                else if (valueStr == QLatin1String("false"))
+                    value = 0;
+                QLoggingRule rule(pattern, (value == 1));
+                if (rule.flags != 0 && (value != -1))
+                    _rules.append(rule);
+                else
                     warnMsg("Ignoring malformed logging rule: '%s'", line.toUtf8().constData());
-                }
+            } else {
+                warnMsg("Ignoring malformed logging rule: '%s'", line.toUtf8().constData());
             }
         }
     }
@@ -270,18 +285,19 @@ static QVector<QLoggingRule> loadRulesFromFile(const QString &filePath)
  */
 void QLoggingRegistry::init()
 {
+    QVector<QLoggingRule> er, qr, cr;
     // get rules from environment
     const QByteArray rulesFilePath = qgetenv("QT_LOGGING_CONF");
     if (!rulesFilePath.isEmpty())
-        envRules = loadRulesFromFile(QFile::decodeName(rulesFilePath));
+        er = loadRulesFromFile(QFile::decodeName(rulesFilePath));
 
     const QByteArray rulesSrc = qgetenv("QT_LOGGING_RULES").replace(';', '\n');
     if (!rulesSrc.isEmpty()) {
          QTextStream stream(rulesSrc);
          QLoggingSettingsParser parser;
-         parser.setSection(QStringLiteral("Rules"));
+         parser.setImplicitRulesSection(true);
          parser.setContent(stream);
-         envRules += parser.rules();
+         er += parser.rules();
     }
 
     const QString configFileName = QStringLiteral("qtlogging.ini");
@@ -290,19 +306,23 @@ void QLoggingRegistry::init()
     // get rules from Qt data configuration path
     const QString qtConfigPath
             = QDir(QLibraryInfo::location(QLibraryInfo::DataPath)).absoluteFilePath(configFileName);
-    qtConfigRules = loadRulesFromFile(qtConfigPath);
+    qr = loadRulesFromFile(qtConfigPath);
 #endif
 
     // get rules from user's/system configuration
     const QString envPath = QStandardPaths::locate(QStandardPaths::GenericConfigLocation,
                                                    QString::fromLatin1("QtProject/") + configFileName);
     if (!envPath.isEmpty())
-        configRules = loadRulesFromFile(envPath);
+        cr = loadRulesFromFile(envPath);
 
-    if (!envRules.isEmpty() || !qtConfigRules.isEmpty() || !configRules.isEmpty()) {
-        QMutexLocker locker(&registryMutex);
+    const QMutexLocker locker(&registryMutex);
+
+    ruleSets[EnvironmentRules] = std::move(er);
+    ruleSets[QtConfigRules] = std::move(qr);
+    ruleSets[ConfigRules] = std::move(cr);
+
+    if (!ruleSets[EnvironmentRules].isEmpty() || !ruleSets[QtConfigRules].isEmpty() || !ruleSets[ConfigRules].isEmpty())
         updateRules();
-    }
 }
 
 /*!
@@ -338,15 +358,15 @@ void QLoggingRegistry::unregisterCategory(QLoggingCategory *cat)
 void QLoggingRegistry::setApiRules(const QString &content)
 {
     QLoggingSettingsParser parser;
-    parser.setSection(QStringLiteral("Rules"));
+    parser.setImplicitRulesSection(true);
     parser.setContent(content);
-
-    QMutexLocker locker(&registryMutex);
 
     if (qtLoggingDebug())
         debugMsg("Loading logging rules set by QLoggingCategory::setFilterRules ...");
 
-    apiRules = parser.rules();
+    const QMutexLocker locker(&registryMutex);
+
+    ruleSets[ApiRules] = parser.rules();
 
     updateRules();
 }
@@ -359,10 +379,8 @@ void QLoggingRegistry::setApiRules(const QString &content)
 */
 void QLoggingRegistry::updateRules()
 {
-    rules = qtConfigRules + configRules + apiRules + envRules;
-
-    foreach (QLoggingCategory *cat, categories.keys())
-        (*categoryFilter)(cat);
+    for (auto it = categories.keyBegin(), end = categories.keyEnd(); it != end; ++it)
+        (*categoryFilter)(*it);
 }
 
 /*!
@@ -380,8 +398,7 @@ QLoggingRegistry::installFilter(QLoggingCategory::CategoryFilter filter)
     QLoggingCategory::CategoryFilter old = categoryFilter;
     categoryFilter = filter;
 
-    foreach (QLoggingCategory *cat, categories.keys())
-        (*categoryFilter)(cat);
+    updateRules();
 
     return old;
 }
@@ -394,10 +411,12 @@ QLoggingRegistry *QLoggingRegistry::instance()
 /*!
     \internal
     Updates category settings according to rules.
+
+    As a category filter, it is run with registryMutex held.
 */
 void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
 {
-    QLoggingRegistry *reg = QLoggingRegistry::instance();
+    const QLoggingRegistry *reg = QLoggingRegistry::instance();
     Q_ASSERT(reg->categories.contains(cat));
     QtMsgType enableForLevel = reg->categories.value(cat);
 
@@ -418,19 +437,22 @@ void QLoggingRegistry::defaultCategoryFilter(QLoggingCategory *cat)
     }
 
     QString categoryName = QLatin1String(cat->categoryName());
-    foreach (const QLoggingRule &item, reg->rules) {
-        int filterpass = item.pass(categoryName, QtDebugMsg);
-        if (filterpass != 0)
-            debug = (filterpass > 0);
-        filterpass = item.pass(categoryName, QtInfoMsg);
-        if (filterpass != 0)
-            info = (filterpass > 0);
-        filterpass = item.pass(categoryName, QtWarningMsg);
-        if (filterpass != 0)
-            warning = (filterpass > 0);
-        filterpass = item.pass(categoryName, QtCriticalMsg);
-        if (filterpass != 0)
-            critical = (filterpass > 0);
+
+    for (const auto &ruleSet : reg->ruleSets) {
+        for (const auto &rule : ruleSet) {
+            int filterpass = rule.pass(categoryName, QtDebugMsg);
+            if (filterpass != 0)
+                debug = (filterpass > 0);
+            filterpass = rule.pass(categoryName, QtInfoMsg);
+            if (filterpass != 0)
+                info = (filterpass > 0);
+            filterpass = rule.pass(categoryName, QtWarningMsg);
+            if (filterpass != 0)
+                warning = (filterpass > 0);
+            filterpass = rule.pass(categoryName, QtCriticalMsg);
+            if (filterpass != 0)
+                critical = (filterpass > 0);
+        }
     }
 
     cat->setEnabled(QtDebugMsg, debug);

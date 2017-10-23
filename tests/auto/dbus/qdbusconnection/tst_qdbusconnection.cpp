@@ -1,32 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -101,7 +96,7 @@ void tst_QDBusConnection::noConnection()
     QVERIFY(con.callWithCallback(msg, &spy, SLOT(asyncReply)) == 0);
 
     QDBusMessage reply = con.call(msg);
-    QVERIFY(reply.type() == QDBusMessage::ErrorMessage);
+    QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
 
     QDBusReply<void> voidreply(reply);
     QVERIFY(!voidreply.isValid());
@@ -1010,14 +1005,14 @@ void tst_QDBusConnection::callSelfByAnotherName()
         break;
 
     case 1:
-        QVERIFY(con.interface()->registerService(sname).value() == QDBusConnectionInterface::ServiceRegistered);
+        QCOMPARE(con.interface()->registerService(sname).value(), QDBusConnectionInterface::ServiceRegistered);
         break;
 
     case 2: {
             // flag is DBUS_NAME_FLAG_DO_NOT_QUEUE = 0x04
             // reply is DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER = 1
             QDBusReply<uint> reply = con.interface()->call("RequestName", sname, 4u);
-            QVERIFY(reply.value() == 1);
+            QCOMPARE(reply.value(), uint(1));
         }
     }
 
@@ -1040,7 +1035,7 @@ void tst_QDBusConnection::callSelfByAnotherName()
                                                       QString(), "test0");
     QDBusMessage reply = con.call(msg, QDBus::Block, 1000);
 
-    QVERIFY(reply.type() == QDBusMessage::ReplyMessage);
+    QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
     QVERIFY_HOOKCALLED();
 }
 
@@ -1058,8 +1053,50 @@ void tst_QDBusConnection::multipleInterfacesInQObject()
                                                       "local.BaseObject", "anotherMethod");
     QDBusMessage reply = con.call(msg, QDBus::Block);
     QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
-    QVERIFY(reply.arguments().count() == 0);
+    QCOMPARE(reply.arguments().count(), 0);
     QVERIFY_HOOKCALLED();
+}
+
+void tst_QDBusConnection::connectSignal()
+{
+    if (!QCoreApplication::instance())
+        QSKIP("Test requires a QCoreApplication");
+
+    QDBusConnection con = QDBusConnection::sessionBus();
+
+    QDBusMessage signal = QDBusMessage::createSignal("/", "org.qtproject.TestCase",
+                                                     "oneSignal");
+    signal << "one parameter";
+
+    SignalReceiver recv;
+    QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // disconnect and try with a signature
+    recv.argumentReceived.clear();
+    recv.signalsReceived = 0;
+    QVERIFY(con.disconnect(con.baseService(), signal.path(), signal.interface(),
+                           signal.member(), &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), "s", &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // confirm that we are, indeed, a unique connection
+    recv.argumentReceived.clear();
+    recv.signalsReceived = 0;
+    QVERIFY(!con.connect(con.baseService(), signal.path(), signal.interface(),
+                        signal.member(), "s", &recv, SLOT(oneSlot(QString))));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, signal.arguments().at(0).toString());
+    QCOMPARE(recv.signalsReceived, 1);
 }
 
 void tst_QDBusConnection::slotsWithLessParameters()
@@ -1073,25 +1110,36 @@ void tst_QDBusConnection::slotsWithLessParameters()
                                                      "oneSignal");
     signal << "one parameter";
 
-    signalsReceived = 0;
+    SignalReceiver recv;
     QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
-                        signal.member(), this, SLOT(oneSlot())));
+                        signal.member(), &recv, SLOT(oneSlot())));
     QVERIFY(con.send(signal));
     QTest::qWait(100);
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
 
     // disconnect and try with a signature
-    signalsReceived = 0;
+    recv.signalsReceived = 0;
     QVERIFY(con.disconnect(con.baseService(), signal.path(), signal.interface(),
-                           signal.member(), this, SLOT(oneSlot())));
+                           signal.member(), &recv, SLOT(oneSlot())));
     QVERIFY(con.connect(con.baseService(), signal.path(), signal.interface(),
-                        signal.member(), "s", this, SLOT(oneSlot())));
+                        signal.member(), "s", &recv, SLOT(oneSlot())));
     QVERIFY(con.send(signal));
     QTest::qWait(100);
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
+
+    // confirm that we are, indeed, a unique connection
+    recv.signalsReceived = 0;
+    QVERIFY(!con.connect(con.baseService(), signal.path(), signal.interface(),
+                         signal.member(), "s", &recv, SLOT(oneSlot())));
+    QVERIFY(con.send(signal));
+    QTest::qWait(100);
+    QCOMPARE(recv.argumentReceived, QString());
+    QCOMPARE(recv.signalsReceived, 1);
 }
 
-void tst_QDBusConnection::secondCallWithCallback()
+void SignalReceiver::secondCallWithCallback()
 {
     QDBusConnection con = QDBusConnection::sessionBus();
     QDBusMessage msg = QDBusMessage::createMethodCall(con.baseService(), "/test", QString(),
@@ -1111,12 +1159,12 @@ void tst_QDBusConnection::nestedCallWithCallback()
 
     QDBusMessage msg = QDBusMessage::createMethodCall(connection.baseService(), "/test", QString(),
                                                       "ThisFunctionDoesntExist");
-    signalsReceived = 0;
 
-    connection.callWithCallback(msg, this, SLOT(exitLoop()), SLOT(secondCallWithCallback()), 10);
+    SignalReceiver recv;
+    connection.callWithCallback(msg, &recv, SLOT(exitLoop()), SLOT(secondCallWithCallback()), 10);
     QTestEventLoop::instance().enterLoop(15);
     QVERIFY(!QTestEventLoop::instance().timeout());
-    QCOMPARE(signalsReceived, 1);
+    QCOMPARE(recv.signalsReceived, 1);
     QCOMPARE_HOOKCOUNT(2);
 }
 
@@ -1362,7 +1410,7 @@ void tst_QDBusConnection::callVirtualObjectLocal()
 
 void tst_QDBusConnection::pendingCallWhenDisconnected()
 {
-#ifdef QT_NO_PROCESS
+#if !QT_CONFIG(process)
     QSKIP("Test requires QProcess");
 #else
     if (!QCoreApplication::instance())

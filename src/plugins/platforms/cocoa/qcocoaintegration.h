@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,7 +40,7 @@
 #ifndef QPLATFORMINTEGRATION_COCOA_H
 #define QPLATFORMINTEGRATION_COCOA_H
 
-#include <Cocoa/Cocoa.h>
+#include <AppKit/AppKit.h>
 
 #include "qcocoacursor.h"
 #include "qcocoawindow.h"
@@ -48,7 +54,7 @@
 
 #include <QtCore/QScopedPointer>
 #include <qpa/qplatformintegration.h>
-#include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
+#include <QtFontDatabaseSupport/private/qcoretextfontdatabase_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -78,8 +84,17 @@ public:
     // ----------------------------------------------------
     // Additional methods
     void setVirtualSiblings(const QList<QPlatformScreen *> &siblings) { m_siblings = siblings; }
-    NSScreen *osScreen() const;
+    NSScreen *nativeScreen() const;
     void updateGeometry();
+
+    QPointF mapToNative(const QPointF &pos) const { return flipCoordinate(pos); }
+    QRectF mapToNative(const QRectF &rect) const { return flipCoordinate(rect); }
+    QPointF mapFromNative(const QPointF &pos) const { return flipCoordinate(pos); }
+    QRectF mapFromNative(const QRectF &rect) const { return flipCoordinate(rect); }
+
+private:
+    QPointF flipCoordinate(const QPointF &pos) const;
+    QRectF flipCoordinate(const QRectF &rect) const;
 
 public:
     int m_screenIndex;
@@ -111,6 +126,7 @@ public:
 
     bool hasCapability(QPlatformIntegration::Capability cap) const Q_DECL_OVERRIDE;
     QPlatformWindow *createPlatformWindow(QWindow *window) const Q_DECL_OVERRIDE;
+    QPlatformWindow *createForeignWindow(QWindow *window, WId nativeHandle) const Q_DECL_OVERRIDE;
 #ifndef QT_NO_OPENGL
     QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const Q_DECL_OVERRIDE;
 #endif
@@ -124,7 +140,9 @@ public:
 #ifndef QT_NO_ACCESSIBILITY
     QCocoaAccessibility *accessibility() const Q_DECL_OVERRIDE;
 #endif
+#ifndef QT_NO_CLIPBOARD
     QCocoaClipboard *clipboard() const Q_DECL_OVERRIDE;
+#endif
     QCocoaDrag *drag() const Q_DECL_OVERRIDE;
 
     QStringList themeNames() const Q_DECL_OVERRIDE;
@@ -136,7 +154,7 @@ public:
     QList<int> possibleKeys(const QKeyEvent *event) const Q_DECL_OVERRIDE;
 
     void updateScreens();
-    QCocoaScreen *screenAtIndex(int index);
+    QCocoaScreen *screenForNSScreen(NSScreen *nsScreen);
 
     void setToolbar(QWindow *window, NSToolbar *toolbar);
     NSToolbar *toolbar(QWindow *window) const;
@@ -148,6 +166,9 @@ public:
     QList<QCocoaWindow *> *popupWindowStack();
 
     void setApplicationIcon(const QIcon &icon) const Q_DECL_OVERRIDE;
+
+    void beep() const Q_DECL_OVERRIDE;
+
 private:
     static QCocoaIntegration *mInstance;
     Options mOptions;
@@ -160,7 +181,9 @@ private:
 #endif
     QScopedPointer<QPlatformTheme> mPlatformTheme;
     QList<QCocoaScreen *> mScreens;
+#ifndef QT_NO_CLIPBOARD
     QCocoaClipboard  *mCocoaClipboard;
+#endif
     QScopedPointer<QCocoaDrag> mCocoaDrag;
     QScopedPointer<QCocoaNativeInterface> mNativeInterface;
     QScopedPointer<QCocoaServices> mServices;

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -137,18 +143,24 @@
 
 #include "qcompleter_p.h"
 
-#ifndef QT_NO_COMPLETER
-
 #include "QtWidgets/qscrollbar.h"
 #include "QtCore/qstringlistmodel.h"
+#if QT_CONFIG(dirmodel)
 #include "QtWidgets/qdirmodel.h"
+#endif
+#if QT_CONFIG(filesystemmodel)
 #include "QtWidgets/qfilesystemmodel.h"
+#endif
 #include "QtWidgets/qheaderview.h"
+#if QT_CONFIG(listview)
 #include "QtWidgets/qlistview.h"
+#endif
 #include "QtWidgets/qapplication.h"
 #include "QtGui/qevent.h"
 #include "QtWidgets/qdesktopwidget.h"
+#if QT_CONFIG(lineedit)
 #include "QtWidgets/qlineedit.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -455,13 +467,13 @@ QMatchData QCompletionEngine::filterHistory()
     if (curParts.count() <= 1 || c->proxy->showAll || !source)
         return QMatchData();
 
-#ifndef QT_NO_DIRMODEL
+#if QT_CONFIG(dirmodel)
     const bool isDirModel = (qobject_cast<QDirModel *>(source) != 0);
 #else
     const bool isDirModel = false;
 #endif
     Q_UNUSED(isDirModel)
-#ifndef QT_NO_FILESYSTEMMODEL
+#if QT_CONFIG(filesystemmodel)
     const bool isFsModel = (qobject_cast<QFileSystemModel *>(source) != 0);
 #else
     const bool isFsModel = false;
@@ -474,7 +486,7 @@ QMatchData QCompletionEngine::filterHistory()
     for (int i = 0; i < source->rowCount(); i++) {
         QString str = source->index(i, c->column).data().toString();
         if (str.startsWith(c->prefix, c->cs)
-#if !defined(Q_OS_WIN) || defined(Q_OS_WINCE)
+#if !defined(Q_OS_WIN)
             && ((!isFsModel && !isDirModel) || QDir::toNativeSeparators(str) != QDir::separator())
 #endif
             )
@@ -487,7 +499,7 @@ QMatchData QCompletionEngine::filterHistory()
 bool QCompletionEngine::matchHint(QString part, const QModelIndex& parent, QMatchData *hint)
 {
     if (c->cs == Qt::CaseInsensitive)
-        part = part.toLower();
+        part = std::move(part).toLower();
 
     const CacheItem& map = cache[parent];
 
@@ -506,7 +518,7 @@ bool QCompletionEngine::matchHint(QString part, const QModelIndex& parent, QMatc
 bool QCompletionEngine::lookupCache(QString part, const QModelIndex& parent, QMatchData *m)
 {
    if (c->cs == Qt::CaseInsensitive)
-        part = part.toLower();
+        part = std::move(part).toLower();
    const CacheItem& map = cache[parent];
    if (!map.contains(part))
        return false;
@@ -542,7 +554,7 @@ void QCompletionEngine::saveInCache(QString part, const QModelIndex& parent, con
     }
 
     if (c->cs == Qt::CaseInsensitive)
-        part = part.toLower();
+        part = std::move(part).toLower();
     cache[parent][part] = m;
 }
 
@@ -552,7 +564,7 @@ QIndexMapper QSortedModelEngine::indexHint(QString part, const QModelIndex& pare
     const QAbstractItemModel *model = c->proxy->sourceModel();
 
     if (c->cs == Qt::CaseInsensitive)
-        part = part.toLower();
+        part = std::move(part).toLower();
 
     const CacheItem& map = cache[parent];
 
@@ -749,9 +761,9 @@ void QUnsortedModelEngine::filterOnDemand(int n)
     const QAbstractItemModel *model = c->proxy->sourceModel();
     int lastRow = model->rowCount(curParent) - 1;
     QIndexMapper im(curMatch.indices.last() + 1, lastRow);
-    int lastIndex = buildIndices(curParts.last(), curParent, n, im, &curMatch);
+    int lastIndex = buildIndices(curParts.constLast(), curParent, n, im, &curMatch);
     curMatch.partial = (lastRow != lastIndex);
-    saveInCache(curParts.last(), curParent, curMatch);
+    saveInCache(curParts.constLast(), curParent, curMatch);
 }
 
 QMatchData QUnsortedModelEngine::filter(const QString& part, const QModelIndex& parent, int n)
@@ -808,11 +820,11 @@ void QCompleterPrivate::init(QAbstractItemModel *m)
     proxy = new QCompletionModel(this, q);
     QObject::connect(proxy, SIGNAL(rowsAdded()), q, SLOT(_q_autoResizePopup()));
     q->setModel(m);
-#ifdef QT_NO_LISTVIEW
+#if !QT_CONFIG(listview)
     q->setCompletionMode(QCompleter::InlineCompletion);
 #else
     q->setCompletionMode(QCompleter::PopupCompletion);
-#endif // QT_NO_LISTVIEW
+#endif // QT_CONFIG(listview)
 }
 
 void QCompleterPrivate::setCurrentIndex(QModelIndex index, bool select)
@@ -859,14 +871,14 @@ void QCompleterPrivate::_q_complete(QModelIndex index, bool highlighted)
         QModelIndex si = proxy->mapToSource(index);
         si = si.sibling(si.row(), column); // for clicked()
         completion = q->pathFromIndex(si);
-#ifndef QT_NO_DIRMODEL
+#if QT_CONFIG(dirmodel)
         // add a trailing separator in inline
         if (mode == QCompleter::InlineCompletion) {
             if (qobject_cast<QDirModel *>(proxy->sourceModel()) && QFileInfo(completion).isDir())
                 completion += QDir::separator();
         }
 #endif
-#ifndef QT_NO_FILESYSTEMMODEL
+#if QT_CONFIG(filesystemmodel)
         // add a trailing separator in inline
         if (mode == QCompleter::InlineCompletion) {
             if (qobject_cast<QFileSystemModel *>(proxy->sourceModel()) && QFileInfo(completion).isDir())
@@ -1001,11 +1013,15 @@ QCompleter::~QCompleter()
 void QCompleter::setWidget(QWidget *widget)
 {
     Q_D(QCompleter);
+    if (widget == d->widget)
+        return;
+
     if (d->widget)
         d->widget->removeEventFilter(this);
     d->widget = widget;
     if (d->widget)
         d->widget->installEventFilter(this);
+
     if (d->popup) {
         d->popup->hide();
         d->popup->setFocusProxy(d->widget);
@@ -1038,7 +1054,7 @@ void QCompleter::setModel(QAbstractItemModel *model)
 {
     Q_D(QCompleter);
     QAbstractItemModel *oldModel = d->proxy->sourceModel();
-#ifndef QT_NO_FILESYSTEMMODEL
+#if QT_CONFIG(filesystemmodel)
     if (qobject_cast<const QFileSystemModel *>(oldModel))
         setCompletionRole(Qt::EditRole); // QTBUG-54642, clear FileNameRole set by QFileSystemModel
 #endif
@@ -1047,19 +1063,19 @@ void QCompleter::setModel(QAbstractItemModel *model)
         setPopup(d->popup); // set the model and make new connections
     if (oldModel && oldModel->QObject::parent() == this)
         delete oldModel;
-#ifndef QT_NO_DIRMODEL
+#if QT_CONFIG(dirmodel)
     if (qobject_cast<QDirModel *>(model)) {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
         setCaseSensitivity(Qt::CaseInsensitive);
 #else
         setCaseSensitivity(Qt::CaseSensitive);
 #endif
     }
-#endif // QT_NO_DIRMODEL
-#ifndef QT_NO_FILESYSTEMMODEL
+#endif // QT_CONFIG(dirmodel)
+#if QT_CONFIG(filesystemmodel)
     QFileSystemModel *fsModel = qobject_cast<QFileSystemModel *>(model);
     if (fsModel) {
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
         setCaseSensitivity(Qt::CaseInsensitive);
 #else
         setCaseSensitivity(Qt::CaseSensitive);
@@ -1067,7 +1083,7 @@ void QCompleter::setModel(QAbstractItemModel *model)
         setCompletionRole(QFileSystemModel::FileNameRole);
         connect(fsModel, SIGNAL(directoryLoaded(QString)), this, SLOT(_q_fileSystemModelDirectoryLoaded(QString)));
     }
-#endif // QT_NO_FILESYSTEMMODEL
+#endif // QT_CONFIG(filesystemmodel)
 }
 
 /*!
@@ -1148,9 +1164,9 @@ void QCompleter::setFilterMode(Qt::MatchFlags filterMode)
     if (d->filterMode == filterMode)
         return;
 
-    if (filterMode != Qt::MatchStartsWith
-            && filterMode != Qt::MatchContains
-            && filterMode != Qt::MatchEndsWith) {
+    if (Q_UNLIKELY(filterMode != Qt::MatchStartsWith &&
+                   filterMode != Qt::MatchContains &&
+                   filterMode != Qt::MatchEndsWith)) {
         qWarning("Unhandled QCompleter::filterMode flag is used.");
         return;
     }
@@ -1206,7 +1222,7 @@ void QCompleter::setPopup(QAbstractItemView *popup)
     popup->setFocusProxy(d->widget);
     popup->installEventFilter(this);
     popup->setItemDelegate(new QCompleterItemDelegate(popup));
-#ifndef QT_NO_LISTVIEW
+#if QT_CONFIG(listview)
     if (QListView *listView = qobject_cast<QListView *>(popup)) {
         listView->setModelColumn(d->column);
     }
@@ -1230,7 +1246,7 @@ void QCompleter::setPopup(QAbstractItemView *popup)
 QAbstractItemView *QCompleter::popup() const
 {
     Q_D(const QCompleter);
-#ifndef QT_NO_LISTVIEW
+#if QT_CONFIG(listview)
     if (!d->popup && completionMode() != QCompleter::InlineCompletion) {
         QListView *listView = new QListView;
         listView->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -1241,7 +1257,7 @@ QAbstractItemView *QCompleter::popup() const
         QCompleter *that = const_cast<QCompleter*>(this);
         that->setPopup(listView);
     }
-#endif // QT_NO_LISTVIEW
+#endif // QT_CONFIG(listview)
     return d->popup;
 }
 
@@ -1341,11 +1357,12 @@ bool QCompleter::eventFilter(QObject *o, QEvent *e)
         }
 
         // default implementation for keys not handled by the widget when popup is open
+#if QT_CONFIG(shortcut)
         if (ke->matches(QKeySequence::Cancel)) {
             d->popup->hide();
             return true;
         }
-
+#endif
         switch (key) {
 #ifdef QT_KEYPAD_NAVIGATION
         case Qt::Key_Select:
@@ -1571,7 +1588,7 @@ void QCompleter::setCompletionColumn(int column)
     Q_D(QCompleter);
     if (d->column == column)
         return;
-#ifndef QT_NO_LISTVIEW
+#if QT_CONFIG(listview)
     if (QListView *listView = qobject_cast<QListView *>(d->popup))
         listView->setModelColumn(column);
 #endif
@@ -1645,7 +1662,7 @@ int QCompleter::maxVisibleItems() const
 void QCompleter::setMaxVisibleItems(int maxItems)
 {
     Q_D(QCompleter);
-    if (maxItems < 0) {
+    if (Q_UNLIKELY(maxItems < 0)) {
         qWarning("QCompleter::setMaxVisibleItems: "
                  "Invalid max visible items (%d) must be >= 0", maxItems);
         return;
@@ -1760,10 +1777,10 @@ QString QCompleter::pathFromIndex(const QModelIndex& index) const
         return QString();
     bool isDirModel = false;
     bool isFsModel = false;
-#ifndef QT_NO_DIRMODEL
+#if QT_CONFIG(dirmodel)
     isDirModel = qobject_cast<QDirModel *>(d->proxy->sourceModel()) != 0;
 #endif
-#ifndef QT_NO_FILESYSTEMMODEL
+#if QT_CONFIG(filesystemmodel)
     isFsModel = qobject_cast<QFileSystemModel *>(d->proxy->sourceModel()) != 0;
 #endif
     if (!isDirModel && !isFsModel)
@@ -1775,7 +1792,7 @@ QString QCompleter::pathFromIndex(const QModelIndex& index) const
         QString t;
         if (isDirModel)
             t = sourceModel->data(idx, Qt::EditRole).toString();
-#ifndef QT_NO_FILESYSTEMMODEL
+#if QT_CONFIG(filesystemmodel)
         else
             t = sourceModel->data(idx, QFileSystemModel::FileNameRole).toString();
 #endif
@@ -1784,7 +1801,7 @@ QString QCompleter::pathFromIndex(const QModelIndex& index) const
         idx = parent.sibling(parent.row(), index.column());
     } while (idx.isValid());
 
-#if !defined(Q_OS_WIN) || defined(Q_OS_WINCE)
+#if !defined(Q_OS_WIN)
     if (list.count() == 1) // only the separator or some other text
         return list[0];
     list[0].clear() ; // the join below will provide the separator
@@ -1809,12 +1826,12 @@ QStringList QCompleter::splitPath(const QString& path) const
 {
     bool isDirModel = false;
     bool isFsModel = false;
-#ifndef QT_NO_DIRMODEL
+#if QT_CONFIG(dirmodel)
     Q_D(const QCompleter);
     isDirModel = qobject_cast<QDirModel *>(d->proxy->sourceModel()) != 0;
 #endif
-#ifndef QT_NO_FILESYSTEMMODEL
-#ifdef QT_NO_DIRMODEL
+#if QT_CONFIG(filesystemmodel)
+#if !QT_CONFIG(dirmodel)
     Q_D(const QCompleter);
 #endif
     isFsModel = qobject_cast<QFileSystemModel *>(d->proxy->sourceModel()) != 0;
@@ -1824,7 +1841,7 @@ QStringList QCompleter::splitPath(const QString& path) const
         return QStringList(completionPrefix());
 
     QString pathCopy = QDir::toNativeSeparators(path);
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     if (pathCopy == QLatin1String("\\") || pathCopy == QLatin1String("\\\\"))
         return QStringList(pathCopy);
     const bool startsWithDoubleSlash = pathCopy.startsWith(QLatin1String("\\\\"));
@@ -1835,7 +1852,7 @@ QStringList QCompleter::splitPath(const QString& path) const
     const QChar sep = QDir::separator();
     QStringList parts = pathCopy.split(sep);
 
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
     if (startsWithDoubleSlash)
         parts[0].prepend(QLatin1String("\\\\"));
 #else
@@ -1885,5 +1902,3 @@ QT_END_NAMESPACE
 #include "moc_qcompleter.cpp"
 
 #include "moc_qcompleter_p.cpp"
-
-#endif // QT_NO_COMPLETER

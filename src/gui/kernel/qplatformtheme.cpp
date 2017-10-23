@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,6 +44,7 @@
 #include <QtCore/QVariant>
 #include <QtCore/QStringList>
 #include <QtCore/qfileinfo.h>
+#include <qicon.h>
 #include <qpalette.h>
 #include <qtextformat.h>
 #include <private/qiconloader_p.h>
@@ -73,6 +80,10 @@ QT_BEGIN_NAMESPACE
     \value MouseDoubleClickInterval (int) Mouse double click interval in ms,
                                     overriding QPlatformIntegration::styleHint.
 
+    \value MouseDoubleClickDistance (int) The maximum distance in logical pixels which the mouse can travel
+                        between clicks in order for the click sequence to be handled as a double click.
+                        The default value is 5 logical pixels.
+
     \value MousePressAndHoldInterval (int) Mouse press and hold interval in ms,
                                     overriding QPlatformIntegration::styleHint.
 
@@ -81,6 +92,9 @@ QT_BEGIN_NAMESPACE
 
     \value StartDragTime (int) Start drag time in ms,
                                overriding QPlatformIntegration::styleHint.
+
+    \value WheelScrollLines (int) The number of lines to scroll a widget, when the mouse wheel is rotated.
+                        The default value is 3.  \sa QApplication::wheelScrollLines()
 
     \value KeyboardAutoRepeatRate (int) Keyboard auto repeat rate,
                                   overriding QPlatformIntegration::styleHint.
@@ -142,10 +156,16 @@ QT_BEGIN_NAMESPACE
 
     \value ContextMenuOnMouseRelease (bool) Whether the context menu should be shown on mouse release.
 
+    \value TouchDoubleTapDistance (int) The maximum distance in logical pixels which a touchpoint can travel
+                        between taps in order for the tap sequence to be handled as a double tap.
+                        The default value is double the MouseDoubleClickDistance, or 10 logical pixels
+                        if that is not specified.
+
     \sa themeHint(), QStyle::pixelMetric()
 */
 
 
+#ifndef QT_NO_SHORTCUT
 // Table of key bindings. It must be sorted on key sequence:
 // The integer value of VK_KEY | Modifier Keys (e.g., VK_META, and etc.)
 // A priority of 1 indicates that this is the primary key binding when multiple are defined.
@@ -329,6 +349,7 @@ const QKeyBinding QPlatformThemePrivate::keyBindings[] = {
 };
 
 const uint QPlatformThemePrivate::numberOfKeyBindings = sizeof(QPlatformThemePrivate::keyBindings)/(sizeof(QKeyBinding));
+#endif
 
 QPlatformThemePrivate::QPlatformThemePrivate()
         : systemPalette(0)
@@ -399,14 +420,22 @@ QPixmap QPlatformTheme::standardPixmap(StandardPixmap sp, const QSizeF &size) co
     return QPixmap();
 }
 
-QPixmap QPlatformTheme::fileIconPixmap(const QFileInfo &fileInfo, const QSizeF &size,
-                                       QPlatformTheme::IconOptions iconOptions) const
+/*!
+    \brief Return an icon for \a fileInfo, observing \a iconOptions.
+
+    This function is queried by QFileIconProvider and similar classes to obtain
+    an icon for a file. If it does not return a non-null icon, fileIconPixmap()
+    is queried for a specific size.
+
+    \since 5.8
+*/
+
+QIcon QPlatformTheme::fileIcon(const QFileInfo &fileInfo, QPlatformTheme::IconOptions iconOptions) const
 {
     Q_UNUSED(fileInfo);
-    Q_UNUSED(size);
     Q_UNUSED(iconOptions);
     // TODO Should return QCommonStyle pixmaps?
-    return QPixmap();
+    return QIcon();
 }
 
 QVariant QPlatformTheme::themeHint(ThemeHint hint) const
@@ -438,6 +467,8 @@ QVariant QPlatformTheme::themeHint(ThemeHint hint) const
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::MousePressAndHoldInterval);
     case QPlatformTheme::ItemViewActivateItemOnSingleClick:
         return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ItemViewActivateItemOnSingleClick);
+    case QPlatformTheme::UiEffects:
+        return QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::UiEffects);
     default:
         return QPlatformTheme::defaultThemeHint(hint);
     }
@@ -514,6 +545,14 @@ QVariant QPlatformTheme::defaultThemeHint(ThemeHint hint)
         }
     case WheelScrollLines:
         return QVariant(3);
+    case TouchDoubleTapDistance:
+        {
+            bool ok = false;
+            int dist = qEnvironmentVariableIntValue("QT_DBL_TAP_DIST", &ok);
+            if (!ok)
+                dist = defaultThemeHint(MouseDoubleClickDistance).toInt(&ok) * 2;
+            return QVariant(ok ? dist : 10);
+        }
     }
     return QVariant();
 }
@@ -574,6 +613,7 @@ static inline int maybeSwapShortcut(int shortcut)
 }
 #endif
 
+#ifndef QT_NO_SHORTCUT
 // mixed-mode predicate: all of these overloads are actually needed (but not all for every compiler)
 struct ByStandardKey {
     typedef bool result_type;
@@ -624,6 +664,7 @@ QList<QKeySequence> QPlatformTheme::keyBindings(QKeySequence::StandardKey key) c
 
     return list;
 }
+#endif
 
 /*!
    Returns the text of a standard \a button.
@@ -635,6 +676,19 @@ QList<QKeySequence> QPlatformTheme::keyBindings(QKeySequence::StandardKey key) c
 QString QPlatformTheme::standardButtonText(int button) const
 {
     return QPlatformTheme::defaultStandardButtonText(button);
+}
+
+/*!
+   Returns the mnemonic that should be used for a standard \a button.
+
+  \since 5.9
+  \sa QPlatformDialogHelper::StandardButton
+ */
+
+QKeySequence QPlatformTheme::standardButtonShortcut(int button) const
+{
+    Q_UNUSED(button)
+    return QKeySequence();
 }
 
 QString QPlatformTheme::defaultStandardButtonText(int button)
@@ -682,14 +736,51 @@ QString QPlatformTheme::defaultStandardButtonText(int button)
     return QString();
 }
 
+QString QPlatformTheme::removeMnemonics(const QString &original)
+{
+    QString returnText(original.size(), 0);
+    int finalDest = 0;
+    int currPos = 0;
+    int l = original.length();
+    while (l) {
+        if (original.at(currPos) == QLatin1Char('&')
+            && (l == 1 || original.at(currPos + 1) != QLatin1Char('&'))) {
+            ++currPos;
+            --l;
+            if (l == 0)
+                break;
+        } else if (original.at(currPos) == QLatin1Char('(') && l >= 4 &&
+                   original.at(currPos + 1) == QLatin1Char('&') &&
+                   original.at(currPos + 2) != QLatin1Char('&') &&
+                   original.at(currPos + 3) == QLatin1Char(')')) {
+            /* remove mnemonics its format is "\s*(&X)" */
+            int n = 0;
+            while (finalDest > n && returnText.at(finalDest - n - 1).isSpace())
+                ++n;
+            finalDest -= n;
+            currPos += 4;
+            l -= 4;
+            continue;
+        }
+        returnText[finalDest] = original.at(currPos);
+        ++currPos;
+        ++finalDest;
+        --l;
+    }
+    returnText.truncate(finalDest);
+    return returnText;
+}
+
 unsigned QPlatformThemePrivate::currentKeyPlatforms()
 {
     const uint keyboardScheme = QGuiApplicationPrivate::platformTheme()->themeHint(QPlatformTheme::KeyboardScheme).toInt();
     unsigned result = 1u << keyboardScheme;
+#ifndef QT_NO_SHORTCUT
     if (keyboardScheme == QPlatformTheme::KdeKeyboardScheme
         || keyboardScheme == QPlatformTheme::GnomeKeyboardScheme
         || keyboardScheme == QPlatformTheme::CdeKeyboardScheme)
         result |= KB_X11;
+#endif
     return result;
 }
 

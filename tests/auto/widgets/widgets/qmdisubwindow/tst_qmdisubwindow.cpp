@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -53,10 +48,8 @@
 #include <QScreen>
 #include <QSizeGrip>
 
-#include "../../../qtest-config.h"
-
 QT_BEGIN_NAMESPACE
-#if !defined(Q_DEAD_CODE_FROM_QT4_WIN)
+#if 1 // Used to be excluded in Qt4 for Q_WS_WIN
 extern bool qt_tab_all_widgets();
 #endif
 QT_END_NAMESPACE
@@ -166,7 +159,7 @@ private slots:
     void showShaded();
     void showNormal_data();
     void showNormal();
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
     void setOpaqueResizeAndMove_data();
     void setOpaqueResizeAndMove();
 #endif
@@ -189,7 +182,7 @@ private slots:
     void explicitlyHiddenWidget();
     void resizeTimer();
     void fixedMinMaxSize();
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     void replaceMenuBarWhileMaximized();
     void closeOnDoubleClick_data();
     void closeOnDoubleClick();
@@ -202,6 +195,7 @@ private slots:
     void task_226929();
     void styleChange();
     void testFullScreenState();
+    void testRemoveBaseWidget();
 };
 
 void tst_QMdiSubWindow::initTestCase()
@@ -363,25 +357,25 @@ void tst_QMdiSubWindow::mainWindowSupport()
     mainWindow.show();
     mainWindow.menuBar()->setVisible(true);
     qApp->setActiveWindow(&mainWindow);
+    bool nativeMenuBar = mainWindow.menuBar()->isNativeMenuBar();
 
-    // QMainWindow's window title is empty
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
-    {
-    QCOMPARE(mainWindow.windowTitle(), QString());
-    QMdiSubWindow *window = workspace->addSubWindow(new QPushButton(QLatin1String("Test")));
-    QString expectedTitle = QLatin1String("MainWindow's title is empty");
-    window->setWindowTitle(expectedTitle);
-    QCOMPARE(window->windowTitle(), expectedTitle);
-    window->showMaximized();
-    QVERIFY(window->isMaximized());
-    QCOMPARE(window->windowTitle(), expectedTitle);
-    QCOMPARE(mainWindow.windowTitle(), expectedTitle);
-    window->showNormal();
-    QCOMPARE(window->windowTitle(), expectedTitle);
-    QCOMPARE(mainWindow.windowTitle(), QString());
-    window->close();
+    // QMainWindow's window title is empty, so on a platform which does NOT have a native menubar,
+    // the maximized subwindow's title is imposed onto the main window's titlebar.
+    if (!nativeMenuBar) {
+        QCOMPARE(mainWindow.windowTitle(), QString());
+        QMdiSubWindow *window = workspace->addSubWindow(new QPushButton(QLatin1String("Test")));
+        QString expectedTitle = QLatin1String("MainWindow's title is empty");
+        window->setWindowTitle(expectedTitle);
+        QCOMPARE(window->windowTitle(), expectedTitle);
+        window->showMaximized();
+        QVERIFY(window->isMaximized());
+        QCOMPARE(window->windowTitle(), expectedTitle);
+        QCOMPARE(mainWindow.windowTitle(), expectedTitle);
+        window->showNormal();
+        QCOMPARE(window->windowTitle(), expectedTitle);
+        QCOMPARE(mainWindow.windowTitle(), QString());
+        window->close();
     }
-#endif
 
     QString originalWindowTitle = QString::fromLatin1("MainWindow");
     mainWindow.setWindowTitle(originalWindowTitle);
@@ -396,7 +390,7 @@ void tst_QMdiSubWindow::mainWindowSupport()
 
         QMdiArea *nestedWorkspace = new QMdiArea; // :-)
         window->setWidget(nestedWorkspace);
-        window->widget()->setWindowTitle(QString::fromLatin1("Window %1").arg(i));
+        window->widget()->setWindowTitle(QLatin1String("Window ") + QString::number(i));
 
         workspace->addSubWindow(window);
         QVERIFY(!window->maximizedButtonsWidget());
@@ -417,37 +411,37 @@ void tst_QMdiSubWindow::mainWindowSupport()
         window->showMaximized();
         qApp->processEvents();
         QVERIFY(window->isMaximized());
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
-        QVERIFY(window->maximizedButtonsWidget());
-        QCOMPARE(window->maximizedButtonsWidget(), mainWindow.menuBar()->cornerWidget(Qt::TopRightCorner));
-        QVERIFY(window->maximizedSystemMenuIconWidget());
-        QCOMPARE(window->maximizedSystemMenuIconWidget(), qobject_cast<QWidget *>(mainWindow.menuBar()
-                                                                    ->cornerWidget(Qt::TopLeftCorner)));
-        QCOMPARE(mainWindow.windowTitle(), QString::fromLatin1("%1 - [%2]")
-                                           .arg(originalWindowTitle, window->widget()->windowTitle()));
-#endif
+        if (!nativeMenuBar) {
+            QVERIFY(window->maximizedButtonsWidget());
+            QCOMPARE(window->maximizedButtonsWidget(), mainWindow.menuBar()->cornerWidget(Qt::TopRightCorner));
+            QVERIFY(window->maximizedSystemMenuIconWidget());
+            QCOMPARE(window->maximizedSystemMenuIconWidget(),
+                     qobject_cast<QWidget *>(mainWindow.menuBar()->cornerWidget(Qt::TopLeftCorner)));
+            const QString expectedTitle = originalWindowTitle + QLatin1String(" - [")
+                + window->widget()->windowTitle() + QLatin1Char(']');
+            QCOMPARE(mainWindow.windowTitle(), expectedTitle);
+        }
 
         // Check that nested child windows don't set window title
         nestedWorkspace->show();
         QMdiSubWindow *nestedWindow = new QMdiSubWindow;
         nestedWindow->setWidget(new QWidget);
         nestedWorkspace->addSubWindow(nestedWindow);
-        nestedWindow->widget()->setWindowTitle(QString::fromLatin1("NestedWindow %1").arg(i));
+        nestedWindow->widget()->setWindowTitle(QLatin1String("NestedWindow ") + QString::number(i));
         nestedWindow->showMaximized();
         qApp->processEvents();
         QVERIFY(nestedWindow->isMaximized());
         QVERIFY(!nestedWindow->maximizedButtonsWidget());
         QVERIFY(!nestedWindow->maximizedSystemMenuIconWidget());
 
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE) && !defined(Q_OS_QNX)
-        QCOMPARE(mainWindow.windowTitle(), QString::fromLatin1("%1 - [%2]")
-                                           .arg(originalWindowTitle, window->widget()->windowTitle()));
-#endif
+        if (!nativeMenuBar) {
+            QCOMPARE(mainWindow.windowTitle(), QString::fromLatin1("%1 - [%2]")
+                     .arg(originalWindowTitle, window->widget()->windowTitle()));
+        }
     }
 
-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
-    return;
-#endif
+    if (nativeMenuBar)
+        return;
 
     workspace->activateNextSubWindow();
     qApp->processEvents();
@@ -579,10 +573,6 @@ void tst_QMdiSubWindow::showShaded()
     window->showNormal();
     QTest::qWait(250);
 
-#ifdef Q_OS_WINCE
-    QSKIP("Until we have a QEvent::WindowFlagsChange event, this will skip");
-#endif
-
     const QSize minimumSizeHint = window->minimumSizeHint();
     QVERIFY(minimumSizeHint.height() < 300);
     const int maxHeightDiff = 300 - minimumSizeHint.height();
@@ -673,7 +663,7 @@ private:
     int _count;
 };
 
-#ifndef QTEST_NO_CURSOR
+#ifndef QT_NO_CURSOR
 void tst_QMdiSubWindow::setOpaqueResizeAndMove_data()
 {
     QTest::addColumn<bool>("opaqueMode");
@@ -970,7 +960,7 @@ void tst_QMdiSubWindow::setSystemMenu()
     QMdiArea *mdiArea = new QMdiArea;
     mdiArea->addSubWindow(subWindow);
     mainWindow.setCentralWidget(mdiArea);
-    mainWindow.menuBar();
+    mainWindow.menuBar()->setNativeMenuBar(false);
     mainWindow.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
     QTest::qWait(60);
@@ -1014,7 +1004,7 @@ void tst_QMdiSubWindow::setSystemMenu()
     systemMenu->hide();
     QVERIFY(!qApp->activePopupWidget());
 
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     // System menu in menu bar.
     subWindow->showMaximized();
     QVERIFY(subWindow->isMaximized());
@@ -1047,7 +1037,7 @@ void tst_QMdiSubWindow::setSystemMenu()
     systemMenu->hide();
     QVERIFY(!qApp->activePopupWidget());
 
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     // System menu in menu bar in reverse mode.
     subWindow->showMaximized();
     QVERIFY(subWindow->isMaximized());
@@ -1470,6 +1460,7 @@ void tst_QMdiSubWindow::hideAndShow()
     QMainWindow mainWindow;
     mainWindow.setGeometry(0, 0, 640, 480);
     QMenuBar *menuBar = mainWindow.menuBar();
+    menuBar->setNativeMenuBar(false);
     mainWindow.setCentralWidget(tabWidget);
     mainWindow.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
@@ -1477,7 +1468,7 @@ void tst_QMdiSubWindow::hideAndShow()
     QVERIFY(!menuBar->cornerWidget(Qt::TopRightCorner));
     QMdiSubWindow *subWindow = mdiArea->addSubWindow(new QTextEdit);
     subWindow->showMaximized();
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     QVERIFY(menuBar->cornerWidget(Qt::TopRightCorner));
     QCOMPARE(menuBar->cornerWidget(Qt::TopRightCorner), subWindow->maximizedButtonsWidget());
 #endif
@@ -1492,7 +1483,7 @@ void tst_QMdiSubWindow::hideAndShow()
     // Show QMdiArea.
     tabWidget->setCurrentIndex(0);
 
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     QVERIFY(menuBar->cornerWidget(Qt::TopRightCorner));
     QVERIFY(subWindow->maximizedButtonsWidget());
     QVERIFY(subWindow->maximizedSystemMenuIconWidget());
@@ -1514,7 +1505,7 @@ void tst_QMdiSubWindow::hideAndShow()
     QVERIFY(subWindow);
     QCOMPARE(mdiArea->activeSubWindow(), subWindow);
 
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     QVERIFY(menuBar->cornerWidget(Qt::TopRightCorner));
 #if defined Q_OS_QNX
     QEXPECT_FAIL("", "QTBUG-38231", Abort);
@@ -1542,7 +1533,7 @@ void tst_QMdiSubWindow::hideAndShow()
     QVERIFY(!menuBar->cornerWidget(Qt::TopRightCorner));
 
     subWindow->show();
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     QVERIFY(subWindow->maximizedButtonsWidget());
     QVERIFY(subWindow->maximizedSystemMenuIconWidget());
     QCOMPARE(menuBar->cornerWidget(Qt::TopRightCorner), subWindow->maximizedButtonsWidget());
@@ -1556,7 +1547,7 @@ void tst_QMdiSubWindow::hideAndShow()
 
     // Show QMainWindow.
     mainWindow.show();
-#if !defined (Q_OS_MAC) && !defined (Q_OS_WINCE)
+#if !defined (Q_OS_DARWIN)
     QVERIFY(subWindow->maximizedButtonsWidget());
     QVERIFY(subWindow->maximizedSystemMenuIconWidget());
     QCOMPARE(menuBar->cornerWidget(Qt::TopRightCorner), subWindow->maximizedButtonsWidget());
@@ -1726,7 +1717,7 @@ void tst_QMdiSubWindow::fixedMinMaxSize()
     QCOMPARE(subWindow->size(), minimumSize);
 }
 
-#if !defined( Q_OS_MAC) && !defined( Q_OS_WINCE)
+#if !defined( Q_OS_DARWIN)
 void tst_QMdiSubWindow::replaceMenuBarWhileMaximized()
 {
 
@@ -1738,6 +1729,7 @@ void tst_QMdiSubWindow::replaceMenuBarWhileMaximized()
 
     mainWindow.setCentralWidget(mdiArea);
     QMenuBar *menuBar = mainWindow.menuBar();
+    menuBar->setNativeMenuBar(false);
     mainWindow.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
 
@@ -1754,6 +1746,7 @@ void tst_QMdiSubWindow::replaceMenuBarWhileMaximized()
     // Replace.
     mainWindow.setMenuBar(new QMenuBar);
     menuBar = mainWindow.menuBar();
+    menuBar->setNativeMenuBar(false);
     qApp->processEvents();
 
     QVERIFY(subWindow->maximizedButtonsWidget());
@@ -1911,14 +1904,14 @@ void tst_QMdiSubWindow::mdiArea()
 
 void tst_QMdiSubWindow::task_182852()
 {
-#if !defined(Q_OS_MAC) && !defined(Q_OS_WINCE)
-
     QMdiArea *workspace = new QMdiArea;
     QMainWindow mainWindow;
     mainWindow.setCentralWidget(workspace);
     mainWindow.show();
     mainWindow.menuBar()->setVisible(true);
     qApp->setActiveWindow(&mainWindow);
+    if (mainWindow.menuBar()->isNativeMenuBar())
+        return; // The main window's title is not overwritten if we have a native menubar (macOS, Unity etc.)
 
     QString originalWindowTitle = QString::fromLatin1("MainWindow - [foo]");
     mainWindow.setWindowTitle(originalWindowTitle);
@@ -1954,9 +1947,6 @@ void tst_QMdiSubWindow::task_182852()
 
     QCOMPARE(mainWindow.windowTitle(), QString::fromLatin1("%1 - [%2]")
             .arg(originalWindowTitle, window->widget()->windowTitle()));
-
-
-#endif
 }
 
 void tst_QMdiSubWindow::task_233197()
@@ -2078,6 +2068,27 @@ void tst_QMdiSubWindow::testFullScreenState()
                                  // should be equivalent to setVisible(true) (and not showNormal())
     QVERIFY(QTest::qWaitForWindowExposed(&mdiArea));
     QCOMPARE(subWindow->size(), QSize(300, 300));
+}
+
+void tst_QMdiSubWindow::testRemoveBaseWidget()
+{
+    QMdiArea mdiArea;
+    mdiArea.show();
+
+    QWidget *widget1 = new QWidget;
+    mdiArea.addSubWindow(widget1);
+
+    QWidget *widget2 = new QWidget;
+    mdiArea.addSubWindow(widget2);
+
+    mdiArea.removeSubWindow(widget1);
+    QVERIFY(!widget1->parent());
+
+    widget2->setParent(widget1);
+    mdiArea.removeSubWindow(widget2);
+    QCOMPARE(widget2->parent(), widget1);
+
+    delete widget1;
 }
 
 QTEST_MAIN(tst_QMdiSubWindow)

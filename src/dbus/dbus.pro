@@ -1,33 +1,28 @@
 TARGET = QtDBus
 QT = core-private
-CONFIG += link_pkgconfig
 MODULE_CONFIG = dbusadaptors dbusinterfaces
 
-!contains(QT_LIBS_DBUS, .*dbus-1.*) {
-    win32:CONFIG(debug, debug|release):QT_LIBS_DBUS += -ldbus-1d
-    else:QT_LIBS_DBUS += -ldbus-1
-}
-
 DEFINES += DBUS_API_SUBJECT_TO_CHANGE
-QMAKE_CXXFLAGS += $$QT_CFLAGS_DBUS
-contains(QT_CONFIG, dbus-linked) {
-    LIBS_PRIVATE += $$QT_LIBS_DBUS
+qtConfig(dbus-linked) {
+    QMAKE_USE_PRIVATE += dbus
     DEFINES += QT_LINKED_LIBDBUS
 }
 
 win32 { 
-    wince: LIBS_PRIVATE += -lws2
-    else:LIBS_PRIVATE += -lws2_32 \
+    LIBS_PRIVATE += \
+        -lws2_32 \
         -ladvapi32 \
         -lnetapi32 \
         -luser32
 }
 
+DEFINES += QT_NO_FOREACH
+
 QMAKE_DOCS = $$PWD/doc/qtdbus.qdocconf
 
-PUB_HEADERS = qdbusargument.h \
+PUB_HEADERS = qtdbusglobal.h \
+    qdbusargument.h \
     qdbusconnectioninterface.h \
-    qdbusmacros.h \
     qdbuserror.h \
     qdbusextratypes.h \
     qdbusmessage.h \
@@ -45,6 +40,7 @@ PUB_HEADERS = qdbusargument.h \
     qdbusservicewatcher.h \
     qdbusunixfiledescriptor.h
 HEADERS += $$PUB_HEADERS \
+    qtdbusglobal_p.h \
     qdbusconnection_p.h \
     qdbusconnectionmanager_p.h \
     qdbusmessage_p.h \

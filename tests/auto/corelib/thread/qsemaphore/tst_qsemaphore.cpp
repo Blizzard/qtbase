@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -207,8 +202,8 @@ void tst_QSemaphore::tryAcquireWithTimeout_data()
 {
     QTest::addColumn<int>("timeout");
 
-    QTest::newRow("1s") << 1000;
-    QTest::newRow("10s") << 10000;
+    QTest::newRow("0.2s") << 200;
+    QTest::newRow("2s") << 2000;
 }
 
 void tst_QSemaphore::tryAcquireWithTimeout()
@@ -217,7 +212,7 @@ void tst_QSemaphore::tryAcquireWithTimeout()
 
     // timers are not guaranteed to be accurate down to the last millisecond,
     // so we permit the elapsed times to be up to this far from the expected value.
-    int fuzz = 50;
+    int fuzz = 50 + (timeout / 20);
 
     QSemaphore semaphore;
     QElapsedTimer time;
@@ -355,15 +350,9 @@ const int AlphabetSize = sizeof(alphabet) - 1;
 const int BufferSize = 4096; // GCD of BufferSize and alphabet size must be 1
 char buffer[BufferSize];
 
-#ifndef Q_OS_WINCE
 const int ProducerChunkSize = 3;
 const int ConsumerChunkSize = 7;
 const int Multiplier = 10;
-#else
-const int ProducerChunkSize = 2;
-const int ConsumerChunkSize = 5;
-const int Multiplier = 3;
-#endif
 
 // note: the code depends on the fact that DataSize is a multiple of
 // ProducerChunkSize, ConsumerChunkSize, and BufferSize
@@ -378,16 +367,18 @@ public:
     void run();
 };
 
+static const int Timeout = 60 * 1000; // 1min
+
 void Producer::run()
 {
     for (int i = 0; i < DataSize; ++i) {
-        freeSpace.acquire();
+        QVERIFY(freeSpace.tryAcquire(1, Timeout));
         buffer[i % BufferSize] = alphabet[i % AlphabetSize];
         usedSpace.release();
     }
     for (int i = 0; i < DataSize; ++i) {
         if ((i % ProducerChunkSize) == 0)
-            freeSpace.acquire(ProducerChunkSize);
+            QVERIFY(freeSpace.tryAcquire(ProducerChunkSize, Timeout));
         buffer[i % BufferSize] = alphabet[i % AlphabetSize];
         if ((i % ProducerChunkSize) == (ProducerChunkSize - 1))
             usedSpace.release(ProducerChunkSize);

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -1072,9 +1078,8 @@ void QPdfEngine::updateState(const QPaintEngineState &state)
     } else if (flags & DirtyClipRegion) {
         d->clipEnabled = true;
         QPainterPath path;
-        QVector<QRect> rects = state.clipRegion().rects();
-        for (int i = 0; i < rects.size(); ++i)
-            path.addRect(rects.at(i));
+        for (const QRect &rect : state.clipRegion())
+            path.addRect(rect);
         updateClipPath(path, state.clipOperation());
         flags |= DirtyClipPath;
     } else if (flags & DirtyClipEnabled) {
@@ -1499,16 +1504,25 @@ void QPdfEnginePrivate::writeInfo()
     printString(creator);
     xprintf("\n/Producer ");
     printString(QString::fromLatin1("Qt " QT_VERSION_STR));
-    QDateTime now = QDateTime::currentDateTimeUtc();
+    QDateTime now = QDateTime::currentDateTime();
     QTime t = now.time();
     QDate d = now.date();
-    xprintf("\n/CreationDate (D:%d%02d%02d%02d%02d%02d)\n",
+    xprintf("\n/CreationDate (D:%d%02d%02d%02d%02d%02d",
             d.year(),
             d.month(),
             d.day(),
             t.hour(),
             t.minute(),
             t.second());
+    int offset = now.offsetFromUtc();
+    int hours  = (offset / 60) / 60;
+    int mins   = (offset / 60) % 60;
+    if (offset < 0)
+        xprintf("-%02d'%02d')\n", -hours, -mins);
+    else if (offset > 0)
+        xprintf("+%02d'%02d')\n", hours , mins);
+    else
+        xprintf("Z)\n");
     xprintf(">>\n"
             "endobj\n");
 }
@@ -1669,7 +1683,7 @@ void QPdfEnginePrivate::writePage()
     uint resources = requestObject();
     uint annots = requestObject();
 
-    addXrefEntry(pages.last());
+    addXrefEntry(pages.constLast());
     xprintf("<<\n"
             "/Type /Page\n"
             "/Parent %d 0 R\n"
@@ -1762,7 +1776,7 @@ void QPdfEnginePrivate::writeTail()
             ">>\n"
             "startxref\n%d\n"
             "%%%%EOF\n",
-            xrefPositions.size()-1, info, catalog, xrefPositions.last());
+            xrefPositions.size()-1, info, catalog, xrefPositions.constLast());
 }
 
 int QPdfEnginePrivate::addXrefEntry(int object, bool printostr)
@@ -1919,7 +1933,7 @@ int QPdfEnginePrivate::writeCompressed(const char *src, int len)
 }
 
 int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height, int depth,
-                                  int maskObject, int softMaskObject, bool dct)
+                                  int maskObject, int softMaskObject, bool dct, bool isMono)
 {
     int image = addXrefEntry(-1);
     xprintf("<<\n"
@@ -1929,8 +1943,13 @@ int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height,
             "/Height %d\n", width, height);
 
     if (depth == 1) {
-        xprintf("/ImageMask true\n"
-                "/Decode [1 0]\n");
+        if (!isMono) {
+            xprintf("/ImageMask true\n"
+                    "/Decode [1 0]\n");
+        } else {
+            xprintf("/BitsPerComponent 1\n"
+                    "/ColorSpace /DeviceGray\n");
+        }
     } else {
         xprintf("/BitsPerComponent 8\n"
                 "/ColorSpace %s\n", (depth == 32) ? "/DeviceRGB" : "/DeviceGray");
@@ -1946,7 +1965,7 @@ int QPdfEnginePrivate::writeImage(const QByteArray &data, int width, int height,
         xprintf("/Interpolate true\n");
     int len = 0;
     if (dct) {
-        //qDebug() << "DCT";
+        //qDebug("DCT");
         xprintf("/Filter /DCTDecode\n>>\nstream\n");
         write(data);
         len = data.length();
@@ -1971,6 +1990,7 @@ struct QGradientBound {
     int function;
     bool reverse;
 };
+Q_DECLARE_TYPEINFO(QGradientBound, Q_PRIMITIVE_TYPE);
 
 int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from, int to, bool reflect, bool alpha)
 {
@@ -2062,7 +2082,8 @@ int QPdfEnginePrivate::createShadingFunction(const QGradient *gradient, int from
         for (int i = 0; i < gradientBounds.size(); ++i)
             s << gradientBounds.at(i).function << "0 R ";
         s << "]\n"
-             ">>\n";
+             ">>\n"
+             "endobj\n";
         write(data);
     } else {
         function = functions.at(0);
@@ -2085,7 +2106,7 @@ int QPdfEnginePrivate::generateLinearGradientShader(const QLinearGradient *gradi
         break;
     case QGradient::ReflectSpread:
         reflect = true;
-        // fall through
+        Q_FALLTHROUGH();
     case QGradient::RepeatSpread: {
         // calculate required bounds
         QRectF pageRect = m_pageLayout.fullRectPixels(resolution);
@@ -2148,7 +2169,7 @@ int QPdfEnginePrivate::generateRadialGradientShader(const QRadialGradient *gradi
         break;
     case QGradient::ReflectSpread:
         reflect = true;
-        // fall through
+        Q_FALLTHROUGH();
     case QGradient::RepeatSpread: {
         Q_ASSERT(qFuzzyIsNull(r0)); // QPainter emulates if this is not 0
 
@@ -2208,8 +2229,10 @@ int QPdfEnginePrivate::generateGradientShader(const QGradient *gradient, const Q
     case QGradient::RadialGradient:
         return generateRadialGradientShader(static_cast<const QRadialGradient *>(gradient), matrix, alpha);
     case QGradient::ConicalGradient:
-    default:
-        qWarning() << "Implement me!";
+        Q_UNIMPLEMENTED(); // ### Implement me!
+        break;
+    case QGradient::NoGradient:
+        break;
     }
     return 0;
 }
@@ -2445,7 +2468,7 @@ int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, qint64 serial_n
             memcpy(rawdata, image.constScanLine(y), bytesPerLine);
             rawdata += bytesPerLine;
         }
-        object = writeImage(data, w, h, d, 0, 0);
+        object = writeImage(data, w, h, d, 0, 0, false, is_monochrome(img.colorTable()));
     } else {
         QByteArray softMaskData;
         bool dct = false;
@@ -2542,6 +2565,7 @@ void QPdfEnginePrivate::drawTextItem(const QPointF &p, const QTextItemInt &ti)
         qreal size = ti.fontEngine->fontDef.pixelSize;
         int synthesized = ti.fontEngine->synthesized();
         qreal stretch = synthesized & QFontEngine::SynthesizedStretch ? ti.fontEngine->fontDef.stretch/100. : 1.;
+        Q_ASSERT(stretch > qreal(0));
 
         QTransform trans;
         // Build text rendering matrix (Trm). We need it to map the text area to user
@@ -2618,6 +2642,7 @@ void QPdfEnginePrivate::drawTextItem(const QPointF &p, const QTextItemInt &ti)
         return;
     int synthesized = ti.fontEngine->synthesized();
     qreal stretch = synthesized & QFontEngine::SynthesizedStretch ? ti.fontEngine->fontDef.stretch/100. : 1.;
+    Q_ASSERT(stretch > qreal(0));
 
     *currentPage << "BT\n"
                  << "/F" << font->object_id << size << "Tf "

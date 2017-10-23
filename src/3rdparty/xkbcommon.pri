@@ -4,6 +4,8 @@ INCLUDEPATH += $$PWD/xkbcommon \
                $$PWD/xkbcommon/src \
                $$PWD/xkbcommon/src/xkbcomp
 
+include($$shadowed($$PWD/../gui/qtgui-config.pri))
+
 DEFINES += DFLT_XKB_CONFIG_ROOT='\\"$$QMAKE_XKB_CONFIG_ROOT\\"'
 
 ### RMLVO names can be overwritten with environmental variables (see libxkbcommon documentation)
@@ -46,16 +48,5 @@ SOURCES += \
     $$PWD/xkbcommon/src/xkbcomp/vmod.c \
     $$PWD/xkbcommon/src/xkbcomp/xkbcomp.c \
     $$PWD/xkbcommon/src/xkbcomp/parser.c
-
-!contains(DEFINES, QT_NO_XKB):contains(QT_CONFIG, use-xkbcommon-x11support): {
-    # Build xkbcommon-x11 support library, it depends on -lxcb and -lxcb-xkb, linking is done
-    # in xcb-plugin.pro (linked to system libraries or if Qt was configured with -qt-xcb then
-    # linked to -lxcb-static).
-    INCLUDEPATH += $$PWD/xkbcommon/src/x11
-    SOURCES += \
-        $$PWD/xkbcommon/src/x11/util.c \
-        $$PWD/xkbcommon/src/x11/x11-keymap.c \ # renamed: keymap.c -> x11-keymap.c
-        $$PWD/xkbcommon/src/x11/x11-state.c    # renamed: state.c  -> x11-state.c
-}
 
 TR_EXCLUDE += $$PWD/*

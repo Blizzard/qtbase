@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -212,8 +218,9 @@ void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSiz
     qreal sumAvailable;
 
     for (int i = 0; i < n; ++i) {
-        if (stretches[start + i] > 0)
-            sumStretches += stretches[start + i];
+        const int stretch = stretches.at(start + i);
+        if (stretch > 0)
+            sumStretches += stretch;
     }
 
     if (targetSize < totalBox.q_preferredSize) {
@@ -410,8 +417,23 @@ void QGridLayoutRowData::calculateGeometries(int start, int end, qreal targetSiz
 #endif
     }
     if (snapToPixelGrid) {
-        for (int i = 0; i < n; ++i)
-            positions[i] = qround(positions[i]);
+        for (int i = 0; i < n; ++i) {
+            const qreal oldpos = positions[i];
+            positions[i] = qround(oldpos);
+            const qreal delta = positions[i] - oldpos;
+            sizes[i] -= delta;
+            if (i > 0)
+                sizes[i - 1] += delta;
+        }
+
+        sizes[n - 1] = targetSize - positions[n - 1];
+        // This loop serves two purposes:
+        // 1. round off the small epsilons produced by the above loop.
+        // 2. avoid that the above loop didn't make the cell width smaller than its minimum constraint.
+        for (int i = 0; i < n; ++i) {
+            const QGridLayoutBox &box = boxes.at(start + i);
+            sizes[i] = qMax(box.q_minimumSize, qround(sizes[i]));
+        }
     }
 
     if (descents) {
@@ -563,7 +585,7 @@ QLayoutPolicy::ControlTypes QGridLayoutItem::controlTypes(LayoutSide /*side*/) c
     return QLayoutPolicy::DefaultType;
 }
 
-QGridLayoutBox QGridLayoutItem::box(Qt::Orientation orientation, qreal constraint) const
+QGridLayoutBox QGridLayoutItem::box(Qt::Orientation orientation, bool snapToPixelGrid, qreal constraint) const
 {
     QGridLayoutBox result;
     QLayoutPolicy::Policy policy = sizePolicy(orientation);
@@ -578,6 +600,8 @@ QGridLayoutBox QGridLayoutItem::box(Qt::Orientation orientation, qreal constrain
         } else {
             result.q_minimumSize = result.q_preferredSize;
         }
+        if (snapToPixelGrid)
+            result.q_minimumSize = qCeil(result.q_minimumSize);
 
         if (policy & (QLayoutPolicy::GrowFlag | QLayoutPolicy::ExpandFlag)) {
             result.q_maximumSize = sizeHint(Qt::MaximumSize, constraintSize).width();
@@ -594,6 +618,8 @@ QGridLayoutBox QGridLayoutItem::box(Qt::Orientation orientation, qreal constrain
         } else {
             result.q_minimumSize = result.q_preferredSize;
         }
+        if (snapToPixelGrid)
+            result.q_minimumSize = qCeil(result.q_minimumSize);
 
         if (policy & (QLayoutPolicy::GrowFlag | QLayoutPolicy::ExpandFlag)) {
             result.q_maximumSize = sizeHint(Qt::MaximumSize, constraintSize).height();
@@ -617,7 +643,7 @@ QGridLayoutBox QGridLayoutItem::box(Qt::Orientation orientation, qreal constrain
 }
 
 QRectF QGridLayoutItem::geometryWithin(qreal x, qreal y, qreal width, qreal height,
-                                       qreal rowDescent, Qt::Alignment align) const
+                                       qreal rowDescent, Qt::Alignment align, bool snapToPixelGrid) const
 {
     const qreal cellWidth = width;
     const qreal cellHeight = height;
@@ -655,7 +681,7 @@ QRectF QGridLayoutItem::geometryWithin(qreal x, qreal y, qreal width, qreal heig
         break;
     case Qt::AlignBaseline: {
         width = qMin(effectiveMaxSize(QSizeF(-1,-1)).width(), width);
-        QGridLayoutBox vBox = box(Qt::Vertical);
+        QGridLayoutBox vBox = box(Qt::Vertical, snapToPixelGrid);
         const qreal descent = vBox.q_minimumDescent;
         const qreal ascent = vBox.q_minimumSize - descent;
         y += (cellHeight - rowDescent - ascent);
@@ -1009,19 +1035,19 @@ void QGridLayoutEngine::setGeometries(const QRectF &contentsGeometry, const QAbs
     for (int i = q_items.count() - 1; i >= 0; --i) {
         QGridLayoutItem *item = q_items.at(i);
 
-        qreal x = q_xx[item->firstColumn()];
-        qreal y = q_yy[item->firstRow()];
-        qreal width = q_widths[item->lastColumn()];
-        qreal height = q_heights[item->lastRow()];
+        qreal x = q_xx.at(item->firstColumn());
+        qreal y = q_yy.at(item->firstRow());
+        qreal width = q_widths.at(item->lastColumn());
+        qreal height = q_heights.at(item->lastRow());
 
         if (item->columnSpan() != 1)
-            width += q_xx[item->lastColumn()] - x;
+            width += q_xx.at(item->lastColumn()) - x;
         if (item->rowSpan() != 1)
-            height += q_yy[item->lastRow()] - y;
+            height += q_yy.at(item->lastRow()) - y;
 
         const Qt::Alignment align = effectiveAlignment(item);
         QRectF geom = item->geometryWithin(contentsGeometry.x() + x, contentsGeometry.y() + y,
-                                               width, height, q_descents[item->lastRow()], align);
+                                               width, height, q_descents.at(item->lastRow()), align, m_snapToPixelGrid);
         if (m_snapToPixelGrid) {
             // x and y should already be rounded, but the call to geometryWithin() above might
             // result in a geom with x,y at half-pixels (due to centering within the cell)
@@ -1401,9 +1427,9 @@ void QGridLayoutEngine::fillRowData(QGridLayoutRowData *rowData,
                         qreal length = colSizes[item->lastColumn(orientation)];
                         if (item->columnSpan(orientation) != 1)
                             length += colPositions[item->lastColumn(orientation)] - colPositions[item->firstColumn(orientation)];
-                        box->combine(item->box(orientation, length));
+                        box->combine(item->box(orientation, m_snapToPixelGrid, length));
                     } else {
-                        box->combine(item->box(orientation));
+                        box->combine(item->box(orientation, m_snapToPixelGrid));
                     }
 
                     if (effectiveRowSpan == 1) {
@@ -1471,8 +1497,8 @@ void QGridLayoutEngine::fillRowData(QGridLayoutRowData *rowData,
                         if (orientation == Qt::Horizontal) {
                             qreal width1 = rowData->boxes.at(prevRow).q_minimumSize;
                             qreal width2 = rowData->boxes.at(row).q_minimumSize;
-                            QRectF rect1 = item1->geometryWithin(0.0, 0.0, width1, FLT_MAX, -1.0, effectiveAlignment(item1));
-                            QRectF rect2 = item2->geometryWithin(0.0, 0.0, width2, FLT_MAX, -1.0, effectiveAlignment(item2));
+                            QRectF rect1 = item1->geometryWithin(0.0, 0.0, width1, FLT_MAX, -1.0, effectiveAlignment(item1), m_snapToPixelGrid);
+                            QRectF rect2 = item2->geometryWithin(0.0, 0.0, width2, FLT_MAX, -1.0, effectiveAlignment(item2), m_snapToPixelGrid);
                             spacing -= (width1 - (rect1.x() + rect1.width())) + rect2.x();
                         } else {
                             const QGridLayoutBox &box1 = rowData->boxes.at(prevRow);
@@ -1484,9 +1510,9 @@ void QGridLayoutEngine::fillRowData(QGridLayoutRowData *rowData,
                             qreal rowDescent2 = fixedDescent(box2.q_minimumDescent,
                                                              box2.q_minimumAscent, height2);
                             QRectF rect1 = item1->geometryWithin(0.0, 0.0, FLT_MAX, height1,
-                                                                 rowDescent1, effectiveAlignment(item1));
+                                                                 rowDescent1, effectiveAlignment(item1), m_snapToPixelGrid);
                             QRectF rect2 = item2->geometryWithin(0.0, 0.0, FLT_MAX, height2,
-                                                                 rowDescent2, effectiveAlignment(item2));
+                                                                 rowDescent2, effectiveAlignment(item2), m_snapToPixelGrid);
                             spacing -= (height1 - (rect1.y() + rect1.height())) + rect2.y();
                         }
                         rowSpacing = qMax(spacing, rowSpacing);

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -81,7 +87,7 @@ bool QFseventsFileSystemWatcherEngine::checkDir(DirsByName::iterator &it)
     if (res == -1) {
         needsRestart |= derefPath(info.watchedPath);
         emit emitDirectoryChanged(info.origPath, true);
-        it = watchedDirectories.erase(it);
+        it = watchingState.watchedDirectories.erase(it);
     } else if (st.st_ctimespec != info.ctime || st.st_mode != info.mode) {
         info.ctime = st.st_ctimespec;
         info.mode = st.st_mode;
@@ -132,7 +138,8 @@ bool QFseventsFileSystemWatcherEngine::rescanDirs(const QString &path)
 {
     bool needsRestart = false;
 
-    for (DirsByName::iterator it = watchedDirectories.begin(); it != watchedDirectories.end(); ) {
+    for (DirsByName::iterator it = watchingState.watchedDirectories.begin();
+            it != watchingState.watchedDirectories.end(); ) {
         if (it.key().startsWith(path))
             needsRestart |= checkDir(it);
         else
@@ -171,11 +178,12 @@ bool QFseventsFileSystemWatcherEngine::rescanFiles(const QString &path)
 {
     bool needsRestart = false;
 
-    for (FilesByPath::iterator i = watchedFiles.begin(); i != watchedFiles.end(); ) {
+    for (FilesByPath::iterator i = watchingState.watchedFiles.begin();
+            i != watchingState.watchedFiles.end(); ) {
         if (i.key().startsWith(path)) {
             needsRestart |= rescanFiles(i.value());
             if (i.value().isEmpty()) {
-                i = watchedFiles.erase(i);
+                i = watchingState.watchedFiles.erase(i);
                 continue;
             }
         }
@@ -192,7 +200,7 @@ void QFseventsFileSystemWatcherEngine::processEvent(ConstFSEventStreamRef stream
                                                     const FSEventStreamEventFlags eventFlags[],
                                                     const FSEventStreamEventId eventIds[])
 {
-#if defined(Q_OS_OSX) && MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_6
+#if defined(Q_OS_OSX)
     Q_UNUSED(streamRef);
 
     bool needsRestart = false;
@@ -226,8 +234,8 @@ void QFseventsFileSystemWatcherEngine::processEvent(ConstFSEventStreamRef stream
 
         if (eFlags & kFSEventStreamEventFlagRootChanged) {
             // re-check everything:
-            DirsByName::iterator dirIt = watchedDirectories.find(path);
-            if (dirIt != watchedDirectories.end())
+            DirsByName::iterator dirIt = watchingState.watchedDirectories.find(path);
+            if (dirIt != watchingState.watchedDirectories.end())
                 needsRestart |= checkDir(dirIt);
             needsRestart |= rescanFiles(path);
             continue;
@@ -237,25 +245,19 @@ void QFseventsFileSystemWatcherEngine::processEvent(ConstFSEventStreamRef stream
             needsRestart |= rescanDirs(path);
 
         // check watched directories:
-        DirsByName::iterator dirIt = watchedDirectories.find(path);
-        if (dirIt != watchedDirectories.end())
+        DirsByName::iterator dirIt = watchingState.watchedDirectories.find(path);
+        if (dirIt != watchingState.watchedDirectories.end())
             needsRestart |= checkDir(dirIt);
 
         // check watched files:
-        FilesByPath::iterator pIt = watchedFiles.find(path);
-        if (pIt != watchedFiles.end())
+        FilesByPath::iterator pIt = watchingState.watchedFiles.find(path);
+        if (pIt != watchingState.watchedFiles.end())
             needsRestart |= rescanFiles(pIt.value());
     }
 
     if (needsRestart)
         emit scheduleStreamRestart();
 #else
-    // This is a work-around for moc: when we put the version check at the top of the header file,
-    // moc will still see the Q_OBJECT macro and generate a meta-object when compiling for 10.6,
-    // which obviously won't link.
-    //
-    // So the trick is to still compile this class on 10.6, but never instantiate it.
-
     Q_UNUSED(streamRef);
     Q_UNUSED(numEvents);
     Q_UNUSED(eventPaths);
@@ -276,12 +278,11 @@ void QFseventsFileSystemWatcherEngine::doEmitDirectoryChanged(const QString &pat
     emit directoryChanged(path, removed);
 }
 
-void QFseventsFileSystemWatcherEngine::restartStream()
+bool QFseventsFileSystemWatcherEngine::restartStream()
 {
-    QMacAutoReleasePool pool;
     QMutexLocker locker(&lock);
     stopStream();
-    startStream();
+    return startStream();
 }
 
 QFseventsFileSystemWatcherEngine *QFseventsFileSystemWatcherEngine::create(QObject *parent)
@@ -311,6 +312,7 @@ QFseventsFileSystemWatcherEngine::~QFseventsFileSystemWatcherEngine()
 {
     QMacAutoReleasePool pool;
 
+    // Stop the stream in case we have to wait for the lock below to be acquired.
     if (stream)
         FSEventStreamStop(stream);
 
@@ -334,12 +336,14 @@ QStringList QFseventsFileSystemWatcherEngine::addPaths(const QStringList &paths,
 
     QMutexLocker locker(&lock);
 
+    bool wasRunning = stream != Q_NULLPTR;
     bool needsRestart = false;
 
+    WatchingState oldState = watchingState;
     QStringList p = paths;
     QMutableListIterator<QString> it(p);
     while (it.hasNext()) {
-        QString origPath = it.next();
+        QString origPath = it.next().normalized(QString::NormalizationForm_C);
         QString realPath = origPath;
         if (realPath.endsWith(QDir::separator()))
             realPath = realPath.mid(0, realPath.size() - 1);
@@ -356,7 +360,7 @@ QStringList QFseventsFileSystemWatcherEngine::addPaths(const QStringList &paths,
 
         const bool isDir = S_ISDIR(st.st_mode);
         if (isDir) {
-            if (watchedDirectories.contains(realPath))
+            if (watchingState.watchedDirectories.contains(realPath))
                 continue;
             directories->append(origPath);
             watchedPath = realPath;
@@ -371,17 +375,18 @@ QStringList QFseventsFileSystemWatcherEngine::addPaths(const QStringList &paths,
             parentPath = watchedPath;
         }
 
-        for (PathRefCounts::const_iterator i = watchedPaths.begin(), ei = watchedPaths.end(); i != ei; ++i) {
+        for (PathRefCounts::const_iterator i = watchingState.watchedPaths.begin(),
+                ei = watchingState.watchedPaths.end(); i != ei; ++i) {
             if (watchedPath.startsWith(i.key())) {
                 watchedPath = i.key();
                 break;
             }
         }
 
-        PathRefCounts::iterator it = watchedPaths.find(watchedPath);
-        if (it == watchedPaths.end()) {
+        PathRefCounts::iterator it = watchingState.watchedPaths.find(watchedPath);
+        if (it == watchingState.watchedPaths.end()) {
             needsRestart = true;
-            watchedPaths.insert(watchedPath, 1);
+            watchingState.watchedPaths.insert(watchedPath, 1);
             DEBUG("Adding '%s' to watchedPaths", qPrintable(watchedPath));
         } else {
             ++it.value();
@@ -392,18 +397,25 @@ QStringList QFseventsFileSystemWatcherEngine::addPaths(const QStringList &paths,
             DirInfo dirInfo;
             dirInfo.dirInfo = info;
             dirInfo.entries = scanForDirEntries(realPath);
-            watchedDirectories.insert(realPath, dirInfo);
+            watchingState.watchedDirectories.insert(realPath, dirInfo);
             DEBUG("-- Also adding '%s' to watchedDirectories", qPrintable(realPath));
         } else {
-            watchedFiles[parentPath].insert(realPath, info);
+            watchingState.watchedFiles[parentPath].insert(realPath, info);
             DEBUG("-- Also adding '%s' to watchedFiles", qPrintable(realPath));
         }
     }
 
     if (needsRestart) {
         stopStream();
-        if (!startStream())
+        if (!startStream()) {
+            // ok, something went wrong, let's try to restore the previous state
+            watchingState = qMove(oldState);
+            // and because we don't know which path caused the issue (if any), fail on all of them
             p = paths;
+
+            if (wasRunning)
+                startStream();
+        }
     }
 
     return p;
@@ -419,6 +431,7 @@ QStringList QFseventsFileSystemWatcherEngine::removePaths(const QStringList &pat
 
     bool needsRestart = false;
 
+    WatchingState oldState = watchingState;
     QStringList p = paths;
     QMutableListIterator<QString> it(p);
     while (it.hasNext()) {
@@ -431,10 +444,10 @@ QStringList QFseventsFileSystemWatcherEngine::removePaths(const QStringList &pat
         realPath = fi.canonicalFilePath();
 
         if (fi.isDir()) {
-            DirsByName::iterator dirIt = watchedDirectories.find(realPath);
-            if (dirIt != watchedDirectories.end()) {
+            DirsByName::iterator dirIt = watchingState.watchedDirectories.find(realPath);
+            if (dirIt != watchingState.watchedDirectories.end()) {
                 needsRestart |= derefPath(dirIt->dirInfo.watchedPath);
-                watchedDirectories.erase(dirIt);
+                watchingState.watchedDirectories.erase(dirIt);
                 directories->removeAll(origPath);
                 it.remove();
                 DEBUG("Removed directory '%s'", qPrintable(realPath));
@@ -442,15 +455,15 @@ QStringList QFseventsFileSystemWatcherEngine::removePaths(const QStringList &pat
         } else {
             QFileInfo fi(realPath);
             QString parentPath = fi.path();
-            FilesByPath::iterator pIt = watchedFiles.find(parentPath);
-            if (pIt != watchedFiles.end()) {
+            FilesByPath::iterator pIt = watchingState.watchedFiles.find(parentPath);
+            if (pIt != watchingState.watchedFiles.end()) {
                 InfoByName &filesInDir = pIt.value();
                 InfoByName::iterator fIt = filesInDir.find(realPath);
                 if (fIt != filesInDir.end()) {
                     needsRestart |= derefPath(fIt->watchedPath);
                     filesInDir.erase(fIt);
                     if (filesInDir.isEmpty())
-                        watchedFiles.erase(pIt);
+                        watchingState.watchedFiles.erase(pIt);
                     files->removeAll(origPath);
                     it.remove();
                     DEBUG("Removed file '%s'", qPrintable(realPath));
@@ -461,26 +474,33 @@ QStringList QFseventsFileSystemWatcherEngine::removePaths(const QStringList &pat
 
     locker.unlock();
 
-    if (needsRestart)
-        restartStream();
+    if (needsRestart) {
+        if (!restartStream()) {
+            watchingState = qMove(oldState);
+            startStream();
+        }
+    }
 
     return p;
 }
 
+// Returns false if FSEventStream* calls failed for some mysterious reason, true if things got a
+// thumbs-up.
 bool QFseventsFileSystemWatcherEngine::startStream()
 {
     Q_ASSERT(stream == 0);
-    QMacAutoReleasePool pool;
-    if (stream) // This shouldn't happen, but let's be nice and handle it.
+    if (stream) // Ok, this really shouldn't happen, esp. not after the assert. But let's be nice in release mode and still handle it.
         stopStream();
 
-    if (watchedPaths.isEmpty())
-        return false;
+    QMacAutoReleasePool pool;
 
-    DEBUG() << "Starting stream with paths" << watchedPaths.keys();
+    if (watchingState.watchedPaths.isEmpty())
+        return true; // we succeeded in doing nothing
 
-    NSMutableArray *pathsToWatch = [NSMutableArray arrayWithCapacity:watchedPaths.size()];
-    for (PathRefCounts::const_iterator i = watchedPaths.begin(), ei = watchedPaths.end(); i != ei; ++i)
+    DEBUG() << "Starting stream with paths" << watchingState.watchedPaths.keys();
+
+    NSMutableArray *pathsToWatch = [NSMutableArray arrayWithCapacity:watchingState.watchedPaths.size()];
+    for (PathRefCounts::const_iterator i = watchingState.watchedPaths.begin(), ei = watchingState.watchedPaths.end(); i != ei; ++i)
         [pathsToWatch addObject:i.key().toNSString()];
 
     struct FSEventStreamContext callBackInfo = {
@@ -504,7 +524,7 @@ bool QFseventsFileSystemWatcherEngine::startStream()
                                  latency,
                                  FSEventStreamCreateFlags(0));
 
-    if (!stream) {
+    if (!stream) { // nope, no way to know what went wrong, so just fail
         DEBUG() << "Failed to create stream!";
         return false;
     }
@@ -514,7 +534,7 @@ bool QFseventsFileSystemWatcherEngine::startStream()
     if (FSEventStreamStart(stream)) {
         DEBUG() << "Stream started successfully with sinceWhen =" << lastReceivedEvent;
         return true;
-    } else {
+    } else { // again, no way to know what went wrong, so just clean up and fail
         DEBUG() << "Stream failed to start!";
         FSEventStreamInvalidate(stream);
         FSEventStreamRelease(stream);
@@ -525,6 +545,7 @@ bool QFseventsFileSystemWatcherEngine::startStream()
 
 void QFseventsFileSystemWatcherEngine::stopStream(bool isStopped)
 {
+    QMacAutoReleasePool pool;
     if (stream) {
         if (!isStopped)
             FSEventStreamStop(stream);
@@ -554,9 +575,9 @@ QFseventsFileSystemWatcherEngine::InfoByName QFseventsFileSystemWatcherEngine::s
 
 bool QFseventsFileSystemWatcherEngine::derefPath(const QString &watchedPath)
 {
-    PathRefCounts::iterator it = watchedPaths.find(watchedPath);
-    if (it != watchedPaths.end() && --it.value() < 1) {
-        watchedPaths.erase(it);
+    PathRefCounts::iterator it = watchingState.watchedPaths.find(watchedPath);
+    if (it != watchingState.watchedPaths.end() && --it.value() < 1) {
+        watchingState.watchedPaths.erase(it);
         DEBUG("Removing '%s' from watchedPaths.", qPrintable(watchedPath));
         return true;
     }

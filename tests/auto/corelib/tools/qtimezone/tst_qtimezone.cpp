@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -50,6 +45,8 @@ private slots:
     void dataStreamTest();
     void isTimeZoneIdAvailable();
     void availableTimeZoneIds();
+    void transitionEachZone_data();
+    void transitionEachZone();
     void stressTest();
     void windowsId();
     void isValidId_data();
@@ -59,23 +56,24 @@ private slots:
     void icuTest();
     void tzTest();
     void macTest();
+    void darwinTypes();
     void winTest();
 
 private:
-    void printTimeZone(const QTimeZone tz);
+    void printTimeZone(const QTimeZone &tz);
 #ifdef QT_BUILD_INTERNAL
     void testCetPrivate(const QTimeZonePrivate &tzp);
 #endif // QT_BUILD_INTERNAL
-    bool debug;
+    const bool debug;
 };
 
 tst_QTimeZone::tst_QTimeZone()
-{
     // Set to true to print debug output, test Display Names and run long stress tests
-    debug = false;
+    : debug(false)
+{
 }
 
-void tst_QTimeZone::printTimeZone(const QTimeZone tz)
+void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
 {
     QDateTime now = QDateTime::currentDateTime();
     QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
@@ -301,7 +299,7 @@ void tst_QTimeZone::nullTest()
 
 void tst_QTimeZone::dataStreamTest()
 {
-    // Test the OffsetFromUtc backend serialization
+    // Test the OffsetFromUtc backend serialization. First with a custom timezone:
     QTimeZone tz1("QST", 123456, "Qt Standard Time", "QST", QLocale::Norway, "Qt Testing");
     QByteArray tmp;
     {
@@ -322,6 +320,20 @@ void tst_QTimeZone::dataStreamTest()
     QCOMPARE(tz2.displayName(QTimeZone::DaylightTime, QTimeZone::LongName, QString()),
              QString("Qt Standard Time"));
     QCOMPARE(tz2.offsetFromUtc(QDateTime::currentDateTime()), 123456);
+
+    // And then with a standard IANA timezone (QTBUG-60595):
+    tz1 = QTimeZone("UTC");
+    QCOMPARE(tz1.isValid(), true);
+    {
+        QDataStream ds(&tmp, QIODevice::WriteOnly);
+        ds << tz1;
+    }
+    {
+        QDataStream ds(&tmp, QIODevice::ReadOnly);
+        ds >> tz2;
+    }
+    QCOMPARE(tz2.isValid(), true);
+    QCOMPARE(tz2.id(), tz1.id());
 
     // Test the system backend serialization
     tz1 = QTimeZone("Pacific/Auckland");
@@ -348,6 +360,7 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     foreach (const QByteArray &id, available)
         QVERIFY(QTimeZone::isTimeZoneIdAvailable(id));
 
+#ifdef QT_BUILD_INTERNAL
     // a-z, A-Z, 0-9, '.', '-', '_' are valid chars
     // Can't start with '-'
     // Parts separated by '/', each part min 1 and max of 14 chars
@@ -370,6 +383,57 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     QCOMPARE(QTimeZonePrivate::isValidId("123456789012345"), false);
     QCOMPARE(QTimeZonePrivate::isValidId("123456789012345/12345678901234"), false);
     QCOMPARE(QTimeZonePrivate::isValidId("12345678901234/123456789012345"), false);
+#endif // QT_BUILD_INTERNAL
+}
+
+void tst_QTimeZone::transitionEachZone_data()
+{
+    QTest::addColumn<QByteArray>("zone");
+    QTest::addColumn<qint64>("secs");
+    QTest::addColumn<int>("start");
+    QTest::addColumn<int>("stop");
+
+    struct {
+        qint64 baseSecs;
+        int start, stop;
+        int year;
+    } table[] = {
+        { 25666200, 3, 12, 1970 },  // 1970-10-25 01:30 UTC; North America
+        { 1288488600, -4, 8, 2010 } // 2010-10-31 01:30 UTC; Europe, Russia
+    };
+
+    QString name;
+    for (int k = sizeof(table) / sizeof(table[0]); k-- > 0; ) {
+        foreach (QByteArray zone, QTimeZone::availableTimeZoneIds()) {
+            name.sprintf("%s@%d", zone.constData(), table[k].year);
+            QTest::newRow(name.toUtf8().constData())
+                << zone
+                << table[k].baseSecs
+                << table[k].start
+                << table[k].stop;
+        }
+    }
+}
+
+void tst_QTimeZone::transitionEachZone()
+{
+    // Regression test: round-trip fromMsecs/toMSecs should be idempotent; but
+    // various zones failed during fall-back transitions.
+    QFETCH(QByteArray, zone);
+    QFETCH(qint64, secs);
+    QFETCH(int, start);
+    QFETCH(int, stop);
+    QTimeZone named(zone);
+
+    for (int i = start; i < stop; i++) {
+        qint64 here = secs + i * 3600;
+        QDateTime when = QDateTime::fromMSecsSinceEpoch(here * 1000, named);
+        qint64 stamp = when.toMSecsSinceEpoch();
+        if (here * 1000 != stamp) // (The +1 is due to using *1*:30 as baseSecs.)
+            qDebug() << "Failing for" << zone << "at half past" << (i + 1) << "UTC";
+        QCOMPARE(stamp % 1000, 0);
+        QCOMPARE(here - stamp / 1000, 0);
+    }
 }
 
 void tst_QTimeZone::availableTimeZoneIds()
@@ -709,9 +773,9 @@ void tst_QTimeZone::tzTest()
 
     // Test display names by type, either ICU or abbreviation only
     QLocale enUS("en_US");
-#ifdef QT_USE_ICU
     // Only test names in debug mode, names used can vary by ICU version installed
     if (debug) {
+#ifdef QT_USE_ICU
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::LongName, enUS),
                 QString("Central European Standard Time"));
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::ShortName, enUS),
@@ -731,9 +795,7 @@ void tst_QTimeZone::tzTest()
                 QString("GMT+01:00"));
         QCOMPARE(tzp.displayName(QTimeZone::GenericTime, QTimeZone::OffsetName, enUS),
                 QString("UTC+01:00"));
-    }
 #else
-    if (debug) {
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::LongName, enUS),
                 QString("CET"));
         QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::ShortName, enUS),
@@ -752,10 +814,8 @@ void tst_QTimeZone::tzTest()
                 QString("CET"));
         QCOMPARE(tzp.displayName(QTimeZone::GenericTime, QTimeZone::OffsetName, enUS),
                 QString("CET"));
-    }
 #endif // QT_USE_ICU
 
-    if (debug) {
         // Test Abbreviations
         QCOMPARE(tzp.abbreviation(std), QString("CET"));
         QCOMPARE(tzp.abbreviation(dst), QString("CEST"));
@@ -910,6 +970,16 @@ void tst_QTimeZone::macTest()
 
     testCetPrivate(tzp);
 #endif // Q_OS_MAC
+}
+
+void tst_QTimeZone::darwinTypes()
+{
+#ifndef Q_OS_DARWIN
+    QSKIP("This is an Apple-only test");
+#else
+    extern void tst_QTimeZone_darwinTypes(); // in tst_qtimezone_darwin.mm
+    tst_QTimeZone_darwinTypes();
+#endif
 }
 
 void tst_QTimeZone::winTest()

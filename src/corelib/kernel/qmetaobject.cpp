@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -320,6 +326,24 @@ const char *QMetaObject::className() const
 */
 
 /*!
+    Returns \c true if the class described by this QMetaObject inherits
+    the type described by \a metaObject; otherwise returns false.
+
+    A type is considered to inherit itself.
+
+    \since 5.7
+*/
+bool QMetaObject::inherits(const QMetaObject *metaObject) const Q_DECL_NOEXCEPT
+{
+    const QMetaObject *m = this;
+    do {
+        if (metaObject == m)
+            return true;
+    } while ((m = m->d.superdata));
+    return false;
+}
+
+/*!
     \internal
 
     Returns \a obj if object \a obj inherits from this
@@ -327,14 +351,8 @@ const char *QMetaObject::className() const
 */
 QObject *QMetaObject::cast(QObject *obj) const
 {
-    if (obj) {
-        const QMetaObject *m = obj->metaObject();
-        do {
-            if (m == this)
-                return obj;
-        } while ((m = m->d.superdata));
-    }
-    return 0;
+    // ### Qt 6: inline
+    return const_cast<QObject*>(cast(const_cast<const QObject*>(obj)));
 }
 
 /*!
@@ -345,14 +363,7 @@ QObject *QMetaObject::cast(QObject *obj) const
 */
 const QObject *QMetaObject::cast(const QObject *obj) const
 {
-    if (obj) {
-        const QMetaObject *m = obj->metaObject();
-        do {
-            if (m == this)
-                return obj;
-        } while ((m = m->d.superdata));
-    }
-    return 0;
+    return (obj && obj->metaObject()->inherits(this)) ? obj : nullptr;
 }
 
 #ifndef QT_NO_TRANSLATION
@@ -1342,7 +1353,7 @@ static inline QByteArray findMethodCandidates(const QMetaObject *metaObject, con
     for (int i = 0; i < metaObject->methodCount(); ++i) {
         const QMetaMethod method = metaObject->method(i);
         if (method.name() == memberByteArray)
-            candidateMessage.append("    " + method.methodSignature() + '\n');
+            candidateMessage += "    " + method.methodSignature() + '\n';
     }
     if (!candidateMessage.isEmpty()) {
         candidateMessage.prepend("\nCandidates are:\n");
@@ -2230,12 +2241,10 @@ bool QMetaMethod::invoke(QObject *object,
 
         for (int i = 1; i < paramCount; ++i) {
             types[i] = QMetaType::type(typeNames[i]);
-            if (types[i] != QMetaType::UnknownType) {
-                args[i] = QMetaType::create(types[i], param[i]);
-                ++nargs;
-            } else if (param[i]) {
+            if (types[i] == QMetaType::UnknownType && param[i]) {
                 // Try to register the type and try again before reporting an error.
-                void *argv[] = { &types[i], &i };
+                int index = nargs - 1;
+                void *argv[] = { &types[i], &index };
                 QMetaObject::metacall(object, QMetaObject::RegisterMethodArgumentMetaType,
                                       idx_relative + idx_offset, argv);
                 if (types[i] == -1) {
@@ -2249,6 +2258,10 @@ bool QMetaMethod::invoke(QObject *object,
                     free(args);
                     return false;
                 }
+            }
+            if (types[i] != QMetaType::UnknownType) {
+                args[i] = QMetaType::create(types[i], param[i]);
+                ++nargs;
             }
         }
 
@@ -2546,9 +2559,19 @@ int QMetaEnum::value(int index) const
 */
 bool QMetaEnum::isFlag() const
 {
-    return mobj && mobj->d.data[handle + 1];
+    return mobj && mobj->d.data[handle + 1] & EnumIsFlag;
 }
 
+/*!
+    \since 5.8
+
+    Returns \c true if this enumerator is declared as a C++11 enum class;
+    otherwise returns false.
+*/
+bool QMetaEnum::isScoped() const
+{
+    return mobj && mobj->d.data[handle + 1] & EnumIsScoped;
+}
 
 /*!
     Returns the scope this enumerator was declared in.
@@ -2641,15 +2664,16 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
         return -1;
     if (ok != 0)
         *ok = true;
-    QStringList l = QString::fromLatin1(keys).split(QLatin1Char('|'));
-    if (l.isEmpty())
+    const QString keysString = QString::fromLatin1(keys);
+    const QVector<QStringRef> splitKeys = keysString.splitRef(QLatin1Char('|'));
+    if (splitKeys.isEmpty())
         return 0;
-    //#### TODO write proper code, do not use QStringList
+    // ### TODO write proper code: do not allocate memory, so we can go nothrow
     int value = 0;
     int count = mobj->d.data[handle + 2];
     int data = mobj->d.data[handle + 3];
-    for (int li = 0; li < l.size(); ++li) {
-        QString trimmed = l.at(li).trimmed();
+    for (const QStringRef &untrimmed : splitKeys) {
+        const QStringRef trimmed = untrimmed.trimmed();
         QByteArray qualified_key = trimmed.toLatin1();
         const char *key = qualified_key.constData();
         uint scope = 0;

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,17 +54,14 @@
 #include <private/qopengl_p.h>
 #endif
 
-#ifndef Q_OS_WINCE
-#  include <QtCore/qt_windows.h>
-#  include <private/qsystemlibrary_p.h>
-#  include <d3d9.h>
-#endif
+#include <QtCore/qt_windows.h>
+#include <private/qsystemlibrary_p.h>
+#include <d3d9.h>
 
 QT_BEGIN_NAMESPACE
 
 GpuDescription GpuDescription::detect()
 {
-#ifndef Q_OS_WINCE
     typedef IDirect3D9 * (WINAPI *PtrDirect3DCreate9)(UINT);
 
     GpuDescription result;
@@ -89,13 +92,6 @@ GpuDescription GpuDescription::detect()
         result.description = adapterIdentifier.Description;
     }
     return result;
-#else // !Q_OS_WINCE
-    GpuDescription result;
-    result.vendorId = result.deviceId = result.revision =1;
-    result.driverVersion = QVersionNumber(1, 1, 1);
-    result.driverName = result.description = QByteArrayLiteral("Generic");
-    return result;
-#endif
 }
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -149,7 +145,6 @@ QVariant GpuDescription::toVariant() const
 
 QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedGlesRenderer()
 {
-#ifndef Q_OS_WINCE
     const char platformVar[] = "QT_ANGLE_PLATFORM";
     if (qEnvironmentVariableIsSet(platformVar)) {
         const QByteArray anglePlatform = qgetenv(platformVar);
@@ -161,13 +156,11 @@ QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedGlesRenderer()
             return QWindowsOpenGLTester::AngleRendererD3d11Warp;
         qCWarning(lcQpaGl) << "Invalid value set for " << platformVar << ": " << anglePlatform;
     }
-#endif // !Q_OS_WINCE
     return QWindowsOpenGLTester::InvalidRenderer;
 }
 
 QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedRenderer()
 {
-#ifndef Q_OS_WINCE
     const char openGlVar[] = "QT_OPENGL";
     if (QCoreApplication::testAttribute(Qt::AA_UseOpenGLES)) {
         const Renderer glesRenderer = QWindowsOpenGLTester::requestedGlesRenderer();
@@ -189,14 +182,12 @@ QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedRenderer()
             return QWindowsOpenGLTester::SoftwareRasterizer;
         qCWarning(lcQpaGl) << "Invalid value set for " << openGlVar << ": " << requested;
     }
-#endif // !Q_OS_WINCE
     return QWindowsOpenGLTester::InvalidRenderer;
 }
 
 QList<QWindowsOpenGLTester::Renderer> QWindowsOpenGLTester::requestedRenderers()
 {
     QList<QWindowsOpenGLTester::Renderer> renderers;
-#ifndef Q_OS_WINCE
     const char openGlVar[] = "QT_OPENGL_RENDERERS";
     if (qEnvironmentVariableIsSet(openGlVar)) {
         QString requestedList = QString::fromLatin1(qgetenv(openGlVar));
@@ -221,11 +212,8 @@ QList<QWindowsOpenGLTester::Renderer> QWindowsOpenGLTester::requestedRenderers()
                 qCWarning(lcQpaGl) << "Invalid value set for " << openGlVar << ": " << requested;
         }
     }
-#endif // !Q_OS_WINCE
     return renderers;
 }
-
-#ifndef Q_OS_WINCE
 
 static inline QString resolveBugListFile(const QString &fileName)
 {
@@ -242,12 +230,10 @@ static inline QString resolveBugListFile(const QString &fileName)
     return QStandardPaths::locate(QStandardPaths::ConfigLocation, fileName);
 }
 
-#  ifndef QT_NO_OPENGL
+#ifndef QT_NO_OPENGL
 typedef QHash<QOpenGLConfig::Gpu, QWindowsOpenGLTester::Renderers> SupportedRenderersCache;
 Q_GLOBAL_STATIC(SupportedRenderersCache, supportedRenderersCache)
-#  endif
-
-#endif // !Q_OS_WINCE
+#endif
 
 static QSet<QString> getGpuFeatures(const QOpenGLConfig::Gpu& qgpu)
 {
@@ -269,8 +255,6 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
     Q_UNUSED(glesOnly)
 #if defined(QT_NO_OPENGL)
     return 0;
-#elif defined(Q_OS_WINCE)
-    return QWindowsOpenGLTester::Gles;
 #else
     QOpenGLConfig::Gpu qgpu = QOpenGLConfig::Gpu::fromDevice(gpu.vendorId, gpu.deviceId, gpu.driverVersion, gpu.description);
     SupportedRenderersCache *srCache = supportedRenderersCache();
@@ -290,22 +274,25 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
 
     result &= ~blacklisted;
 
-    QSet<QString> features = getGpuFeatures(qgpu);
-    if (features.contains(QStringLiteral("disable_rotation"))) {
-        qCDebug(lcQpaGl) << "Disabling rotation: " << gpu;
-        result |= DisableRotationFlag;
-    }
-
     srCache->insert(qgpu, result);
     return result;
-#endif // !Q_OS_WINCE && !QT_NO_OPENGL
+#endif // !QT_NO_OPENGL
 }
 
 QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::blacklistedRenderers()
 {
     const GpuDescription gpu = GpuDescription::detect();
-    QOpenGLConfig::Gpu qgpu = QOpenGLConfig::Gpu::fromDevice(gpu.vendorId, gpu.deviceId, gpu.driverVersion, gpu.description);
-    QSet<QString> features = getGpuFeatures(qgpu);
+	QOpenGLConfig::Gpu qgpu = QOpenGLConfig::Gpu::fromDevice(gpu.vendorId, gpu.deviceId, gpu.driverVersion, gpu.description);
+	const char bugListFileVar[] = "QT_OPENGL_BUGLIST";
+    QString buglistFileName = QStringLiteral(":/qt-project.org/windows/openglblacklists/default.json");
+
+    if (qEnvironmentVariableIsSet(bugListFileVar)) {
+        const QString fileName = resolveBugListFile(QFile::decodeName(qgetenv(bugListFileVar)));
+        if (!fileName.isEmpty())
+            buglistFileName = fileName;
+    }
+
+    QSet<QString> features = QOpenGLConfig::gpuFeatures(qgpu, buglistFileName);
     qCDebug(lcQpaGl) << "GPU features:" << features;
 
     QWindowsOpenGLTester::Renderers result = 0;
@@ -333,6 +320,10 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::blacklistedRenderers()
             result |= QWindowsOpenGLTester::AngleRendererD3d9;
         }
     }
+    if (features.contains(QStringLiteral("disable_rotation"))) {
+        qCDebug(lcQpaGl) << "Disabling rotation: " << gpu;
+        result |= DisableRotationFlag;
+    }
 
     return result;
 }
@@ -355,7 +346,7 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::supportedRenderers()
 
 bool QWindowsOpenGLTester::testDesktopGL()
 {
-#if !defined(QT_NO_OPENGL) && !defined(Q_OS_WINCE)
+#if !defined(QT_NO_OPENGL)
     HMODULE lib = 0;
     HWND wnd = 0;
     HDC dc = 0;
@@ -482,7 +473,7 @@ cleanup:
     return result;
 #else
     return false;
-#endif // !QT_NO_OPENGL && !Q_OS_WINCE
+#endif // !QT_NO_OPENGL
 }
 
 QT_END_NAMESPACE

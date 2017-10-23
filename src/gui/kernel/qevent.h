@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,21 +40,21 @@
 #ifndef QEVENT_H
 #define QEVENT_H
 
+#include <QtGui/qtguiglobal.h>
 #include <QtGui/qwindowdefs.h>
-#include <QtCore/qobject.h>
 #include <QtGui/qregion.h>
 #include <QtCore/qnamespace.h>
 #include <QtCore/qstring.h>
 #include <QtGui/qkeysequence.h>
 #include <QtCore/qcoreevent.h>
 #include <QtCore/qvariant.h>
-#include <QtCore/qmap.h>
+#include <QtCore/qmap.h> // ### Qt 6: Remove
 #include <QtCore/qvector.h>
-#include <QtCore/qset.h>
+#include <QtCore/qset.h> // ### Qt 6: Remove
 #include <QtCore/qurl.h>
-#include <QtCore/qfile.h>
+#include <QtCore/qfile.h> // ### Qt 6: Replace by <QtCore/qiodevice.h> and forward declare QFile
 #include <QtGui/qvector2d.h>
-#include <QtGui/qtouchdevice.h>
+#include <QtGui/qtouchdevice.h> // ### Qt 6: Replace by forward declaration
 
 QT_BEGIN_NAMESPACE
 
@@ -126,6 +132,8 @@ public:
     inline Qt::MouseButton button() const { return b; }
     inline Qt::MouseButtons buttons() const { return mouseState; }
 
+    inline void setLocalPos(const QPointF &localPosition) { l = localPosition; }
+
 #if QT_DEPRECATED_SINCE(5, 0)
     QT_DEPRECATED inline QPointF posF() const { return l; }
 #endif
@@ -161,7 +169,7 @@ protected:
     QPointF p, op;
 };
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 class Q_GUI_EXPORT QWheelEvent : public QInputEvent
 {
 public:
@@ -182,6 +190,9 @@ public:
     QWheelEvent(const QPointF &pos, const QPointF &globalPos, QPoint pixelDelta, QPoint angleDelta,
                 int qt4Delta, Qt::Orientation qt4Orientation, Qt::MouseButtons buttons,
                 Qt::KeyboardModifiers modifiers, Qt::ScrollPhase phase, Qt::MouseEventSource source);
+    QWheelEvent(const QPointF &pos, const QPointF &globalPos, QPoint pixelDelta, QPoint angleDelta,
+                int qt4Delta, Qt::Orientation qt4Orientation, Qt::MouseButtons buttons,
+                Qt::KeyboardModifiers modifiers, Qt::ScrollPhase phase, Qt::MouseEventSource source, bool inverted);
     ~QWheelEvent();
 
 
@@ -205,6 +216,7 @@ public:
     inline Qt::MouseButtons buttons() const { return mouseState; }
 
     inline Qt::ScrollPhase phase() const { return Qt::ScrollPhase(ph); }
+    inline bool inverted() const { return invertedScrolling; }
 
     Qt::MouseEventSource source() const { return Qt::MouseEventSource(src); }
 
@@ -218,13 +230,14 @@ protected:
     Qt::MouseButtons mouseState;
     uint ph : 2;
     uint src: 2;
-    int reserved : 28;
+    bool invertedScrolling : 1;
+    int reserved : 27;
 
     friend class QApplication;
 };
 #endif
 
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 class Q_GUI_EXPORT QTabletEvent : public QInputEvent
 {
     Q_GADGET
@@ -282,7 +295,7 @@ protected:
     // ### Qt 6: QPointingEvent will have Buttons, QTabletEvent will inherit
     void *mExtra;
 };
-#endif // QT_NO_TABLETEVENT
+#endif // QT_CONFIG(tabletevent)
 
 #ifndef QT_NO_GESTURES
 class Q_GUI_EXPORT QNativeGestureEvent : public QInputEvent
@@ -527,8 +540,9 @@ public:
     class Attribute {
     public:
         Attribute(AttributeType typ, int s, int l, QVariant val) : type(typ), start(s), length(l), value(qMove(val)) {}
-        AttributeType type;
+        Attribute(AttributeType typ, int s, int l) : type(typ), start(s), length(l), value() {}
 
+        AttributeType type;
         int start;
         int length;
         QVariant value;
@@ -572,8 +586,10 @@ private:
         Qt::InputMethodQuery query;
         QVariant value;
     };
+    friend QTypeInfo<QueryPair>;
     QVector<QueryPair> m_values;
 };
+Q_DECLARE_TYPEINFO(QInputMethodQueryEvent::QueryPair, Q_MOVABLE_TYPE);
 
 #endif // QT_NO_INPUTMETHOD
 
@@ -685,7 +701,7 @@ private:
 };
 #endif
 
-#ifndef QT_NO_WHATSTHIS
+#if QT_CONFIG(whatsthis)
 class Q_GUI_EXPORT QWhatsThisClickedEvent : public QEvent
 {
 public:
@@ -779,6 +795,37 @@ inline bool operator==(QKeyEvent *e, QKeySequence::StandardKey key){return (e ? 
 inline bool operator==(QKeySequence::StandardKey key, QKeyEvent *e){return (e ? e->matches(key) : false);}
 #endif // QT_NO_SHORTCUT
 
+class Q_GUI_EXPORT QPointingDeviceUniqueId
+{
+    Q_GADGET
+    Q_PROPERTY(qint64 numericId READ numericId CONSTANT)
+public:
+    Q_ALWAYS_INLINE
+    Q_DECL_CONSTEXPR QPointingDeviceUniqueId() Q_DECL_NOTHROW : m_numericId(-1) {}
+    // compiler-generated copy/move ctor/assignment operators are ok!
+    // compiler-generated dtor is ok!
+
+    static QPointingDeviceUniqueId fromNumericId(qint64 id);
+
+    Q_ALWAYS_INLINE Q_DECL_CONSTEXPR bool isValid() const Q_DECL_NOTHROW { return m_numericId != -1; }
+    qint64 numericId() const Q_DECL_NOTHROW;
+
+private:
+    // TODO: for TUIO 2, or any other type of complex token ID, an internal
+    // array (or hash) can be added to hold additional properties.
+    // In this case, m_numericId will then turn into an index into that array (or hash).
+    qint64 m_numericId;
+};
+Q_DECLARE_TYPEINFO(QPointingDeviceUniqueId, Q_MOVABLE_TYPE);
+template <> class QList<QPointingDeviceUniqueId> {}; // to prevent instantiation: use QVector instead
+
+Q_GUI_EXPORT bool operator==(QPointingDeviceUniqueId lhs, QPointingDeviceUniqueId rhs) Q_DECL_NOTHROW;
+inline bool operator!=(QPointingDeviceUniqueId lhs, QPointingDeviceUniqueId rhs) Q_DECL_NOTHROW
+{ return !operator==(lhs, rhs); }
+Q_GUI_EXPORT uint qHash(QPointingDeviceUniqueId key, uint seed = 0) Q_DECL_NOTHROW;
+
+
+
 class QTouchEventTouchPointPrivate;
 class Q_GUI_EXPORT QTouchEvent : public QInputEvent
 {
@@ -787,7 +834,8 @@ public:
     {
     public:
         enum InfoFlag {
-            Pen  = 0x0001
+            Pen  = 0x0001,
+            Token = 0x0002
         };
 #ifndef Q_MOC_RUN
         // otherwise moc gives
@@ -813,6 +861,7 @@ public:
         { qSwap(d, other.d); }
 
         int id() const;
+        QPointingDeviceUniqueId uniqueId() const;
 
         Qt::TouchPointState state() const;
 
@@ -837,12 +886,16 @@ public:
         QRectF screenRect() const;
 
         qreal pressure() const;
+        qreal rotation() const;
+        QSizeF ellipseDiameters() const;
+
         QVector2D velocity() const;
         InfoFlags flags() const;
         QVector<QPointF> rawScreenPositions() const;
 
         // internal
         void setId(int id);
+        void setUniqueId(qint64 uid);
         void setState(Qt::TouchPointStates state);
         void setPos(const QPointF &pos);
         void setScenePos(const QPointF &scenePos);
@@ -856,10 +909,12 @@ public:
         void setLastScenePos(const QPointF &lastScenePos);
         void setLastScreenPos(const QPointF &lastScreenPos);
         void setLastNormalizedPos(const QPointF &lastNormalizedPos);
-        void setRect(const QRectF &rect);
-        void setSceneRect(const QRectF &sceneRect);
-        void setScreenRect(const QRectF &screenRect);
+        void setRect(const QRectF &rect); // deprecated
+        void setSceneRect(const QRectF &sceneRect); // deprecated
+        void setScreenRect(const QRectF &screenRect); // deprecated
         void setPressure(qreal pressure);
+        void setRotation(qreal angle);
+        void setEllipseDiameters(const QSizeF &dia);
         void setVelocity(const QVector2D &v);
         void setFlags(InfoFlags flags);
         void setRawScreenPositions(const QVector<QPointF> &positions);
@@ -913,6 +968,9 @@ protected:
     friend class QGuiApplicationPrivate;
     friend class QApplication;
     friend class QApplicationPrivate;
+#ifndef QT_NO_GRAPHICSVIEW
+    friend class QGraphicsScenePrivate; // direct access to _touchPoints
+#endif
 };
 Q_DECLARE_TYPEINFO(QTouchEvent::TouchPoint, Q_MOVABLE_TYPE);
 Q_DECLARE_OPERATORS_FOR_FLAGS(QTouchEvent::TouchPoint::InfoFlags)

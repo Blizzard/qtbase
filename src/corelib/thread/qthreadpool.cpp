@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -222,7 +228,7 @@ int QThreadPoolPrivate::activeThreadCount() const
 void QThreadPoolPrivate::tryToStartMoreThreads()
 {
     // try to push tasks on the queue to any available threads
-    while (!queue.isEmpty() && tryStart(queue.first().first))
+    while (!queue.isEmpty() && tryStart(queue.constFirst().first))
         queue.removeFirst();
 }
 
@@ -239,7 +245,8 @@ void QThreadPoolPrivate::startThread(QRunnable *runnable)
 {
     QScopedPointer <QThreadPoolThread> thread(new QThreadPoolThread(this));
     thread->setObjectName(QLatin1String("Thread (pooled)"));
-    allThreads.insert(thread.data());
+    Q_ASSERT(!allThreads.contains(thread.data())); // if this assert hits, we have an ABA problem (deleted threads don't get removed here)
+    allThreads.append(thread.data());
     ++activeThreads;
 
     if (runnable->autoDelete())
@@ -259,11 +266,11 @@ void QThreadPoolPrivate::reset()
 
     while (!allThreads.empty()) {
         // move the contents of the set out so that we can iterate without the lock
-        QSet<QThreadPoolThread *> allThreadsCopy;
+        QList<QThreadPoolThread *> allThreadsCopy;
         allThreadsCopy.swap(allThreads);
         locker.unlock();
 
-        foreach (QThreadPoolThread *thread, allThreadsCopy) {
+        for (QThreadPoolThread *thread : qAsConst(allThreadsCopy)) {
             thread->runnableReady.wakeAll();
             thread->wait();
             delete thread;
@@ -309,22 +316,39 @@ void QThreadPoolPrivate::clear()
 }
 
 /*!
-    \internal
-    Searches for \a runnable in the queue, removes it from the queue and
-    returns \c true if it was found in the queue
+    \since 5.9
+
+    Attempts to remove the specified \a runnable from the queue if it is not yet started.
+    If the runnable had not been started, returns \c true, and ownership of \a runnable
+    is transferred to the caller (even when \c{runnable->autoDelete() == true}).
+    Otherwise returns \c false.
+
+    \note If \c{runnable->autoDelete() == true}, this function may remove the wrong
+    runnable. This is known as the \l{https://en.wikipedia.org/wiki/ABA_problem}{ABA problem}:
+    the original \a runnable may already have executed and has since been deleted.
+    The memory is re-used for another runnable, which then gets removed instead of
+    the intended one. For this reason, we recommend calling this function only for
+    runnables that are not auto-deleting.
+
+    \sa start(), QRunnable::autoDelete()
 */
-bool QThreadPoolPrivate::stealRunnable(QRunnable *runnable)
+bool QThreadPool::tryTake(QRunnable *runnable)
 {
+    Q_D(QThreadPool);
+
     if (runnable == 0)
         return false;
     {
-        QMutexLocker locker(&mutex);
-        QVector<QPair<QRunnable *, int> >::iterator it = queue.begin();
-        QVector<QPair<QRunnable *, int> >::iterator end = queue.end();
+        QMutexLocker locker(&d->mutex);
+
+        auto it = d->queue.begin();
+        auto end = d->queue.end();
 
         while (it != end) {
             if (it->first == runnable) {
-                queue.erase(it);
+                d->queue.erase(it);
+                if (runnable->autoDelete())
+                    --runnable->ref; // undo ++ref in start()
                 return true;
             }
             ++it;
@@ -342,10 +366,10 @@ bool QThreadPoolPrivate::stealRunnable(QRunnable *runnable)
      */
 void QThreadPoolPrivate::stealAndRunRunnable(QRunnable *runnable)
 {
-    if (!stealRunnable(runnable))
+    Q_Q(QThreadPool);
+    if (!q->tryTake(runnable))
         return;
-    const bool autoDelete = runnable->autoDelete();
-    bool del = autoDelete && !--runnable->ref;
+    const bool del = runnable->autoDelete() && !runnable->ref; // tryTake already deref'ed
 
     runnable->run();
 
@@ -635,25 +659,26 @@ void QThreadPool::clear()
     d->clear();
 }
 
+#if QT_DEPRECATED_SINCE(5, 9)
 /*!
     \since 5.5
+    \obsolete use tryTake() instead, but note the different deletion rules.
 
     Removes the specified \a runnable from the queue if it is not yet started.
     The runnables for which \l{QRunnable::autoDelete()}{runnable->autoDelete()}
     returns \c true are deleted.
 
-    \sa start()
+    \sa start(), tryTake()
 */
 void QThreadPool::cancel(QRunnable *runnable)
 {
-    Q_D(QThreadPool);
-    if (!d->stealRunnable(runnable))
-        return;
-    if (runnable->autoDelete() && !--runnable->ref) {
+    if (tryTake(runnable) && runnable->autoDelete() && !runnable->ref) // tryTake already deref'ed
         delete runnable;
-    }
 }
+#endif
 
 QT_END_NAMESPACE
+
+#include "moc_qthreadpool.cpp"
 
 #endif

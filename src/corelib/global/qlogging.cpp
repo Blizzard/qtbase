@@ -1,38 +1,45 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Copyright (C) 2014 Olivier Goffart <ogoffart@woboq.com>
-** Copyright (C) 2014 Intel Corporation.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include "qglobal_p.h"
 #include "qlogging.h"
 #include "qlist.h"
 #include "qbytearray.h"
@@ -48,11 +55,12 @@
 #include "qthread.h"
 #include "private/qloggingregistry_p.h"
 #include "private/qcoreapplication_p.h"
+#include "private/qsimd_p.h"
 #endif
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #endif
-#ifdef QT_USE_SLOG2
+#if QT_CONFIG(slog2)
 #include <slog2.h>
 #endif
 
@@ -60,12 +68,12 @@
 #include <android/log.h>
 #endif
 
-#if defined(QT_USE_JOURNALD) && !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(journald)
 # define SD_JOURNAL_SUPPRESS_LOCATION
 # include <systemd/sd-journal.h>
 # include <syslog.h>
 #endif
-#if defined(QT_USE_SYSLOG) && !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(syslog)
 # include <syslog.h>
 #endif
 #ifdef Q_OS_UNIX
@@ -75,26 +83,22 @@
 # include "private/qcore_unix_p.h"
 #endif
 
-#ifndef __has_include
-#  define __has_include(x) 0
-#endif
-
 #ifndef QT_BOOTSTRAPPED
 #if !defined QT_NO_REGULAREXPRESSION
 #  ifdef __UCLIBC__
 #    if __UCLIBC_HAS_BACKTRACE__
 #      define QLOGGING_HAVE_BACKTRACE
 #    endif
-#  elif (defined(__GLIBC__) && defined(__GLIBCXX__)) || (__has_include(<cxxabi.h>) && __has_include(<execinfo.h>))
+#  elif (defined(__GLIBC__) && defined(__GLIBCXX__)) || (QT_HAS_INCLUDE(<cxxabi.h>) && QT_HAS_INCLUDE(<execinfo.h>))
 #    define QLOGGING_HAVE_BACKTRACE
 #  endif
 #endif
 
-#if defined(QT_USE_SLOG2)
+#if QT_CONFIG(slog2)
 extern char *__progname;
 #endif
 
-#if defined(Q_OS_LINUX) && (defined(__GLIBC__) || __has_include(<sys/syscall.h>))
+#if defined(Q_OS_LINUX) && (defined(__GLIBC__) || QT_HAS_INCLUDE(<sys/syscall.h>))
 #  include <sys/syscall.h>
 
 # if defined(Q_OS_ANDROID) && !defined(SYS_gettid)
@@ -137,6 +141,8 @@ static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
 #endif
 #endif // !QT_BOOTSTRAPPED
 
+#include <cstdlib>
+
 #include <stdio.h>
 
 QT_BEGIN_NAMESPACE
@@ -167,7 +173,7 @@ static bool isFatal(QtMsgType msgType)
 
 static bool willLogToConsole()
 {
-#if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+#if defined(Q_OS_WINRT)
     // these systems have no stderr, so always log to the system log
     return false;
 #elif defined(QT_BOOTSTRAPPED)
@@ -191,7 +197,7 @@ static bool willLogToConsole()
 #  elif defined(Q_OS_UNIX)
     // if /dev/tty exists, we can only open it if we have a controlling TTY
     int devtty = qt_safe_open("/dev/tty", O_RDONLY);
-    if (devtty == -1 && (errno == ENOENT || errno == EPERM)) {
+    if (devtty == -1 && (errno == ENOENT || errno == EPERM || errno == ENXIO)) {
         // no /dev/tty, fall back to isatty on stderr
         return isatty(STDERR_FILENO);
     } else if (devtty != -1) {
@@ -248,7 +254,7 @@ Q_CORE_EXPORT bool qt_logging_to_console()
     \sa QMessageLogContext, qDebug(), qInfo(), qWarning(), qCritical(), qFatal()
 */
 
-#ifdef Q_OS_WIN
+#if defined(Q_CC_MSVC) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
 static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const char *s) Q_DECL_NOEXCEPT
 {
     size_t len = qstrlen(s);
@@ -1036,6 +1042,10 @@ void QMessagePattern::setPattern(const QString &pattern)
         delete [] literals;
     }
     delete [] tokens;
+    timeArgs.clear();
+#ifdef QLOGGING_HAVE_BACKTRACE
+    backtraceArgs.clear();
+#endif
 
     // scanner
     QList<QString> lexemes;
@@ -1120,7 +1130,7 @@ void QMessagePattern::setPattern(const QString &pattern)
                 if (m.hasMatch()) {
                     int depth = m.capturedRef(1).toInt();
                     if (depth <= 0)
-                        error += QStringLiteral("QT_MESSAGE_PATTERN: %{backtrace} depth must be a number greater than 0\n");
+                        error += QLatin1String("QT_MESSAGE_PATTERN: %{backtrace} depth must be a number greater than 0\n");
                     else
                         backtraceDepth = depth;
                 }
@@ -1132,7 +1142,8 @@ void QMessagePattern::setPattern(const QString &pattern)
                 backtraceParams.backtraceSeparator = backtraceSeparator;
                 backtraceArgs.append(backtraceParams);
 #else
-                error += QStringLiteral("QT_MESSAGE_PATTERN: %{backtrace} is not supported by this Qt build\n");
+                error += QLatin1String("QT_MESSAGE_PATTERN: %{backtrace} is not supported by this Qt build\n");
+                tokens[i] = "";
 #endif
             }
 
@@ -1153,7 +1164,7 @@ void QMessagePattern::setPattern(const QString &pattern)
             else if (lexeme == QLatin1String(endifTokenC)) {
                 tokens[i] = endifTokenC;
                 if (!inIf && !nestedIfError)
-                    error += QStringLiteral("QT_MESSAGE_PATTERN: %{endif} without an %{if-*}\n");
+                    error += QLatin1String("QT_MESSAGE_PATTERN: %{endif} without an %{if-*}\n");
                 inIf = false;
             } else {
                 tokens[i] = emptyTokenC;
@@ -1169,11 +1180,11 @@ void QMessagePattern::setPattern(const QString &pattern)
         }
     }
     if (nestedIfError)
-        error += QStringLiteral("QT_MESSAGE_PATTERN: %{if-*} cannot be nested\n");
+        error += QLatin1String("QT_MESSAGE_PATTERN: %{if-*} cannot be nested\n");
     else if (inIf)
-        error += QStringLiteral("QT_MESSAGE_PATTERN: missing %{endif}\n");
+        error += QLatin1String("QT_MESSAGE_PATTERN: missing %{endif}\n");
     if (!error.isEmpty()) {
-#if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+#if defined(Q_OS_WINRT)
         OutputDebugString(reinterpret_cast<const wchar_t*>(error.utf16()));
         if (0)
 #elif defined(Q_OS_WIN) && defined(QT_BUILD_CORE_LIB)
@@ -1191,7 +1202,91 @@ void QMessagePattern::setPattern(const QString &pattern)
     memcpy(literals, literalsVar.constData(), literalsVar.size() * sizeof(const char*));
 }
 
-#if defined(QT_USE_SLOG2)
+#if defined(QLOGGING_HAVE_BACKTRACE) && !defined(QT_BOOTSTRAPPED)
+// make sure the function has "Message" in the name so the function is removed
+
+#if ((defined(Q_CC_GNU) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS)) || QT_HAS_ATTRIBUTE(optimize)) \
+    && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
+// force skipping the frame pointer, to save the backtrace() function some work
+__attribute__((optimize("omit-frame-pointer")))
+#endif
+static QStringList backtraceFramesForLogMessage(int frameCount)
+{
+    QStringList result;
+    if (frameCount == 0)
+        return result;
+
+    // The results of backtrace_symbols looks like this:
+    //    /lib/libc.so.6(__libc_start_main+0xf3) [0x4a937413]
+    // The offset and function name are optional.
+    // This regexp tries to extract the library name (without the path) and the function name.
+    // This code is protected by QMessagePattern::mutex so it is thread safe on all compilers
+    static QRegularExpression rx(QStringLiteral("^(?:[^(]*/)?([^(/]+)\\(([^+]*)(?:[\\+[a-f0-9x]*)?\\) \\[[a-f0-9x]*\\]$"),
+                                 QRegularExpression::OptimizeOnFirstUsageOption);
+
+    QVarLengthArray<void*, 32> buffer(7 + frameCount);
+    int n = backtrace(buffer.data(), buffer.size());
+    if (n > 0) {
+        int numberPrinted = 0;
+        for (int i = 0; i < n && numberPrinted < frameCount; ++i) {
+            QScopedPointer<char*, QScopedPointerPodDeleter> strings(backtrace_symbols(buffer.data() + i, 1));
+            QString trace = QString::fromLatin1(strings.data()[0]);
+            QRegularExpressionMatch m = rx.match(trace);
+            if (m.hasMatch()) {
+                QString library = m.captured(1);
+                QString function = m.captured(2);
+
+                // skip the trace from QtCore that are because of the qDebug itself
+                if (!numberPrinted && library.contains(QLatin1String("Qt5Core"))
+                        && (function.isEmpty() || function.contains(QLatin1String("Message"), Qt::CaseInsensitive)
+                            || function.contains(QLatin1String("QDebug")))) {
+                    continue;
+                }
+
+                if (function.startsWith(QLatin1String("_Z"))) {
+                    QScopedPointer<char, QScopedPointerPodDeleter> demangled(
+                                abi::__cxa_demangle(function.toUtf8(), 0, 0, 0));
+                    if (demangled)
+                        function = QString::fromUtf8(qCleanupFuncinfo(demangled.data()));
+                }
+
+                if (function.isEmpty()) {
+                    result.append(QLatin1Char('?') + library + QLatin1Char('?'));
+                } else {
+                    result.append(function);
+                }
+            } else {
+                if (numberPrinted == 0) {
+                    // innermost, unknown frames are usually the logging framework itself
+                    continue;
+                }
+                result.append(QStringLiteral("???"));
+            }
+            numberPrinted++;
+        }
+    }
+    return result;
+}
+
+static QString formatBacktraceForLogMessage(const QMessagePattern::BacktraceParams backtraceParams,
+                                            const char *function)
+{
+    QString backtraceSeparator = backtraceParams.backtraceSeparator;
+    int backtraceDepth = backtraceParams.backtraceDepth;
+
+    QStringList frames = backtraceFramesForLogMessage(backtraceDepth);
+    if (frames.isEmpty())
+        return QString();
+
+    // if the first frame is unknown, replace it with the context function
+    if (function && frames.at(0).startsWith(QLatin1Char('?')))
+        frames[0] = QString::fromUtf8(qCleanupFuncinfo(function));
+
+    return frames.join(backtraceSeparator);
+}
+#endif // QLOGGING_HAVE_BACKTRACE && !QT_BOOTSTRAPPED
+
+#if QT_CONFIG(slog2)
 #ifndef QT_LOG_CODE
 #define QT_LOG_CODE 9000
 #endif
@@ -1240,7 +1335,7 @@ static void slog2_default_handler(QtMsgType msgType, const char *message)
     //writes to the slog2 buffer
     slog2c(NULL, QT_LOG_CODE, severity, message);
 }
-#endif // QT_USE_SLOG2
+#endif // slog2
 
 Q_GLOBAL_STATIC(QMessagePattern, qMessagePattern)
 
@@ -1334,62 +1429,8 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
 #ifdef QLOGGING_HAVE_BACKTRACE
         } else if (token == backtraceTokenC) {
             QMessagePattern::BacktraceParams backtraceParams = pattern->backtraceArgs.at(backtraceArgsIdx);
-            QString backtraceSeparator = backtraceParams.backtraceSeparator;
-            int backtraceDepth = backtraceParams.backtraceDepth;
             backtraceArgsIdx++;
-            QVarLengthArray<void*, 32> buffer(7 + backtraceDepth);
-            int n = backtrace(buffer.data(), buffer.size());
-            if (n > 0) {
-                int numberPrinted = 0;
-                for (int i = 0; i < n && numberPrinted < backtraceDepth; ++i) {
-                    QScopedPointer<char*, QScopedPointerPodDeleter> strings(backtrace_symbols(buffer.data() + i, 1));
-                    QString trace = QString::fromLatin1(strings.data()[0]);
-                    // The results of backtrace_symbols looks like this:
-                    //    /lib/libc.so.6(__libc_start_main+0xf3) [0x4a937413]
-                    // The offset and function name are optional.
-                    // This regexp tries to extract the librry name (without the path) and the function name.
-                    // This code is protected by QMessagePattern::mutex so it is thread safe on all compilers
-                    static QRegularExpression rx(QStringLiteral("^(?:[^(]*/)?([^(/]+)\\(([^+]*)(?:[\\+[a-f0-9x]*)?\\) \\[[a-f0-9x]*\\]$"),
-                                                 QRegularExpression::OptimizeOnFirstUsageOption);
-
-                    QRegularExpressionMatch m = rx.match(trace);
-                    if (m.hasMatch()) {
-                        // skip the trace from QtCore that are because of the qDebug itself
-                        QString library = m.captured(1);
-                        QString function = m.captured(2);
-                        if (!numberPrinted && library.contains(QLatin1String("Qt5Core"))
-                            && (function.isEmpty() || function.contains(QLatin1String("Message"), Qt::CaseInsensitive)
-                                || function.contains(QLatin1String("QDebug")))) {
-                            continue;
-                        }
-
-                        if (function.startsWith(QLatin1String("_Z"))) {
-                            QScopedPointer<char, QScopedPointerPodDeleter> demangled(
-                                abi::__cxa_demangle(function.toUtf8(), 0, 0, 0));
-                            if (demangled)
-                                function = QString::fromUtf8(qCleanupFuncinfo(demangled.data()));
-                        }
-
-                        if (numberPrinted > 0)
-                            message.append(backtraceSeparator);
-
-                        if (function.isEmpty()) {
-                            if (numberPrinted == 0 && context.function)
-                                message += QString::fromUtf8(qCleanupFuncinfo(context.function));
-                            else
-                                message += QLatin1Char('?') + library + QLatin1Char('?');
-                        } else {
-                            message += function;
-                        }
-
-                    } else {
-                        if (numberPrinted == 0)
-                            continue;
-                        message += backtraceSeparator + QLatin1String("???");
-                    }
-                    numberPrinted++;
-                }
-            }
+            message.append(formatBacktraceForLogMessage(backtraceParams, context.function));
 #endif
         } else if (token == timeTokenC) {
             QString timeFormat = pattern->timeArgs.at(timeArgsIdx);
@@ -1404,12 +1445,14 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
                 now.start();
                 uint ms = now.msecsSinceReference();
                 message.append(QString::asprintf("%6d.%03d", uint(ms / 1000), uint(ms % 1000)));
+#if QT_CONFIG(datestring)
             } else if (timeFormat.isEmpty()) {
                     message.append(QDateTime::currentDateTime().toString(Qt::ISODate));
             } else {
                 message.append(QDateTime::currentDateTime().toString(timeFormat));
+#endif // QT_CONFIG(datestring)
             }
-#endif
+#endif // !QT_BOOTSTRAPPED
         } else if (token == ifCategoryTokenC) {
             if (!context.category || (strcmp(context.category, "default") == 0))
                 skip = true;
@@ -1443,7 +1486,7 @@ static QBasicAtomicPointer<void (QtMsgType, const char*)> msgHandler = Q_BASIC_A
 // pointer to QtMessageHandler debug handler (with context)
 static QBasicAtomicPointer<void (QtMsgType, const QMessageLogContext &, const QString &)> messageHandler = Q_BASIC_ATOMIC_INITIALIZER(qDefaultMessageHandler);
 
-#if defined(QT_USE_JOURNALD) && !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(journald)
 static void systemd_default_message_handler(QtMsgType type,
                                             const QMessageLogContext &context,
                                             const QString &message)
@@ -1477,7 +1520,7 @@ static void systemd_default_message_handler(QtMsgType type,
 }
 #endif
 
-#ifdef QT_USE_SYSLOG
+#if QT_CONFIG(syslog)
 static void syslog_default_message_handler(QtMsgType type, const char *message)
 {
     int priority = LOG_INFO; // Informational
@@ -1541,14 +1584,14 @@ static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &con
         logMessage.append(QLatin1Char('\n'));
         OutputDebugString(reinterpret_cast<const wchar_t *>(logMessage.utf16()));
         return;
-#elif defined(QT_USE_SLOG2)
+#elif QT_CONFIG(slog2)
         logMessage.append(QLatin1Char('\n'));
         slog2_default_handler(type, logMessage.toLocal8Bit().constData());
         return;
-#elif defined(QT_USE_JOURNALD) && !defined(QT_BOOTSTRAPPED)
+#elif QT_CONFIG(journald)
         systemd_default_message_handler(type, context, logMessage);
         return;
-#elif defined(QT_USE_SYSLOG) && !defined(QT_BOOTSTRAPPED)
+#elif QT_CONFIG(syslog)
         syslog_default_message_handler(type, logMessage.toUtf8().constData());
         return;
 #elif defined(Q_OS_ANDROID)
@@ -1644,11 +1687,7 @@ static void qt_message_fatal(QtMsgType, const QMessageLogContext &context, const
     Q_UNUSED(message);
 #endif
 
-#if (defined(Q_OS_UNIX) || defined(Q_CC_MINGW))
-    abort(); // trap; generates core dump
-#else
-    exit(1); // goodbye cruel world
-#endif
+    std::abort();
 }
 
 
@@ -1747,7 +1786,7 @@ void qErrnoWarning(int code, const char *msg, ...)
 
     \snippet code/src_corelib_global_qglobal.cpp 23
 
-    \sa QtMessageHandler, QtMsgType, qDebug(), qWarning(), qCritical(), qFatal(),
+    \sa QtMessageHandler, QtMsgType, qDebug(), qInfo(), qWarning(), qCritical(), qFatal(),
     {Debugging Techniques}
 */
 

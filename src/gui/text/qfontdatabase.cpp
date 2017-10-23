@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -400,9 +406,14 @@ QtFontFoundry *QtFontFamily::foundry(const QString &f, bool create)
     return foundries[count++];
 }
 
+static inline bool equalsCaseInsensitive(const QString &a, const QString &b)
+{
+    return a.size() == b.size() && a.compare(b, Qt::CaseInsensitive) == 0;
+}
+
 bool QtFontFamily::matchesFamilyName(const QString &familyName) const
 {
-    return name.compare(familyName, Qt::CaseInsensitive) == 0 || aliases.contains(familyName, Qt::CaseInsensitive);
+    return equalsCaseInsensitive(name, familyName) || aliases.contains(familyName, Qt::CaseInsensitive);
 }
 
 void QtFontFamily::ensurePopulated()
@@ -493,6 +504,7 @@ public:
 
     void invalidate();
 };
+Q_DECLARE_TYPEINFO(QFontDatabasePrivate::ApplicationFont, Q_MOVABLE_TYPE);
 
 void QFontDatabasePrivate::invalidate()
 {
@@ -656,11 +668,8 @@ struct QtFontDesc
 static void initFontDef(const QtFontDesc &desc, const QFontDef &request, QFontDef *fontDef, bool multi)
 {
     fontDef->family = desc.family->name;
-    if (! desc.foundry->name.isEmpty() && desc.family->count > 1) {
-        fontDef->family += QString::fromLatin1(" [");
-        fontDef->family += desc.foundry->name;
-        fontDef->family += QLatin1Char(']');
-    }
+    if (! desc.foundry->name.isEmpty() && desc.family->count > 1)
+        fontDef->family += QLatin1String(" [") + desc.foundry->name + QLatin1Char(']');
 
     if (desc.style->smoothScalable
         || QGuiApplicationPrivate::platformIntegration()->fontDatabase()->fontsAlwaysScalable()
@@ -690,25 +699,20 @@ static QStringList familyList(const QFontDef &req)
     if (req.family.isEmpty())
         return family_list;
 
-    QStringList list = req.family.split(QLatin1Char(','));
+    const auto list = req.family.splitRef(QLatin1Char(','));
     const int numFamilies = list.size();
     family_list.reserve(numFamilies);
     for (int i = 0; i < numFamilies; ++i) {
-        QString str = list.at(i).trimmed();
+        QStringRef str = list.at(i).trimmed();
         if ((str.startsWith(QLatin1Char('"')) && str.endsWith(QLatin1Char('"')))
             || (str.startsWith(QLatin1Char('\'')) && str.endsWith(QLatin1Char('\''))))
             str = str.mid(1, str.length() - 2);
-        family_list << str;
+        family_list << str.toString();
     }
 
     // append the substitute list for each family in family_list
-    QStringList subs_list;
-    QStringList::ConstIterator it = family_list.constBegin(), end = family_list.constEnd();
-    for (; it != end; ++it)
-        subs_list += QFont::substitutes(*it);
-//         qDebug() << "adding substs: " << subs_list;
-
-    family_list += subs_list;
+    for (int i = 0, size = family_list.size(); i < size; ++i)
+        family_list += QFont::substitutes(family_list.at(i));
 
     return family_list;
 }
@@ -805,7 +809,8 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
     Q_UNUSED(family);
     Q_UNUSED(styleHint);
 
-    QStringList retList;
+    QStringList preferredFallbacks;
+    QStringList otherFallbacks;
 
     size_t writingSystem = std::find(scriptForWritingSystem,
                                      scriptForWritingSystem + QFontDatabase::WritingSystemsCount,
@@ -826,23 +831,27 @@ QStringList QPlatformFontDatabase::fallbacksForFamily(const QString &family, QFo
             QtFontFoundry *foundry = f->foundries[j];
 
             for (int k = 0; k < foundry->count; ++k) {
-                if (style == foundry->styles[k]->key.style) {
-                    if (foundry->name.isEmpty())
-                        retList.append(f->name);
-                    else
-                        retList.append(f->name + QLatin1String(" [") + foundry->name + QLatin1Char(']'));
-                    break;
-                }
+                QString name = foundry->name.isEmpty()
+                        ? f->name
+                        : f->name + QLatin1String(" [") + foundry->name + QLatin1Char(']');
+                if (style == foundry->styles[k]->key.style)
+                    preferredFallbacks.append(name);
+                else
+                    otherFallbacks.append(name);
             }
         }
     }
 
-    return retList;
+    return preferredFallbacks + otherFallbacks;
 }
+
+static void initializeDb();
 
 static QStringList fallbacksForFamily(const QString &family, QFont::Style style, QFont::StyleHint styleHint, QChar::Script script)
 {
     QFontDatabasePrivate *db = privateDb();
+    if (!db->count)
+        initializeDb();
 
     const FallbacksCacheKey cacheKey = { family, style, styleHint, script };
 
@@ -939,34 +948,39 @@ QFontEngine *loadSingleEngine(int script,
             if (engine) {
                 // Also check for OpenType tables when using complex scripts
                 if (Q_UNLIKELY(!engine->supportsScript(QChar::Script(script)))) {
-                    qWarning("  OpenType support missing for script %d", script);
+                    qWarning("  OpenType support missing for \"%s\", script %d",
+                             qPrintable(def.family), script);
                     return 0;
                 }
 
+                engine->isSmoothlyScalable = style->smoothScalable;
                 fontCache->insertEngine(key, engine);
-
                 return engine;
             }
         }
 
-        // If the font data's native stretch matches the requested stretch we need to set stretch to 100
-        // to avoid the fontengine synthesizing stretch. If they didn't match exactly we need to calculate
-        // the new stretch factor. This only done if not matched by styleName.
+        // To avoid synthesized stretch we need a matching stretch to be 100 after this point.
+        // If stretch didn't match exactly we need to calculate the new stretch factor.
+        // This only done if not matched by styleName.
         if (style->key.stretch != 0 && request.stretch != 0
             && (request.styleName.isEmpty() || request.styleName != style->styleName)) {
-            def.stretch = (request.stretch * 100 + 50) / style->key.stretch;
+            def.stretch = (request.stretch * 100 + style->key.stretch / 2) / style->key.stretch;
+        } else {
+            def.stretch = 100;
         }
 
         engine = pfdb->fontEngine(def, size->handle);
         if (engine) {
             // Also check for OpenType tables when using complex scripts
             if (!engine->supportsScript(QChar::Script(script))) {
-                qWarning("  OpenType support missing for script %d", script);
+                qWarning("  OpenType support missing for \"%s\", script %d",
++                        qPrintable(def.family), script);
                 if (engine->ref.load() == 0)
                     delete engine;
                 return 0;
             }
 
+            engine->isSmoothlyScalable = style->smoothScalable;
             fontCache->insertEngine(key, engine);
 
             if (Q_LIKELY(cacheForCommonScript && !engine->symbol)) {
@@ -1217,7 +1231,8 @@ static int match(int script, const QFontDef &request,
     QtFontStyle::Key styleKey;
     styleKey.style = request.style;
     styleKey.weight = request.weight;
-    styleKey.stretch = request.stretch;
+    // Prefer a stretch closest to 100.
+    styleKey.stretch = request.stretch ? request.stretch : 100;
     char pitch = request.ignorePitch ? '*' : request.fixedPitch ? 'm' : 'p';
 
 
@@ -1401,7 +1416,7 @@ QString QFontDatabase::styleString(const QFontInfo &fontInfo)
 */
 QFontDatabase::QFontDatabase()
 {
-    if (!qApp || !QGuiApplicationPrivate::platformIntegration())
+    if (Q_UNLIKELY(!qApp || !QGuiApplicationPrivate::platformIntegration()))
         qFatal("QFontDatabase: Must construct a QGuiApplication before accessing QFontDatabase");
 
     QMutexLocker locker(fontDatabaseMutex());
@@ -1653,9 +1668,6 @@ bool QFontDatabase::isFixedPitch(const QString &family,
 bool QFontDatabase::isBitmapScalable(const QString &family,
                                       const QString &style) const
 {
-    if (QGuiApplicationPrivate::platformIntegration()->fontDatabase()->fontsAlwaysScalable())
-        return true;
-
     bool bitmapScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
@@ -1696,9 +1708,6 @@ bool QFontDatabase::isBitmapScalable(const QString &family,
 */
 bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &style) const
 {
-    if (QGuiApplicationPrivate::platformIntegration()->fontDatabase()->fontsAlwaysScalable())
-        return true;
-
     bool smoothScalable = false;
     QString familyName, foundryName;
     parseFontName(family, foundryName, familyName);
@@ -2219,10 +2228,18 @@ QString QFontDatabase::writingSystemSample(WritingSystem writingSystem)
         sample += QChar(0x05D3);
         break;
     case Arabic:
+        sample += QChar(0x0623);
         sample += QChar(0x0628);
+        sample += QChar(0x062C);
+        sample += QChar(0x062F);
+        sample += QChar(0x064A);
         sample += QChar(0x0629);
-        sample += QChar(0x062A);
-        sample += QChar(0x063A);
+        sample += QChar(0x0020);
+        sample += QChar(0x0639);
+        sample += QChar(0x0631);
+        sample += QChar(0x0628);
+        sample += QChar(0x064A);
+        sample += QChar(0x0629);
         break;
     case Syriac:
         sample += QChar(0x0715);
@@ -2425,7 +2442,7 @@ int QFontDatabasePrivate::addAppFont(const QByteArray &fontData, const QString &
     }
 
     if (font.fileName.isEmpty() && !fontData.isEmpty())
-        font.fileName = QString::fromLatin1(":qmemoryfonts/") + QString::number(i);
+        font.fileName = QLatin1String(":qmemoryfonts/") + QString::number(i);
 
     registerFont(&font);
     if (font.families.isEmpty())
@@ -2662,7 +2679,11 @@ QFontEngine *QFontDatabase::findFont(const QFontDef &request, int script)
 
     QtFontDesc desc;
     QList<int> blackListed;
-    int index = match(script, request, family_name, foundry_name, &desc, blackListed);
+    int index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
+    if (index < 0 && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases()) {
+        // We populated familiy aliases (e.g. localized families), so try again
+        index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
+    }
     if (index >= 0) {
         engine = loadEngine(script, request, desc.family, desc.foundry, desc.style, desc.size);
         if (engine)
@@ -2695,7 +2716,7 @@ QFontEngine *QFontDatabase::findFont(const QFontDef &request, int script)
                 if (!engine) {
                     QtFontDesc desc;
                     do {
-                        index = match(script, def, def.family, QLatin1String(""), &desc, blackListed);
+                        index = match(multi ? QChar::Script_Common : script, def, def.family, QLatin1String(""), &desc, blackListed);
                         if (index >= 0) {
                             QFontDef loadDef = def;
                             if (loadDef.family.isEmpty())
@@ -2730,8 +2751,6 @@ void QFontDatabase::load(const QFontPrivate *d, int script)
     }
     if (req.pointSize < 0)
         req.pointSize = req.pixelSize*72.0/d->dpi;
-    if (req.stretch == 0)
-        req.stretch = 100;
 
     // respect the fallback families that might be passed through the request
     const QStringList fallBackFamilies = familyList(req);

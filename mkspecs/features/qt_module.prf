@@ -9,19 +9,18 @@
 # We mean it.
 #
 
-!no_qt_module_warning:!contains(QMAKE_INTERNAL_INCLUDED_FILES, .*qmodule\\.pri) {
-    QMAKE_ACTUAL_PRO_FILE = $$basename(_PRO_FILE_)
-    isEmpty(QMAKE_ACTUAL_PRO_FILE): QMAKE_ACTUAL_PRO_FILE=.pro
-    warning("You should probably load(qt_build_config) first in $$QMAKE_ACTUAL_PRO_FILE for $$TARGET, as the latter also load()s qt_module.")
-    message("Not doing so may lead to qt_module.prf overriding compiler/linker options in your .pro file.")
-    message("Ignore this warning with CONFIG+=no_qt_module_warning if you know what you are doing.")
-    unset(QMAKE_ACTUAL_PRO_FILE)
-}
-load(qt_build_config) # loads qmodule.pri if hasn't been loaded already
-
 isEmpty(MODULE):MODULE = $$section($$list($$basename(_PRO_FILE_)), ., 0, 0)
 isEmpty(VERSION): VERSION = $$MODULE_VERSION
 isEmpty(VERSION): error("Module does not define version.")
+
+exists($$OUT_PWD/qt$${MODULE}-config.pri) {
+    include($$OUT_PWD/qt$${MODULE}-config.pri)
+    CONFIG += generated_privates
+}
+
+skip = $$eval(QT.$${MODULE}.skip)
+isEmpty(skip): skip = false
+requires(!$$skip)
 
 # Compile as shared/DLL or static according to the option given to configure
 # unless overridden. Host builds are always static
@@ -32,20 +31,27 @@ host_build {
     QMAKE_CFLAGS += $$QMAKE_CFLAGS_SPLIT_SECTIONS
     QMAKE_CXXFLAGS += $$QMAKE_CXXFLAGS_SPLIT_SECTIONS
     force_bootstrap {
-        !build_pass:contains(QT_CONFIG, release_tools): CONFIG += release
+        !build_pass:qtConfig(release_tools): CONFIG += release
         contains(QT, core(-private)?|xml) {
             QT -= core core-private xml
             QT += bootstrap-private
         }
     } else {
-        !build_pass:contains(QT_CONFIG, debug_and_release): CONFIG += release
+        !build_pass:qtConfig(debug_and_release): CONFIG += release
     }
 }
 
-CONFIG(shared, static|shared):contains(QT_CONFIG, qt_framework): \
-    CONFIG += lib_bundle
+qtConfig(framework) {
+    minimal_syncqt: \
+        CONFIG += module_frameworks
+    else: CONFIG(shared, static|shared): \
+        CONFIG += module_frameworks lib_bundle
+}
 
 CONFIG += relative_qt_rpath  # Qt libraries should be relocatable
+
+# Qt libraries should only use Application Extension safe APIs
+darwin:!no_app_extension_api_only: CONFIG += app_extension_api_only
 
 ucmodule = $$upper($$MODULE)
 
@@ -65,16 +71,23 @@ else: \
     MODULE_DEFINE = QT_$${ucmodule}_LIB
 MODULE_DEFINES = $$MODULE_DEFINE $$MODULE_DEFINES
 
+# Make sure that the supporting runtime is linked into the application when
+# the module is built with exceptions enabled.
+integrity:CONFIG(exceptions, exceptions|exceptions_off): \
+    MODULE_CONFIG += exceptions
+
 load(qt_build_paths)
 
 header_module {
     TEMPLATE     = aux
     CONFIG      += force_qt  # Needed for the headers_clean tests.
+    !lib_bundle: \
+        CONFIG  += qt_no_install_library
 } else {
     TEMPLATE     = lib
 }
 DESTDIR          = $$MODULE_BASE_OUTDIR/lib
-win32:!wince:!prefix_build: DLLDESTDIR = $$MODULE_BASE_OUTDIR/bin
+DLLDESTDIR       = $$MODULE_BASE_OUTDIR/bin
 
 CONFIG          += qmake_cache target_qt
 
@@ -89,15 +102,16 @@ INCLUDEPATH *= $$eval(QT.$${MODULE}.includes) $$eval(QT.$${MODULE}_private.inclu
 # If Qt was configured with -debug-and-release then build the module the same way
 # - unless this is a host library
 !host_build:if(win32|mac):!macx-xcode {
-    contains(QT_CONFIG, simulator_and_device): CONFIG += iphonesimulator_and_iphoneos
-    contains(QT_CONFIG, debug_and_release): CONFIG += debug_and_release
-    contains(QT_CONFIG, build_all): CONFIG += build_all
+    qtConfig(debug_and_release): CONFIG += debug_and_release
+    qtConfig(build_all): CONFIG += build_all
 }
 
 QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF
 
-QT += $$QT_FOR_PRIVATE
+QT_PRIVATE += $$QT_FOR_PRIVATE
 unset(QT_FOR_PRIVATE)
+QMAKE_USE_PRIVATE += $$QMAKE_USE_FOR_PRIVATE
+unset(QMAKE_USE_FOR_PRIVATE)
 
 !internal_module:CONFIG += create_cmake
 
@@ -114,15 +128,17 @@ lib_bundle {
    CONFIG += sliced_bundle
    header_module {
         CONFIG += bundle
+        QMAKE_BUNDLE_NAME = $$TARGET
         QMAKE_BUNDLE_EXTENSION = .framework
         QMAKE_INFO_PLIST = $$QMAKESPEC/Info.plist.lib
    }
-   !debug_and_release|!build_all|CONFIG(release, debug|release) {
+   !build_all| \
+           if(if(!debug_and_release|CONFIG(release, debug|release))) {
         FRAMEWORK_HEADERS.version = Versions
         FRAMEWORK_HEADERS.files = $$SYNCQT.HEADER_FILES $$SYNCQT.HEADER_CLASSES
         FRAMEWORK_HEADERS.path = Headers
         FRAMEWORK_PRIVATE_HEADERS.version = Versions
-        FRAMEWORK_PRIVATE_HEADERS.files = $$SYNCQT.PRIVATE_HEADER_FILES
+        FRAMEWORK_PRIVATE_HEADERS.files = $$SYNCQT.PRIVATE_HEADER_FILES $$SYNCQT.INJECTED_PRIVATE_HEADER_FILES
         FRAMEWORK_PRIVATE_HEADERS.path = Headers/$$VERSION/$$MODULE_INCNAME/private
         FRAMEWORK_QPA_HEADERS.version = Versions
         FRAMEWORK_QPA_HEADERS.files = $$SYNCQT.QPA_HEADER_FILES
@@ -137,7 +153,7 @@ mac {
        QMAKE_CXXFLAGS += -fconstant-cfstrings
    }
 
-   contains(QT_CONFIG, rpath): \
+   qtConfig(rpath): \
        QMAKE_SONAME_PREFIX = @rpath
    else: \
        CONFIG += absolute_library_soname
@@ -164,7 +180,7 @@ aix-g++* {
      QMAKE_CXXFLAGS += -mminimal-toc
 }
 
-sse2:!contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):!host_build:!if(static:contains(QT_CONFIG, shared)) {
+sse2:!contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):!host_build:!if(static:qtConfig(shared)) {
     # If the compiler supports SSE2, enable it unconditionally in all of Qt shared libraries
     # (and only the libraries). This is not expected to be a problem because:
     # - on Windows, sharing of libraries is uncommon
@@ -202,7 +218,10 @@ android: CONFIG += qt_android_deps no_linker_version_script
     } else {
         verscript_content = "Qt_$${QT_MAJOR_VERSION}_PRIVATE_API {" \
                             "    qt_private_api_tag*;"
-        for(header, SYNCQT.PRIVATE_HEADER_FILES): \
+
+        private_api_headers = $$SYNCQT.PRIVATE_HEADER_FILES $$SYNCQT.QPA_HEADER_FILES
+
+        for(header, private_api_headers): \
             verscript_content += "    @FILE:$${_PRO_FILE_PWD_}/$$header@"
         verscript_content += "};"
 
@@ -223,7 +242,7 @@ android: CONFIG += qt_android_deps no_linker_version_script
         verscriptprocess.name = linker version script ${QMAKE_FILE_BASE}
         verscriptprocess.input = verscript_in
         verscriptprocess.CONFIG += no_link target_predeps
-        for(header, SYNCQT.PRIVATE_HEADER_FILES): \
+        for(header, private_api_headers): \
             verscriptprocess.depends += $${_PRO_FILE_PWD_}/$$header
         verscriptprocess.output = $$verscript
         verscriptprocess.commands = perl $${PWD}/data/unix/findclasslist.pl < ${QMAKE_FILE_IN} > $@
@@ -232,7 +251,7 @@ android: CONFIG += qt_android_deps no_linker_version_script
 
         verscript = $$verscript_in
     }
-    write_file($$OUT_PWD/$$verscript, verscript_content)|error("Aborting.")
+    write_file($$OUT_PWD/$$verscript, verscript_content)|error()
     unset(current)
     unset(previous)
     unset(verscript)
@@ -257,7 +276,7 @@ load(qt_targets)
     QMAKE_PKGCONFIG_NAME = $$replace(TARGET, ^Qt, "Qt$$QT_MAJOR_VERSION ")
     QMAKE_PKGCONFIG_FILE = $$replace(TARGET, ^Qt, Qt$$QT_MAJOR_VERSION)
     for(i, MODULE_DEPENDS): \
-        QMAKE_PKGCONFIG_REQUIRES += $$replace(QT.$${i}.name, ^Qt, Qt$$eval(QT.$${i}.MAJOR_VERSION))
+        QMAKE_PKGCONFIG_REQUIRES += $$replace(QT.$${i}.name, ^Qt, Qt$$section(QT.$${i}.VERSION, ., 0, 0))
     isEmpty(QMAKE_PKGCONFIG_DESCRIPTION): \
         QMAKE_PKGCONFIG_DESCRIPTION = $$replace(TARGET, ^Qt, "Qt ") module
     pclib_replace.match = $$lib_replace.match

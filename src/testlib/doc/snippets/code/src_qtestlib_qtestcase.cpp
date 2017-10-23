@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -198,6 +208,17 @@ void myTestFunction_data()
 //! [20]
 
 
+//! [addRow]
+void myTestFunction_data()
+{
+    QTest::addColumn<int>("input");
+    QTest::addColumn<QString>("output");
+    QTest::addRow("%d", 0) << 0 << QString("0");
+    QTest::addRow("%d", 1) << 1 << QString("1");
+}
+//! [addRow]
+
+
 //! [21]
 void myTestFunction_data() {
     QTest::addColumn<int>("intval");
@@ -231,17 +252,18 @@ QTest::qWaitForWindowShown(&widget);
 //! [24]
 
 //! [25]
+QTouchDevice *dev = QTest::createTouchDevice();
 QWidget widget;
 
-QTest::touchEvent(&widget)
+QTest::touchEvent(&widget, dev)
     .press(0, QPoint(10, 10));
-QTest::touchEvent(&widget)
+QTest::touchEvent(&widget, dev)
     .stationary(0)
     .press(1, QPoint(40, 10));
-QTest::touchEvent(&widget)
+QTest::touchEvent(&widget, dev)
     .move(0, QPoint(12, 12))
     .move(1, QPoint(45, 5));
-QTest::touchEvent(&widget)
+QTest::touchEvent(&widget, dev)
     .release(0, QPoint(12, 12))
     .release(1, QPoint(45, 5));
 //! [25]

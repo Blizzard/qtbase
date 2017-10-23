@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -79,7 +74,7 @@ private slots:
     void minimum_maximum();
     void keyPressed_data();
     void keyPressed();
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     void wheelEvent_data();
     void wheelEvent();
     void fineGrainedWheelEvent_data();
@@ -695,7 +690,7 @@ void tst_QAbstractSlider::keyPressed()
     QCOMPARE(slider->sliderPosition(), expectedSliderPositionVerticalInverted);
 }
 
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 void tst_QAbstractSlider::wheelEvent_data()
 {
     QTest::addColumn<int>("initialSliderPosition");
@@ -707,8 +702,8 @@ void tst_QAbstractSlider::wheelEvent_data()
     QTest::addColumn<int>("wheelScrollLines");
     QTest::addColumn<bool>("withModifiers"); // use keyboard modifiers while scrolling? (CTRL and SHIFT)
     QTest::addColumn<int>("deltaMultiple"); // multiples of WHEEL_DELTA
-    QTest::addColumn<int>("sliderOrientation");
-    QTest::addColumn<int>("wheelOrientation");
+    QTest::addColumn<Qt::Orientation>("sliderOrientation");
+    QTest::addColumn<Qt::Orientation>("wheelOrientation");
     QTest::addColumn<int>("expectedSliderPosition");
     QTest::addColumn<QPoint>("distanceFromBottomRight"); // mpointer's distance from bottom-right corner of widget
 
@@ -721,8 +716,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                    << 20                                 // wheel scroll lines
                                    << false                              // with modifiers
                                    << 1                                  // delta
-                                   << int(Qt::Vertical)                  // orientation of slider
-                                   << int(Qt::Vertical)                  // orientation of wheel
+                                   << Qt::Vertical                       // orientation of slider
+                                   << Qt::Vertical                       // orientation of wheel
                                    << 20                                 // expected position after
                                    << QPoint(0,0);
 
@@ -735,8 +730,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                    << 20                                 // wheel scroll lines
                                    << false                              // with modifiers
                                    << 1                                  // delta
-                                   << int(Qt::Vertical)                  // orientation of slider
-                                   << int(Qt::Vertical)                  // orientation of wheel
+                                   << Qt::Vertical                       // orientation of slider
+                                   << Qt::Vertical                       // orientation of wheel
 #ifndef Q_OS_MAC
                                    << 1                                  // expected position after
 #else
@@ -753,8 +748,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 20                            // wheel scroll lines
                                         << false                         // with modifiers
                                         << 1                             // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Vertical)             // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Vertical                  // orientation of wheel
 #ifndef Q_OS_MAC
                                         << 1                             // expected position after
 #else
@@ -772,8 +767,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 20                            // wheel scroll lines
                                         << false                         // with modifiers
                                         << 1                             // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Vertical)             // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Vertical                  // orientation of wheel
 #ifndef Q_OS_MAC
                                         << 1                             // expected position after
 #else
@@ -791,8 +786,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 20                            // wheel scroll lines
                                         << false                         // with modifiers
                                         << -1                            // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Horizontal)           // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Horizontal                // orientation of wheel
                                         << 30                            // expected position after
                                         << QPoint(1,1);
 
@@ -805,8 +800,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 1                             // wheel scroll lines
                                         << false                         // with modifiers
                                         << -2                            // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Horizontal)           // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Horizontal                // orientation of wheel
                                         << 100                           // expected position after
                                         << QPoint(0,0);
 
@@ -819,8 +814,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 1                             // wheel scroll lines
                                         << false                         // with modifiers
                                         << 2                             // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Horizontal)           // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Horizontal                // orientation of wheel
                                         << 0                             // expected position after
                                         << QPoint(0,0);
 
@@ -833,8 +828,8 @@ void tst_QAbstractSlider::wheelEvent_data()
                                         << 20                            // wheel scroll lines
                                         << true                          // with modifiers
                                         << -1                            // delta
-                                        << int(Qt::Horizontal)           // orientation of slider
-                                        << int(Qt::Horizontal)           // orientation of wheel
+                                        << Qt::Horizontal                // orientation of slider
+                                        << Qt::Horizontal                // orientation of wheel
                                         << 90                            // expected position after
                                         << QPoint(0,0);
 
@@ -851,8 +846,8 @@ void tst_QAbstractSlider::wheelEvent()
     QFETCH(int,wheelScrollLines);
     QFETCH(bool,withModifiers);
     QFETCH(int,deltaMultiple);
-    QFETCH(int,sliderOrientation);
-    QFETCH(int,wheelOrientation);
+    QFETCH(Qt::Orientation, sliderOrientation);
+    QFETCH(Qt::Orientation, wheelOrientation);
     QFETCH(int,expectedSliderPosition);
     QFETCH(QPoint,distanceFromBottomRight);
 
@@ -860,18 +855,16 @@ void tst_QAbstractSlider::wheelEvent()
     QVERIFY(applicationInstance != 0);
     QApplication::setWheelScrollLines(wheelScrollLines);
 
-    Qt::Orientation orientation = *reinterpret_cast<Qt::Orientation*>(&sliderOrientation);
     slider->setRange(minimum,maximum);
     slider->setSliderPosition(initialSliderPosition);
     slider->setSingleStep(singleStep);
     slider->setPageStep(pageStep);
     slider->setInvertedControls(invertedControls);
-    slider->setOrientation(orientation);
+    slider->setOrientation(sliderOrientation);
 
     Qt::KeyboardModifier k = withModifiers ? Qt::ControlModifier : Qt::NoModifier;
-    orientation = *reinterpret_cast<Qt::Orientation*>(&wheelOrientation);
     QWheelEvent event(slider->rect().bottomRight() + distanceFromBottomRight, WHEEL_DELTA * deltaMultiple,
-                      Qt::NoButton, k, orientation);
+                      Qt::NoButton, k, wheelOrientation);
     QVERIFY(applicationInstance->sendEvent(slider,&event));
 #ifdef Q_OS_MAC
     QEXPECT_FAIL("Normal data page", "QTBUG-23679", Continue);
@@ -883,7 +876,7 @@ void tst_QAbstractSlider::wheelEvent()
     slider->setSliderPosition(initialSliderPosition);
     k = withModifiers ? Qt::ShiftModifier : Qt::NoModifier;
     event = QWheelEvent(slider->rect().bottomRight() + distanceFromBottomRight, WHEEL_DELTA * deltaMultiple,
-                      Qt::NoButton, k, orientation);
+                      Qt::NoButton, k, wheelOrientation);
     QSignalSpy spy1(slider, SIGNAL(actionTriggered(int)));
     QSignalSpy spy2(slider, SIGNAL(valueChanged(int)));
     QVERIFY(applicationInstance->sendEvent(slider,&event));
@@ -948,7 +941,7 @@ void tst_QAbstractSlider::fineGrainedWheelEvent()
     QCOMPARE(slider->sliderPosition(), 1);
 }
 
-#endif // !QT_NO_WHEELEVENT
+#endif // QT_CONFIG(wheelevent)
 
 void tst_QAbstractSlider::sliderPressedReleased_data()
 {

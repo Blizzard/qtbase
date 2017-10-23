@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -65,7 +60,7 @@ UnixMakefileGenerator::init()
     project->values("VER_PAT").append(l[2]);
 
     QString sroot = project->sourceRoot();
-    foreach (const ProString &iif, project->values("QMAKE_INTERNAL_INCLUDED_FILES")) {
+    for (const ProString &iif : project->values("QMAKE_INTERNAL_INCLUDED_FILES")) {
         if (iif == project->cacheFile())
             continue;
         if (iif.startsWith(sroot) && iif.at(sroot.length()) == QLatin1Char('/'))
@@ -99,6 +94,10 @@ UnixMakefileGenerator::init()
             !project->values("QMAKE_LIB_FLAG").isEmpty() &&
             project->isActiveConfig("dll"))
         project->values("QMAKE_LFLAGS") += project->values("QMAKE_LFLAGS_PREBIND");
+    project->values("QMAKE_INCDIR") += project->values("QMAKE_INCDIR_POST");
+    project->values("QMAKE_LIBDIR") += project->values("QMAKE_LIBDIR_POST");
+    project->values("QMAKE_RPATHDIR") += project->values("QMAKE_RPATHDIR_POST");
+    project->values("QMAKE_RPATHLINKDIR") += project->values("QMAKE_RPATHLINKDIR_POST");
     if(!project->isEmpty("QMAKE_INCDIR"))
         project->values("INCLUDEPATH") += project->values("QMAKE_INCDIR");
     ProStringList ldadd;
@@ -161,7 +160,7 @@ UnixMakefileGenerator::init()
     if (project->isActiveConfig("objective_c"))
         project->values("QMAKE_BUILTIN_COMPILERS") << "OBJC" << "OBJCXX";
 
-    foreach (const ProString &compiler, project->values("QMAKE_BUILTIN_COMPILERS")) {
+    for (const ProString &compiler : project->values("QMAKE_BUILTIN_COMPILERS")) {
         QString compile_flag = var("QMAKE_COMPILE_FLAG");
         if(compile_flag.isEmpty())
             compile_flag = "-c";
@@ -185,6 +184,13 @@ UnixMakefileGenerator::init()
                 // icc style
                 pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT}"),
                                  escapeFilePath(pchBaseName + project->first("QMAKE_PCH_OUTPUT_EXT")));
+                const ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+                for (const ProString &arch : pchArchs) {
+                    QString suffix = project->first("QMAKE_PCH_OUTPUT_EXT").toQString();
+                    suffix.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                    pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT_") + arch + QLatin1Char('}'),
+                                     escapeFilePath(pchBaseName + suffix));
+                }
             } else {
                 // gcc style (including clang_pch_style)
                 QString headerSuffix;
@@ -199,6 +205,18 @@ UnixMakefileGenerator::init()
                 if (!language.isEmpty()) {
                     pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT}"),
                                      escapeFilePath(pchBaseName + language + headerSuffix));
+                    const ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+                    for (const ProString &arch : pchArchs) {
+                        QString suffix = headerSuffix;
+                        suffix.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                        if (project->isActiveConfig("clang_pch_style")
+                            && (suffix.endsWith(QLatin1String(".pch"))
+                                || suffix.endsWith(QLatin1String(".gch")))) {
+                            suffix.chop(4); // must omit header suffix for -include to recognize the PCH
+                        }
+                        pchFlags.replace(QLatin1String("${QMAKE_PCH_OUTPUT_") + arch + QLatin1Char('}'),
+                                         escapeFilePath(pchBaseName + language + suffix));
+                    }
                 }
             }
 
@@ -327,10 +345,19 @@ QStringList
             header_prefix += project->first("QMAKE_PCH_OUTPUT_EXT").toQString();
         if (project->isActiveConfig("icc_pch_style")) {
             // icc style
-            for(QStringList::Iterator it = Option::cpp_ext.begin(); it != Option::cpp_ext.end(); ++it) {
-                if(file.endsWith(*it)) {
-                    ret += header_prefix;
-                    break;
+            ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+            if (pchArchs.isEmpty())
+                pchArchs << ProString(); // normal single-arch PCH
+            for (const ProString &arch : qAsConst(pchArchs)) {
+                auto pfx = header_prefix;
+                if (!arch.isEmpty())
+                    pfx.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                for (QStringList::Iterator it = Option::cpp_ext.begin();
+                    it != Option::cpp_ext.end(); ++it) {
+                    if (file.endsWith(*it)) {
+                        ret += pfx;
+                        break;
+                    }
                 }
             }
         } else {
@@ -339,7 +366,7 @@ QStringList
                     ? project->first("QMAKE_PCH_OUTPUT_EXT").toQString() : "";
             header_prefix += Option::dir_sep + project->first("QMAKE_PRECOMP_PREFIX");
 
-            foreach (const ProString &compiler, project->values("QMAKE_BUILTIN_COMPILERS")) {
+            for (const ProString &compiler : project->values("QMAKE_BUILTIN_COMPILERS")) {
                 if (project->isEmpty(ProKey("QMAKE_" + compiler + "FLAGS_PRECOMPILE")))
                     continue;
 
@@ -352,13 +379,21 @@ QStringList
                 if (extensionSuffix == "CXX")
                     extensionSuffix = ProString("CPP");
 
-                foreach (const ProString &extension, project->values(ProKey("QMAKE_EXT_" + extensionSuffix))) {
+                for (const ProString &extension : project->values(ProKey("QMAKE_EXT_" + extensionSuffix))) {
                     if (!file.endsWith(extension.toQString()))
                         continue;
 
-                    QString precompiledHeader = header_prefix + language + header_suffix;
-                    if (!ret.contains(precompiledHeader))
-                        ret += precompiledHeader;
+                    ProStringList pchArchs = project->values("QMAKE_PCH_ARCHS");
+                    if (pchArchs.isEmpty())
+                        pchArchs << ProString(); // normal single-arch PCH
+                    for (const ProString &arch : qAsConst(pchArchs)) {
+                        QString suffix = header_suffix;
+                        if (!arch.isEmpty())
+                            suffix.replace(QLatin1String("${QMAKE_PCH_ARCH}"), arch.toQString());
+                        QString precompiledHeader = header_prefix + language + suffix;
+                        if (!ret.contains(precompiledHeader))
+                            ret += precompiledHeader;
+                    }
 
                     goto foundPrecompiledDependency;
                 }
@@ -381,7 +416,7 @@ UnixMakefileGenerator::findLibraries(bool linkPrl, bool mergeLflags)
 {
     QList<QMakeLocalFileName> libdirs, frameworkdirs;
     int libidx = 0, fwidx = 0;
-    foreach (const ProString &dlib, project->values("QMAKE_DEFAULT_LIBDIRS"))
+    for (const ProString &dlib : project->values("QMAKE_DEFAULT_LIBDIRS"))
         libdirs.append(QMakeLocalFileName(dlib.toQString()));
     frameworkdirs.append(QMakeLocalFileName("/System/Library/Frameworks"));
     frameworkdirs.append(QMakeLocalFileName("/Library/Frameworks"));
@@ -426,7 +461,7 @@ UnixMakefileGenerator::findLibraries(bool linkPrl, bool mergeLflags)
                             opt = (*++it).toQString();
                         else
                             opt = opt.mid(10).trimmed();
-                        foreach (const QMakeLocalFileName &dir, frameworkdirs) {
+                        for (const QMakeLocalFileName &dir : qAsConst(frameworkdirs)) {
                             QString prl = dir.local() + "/" + opt + ".framework/" + opt + Option::prl_ext;
                             if (processPrlFile(prl))
                                 break;
@@ -569,7 +604,7 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
                 dst = escapeFilePath(filePrefixRoot(root, targetdir + src.section('/', -1)));
         if(!ret.isEmpty())
             ret += "\n\t";
-        ret += "-$(INSTALL_FILE) " + escapeFilePath(Option::fixPathToTargetOS(src, false)) + ' ' + dst;
+        ret += "-$(QINSTALL) " + escapeFilePath(Option::fixPathToTargetOS(src, false)) + ' ' + dst;
         if(!uninst.isEmpty())
             uninst.append("\n\t");
         uninst.append("-$(DEL_FILE) " + dst);
@@ -584,10 +619,13 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
         plain_targ = escapeFilePath(plain_targ);
         if (bundle != NoBundle) {
             QString suffix;
-            if (project->first("TEMPLATE") == "lib")
-                suffix = "/Versions/" + project->first("QMAKE_FRAMEWORK_VERSION") + "/$(TARGET)";
-            else
+            if (project->first("TEMPLATE") == "lib") {
+                if (!project->isActiveConfig("shallow_bundle"))
+                    suffix += "/Versions/" + project->first("QMAKE_FRAMEWORK_VERSION");
+                suffix += "/$(TARGET)";
+            } else {
                 suffix = "/" + project->first("QMAKE_BUNDLE_LOCATION") + "/$(QMAKE_TARGET)";
+            }
             dst_targ += suffix;
             if (bundle == SolidBundle) {
                 if (!ret.isEmpty())
@@ -602,16 +640,16 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
 
         QString copy_cmd;
         if (bundle == SolidBundle) {
-            copy_cmd += "-$(INSTALL_DIR) " + src_targ + ' ' + plain_targ;
+            copy_cmd += "-$(QINSTALL) " + src_targ + ' ' + plain_targ;
         } else if (project->first("TEMPLATE") == "lib" && project->isActiveConfig("staticlib")) {
-            copy_cmd += "-$(INSTALL_FILE) " + src_targ + ' ' + dst_targ;
+            copy_cmd += "-$(QINSTALL) " + src_targ + ' ' + dst_targ;
         } else if (!isAux) {
             if (bundle == SlicedBundle) {
                 if (!ret.isEmpty())
                     ret += "\n\t";
                 ret += mkdir_p_asstring("\"`dirname " + dst_targ + "`\"", false);
             }
-            copy_cmd += "-$(INSTALL_PROGRAM) " + src_targ + ' ' + dst_targ;
+            copy_cmd += "-$(QINSTALL_PROGRAM) " + src_targ + ' ' + dst_targ;
         }
         if(project->first("TEMPLATE") == "lib" && !project->isActiveConfig("staticlib")
            && project->values(ProKey(t + ".CONFIG")).indexOf("fix_rpath") != -1) {
@@ -656,7 +694,7 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
             uninst.append("-$(DEL_FILE) " + dst_targ);
         if (bundle == SlicedBundle) {
             int dstlen = project->first("DESTDIR").length();
-            foreach (const ProString &src, project->values("QMAKE_BUNDLED_FILES")) {
+            for (const ProString &src : project->values("QMAKE_BUNDLED_FILES")) {
                 ProString file = src.mid(dstlen);
                 QString dst = escapeFilePath(
                             filePrefixRoot(root, fileFixify(targetdir + file, FileFixifyAbsolute)));
@@ -664,7 +702,7 @@ UnixMakefileGenerator::defaultInstall(const QString &t)
                     ret += "\n\t";
                 ret += mkdir_p_asstring("\"`dirname " + dst + "`\"", false) + "\n\t";
                 ret += "-$(DEL_FILE) " + dst + "\n\t"; // Can't overwrite symlinks to directories
-                ret += "-$(INSTALL_DIR) " + escapeFilePath(src) + " " + dst; // Use cp -R to copy symlinks
+                ret += "-$(QINSTALL) " + escapeFilePath(src) + " " + dst;
                 if (!uninst.isEmpty())
                     uninst.append("\n\t");
                 uninst.append("-$(DEL_FILE) " + dst);

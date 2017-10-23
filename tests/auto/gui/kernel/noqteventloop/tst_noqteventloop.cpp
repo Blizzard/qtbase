@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,36 +31,31 @@
 #include <QEvent>
 #include <QtCore/qthread.h>
 #include <QtGui/qguiapplication.h>
+#include <QtGui/qpainter.h>
+#include <QtGui/qrasterwindow.h>
 #include <QtNetwork/qtcpserver.h>
 #include <QtNetwork/qtcpsocket.h>
 #include <QtCore/qelapsedtimer.h>
 
 #include <QtCore/qt_windows.h>
 
+static const int topVerticalMargin = 50;
+static const int margin = 10;
+
 class tst_NoQtEventLoop : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void initTestCase();
-    void cleanup();
     void consumeMouseEvents();
     void consumeSocketEvents();
 
 };
 
-void tst_NoQtEventLoop::initTestCase()
-{
-}
-
-void tst_NoQtEventLoop::cleanup()
-{
-}
-
-class Window : public QWindow
+class Window : public QRasterWindow
 {
 public:
-    Window(QWindow *parentWindow = 0) : QWindow(parentWindow)
+    explicit Window(QWindow *parentWindow = nullptr) : QRasterWindow(parentWindow)
     {
     }
 
@@ -87,6 +77,13 @@ public:
 
 
     QHash<QEvent::Type, int> m_received;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.fillRect(QRect(QPoint(0, 0), size()), Qt::yellow);
+    }
 };
 
 bool g_exit = false;
@@ -189,7 +186,8 @@ public:
         QTRY_COMPARE(m_childWindow->received(QEvent::MouseButtonPress) + m_childWindow->received(QEvent::MouseButtonRelease), 0);
 
         // Now click in the QWindow. The QWindow should receive those events.
-        m_windowPos.ry() += 50;
+        m_windowPos.rx() += margin;
+        m_windowPos.ry() += topVerticalMargin;
         mouseMove(m_windowPos);
         ::Sleep(150);
         mouseClick();
@@ -219,6 +217,8 @@ void tst_NoQtEventLoop::consumeMouseEvents()
 {
     int argc = 1;
     char *argv[] = {const_cast<char*>("test")};
+    // ensure scaling is off since the child window is positioned using QWindow API.
+    QCoreApplication::setAttribute(Qt::AA_DisableHighDpiScaling);
     QGuiApplication app(argc, argv);
     QString clsName(QStringLiteral("tst_NoQtEventLoop_WINDOW"));
     const HINSTANCE appInstance = (HINSTANCE)GetModuleHandle(0);
@@ -240,16 +240,28 @@ void tst_NoQtEventLoop::consumeMouseEvents()
     QVERIFY2(atom, "RegisterClassEx failed");
 
     DWORD dwExStyle = WS_EX_APPWINDOW;
-    DWORD dwStyle = WS_CAPTION | WS_HSCROLL | WS_TABSTOP | WS_VISIBLE;
+    DWORD dwStyle = WS_CAPTION | WS_TABSTOP | WS_VISIBLE;
 
-    HWND mainWnd = ::CreateWindowEx(dwExStyle, (wchar_t*)clsName.utf16(), TEXT("tst_NoQtEventLoop"), dwStyle, 100, 100, 300, 300, 0, NULL, appInstance, NULL);
+    const int screenWidth = ::GetSystemMetrics(SM_CXSCREEN);
+    const int screenHeight = ::GetSystemMetrics(SM_CYSCREEN);
+    const int width = screenWidth / 4;
+    const int height = screenHeight / 4;
+
+    HWND mainWnd =
+        ::CreateWindowEx(dwExStyle, reinterpret_cast<const wchar_t*>(clsName.utf16()),
+                         TEXT("tst_NoQtEventLoop"), dwStyle,
+                         (screenWidth - width) / 2, (screenHeight - height) / 2 , width, height,
+                         0, NULL, appInstance, NULL);
     QVERIFY2(mainWnd, "CreateWindowEx failed");
 
     ::ShowWindow(mainWnd, SW_SHOW);
 
+    ::SetWindowPos(mainWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
     Window *childWindow = new Window;
     childWindow->setParent(QWindow::fromWinId((WId)mainWnd));
-    childWindow->setGeometry(0, 50, 200, 200);
+    childWindow->setGeometry(margin, topVerticalMargin,
+                             width - 2 * margin, height - margin - topVerticalMargin);
     childWindow->show();
 
     TestThread *testThread = new TestThread(mainWnd, childWindow);

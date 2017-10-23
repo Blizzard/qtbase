@@ -3,7 +3,7 @@ TEMPLATE=subdirs
 SUBDIRS = \
     kernel
 
-!ios: SUBDIRS += \
+!uikit: SUBDIRS += \
     image \
     math3d \
     painting \
@@ -13,4 +13,4 @@ SUBDIRS = \
     util \
     itemmodels \
 
-!contains(QT_CONFIG, opengl(es2)?): SUBDIRS -= qopengl qopenglconfig
+!qtConfig(opengl): SUBDIRS -= qopengl qopenglconfig

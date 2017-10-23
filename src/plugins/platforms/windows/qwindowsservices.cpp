@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,16 +39,14 @@
 
 #define QT_NO_URL_CAST_FROM_STRING
 #include "qwindowsservices.h"
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 
 #include <QtCore/QUrl>
 #include <QtCore/QDebug>
 #include <QtCore/QDir>
 
 #include <shlobj.h>
-#ifndef Q_OS_WINCE
-#  include <intshcut.h>
-#endif
+#include <intshcut.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -50,7 +54,6 @@ enum { debug = 0 };
 
 static inline bool shellExecute(const QUrl &url)
 {
-#ifndef Q_OS_WINCE
     const QString nativeFilePath = url.isLocalFile() && !url.hasFragment() && !url.hasQuery()
         ? QDir::toNativeSeparators(url.toLocalFile())
         : url.toString(QUrl::FullyEncoded);
@@ -64,10 +67,6 @@ static inline bool shellExecute(const QUrl &url)
         return false;
     }
     return true;
-#else
-    Q_UNUSED(url);
-    return false;
-#endif
 }
 
 // Retrieve the commandline for the default mail client. It contains a
@@ -89,9 +88,8 @@ static inline QString mailCommand()
             keyName = QString::fromWCharArray(command);
         RegCloseKey(handle);
     }
-    if (keyName.isEmpty())
-        keyName = QStringLiteral("mailto");
-    keyName += QStringLiteral("\\Shell\\Open\\Command");
+    const QLatin1String mailto = keyName.isEmpty() ? QLatin1String("mailto") : QLatin1String();
+    keyName += mailto + QLatin1String("\\Shell\\Open\\Command");
     if (debug)
         qDebug() << __FUNCTION__ << "keyName=" << keyName;
     command[0] = 0;
@@ -100,15 +98,15 @@ static inline QString mailCommand()
         RegQueryValueEx(handle, L"", 0, 0, reinterpret_cast<unsigned char*>(command), &bufferSize);
         RegCloseKey(handle);
     }
-    if (!command[0])
+    // QTBUG-57816: As of Windows 10, if there is no mail client installed, an entry like
+    // "rundll32.exe .. url.dll,MailToProtocolHandler %l" is returned. Launching it
+    // silently fails or brings up a broken dialog after a long time, so exclude it and
+    // fall back to ShellExecute() which brings up the URL assocation dialog.
+    if (!command[0] || wcsstr(command, L",MailToProtocolHandler") != nullptr)
         return QString();
-#ifndef Q_OS_WINCE
     wchar_t expandedCommand[MAX_PATH] = {0};
     return ExpandEnvironmentStrings(command, expandedCommand, MAX_PATH) ?
            QString::fromWCharArray(expandedCommand) : QString::fromWCharArray(command);
-#else
-    return QString();
-#endif
 }
 
 static inline bool launchMail(const QUrl &url)
@@ -129,7 +127,7 @@ static inline bool launchMail(const QUrl &url)
     }
     // Pass the url as the parameter. Should use QProcess::startDetached(),
     // but that cannot handle a Windows command line [yet].
-    command.replace(QStringLiteral("%1"), url.toString(QUrl::FullyEncoded));
+    command.replace(QLatin1String("%1"), url.toString(QUrl::FullyEncoded));
     if (debug)
         qDebug() << __FUNCTION__ << "Launching" << command;
     //start the process

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,6 +33,7 @@
 
 #include <qcolor.h>
 #include <qdebug.h>
+#include <private/qcolorprofile_p.h>
 #include <private/qdrawingprimitive_sse2_p.h>
 #include <qrgba64.h>
 
@@ -57,6 +53,7 @@ private slots:
     void name();
     void namehex_data();
     void namehex();
+    void setNamedColor_data();
     void setNamedColor();
 
     void constructNamedColorWithSpace();
@@ -111,7 +108,10 @@ private slots:
     void qrgba64Premultiply();
     void qrgba64Equivalence();
 
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+    void qcolorprofile_data();
+    void qcolorprofile();
+
+#if 0 // Used to be included in Qt4 for Q_WS_X11
     void setallowX11ColorNames();
 #endif
 };
@@ -530,25 +530,48 @@ static const int rgbTblSize = sizeof(rgbTbl) / sizeof(RGBData);
 
 #undef rgb
 
-void tst_QColor::setNamedColor()
+void tst_QColor::setNamedColor_data()
 {
-    for (int i = 0; i < rgbTblSize; ++i) {
+    QTest::addColumn<QColor>("byCtor");
+    QTest::addColumn<QColor>("bySetNamedColor");
+    QTest::addColumn<QColor>("expected");
+
+    for (const auto e : rgbTbl) {
         QColor expected;
-        expected.setRgba(rgbTbl[i].value);
+        expected.setRgba(e.value);
 
-        QColor color;
-        color.setNamedColor(QLatin1String(rgbTbl[i].name));
-        QCOMPARE(color, expected);
+#define ROW(expr)                                \
+        do {                                     \
+            QColor bySetNamedColor;              \
+            bySetNamedColor.setNamedColor(expr); \
+            auto byCtor = QColor(expr);          \
+            QTest::newRow(e.name + QByteArrayLiteral(#expr)) \
+                << byCtor << bySetNamedColor << expected;    \
+        } while (0)                              \
+        /*end*/
 
+        ROW(QLatin1String(e.name));
+        ROW(QString(QLatin1String(e.name)));
         // name should be case insensitive
-        color.setNamedColor(QString(rgbTbl[i].name).toUpper());
-        QCOMPARE(color, expected);
-
+        ROW(QLatin1String(QByteArray(e.name).toUpper()));
+        ROW(QString(e.name).toUpper());
         // spaces should be ignored
-        color.setNamedColor(QString(rgbTbl[i].name).insert(1, ' '));
-        QCOMPARE(color, expected);
+        ROW(QLatin1String(QByteArray(e.name).insert(1, ' ')));
+        ROW(QString(e.name).insert(1, ' '));
+#undef ROW
     }
 }
+
+void tst_QColor::setNamedColor()
+{
+    QFETCH(QColor, byCtor);
+    QFETCH(QColor, bySetNamedColor);
+    QFETCH(QColor, expected);
+
+    QCOMPARE(byCtor, expected);
+    QCOMPARE(bySetNamedColor, expected);
+}
+
 
 void tst_QColor::constructNamedColorWithSpace()
 {
@@ -561,7 +584,7 @@ void tst_QColor::colorNames()
     QStringList all = QColor::colorNames();
     QCOMPARE(all.size(), rgbTblSize);
     for (int i = 0; i < all.size(); ++i)
-        QCOMPARE(all.at(i), QString::fromLatin1(rgbTbl[i].name));
+        QCOMPARE(all.at(i), QLatin1String(rgbTbl[i].name));
 }
 
 void tst_QColor::spec()
@@ -1384,7 +1407,7 @@ void tst_QColor::achromaticHslHue()
     QCOMPARE(hsl.hslHue(), -1);
 }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
+#if 0 // Used to be included in Qt4 for Q_WS_X11
 void tst_QColor::setallowX11ColorNames()
 {
 #if defined(Q_OS_IRIX)
@@ -1566,6 +1589,37 @@ void tst_QColor::qrgba64Equivalence()
             QCOMPARE(pu64.toArgb32(), pu);
         }
     }
+}
+
+void tst_QColor::qcolorprofile_data()
+{
+    QTest::addColumn<qreal>("gammaC");
+    QTest::addColumn<int>("tolerance");
+
+    QTest::newRow("gamma=1.0") << qreal(1.0) << 0;
+    QTest::newRow("gamma=1.5") << qreal(1.5) << 1;
+    QTest::newRow("gamma=1.7") << qreal(1.7) << 2;
+    QTest::newRow("gamma=2.0") << qreal(2.0) << 8;
+    QTest::newRow("gamma=2.31") << qreal(2.31) << 33;
+    QTest::newRow("SRgb") << qreal(0.0) << 7;
+}
+
+void tst_QColor::qcolorprofile()
+{
+    QFETCH(qreal, gammaC);
+    QFETCH(int, tolerance);
+    QColorProfile *cp = (gammaC == 0) ? QColorProfile::fromSRgb(): QColorProfile::fromGamma(gammaC);
+
+    // Test we are accurate for most values after converting through gamma-correction.
+    int error = 0;
+    for (uint i = 0; i < 256; i++) {
+        QRgb cin = qRgb(i, i, i);
+        QRgba64 tmp = cp->toLinear64(cin);
+        QRgb cout = cp->fromLinear64(tmp);
+        error += qAbs(qRed(cin) - qRed(cout));
+    }
+    QVERIFY(error <= tolerance);
+    delete cp;
 }
 
 QTEST_MAIN(tst_QColor)

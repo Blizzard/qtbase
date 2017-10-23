@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,9 +51,8 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "qgraphicsview.h"
-
-#if !defined(QT_NO_GRAPHICSVIEW)
 
 #include <QtGui/qevent.h>
 #include <QtCore/qcoreapplication.h>
@@ -55,6 +60,8 @@
 #include <QtWidgets/qstyleoption.h>
 #include <private/qabstractscrollarea_p.h>
 #include <private/qapplication_p.h>
+
+QT_REQUIRE_CONFIG(graphicsview);
 
 QT_BEGIN_NAMESPACE
 
@@ -129,7 +136,7 @@ public:
     QGraphicsView::OptimizationFlags optimizationFlags;
 
     QPointer<QGraphicsScene> scene;
-#ifndef QT_NO_RUBBERBAND
+#if QT_CONFIG(rubberband)
     QRect rubberBandRect;
     QRegion rubberBandRegion(const QWidget *widget, const QRect &rect) const;
     void updateRubberBand(const QMouseEvent *event);
@@ -177,7 +184,7 @@ public:
 
     inline void dispatchPendingUpdateRequests()
     {
-#ifdef Q_DEAD_CODE_FROM_QT4_MAC
+#if 0 // Used to be included in Qt4 for Q_WS_MAC
         // QWidget::update() works slightly different on the Mac without the raster engine;
         // it's not part of our backing store so it needs special threatment.
         if (QApplicationPrivate::graphics_system_name != QLatin1String("raster")) {
@@ -188,7 +195,7 @@ public:
             extern void qt_mac_dispatchPendingUpdateRequests(QWidget *);
             qt_mac_dispatchPendingUpdateRequests(viewport->window());
         } else
-#endif // !Q_DEAD_CODE_FROM_QT4_MAC
+#endif
         {
             if (qt_widget_private(viewport)->paintOnScreen())
                 QCoreApplication::sendPostedEvents(viewport, QEvent::UpdateRequest);
@@ -223,7 +230,5 @@ public:
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_GRAPHICSVIEW
 
 #endif

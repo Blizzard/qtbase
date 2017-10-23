@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #ifndef QWINDOW_H
 #define QWINDOW_H
 
+#include <QtGui/qtguiglobal.h>
 #include <QtCore/QObject>
 #include <QtCore/QEvent>
 #include <QtCore/QMargins>
@@ -64,11 +71,11 @@ class QShowEvent;
 class QHideEvent;
 class QKeyEvent;
 class QMouseEvent;
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
 class QWheelEvent;
 #endif
 class QTouchEvent;
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
 class QTabletEvent;
 #endif
 
@@ -125,6 +132,12 @@ public:
     };
     Q_ENUM(Visibility)
 
+    enum AncestorMode {
+        ExcludeTransients,
+        IncludeTransients
+    };
+    Q_ENUM(AncestorMode)
+
     explicit QWindow(QScreen *screen = Q_NULLPTR);
     explicit QWindow(QWindow *parent);
     virtual ~QWindow();
@@ -141,7 +154,8 @@ public:
 
     WId winId() const;
 
-    QWindow *parent() const;
+    QWindow *parent(AncestorMode mode) const;
+    QWindow *parent() const; // ### Qt6: Merge with above
     void setParent(QWindow *parent);
 
     bool isTopLevel() const;
@@ -156,6 +170,7 @@ public:
 
     void setFlags(Qt::WindowFlags flags);
     Qt::WindowFlags flags() const;
+    void setFlag(Qt::WindowType, bool on = true);
     Qt::WindowType type() const;
 
     QString title() const;
@@ -178,11 +193,6 @@ public:
 
     void setTransientParent(QWindow *parent);
     QWindow *transientParent() const;
-
-    enum AncestorMode {
-        ExcludeTransients,
-        IncludeTransients
-    };
 
     bool isAncestorOf(const QWindow *child, AncestorMode mode = IncludeTransients) const;
 
@@ -334,11 +344,11 @@ protected:
     virtual void mouseReleaseEvent(QMouseEvent *);
     virtual void mouseDoubleClickEvent(QMouseEvent *);
     virtual void mouseMoveEvent(QMouseEvent *);
-#ifndef QT_NO_WHEELEVENT
+#if QT_CONFIG(wheelevent)
     virtual void wheelEvent(QWheelEvent *);
 #endif
     virtual void touchEvent(QTouchEvent *);
-#ifndef QT_NO_TABLETEVENT
+#if QT_CONFIG(tabletevent)
     virtual void tabletEvent(QTabletEvent *);
 #endif
     virtual bool nativeEvent(const QByteArray &eventType, void *message, long *result);

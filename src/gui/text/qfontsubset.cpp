@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -618,6 +624,7 @@ static QTtfTable generateName(const QVector<QTtfNameRecord> &name);
 static QTtfTable generateName(const qttf_name_table &name)
 {
     QVector<QTtfNameRecord> list;
+    list.reserve(5);
     QTtfNameRecord rec;
     rec.nameId = 0;
     rec.value = name.copyright;
@@ -733,7 +740,7 @@ static void convertPath(const QPainterPath &path, QVector<TTF_POINT> *points, QV
                     points->takeLast();
                 endPoints->append(points->size() - 1);
             }
-            // fall through
+            Q_FALLTHROUGH();
         case QPainterPath::LineToElement:
             p.flags = OnCurve;
             break;
@@ -791,7 +798,7 @@ static void convertPath(const QPainterPath &path, QVector<TTF_POINT> *points, QV
                     base -= 3;
                 } else {
                     // need to split
-//                     qDebug() << "  -> splitting";
+//                     qDebug("  -> splitting");
                     qint16 a, b, c, d;
                     base[6].x = base[3].x;
                     c = base[1].x;
@@ -852,7 +859,7 @@ static void getBounds(const QVector<TTF_POINT> &points, qint16 *xmin, qint16 *xm
 static int convertToRelative(QVector<TTF_POINT> *points)
 {
     // convert points to relative and setup flags
-//     qDebug() << "relative points:";
+//     qDebug("relative points:");
     qint16 prev_x = 0;
     qint16 prev_y = 0;
     int point_array_size = 0;
@@ -959,7 +966,7 @@ static QTtfGlyph generateGlyph(int index, const QPainterPath &path, qreal advanc
     glyph.advanceWidth = qRound(advance * 2048. / ppem);
     glyph.lsb = qRound(lsb * 2048. / ppem);
 
-    if (!path.elementCount()) {
+    if (path.isEmpty()) {
         //qDebug("glyph %d is empty", index);
         lsb = 0;
         glyph.xMin = glyph.xMax = glyph.yMin = glyph.yMax = 0;
@@ -973,7 +980,7 @@ static QTtfGlyph generateGlyph(int index, const QPainterPath &path, qreal advanc
 //     qDebug() << "number of contours=" << endPoints.size();
 //     for (int i = 0; i < points.size(); ++i)
 //         qDebug() << "  point[" << i << "] = " << QPoint(points.at(i).x, points.at(i).y) << " flags=" << points.at(i).flags;
-//     qDebug() << "endPoints:";
+//     qDebug("endPoints:");
 //     for (int i = 0; i < endPoints.size(); ++i)
 //         qDebug() << endPoints.at(i);
 
@@ -1055,6 +1062,7 @@ static QVector<QTtfTable> generateGlyphTables(qttf_font_tables &tables, const QV
     Q_ASSERT(hmtx.data.size() == hs.offset());
 
     QVector<QTtfTable> list;
+    list.reserve(3);
     list.append(glyf);
     list.append(loca);
     list.append(hmtx);
@@ -1137,7 +1145,7 @@ static QByteArray bindFont(const QVector<QTtfTable>& _tables)
 
     // calculate the fonts checksum and qToBigEndian into 'head's checksum_adjust
     quint32 checksum_adjust = 0xB1B0AFBA - checksum(font);
-    qToBigEndian(checksum_adjust, (uchar *)font.data() + head_offset + 8);
+    qToBigEndian(checksum_adjust, font.data() + head_offset + 8);
 
     return font;
 }

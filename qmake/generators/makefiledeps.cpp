@@ -1,31 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -50,6 +46,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <limits.h>
 #if defined(_MSC_VER) && _MSC_VER >= 1400
 #include <share.h>
 #endif
@@ -425,25 +422,53 @@ static bool matchWhileUnsplitting(const char *buffer, int buffer_len, int start,
 /* Advance from an opening quote at buffer[offset] to the matching close quote. */
 static int scanPastString(char *buffer, int buffer_len, int offset, int *lines)
 {
+    // http://en.cppreference.com/w/cpp/language/string_literal
     // It might be a C++11 raw string.
     bool israw = false;
     if (buffer[offset] == '"' && offset > 0) {
         int explore = offset - 1;
-        while (explore > 0 && buffer[explore] != 'R') {
-            if (buffer[explore] == '8' || buffer[explore] == 'u' || buffer[explore] == 'U') {
-                explore--;
-            } else if (explore > 1 && qmake_endOfLine(buffer[explore])
-                       && buffer[explore - 1] == '\\') {
+        bool prefix = false; // One of L, U, u or u8 may appear before R
+        bool saw8 = false; // Partial scan of u8
+        while (explore >= 0) {
+            // Cope with backslash-newline interruptions of the prefix:
+            if (explore > 0
+                && qmake_endOfLine(buffer[explore])
+                && buffer[explore - 1] == '\\') {
                 explore -= 2;
-            } else if (explore > 2 && buffer[explore] == '\n'
+            } else if (explore > 1
+                       && buffer[explore] == '\n'
                        && buffer[explore - 1] == '\r'
                        && buffer[explore - 2] == '\\') {
                 explore -= 3;
+                // Remaining cases can only decrement explore by one at a time:
+            } else if (saw8 && buffer[explore] == 'u') {
+                explore--;
+                saw8 = false;
+                prefix = true;
+            } else if (saw8 || prefix) {
+                break;
+            } else if (explore > 1 && buffer[explore] == '8') {
+                explore--;
+                saw8 = true;
+            } else if (buffer[explore] == 'L'
+                       || buffer[explore] == 'U'
+                       || buffer[explore] == 'u') {
+                explore--;
+                prefix = true;
+            } else if (buffer[explore] == 'R') {
+                if (israw)
+                    break;
+                explore--;
+                israw = true;
             } else {
                 break;
             }
         }
-        israw = (buffer[explore] == 'R');
+        // Check the R (with possible prefix) isn't just part of an identifier:
+        if (israw && explore >= 0
+            && (isalnum(buffer[explore]) || buffer[explore] == '_')) {
+            israw = false;
+        }
     }
 
     if (israw) {
@@ -915,9 +940,10 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
 
     debug_msg(2, "findMocs: %s", file->file.local().toLatin1().constData());
     int line_count = 1;
-    bool ignore[2] = { false, false }; // [0] for Q_OBJECT, [1] for Q_GADGET
+    bool ignore[3] = { false, false, false }; // [0] for Q_OBJECT, [1] for Q_GADGET, [2] for Q_NAMESPACE
  /* qmake ignore Q_GADGET */
  /* qmake ignore Q_OBJECT */
+ /* qmake ignore Q_NAMESPACE */
     for(int x = 0; x < buffer_len; x++) {
 #define SKIP_BSNL(pos) skipEscapedLineEnds(buffer, buffer_len, (pos), &line_count)
         x = SKIP_BSNL(x);
@@ -950,6 +976,12 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
                                           file->file.real().toLatin1().constData(), line_count);
                                 x += 20;
                                 ignore[1] = true;
+                            } else if (buffer_len >= (x + 23) &&
+                                      !strncmp(buffer + x + 1, "make ignore Q_NAMESPACE", 23)) {
+                                debug_msg(2, "Mocgen: %s:%d Found \"qmake ignore Q_NAMESPACE\"",
+                                          file->file.real().toLatin1().constData(), line_count);
+                                x += 23;
+                                ignore[2] = true;
                             }
                         } else if (buffer[x] == '*') {
                             extralines = 0;
@@ -977,15 +1009,17 @@ bool QMakeSourceFileInfo::findMocs(SourceFile *file)
             int morelines = 0;
             int y = skipEscapedLineEnds(buffer, buffer_len, x + 1, &morelines);
             if (buffer[y] == 'Q') {
-                static const char interesting[][9] = { "Q_OBJECT", "Q_GADGET" };
-                for (int interest = 0; interest < 2; ++interest) {
+                static const char interesting[][12] = { "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE"};
+                for (int interest = 0; interest < 3; ++interest) {
                     if (ignore[interest])
                         continue;
 
                     int matchlen = 0, extralines = 0;
+                    size_t needle_len = strlen(interesting[interest]);
+                    Q_ASSERT(needle_len <= INT_MAX);
                     if (matchWhileUnsplitting(buffer, buffer_len, y,
                                               interesting[interest],
-                                              strlen(interesting[interest]),
+                                              static_cast<int>(needle_len),
                                               &matchlen, &extralines)
                         && y + matchlen < buffer_len
                         && !isCWordChar(buffer[y + matchlen])) {

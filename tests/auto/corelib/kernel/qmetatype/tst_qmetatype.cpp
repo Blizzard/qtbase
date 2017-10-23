@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,6 +30,7 @@
 #include <QtCore>
 #include <QtTest/QtTest>
 
+#include "tst_qmetatype.h"
 #include "tst_qvariant_common.h"
 
 #ifdef Q_OS_LINUX
@@ -193,8 +189,11 @@ protected:
         Bar space[1];
         space[0].~Bar();
 
+        const QByteArray postFix =  '_'
+            + QByteArray::number(reinterpret_cast<quintptr>(QThread::currentThreadId()));
+
         for (int i = 0; i < 1000; ++i) {
-            const QByteArray name = QString("Bar%1_%2").arg(i).arg((size_t)QThread::currentThreadId()).toLatin1();
+            const QByteArray name = "Bar" + QByteArray::number(i) + postFix;
             const char *nm = name.constData();
             int tp = qRegisterMetaType<Bar>(nm);
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
@@ -378,6 +377,8 @@ void tst_QMetaType::typeName_data()
 
     QT_FOR_EACH_STATIC_TYPE(TYPENAME_DATA)
     QTest::newRow("QMetaType::UnknownType") << int(QMetaType::UnknownType) << static_cast<const char*>(0);
+    QTest::newRow("QMetaType::User-1") << (int(QMetaType::User) - 1) << static_cast<const char *>(nullptr);
+    QTest::newRow("QMetaType::FirstWidgetsType-1") << (int(QMetaType::FirstWidgetsType) - 1) << static_cast<const char *>(nullptr);
 
     QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << QString::fromLatin1("Whity<double>");
     QTest::newRow("Whity<int>") << ::qMetaTypeId<Whity<int> >() << QString::fromLatin1("Whity<int>");
@@ -405,10 +406,12 @@ void tst_QMetaType::typeName()
     QFETCH(int, aType);
     QFETCH(QString, aTypeName);
 
-    QString name = QString::fromLatin1(QMetaType::typeName(aType));
+    const char *rawname = QMetaType::typeName(aType);
+    QString name = QString::fromLatin1(rawname);
 
     QCOMPARE(name, aTypeName);
     QCOMPARE(name.toLatin1(), QMetaObject::normalizedType(name.toLatin1().constData()));
+    QCOMPARE(rawname == nullptr, aTypeName.isNull());
 }
 
 void tst_QMetaType::type_data()
@@ -466,18 +469,6 @@ void tst_QMetaType::type_fromSubString()
     QCOMPARE(QMetaType::type(ba), expectedType);
 }
 
-#define FOR_EACH_PRIMITIVE_METATYPE(F) \
-    QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(F) \
-    QT_FOR_EACH_STATIC_CORE_POINTER(F) \
-
-#define FOR_EACH_COMPLEX_CORE_METATYPE(F) \
-    QT_FOR_EACH_STATIC_CORE_CLASS(F) \
-    QT_FOR_EACH_STATIC_CORE_TEMPLATE(F)
-
-#define FOR_EACH_CORE_METATYPE(F) \
-    FOR_EACH_PRIMITIVE_METATYPE(F) \
-    FOR_EACH_COMPLEX_CORE_METATYPE(F) \
-
 namespace {
     template <typename T>
     struct static_assert_trigger {
@@ -496,234 +487,6 @@ Q_STATIC_ASSERT((!QMetaTypeId2<tst_QMetaType*>::IsBuiltIn)); // QObject subclass
 Q_STATIC_ASSERT((!QMetaTypeId2<QList<int> >::IsBuiltIn));
 Q_STATIC_ASSERT((!QMetaTypeId2<QMap<int,int> >::IsBuiltIn));
 Q_STATIC_ASSERT((!QMetaTypeId2<QMetaType::Type>::IsBuiltIn));
-
-template <int ID>
-struct MetaEnumToType {};
-
-#define DEFINE_META_ENUM_TO_TYPE(MetaTypeName, MetaTypeId, RealType) \
-template<> \
-struct MetaEnumToType<QMetaType::MetaTypeName> { \
-    typedef RealType Type; \
-};
-FOR_EACH_CORE_METATYPE(DEFINE_META_ENUM_TO_TYPE)
-#undef DEFINE_META_ENUM_TO_TYPE
-
-template <int ID>
-struct DefaultValueFactory
-{
-    typedef typename MetaEnumToType<ID>::Type Type;
-    static Type *create() { return new Type; }
-};
-
-template <>
-struct DefaultValueFactory<QMetaType::Void>
-{
-    typedef MetaEnumToType<QMetaType::Void>::Type Type;
-    static Type *create() { return 0; }
-};
-
-template <int ID>
-struct DefaultValueTraits
-{
-    // By default we assume that a default-constructed value (new T) is
-    // initialized; e.g. QCOMPARE(*(new T), *(new T)) should succeed
-    enum { IsInitialized = true };
-};
-
-#define DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS(MetaTypeName, MetaTypeId, RealType) \
-template<> struct DefaultValueTraits<QMetaType::MetaTypeName> { \
-    enum { IsInitialized = false }; \
-};
-// Primitive types (int et al) aren't initialized
-FOR_EACH_PRIMITIVE_METATYPE(DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS)
-#undef DEFINE_NON_INITIALIZED_DEFAULT_VALUE_TRAITS
-
-template <int ID>
-struct TestValueFactory {};
-
-template<> struct TestValueFactory<QMetaType::Void> {
-    static void *create() { return 0; }
-};
-
-template<> struct TestValueFactory<QMetaType::QString> {
-    static QString *create() { return new QString(QString::fromLatin1("QString")); }
-};
-template<> struct TestValueFactory<QMetaType::Int> {
-    static int *create() { return new int(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::UInt> {
-    static uint *create() { return new uint(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::Bool> {
-    static bool *create() { return new bool(true); }
-};
-template<> struct TestValueFactory<QMetaType::Double> {
-    static double *create() { return new double(3.14); }
-};
-template<> struct TestValueFactory<QMetaType::QByteArray> {
-    static QByteArray *create() { return new QByteArray(QByteArray("QByteArray")); }
-};
-template<> struct TestValueFactory<QMetaType::QByteArrayList> {
-    static QByteArrayList *create() { return new QByteArrayList(QByteArrayList() << "Q" << "Byte" << "Array" << "List"); }
-};
-template<> struct TestValueFactory<QMetaType::QVariantMap> {
-    static QVariantMap *create() { return new QVariantMap(); }
-};
-template<> struct TestValueFactory<QMetaType::QVariantHash> {
-    static QVariantHash *create() { return new QVariantHash(); }
-};
-template<> struct TestValueFactory<QMetaType::QVariantList> {
-    static QVariantList *create() { return new QVariantList(QVariantList() << 123 << "Q" << "Variant" << "List"); }
-};
-template<> struct TestValueFactory<QMetaType::QChar> {
-    static QChar *create() { return new QChar(QChar('q')); }
-};
-template<> struct TestValueFactory<QMetaType::Long> {
-    static long *create() { return new long(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::Short> {
-    static short *create() { return new short(0x1234); }
-};
-template<> struct TestValueFactory<QMetaType::Char> {
-    static char *create() { return new char('c'); }
-};
-template<> struct TestValueFactory<QMetaType::ULong> {
-    static ulong *create() { return new ulong(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::UShort> {
-    static ushort *create() { return new ushort(0x1234); }
-};
-template<> struct TestValueFactory<QMetaType::SChar> {
-    static signed char *create() { return new signed char(-12); }
-};
-template<> struct TestValueFactory<QMetaType::UChar> {
-    static uchar *create() { return new uchar('u'); }
-};
-template<> struct TestValueFactory<QMetaType::Float> {
-    static float *create() { return new float(3.14f); }
-};
-template<> struct TestValueFactory<QMetaType::QObjectStar> {
-    static QObject * *create() { return new QObject *(0); }
-};
-template<> struct TestValueFactory<QMetaType::VoidStar> {
-    static void * *create() { return new void *(0); }
-};
-template<> struct TestValueFactory<QMetaType::LongLong> {
-    static qlonglong *create() { return new qlonglong(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::ULongLong> {
-    static qulonglong *create() { return new qulonglong(0x12345678); }
-};
-template<> struct TestValueFactory<QMetaType::QStringList> {
-    static QStringList *create() { return new QStringList(QStringList() << "Q" << "t"); }
-};
-template<> struct TestValueFactory<QMetaType::QBitArray> {
-    static QBitArray *create() { return new QBitArray(QBitArray(256, true)); }
-};
-template<> struct TestValueFactory<QMetaType::QDate> {
-    static QDate *create() { return new QDate(QDate::currentDate()); }
-};
-template<> struct TestValueFactory<QMetaType::QTime> {
-    static QTime *create() { return new QTime(QTime::currentTime()); }
-};
-template<> struct TestValueFactory<QMetaType::QDateTime> {
-    static QDateTime *create() { return new QDateTime(QDateTime::currentDateTime()); }
-};
-template<> struct TestValueFactory<QMetaType::QUrl> {
-    static QUrl *create() { return new QUrl("http://www.example.org"); }
-};
-template<> struct TestValueFactory<QMetaType::QLocale> {
-    static QLocale *create() { return new QLocale(QLocale::c()); }
-};
-template<> struct TestValueFactory<QMetaType::QRect> {
-    static QRect *create() { return new QRect(10, 20, 30, 40); }
-};
-template<> struct TestValueFactory<QMetaType::QRectF> {
-    static QRectF *create() { return new QRectF(10, 20, 30, 40); }
-};
-template<> struct TestValueFactory<QMetaType::QSize> {
-    static QSize *create() { return new QSize(10, 20); }
-};
-template<> struct TestValueFactory<QMetaType::QSizeF> {
-    static QSizeF *create() { return new QSizeF(10, 20); }
-};
-template<> struct TestValueFactory<QMetaType::QLine> {
-    static QLine *create() { return new QLine(10, 20, 30, 40); }
-};
-template<> struct TestValueFactory<QMetaType::QLineF> {
-    static QLineF *create() { return new QLineF(10, 20, 30, 40); }
-};
-template<> struct TestValueFactory<QMetaType::QPoint> {
-    static QPoint *create() { return new QPoint(10, 20); }
-};
-template<> struct TestValueFactory<QMetaType::QPointF> {
-    static QPointF *create() { return new QPointF(10, 20); }
-};
-template<> struct TestValueFactory<QMetaType::QEasingCurve> {
-    static QEasingCurve *create() { return new QEasingCurve(QEasingCurve::InOutElastic); }
-};
-template<> struct TestValueFactory<QMetaType::QUuid> {
-    static QUuid *create() { return new QUuid(); }
-};
-template<> struct TestValueFactory<QMetaType::QModelIndex> {
-    static QModelIndex *create() { return new QModelIndex(); }
-};
-template<> struct TestValueFactory<QMetaType::QPersistentModelIndex> {
-    static QPersistentModelIndex *create() { return new QPersistentModelIndex(); }
-};
-template<> struct TestValueFactory<QMetaType::QRegExp> {
-    static QRegExp *create()
-    {
-#ifndef QT_NO_REGEXP
-        return new QRegExp("A*");
-#else
-        return 0;
-#endif
-    }
-};
-template<> struct TestValueFactory<QMetaType::QRegularExpression> {
-    static QRegularExpression *create()
-    {
-#ifndef QT_NO_REGEXP
-        return new QRegularExpression("abc.*def");
-#else
-        return 0;
-#endif
-    }
-};
-template<> struct TestValueFactory<QMetaType::QJsonValue> {
-    static QJsonValue *create() { return new QJsonValue(123.); }
-};
-template<> struct TestValueFactory<QMetaType::QJsonObject> {
-    static QJsonObject *create() {
-        QJsonObject *o = new QJsonObject();
-        o->insert("a", 123.);
-        o->insert("b", true);
-        o->insert("c", QJsonValue::Null);
-        o->insert("d", QLatin1String("ciao"));
-        return o;
-    }
-};
-template<> struct TestValueFactory<QMetaType::QJsonArray> {
-    static QJsonArray *create() {
-        QJsonArray *a = new QJsonArray();
-        a->append(123.);
-        a->append(true);
-        a->append(QJsonValue::Null);
-        a->append(QLatin1String("ciao"));
-        return a;
-    }
-};
-template<> struct TestValueFactory<QMetaType::QJsonDocument> {
-    static QJsonDocument *create() {
-        return new QJsonDocument(
-            QJsonDocument::fromJson("{ 'foo': 123, 'bar': [true, null, 'ciao'] }")
-        );
-    }
-};
-template<> struct TestValueFactory<QMetaType::QVariant> {
-    static QVariant *create() { return new QVariant(QStringList(QStringList() << "Q" << "t")); }
-};
 
 void tst_QMetaType::create_data()
 {
@@ -950,10 +713,10 @@ void tst_QMetaType::flags_data()
 
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     QTest::newRow(#RealType) << MetaTypeId \
-        << bool(!QTypeInfo<RealType>::isStatic) \
-        << bool(QTypeInfo<RealType>::isComplex) \
+        << bool(QTypeInfoQuery<RealType>::isRelocatable) \
+        << bool(QTypeInfoQuery<RealType>::isComplex) \
         << bool(QtPrivate::IsPointerToTypeDerivedFromQObject<RealType>::Value) \
-        << bool(Q_IS_ENUM(RealType));
+        << bool(std::is_enum<RealType>::value);
 QT_FOR_EACH_STATIC_CORE_CLASS(ADD_METATYPE_TEST_ROW)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(ADD_METATYPE_TEST_ROW)
 QT_FOR_EACH_STATIC_CORE_POINTER(ADD_METATYPE_TEST_ROW)
@@ -972,7 +735,7 @@ QT_FOR_EACH_STATIC_CORE_POINTER(ADD_METATYPE_TEST_ROW)
     QTest::newRow("QPair<P,C>") << ::qMetaTypeId<QPair<P,C> >() << false << true  << false << false;
     QTest::newRow("QPair<P,M>") << ::qMetaTypeId<QPair<P,M> >() << true  << true  << false << false;
     QTest::newRow("QPair<P,P>") << ::qMetaTypeId<QPair<P,P> >() << true  << false << false << false;
-    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << true << false << true;
+    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << false << false << true;
 
     // invalid ids.
     QTest::newRow("-1") << -1 << false << false << false << false;
@@ -1838,7 +1601,10 @@ void tst_QMetaType::saveAndLoadBuiltin()
 
     if (isStreamable) {
         QVERIFY(QMetaType::load(stream, type, value)); // Hmmm, shouldn't it return false?
-        QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
+
+        // std::nullptr_t is nullary: it doesn't actually read anything
+        if (type != QMetaType::Nullptr)
+            QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
     }
 
     stream.device()->seek(0);
@@ -1848,7 +1614,10 @@ void tst_QMetaType::saveAndLoadBuiltin()
 
     if (isStreamable) {
         QVERIFY(QMetaType::load(stream, type, value)); // Hmmm, shouldn't it return false?
-        QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
+
+        // std::nullptr_t is nullary: it doesn't actually read anything
+        if (type != QMetaType::Nullptr)
+            QCOMPARE(stream.status(), QDataStream::ReadPastEnd);
     }
 
     QMetaType::destroy(type, value);
@@ -1952,10 +1721,10 @@ void tst_QMetaType::metaObject()
 }
 
 #define METATYPE_ID_FUNCTION(Type, MetaTypeId, Name) \
-  case ::qMetaTypeId< Name >(): metaType = MetaTypeIdStruct<MetaTypeId>::Value;
+  case ::qMetaTypeId< Name >(): metaType = MetaTypeIdStruct<MetaTypeId>::Value; break;
 
 #define REGISTER_METATYPE_FUNCTION(Type, MetaTypeId, Name) \
-  case qRegisterMetaType< Name >(): metaType = RegisterMetaTypeStruct<MetaTypeId>::Value;
+  case qRegisterMetaType< Name >(): metaType = RegisterMetaTypeStruct<MetaTypeId>::Value; break;
 
 template<int>
 struct MetaTypeIdStruct
@@ -2394,8 +2163,8 @@ void tst_QMetaType::compareCustomEqualOnlyType()
     QVERIFY(variant50 != variant100x);
     QVERIFY(variant100 != variant50);
     QVERIFY(variant100x != variant50);
-    QVERIFY(variant100 == variant100x);
-    QVERIFY(variant100 == variant100);
+    QCOMPARE(variant100, variant100x);
+    QCOMPARE(variant100, variant100);
 
     // compare always fails
     QVERIFY(!(variant50 < variant50));

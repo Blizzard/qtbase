@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,6 +40,7 @@
 #include "qcocoacursor.h"
 #include "qcocoawindow.h"
 #include "qcocoahelpers.h"
+#include <QtGui/private/qcoregraphics_p.h>
 
 #include <QtGui/QBitmap>
 
@@ -55,7 +62,7 @@ QCocoaCursor::~QCocoaCursor()
 
 void QCocoaCursor::changeCursor(QCursor *cursor, QWindow *window)
 {
-    NSCursor * cocoaCursor = convertCursor(cursor);
+    NSCursor *cocoaCursor = convertCursor(cursor);
 
     if (QPlatformWindow * platformWindow = window->handle())
         static_cast<QCocoaWindow *>(platformWindow)->setWindowCursor(cocoaCursor);
@@ -77,15 +84,21 @@ void QCocoaCursor::setPos(const QPoint &position)
     CFRelease(e);
 }
 
-NSCursor *QCocoaCursor::convertCursor(QCursor * cursor)
+NSCursor *QCocoaCursor::convertCursor(QCursor *cursor)
 {
-    const Qt::CursorShape newShape = cursor ? cursor->shape() : Qt::ArrowCursor;
+    if (cursor == Q_NULLPTR)
+        return 0;
+
+    const Qt::CursorShape newShape = cursor->shape();
     NSCursor *cocoaCursor;
 
     // Check for a suitable built-in NSCursor first:
     switch (newShape) {
     case Qt::ArrowCursor:
         cocoaCursor= [NSCursor arrowCursor];
+        break;
+    case Qt::ForbiddenCursor:
+        cocoaCursor = [NSCursor operationNotAllowedCursor];
         break;
     case Qt::CrossCursor:
         cocoaCursor = [NSCursor crosshairCursor];
@@ -113,7 +126,7 @@ NSCursor *QCocoaCursor::convertCursor(QCursor * cursor)
         cocoaCursor = [NSCursor crosshairCursor];
         break;
     case Qt::DragCopyCursor:
-        cocoaCursor = [NSCursor crosshairCursor];
+        cocoaCursor = [NSCursor dragCopyCursor];
         break;
     case Qt::DragLinkCursor:
         cocoaCursor = [NSCursor dragLinkCursor];
@@ -223,10 +236,6 @@ NSCursor *QCocoaCursor::createCursorData(QCursor *cursor)
         break; }
     case Qt::BusyCursor: {
         QPixmap pixmap = QPixmap(QLatin1String(":/qt-project.org/mac/cursors/images/waitcursor.png"));
-        return createCursorFromPixmap(pixmap, hotspot);
-        break; }
-    case Qt::ForbiddenCursor: {
-        QPixmap pixmap = QPixmap(QLatin1String(":/qt-project.org/mac/cursors/images/forbiddencursor.png"));
         return createCursorFromPixmap(pixmap, hotspot);
         break; }
 #define QT_USE_APPROXIMATE_CURSORS

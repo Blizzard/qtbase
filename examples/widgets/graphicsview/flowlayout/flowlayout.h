@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -50,14 +60,14 @@ public:
     qreal spacing(Qt::Orientation o) const;
 
     // inherited functions
-    void setGeometry(const QRectF &geom) Q_DECL_OVERRIDE;
+    void setGeometry(const QRectF &geom) override;
 
-    int count() const Q_DECL_OVERRIDE;
-    QGraphicsLayoutItem *itemAt(int index) const Q_DECL_OVERRIDE;
-    void removeAt(int index) Q_DECL_OVERRIDE;
+    int count() const override;
+    QGraphicsLayoutItem *itemAt(int index) const override;
+    void removeAt(int index) override;
 
 protected:
-    QSizeF sizeHint(Qt::SizeHint which, const QSizeF &constraint = QSizeF()) const Q_DECL_OVERRIDE;
+    QSizeF sizeHint(Qt::SizeHint which, const QSizeF &constraint = QSizeF()) const override;
 
 private:
     qreal doLayout(const QRectF &geom, bool applyNewGeometry) const;

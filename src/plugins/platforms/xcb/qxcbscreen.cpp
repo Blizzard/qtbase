@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +47,7 @@
 #include <stdio.h>
 
 #include <QDebug>
+#include <QtAlgorithms>
 
 #include <qpa/qwindowsysteminterface.h>
 #include <private/qmath_p.h>
@@ -52,10 +59,8 @@ QXcbVirtualDesktop::QXcbVirtualDesktop(QXcbConnection *connection, xcb_screen_t 
     : QXcbObject(connection)
     , m_screen(screen)
     , m_number(number)
-    , m_xSettings(Q_NULLPTR)
 {
-    QByteArray cmAtomName("_NET_WM_CM_S");
-    cmAtomName += QByteArray::number(m_number);
+    const QByteArray cmAtomName =  "_NET_WM_CM_S" + QByteArray::number(m_number);
     m_net_wm_cm_atom = connection->internAtom(cmAtomName.constData());
     m_compositingActive = connection->getSelectionOwner(m_net_wm_cm_atom);
 
@@ -69,7 +74,8 @@ QXcbVirtualDesktop::~QXcbVirtualDesktop()
 
 QXcbScreen *QXcbVirtualDesktop::screenAt(const QPoint &pos) const
 {
-    foreach (QXcbScreen *screen, connection()->screens()) {
+    const auto screens = connection()->screens();
+    for (QXcbScreen *screen : screens) {
         if (screen->virtualDesktop() == this && screen->geometry().contains(pos))
             return screen;
     }
@@ -150,7 +156,7 @@ void QXcbVirtualDesktop::updateWorkArea()
     QRect workArea = getWorkArea();
     if (m_workArea != workArea) {
         m_workArea = workArea;
-        foreach (QPlatformScreen *screen, m_screens)
+        for (QPlatformScreen *screen : qAsConst(m_screens))
             ((QXcbScreen *)screen)->updateAvailableGeometry();
     }
 }
@@ -168,21 +174,10 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
     , m_virtualDesktop(virtualDesktop)
     , m_output(outputId)
     , m_crtc(output ? output->crtc : XCB_NONE)
-    , m_mode(XCB_NONE)
-    , m_primary(false)
-    , m_rotation(XCB_RANDR_ROTATION_ROTATE_0)
     , m_outputName(getOutputName(output))
     , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
     , m_virtualSize(virtualDesktop->size())
     , m_virtualSizeMillimeters(virtualDesktop->physicalSize())
-    , m_orientation(Qt::PrimaryOrientation)
-    , m_refreshRate(60)
-    , m_forcedDpi(-1)
-    , m_pixelDensity(1)
-    , m_hintStyle(QFontEngine::HintStyle(-1))
-    , m_noFontHinting(false)
-    , m_subpixelType(QFontEngine::SubpixelAntialiasingType(-1))
-    , m_antialiasingEnabled(-1)
 {
     if (connection->hasXRandr()) {
         xcb_randr_select_input(xcb_connection(), screen()->root, true);
@@ -353,6 +348,66 @@ void QXcbScreen::windowShown(QXcbWindow *window)
     }
 }
 
+QSurfaceFormat QXcbScreen::surfaceFormatFor(const QSurfaceFormat &format) const
+{
+    const xcb_visualid_t xcb_visualid = connection()->hasDefaultVisualId() ? connection()->defaultVisualId()
+                                                                           : screen()->root_visual;
+    const xcb_visualtype_t *xcb_visualtype = visualForId(xcb_visualid);
+
+    const int redSize = qPopulationCount(xcb_visualtype->red_mask);
+    const int greenSize = qPopulationCount(xcb_visualtype->green_mask);
+    const int blueSize = qPopulationCount(xcb_visualtype->blue_mask);
+
+    QSurfaceFormat result = format;
+
+    if (result.redBufferSize() < 0)
+        result.setRedBufferSize(redSize);
+
+    if (result.greenBufferSize() < 0)
+        result.setGreenBufferSize(greenSize);
+
+    if (result.blueBufferSize() < 0)
+        result.setBlueBufferSize(blueSize);
+
+    return result;
+}
+
+const xcb_visualtype_t *QXcbScreen::visualForFormat(const QSurfaceFormat &format) const
+{
+    const xcb_visualtype_t *candidate = nullptr;
+
+    for (const xcb_visualtype_t &xcb_visualtype : m_visuals) {
+
+        const int redSize = qPopulationCount(xcb_visualtype.red_mask);
+        const int greenSize = qPopulationCount(xcb_visualtype.green_mask);
+        const int blueSize = qPopulationCount(xcb_visualtype.blue_mask);
+        const int alphaSize = depthOfVisual(xcb_visualtype.visual_id) - redSize - greenSize - blueSize;
+
+        if (format.redBufferSize() != -1 && redSize != format.redBufferSize())
+            continue;
+
+        if (format.greenBufferSize() != -1 && greenSize != format.greenBufferSize())
+            continue;
+
+        if (format.blueBufferSize() != -1 && blueSize != format.blueBufferSize())
+            continue;
+
+        if (format.alphaBufferSize() != -1 && alphaSize != format.alphaBufferSize())
+            continue;
+
+        // Try to find a RGB visual rather than e.g. BGR or GBR
+        if (qCountTrailingZeroBits(xcb_visualtype.blue_mask) == 0)
+            return &xcb_visualtype;
+
+        // In case we do not find anything we like, just remember the first one
+        // and hope for the best:
+        if (!candidate)
+            candidate = &xcb_visualtype;
+    }
+
+    return candidate;
+}
+
 void QXcbScreen::sendStartupMessage(const QByteArray &message) const
 {
     xcb_window_t rootWindow = root();
@@ -397,7 +452,7 @@ quint8 QXcbScreen::depthOfVisual(xcb_visualid_t visualid) const
 
 QImage::Format QXcbScreen::format() const
 {
-    return QImage::Format_RGB32;
+    return qt_xcb_imageFormatForVisual(connection(), screen()->root_depth, visualForId(screen()->root_visual));
 }
 
 QDpi QXcbScreen::virtualDpi() const
@@ -565,7 +620,7 @@ void QXcbScreen::updateGeometry(const QRect &geom, uint8_t rotation)
         m_sizeMillimeters = sizeInMillimeters(xGeometry.size(), virtualDpi());
 
     qreal dpi = xGeometry.width() / physicalSize().width() * qreal(25.4);
-    m_pixelDensity = qRound(dpi/96);
+    m_pixelDensity = qMax(1, qRound(dpi/96));
     m_geometry = QRect(xGeometry.topLeft(), xGeometry.size());
     m_availableGeometry = xGeometry & m_virtualDesktop->workArea();
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), m_geometry, m_availableGeometry);
@@ -612,85 +667,88 @@ void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
     }
 }
 
-QPixmap QXcbScreen::grabWindow(WId window, int x, int y, int width, int height) const
+static xcb_get_geometry_reply_t *getGeometryUnchecked(xcb_connection_t *connection, xcb_window_t window)
+{
+    const xcb_get_geometry_cookie_t geometry_cookie = xcb_get_geometry_unchecked(connection, window);
+    return xcb_get_geometry_reply(connection, geometry_cookie, NULL);
+}
+
+static inline bool translate(xcb_connection_t *connection, xcb_window_t child, xcb_window_t parent,
+                             int *x, int *y)
+{
+    const xcb_translate_coordinates_cookie_t translate_cookie =
+        xcb_translate_coordinates_unchecked(connection, child, parent, *x, *y);
+    xcb_translate_coordinates_reply_t *translate_reply =
+        xcb_translate_coordinates_reply(connection, translate_cookie, NULL);
+    if (!translate_reply)
+        return false;
+    *x = translate_reply->dst_x;
+    *y = translate_reply->dst_y;
+    free(translate_reply);
+    return true;
+}
+
+QPixmap QXcbScreen::grabWindow(WId window, int xIn, int yIn, int width, int height) const
 {
     if (width == 0 || height == 0)
         return QPixmap();
 
-    // TODO: handle multiple screens
+    int x = xIn;
+    int y = yIn;
     QXcbScreen *screen = const_cast<QXcbScreen *>(this);
     xcb_window_t root = screen->root();
 
-    if (window == 0)
-        window = root;
-
-    xcb_get_geometry_cookie_t geometry_cookie = xcb_get_geometry_unchecked(xcb_connection(), window);
-
-    xcb_get_geometry_reply_t *reply =
-        xcb_get_geometry_reply(xcb_connection(), geometry_cookie, NULL);
-
-    if (!reply) {
+    xcb_get_geometry_reply_t *rootReply = getGeometryUnchecked(xcb_connection(), root);
+    if (!rootReply)
         return QPixmap();
+
+    const quint8 rootDepth = rootReply->depth;
+    free(rootReply);
+
+    QSize windowSize;
+    quint8 effectiveDepth = 0;
+    if (window) {
+        xcb_get_geometry_reply_t *windowReply = getGeometryUnchecked(xcb_connection(), window);
+        if (!windowReply)
+            return QPixmap();
+        windowSize = QSize(windowReply->width, windowReply->height);
+        effectiveDepth = windowReply->depth;
+        free(windowReply);
+        if (effectiveDepth == rootDepth) {
+            // if the depth of the specified window and the root window are the
+            // same, grab pixels from the root window (so that we get the any
+            // overlapping windows and window manager frames)
+
+            // map x and y to the root window
+            if (!translate(xcb_connection(), window, root, &x, &y))
+                return QPixmap();
+
+            window = root;
+        }
+    } else {
+        window = root;
+        effectiveDepth = rootDepth;
+        windowSize = m_geometry.size();
+        x += m_geometry.x();
+        y += m_geometry.y();
     }
 
     if (width < 0)
-        width = reply->width - x;
+        width = windowSize.width() - xIn;
     if (height < 0)
-        height = reply->height - y;
-
-    geometry_cookie = xcb_get_geometry_unchecked(xcb_connection(), root);
-    xcb_get_geometry_reply_t *root_reply =
-        xcb_get_geometry_reply(xcb_connection(), geometry_cookie, NULL);
-
-    if (!root_reply) {
-        free(reply);
-        return QPixmap();
-    }
-
-    if (reply->depth == root_reply->depth) {
-        // if the depth of the specified window and the root window are the
-        // same, grab pixels from the root window (so that we get the any
-        // overlapping windows and window manager frames)
-
-        // map x and y to the root window
-        xcb_translate_coordinates_cookie_t translate_cookie =
-            xcb_translate_coordinates_unchecked(xcb_connection(), window, root, x, y);
-
-        xcb_translate_coordinates_reply_t *translate_reply =
-            xcb_translate_coordinates_reply(xcb_connection(), translate_cookie, NULL);
-
-        if (!translate_reply) {
-            free(reply);
-            free(root_reply);
-            return QPixmap();
-        }
-
-        x = translate_reply->dst_x;
-        y = translate_reply->dst_y;
-
-        window = root;
-
-        free(translate_reply);
-        free(reply);
-        reply = root_reply;
-    } else {
-        free(root_reply);
-        root_reply = 0;
-    }
+        height = windowSize.height() - yIn;
 
     xcb_get_window_attributes_reply_t *attributes_reply =
         xcb_get_window_attributes_reply(xcb_connection(), xcb_get_window_attributes_unchecked(xcb_connection(), window), NULL);
 
-    if (!attributes_reply) {
-        free(reply);
+    if (!attributes_reply)
         return QPixmap();
-    }
 
     const xcb_visualtype_t *visual = screen->visualForId(attributes_reply->visual);
     free(attributes_reply);
 
     xcb_pixmap_t pixmap = xcb_generate_id(xcb_connection());
-    xcb_create_pixmap(xcb_connection(), reply->depth, pixmap, window, width, height);
+    xcb_create_pixmap(xcb_connection(), effectiveDepth, pixmap, window, width, height);
 
     uint32_t gc_value_mask = XCB_GC_SUBWINDOW_MODE;
     uint32_t gc_value_list[] = { XCB_SUBWINDOW_MODE_INCLUDE_INFERIORS };
@@ -700,9 +758,7 @@ QPixmap QXcbScreen::grabWindow(WId window, int x, int y, int width, int height) 
 
     xcb_copy_area(xcb_connection(), window, pixmap, gc, x, y, 0, 0, width, height);
 
-    QPixmap result = qt_xcb_pixmapFromXPixmap(connection(), pixmap, width, height, reply->depth, visual);
-
-    free(reply);
+    QPixmap result = qt_xcb_pixmapFromXPixmap(connection(), pixmap, width, height, effectiveDepth, visual);
     xcb_free_gc(xcb_connection(), gc);
     xcb_free_pixmap(xcb_connection(), pixmap);
 

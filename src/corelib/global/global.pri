@@ -2,6 +2,8 @@
 
 HEADERS +=  \
 	global/qglobal.h \
+        global/qoperatingsystemversion.h \
+        global/qoperatingsystemversion_p.h \
         global/qsystemdetection.h \
         global/qcompilerdetection.h \
         global/qprocessordetection.h \
@@ -9,6 +11,8 @@ HEADERS +=  \
         global/qendian.h \
         global/qnumeric_p.h \
         global/qnumeric.h \
+        global/qfloat16_p.h \
+        global/qfloat16.h \
         global/qglobalstatic.h \
         global/qlibraryinfo.h \
         global/qlogging.h \
@@ -23,14 +27,18 @@ HEADERS +=  \
 SOURCES += \
         global/archdetect.cpp \
 	global/qglobal.cpp \
-        global/qglobalstatic.cpp \
         global/qlibraryinfo.cpp \
 	global/qmalloc.cpp \
         global/qnumeric.cpp \
+        global/qfloat16.cpp \
+        global/qoperatingsystemversion.cpp \
         global/qlogging.cpp \
         global/qhooks.cpp
 
 VERSIONTAGGING_SOURCES = global/qversiontagging.cpp
+
+darwin: SOURCES += global/qoperatingsystemversion_darwin.mm
+win32: SOURCES += global/qoperatingsystemversion_win.cpp
 
 # qlibraryinfo.cpp includes qconfig.cpp
 INCLUDEPATH += $$QT_BUILD_TREE/src/corelib/global
@@ -47,23 +55,11 @@ if(linux*|hurd*):!cross_compile:!static:!*-armcc* {
    DEFINES += ELF_INTERPRETER=\\\"$$system(LC_ALL=C readelf -l /bin/ls | perl -n -e \'$$prog\')\\\"
 }
 
-slog2 {
+qtConfig(slog2): \
     LIBS_PRIVATE += -lslog2
-    DEFINES += QT_USE_SLOG2
-}
 
-journald {
-    CONFIG += link_pkgconfig
-    packagesExist(libsystemd): \
-        PKGCONFIG_PRIVATE += libsystemd
-    else: \
-        PKGCONFIG_PRIVATE += libsystemd-journal
-    DEFINES += QT_USE_JOURNALD
-}
-
-syslog {
-    DEFINES += QT_USE_SYSLOG
-}
+qtConfig(journald): \
+    QMAKE_USE_PRIVATE += journald
 
 gcc:ltcg {
     versiontagging_compiler.commands = $$QMAKE_CXX -c $(CXXFLAGS) $(INCPATH)
@@ -81,4 +77,18 @@ gcc:ltcg {
     QMAKE_EXTRA_COMPILERS += versiontagging_compiler
 } else {
     SOURCES += $$VERSIONTAGGING_SOURCES
+}
+
+# On AARCH64 the fp16 extension is mandatory, so we don't need the conversion tables.
+!contains(QT_ARCH, "arm64") {
+    QMAKE_QFLOAT16_TABLES_GENERATE = global/qfloat16.h
+
+    qtPrepareTool(QMAKE_QFLOAT16_TABLES, qfloat16-tables)
+
+    qfloat16_tables.commands = $$QMAKE_QFLOAT16_TABLES ${QMAKE_FILE_OUT}
+    qfloat16_tables.output = global/qfloat16tables.cpp
+    qfloat16_tables.depends = $$QMAKE_QFLOAT16_TABLES
+    qfloat16_tables.input = QMAKE_QFLOAT16_TABLES_GENERATE
+    qfloat16_tables.variable_out = SOURCES
+    QMAKE_EXTRA_COMPILERS += qfloat16_tables
 }

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -143,17 +149,9 @@ QT_BEGIN_NAMESPACE
 
 QWindowsOpengl32DLL QOpenGLStaticContext::opengl32;
 
-void *QWindowsOpengl32DLL::resolve(const char *name)
+FARPROC QWindowsOpengl32DLL::resolve(const char *name)
 {
-#ifndef Q_OS_WINCE
-    void *proc = m_lib ? (void *) ::GetProcAddress(m_lib, name) : 0;
-#else
-    void *proc = m_lib ? (void *) ::GetProcAddress(m_lib, (const wchar_t *) QString::fromLatin1(name).utf16()) : 0;
-#endif
-    if (!proc)
-        qErrnoWarning(::GetLastError(), "Failed to resolve OpenGL function %s", name);
-
-    return proc;
+    return m_lib ? ::GetProcAddress(m_lib, name) : nullptr;
 }
 
 bool QWindowsOpengl32DLL::init(bool softwareRendering)
@@ -193,56 +191,11 @@ bool QWindowsOpengl32DLL::init(bool softwareRendering)
     wglSwapBuffers = reinterpret_cast<BOOL (WINAPI *)(HDC)>(resolve("wglSwapBuffers"));
     wglSetPixelFormat = reinterpret_cast<BOOL (WINAPI *)(HDC, int, const PIXELFORMATDESCRIPTOR *)>(resolve("wglSetPixelFormat"));
 
-    glBindTexture = reinterpret_cast<void (APIENTRY *)(GLenum , GLuint )>(resolve("glBindTexture"));
-    glBlendFunc = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum )>(resolve("glBlendFunc"));
-    glClear = reinterpret_cast<void (APIENTRY *)(GLbitfield )>(resolve("glClear"));
-    glClearColor = reinterpret_cast<void (APIENTRY *)(GLfloat , GLfloat , GLfloat , GLfloat )>(resolve("glClearColor"));
-    glClearStencil = reinterpret_cast<void (APIENTRY *)(GLint )>(resolve("glClearStencil"));
-    glColorMask = reinterpret_cast<void (APIENTRY *)(GLboolean , GLboolean , GLboolean , GLboolean )>(resolve("glColorMask"));
-    glCopyTexImage2D = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLenum , GLint , GLint , GLsizei , GLsizei , GLint )>(resolve("glCopyTexImage2D"));
-    glCopyTexSubImage2D = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLint , GLint , GLint , GLint , GLsizei , GLsizei )>(resolve("glCopyTexSubImage2D"));
-    glCullFace = reinterpret_cast<void (APIENTRY *)(GLenum )>(resolve("glCullFace"));
-    glDeleteTextures = reinterpret_cast<void (APIENTRY *)(GLsizei , const GLuint *)>(resolve("glDeleteTextures"));
-    glDepthFunc = reinterpret_cast<void (APIENTRY *)(GLenum )>(resolve("glDepthFunc"));
-    glDepthMask = reinterpret_cast<void (APIENTRY *)(GLboolean )>(resolve("glDepthMask"));
-    glDisable = reinterpret_cast<void (APIENTRY *)(GLenum )>(resolve("glDisable"));
-    glDrawArrays = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLsizei )>(resolve("glDrawArrays"));
-    glDrawElements = reinterpret_cast<void (APIENTRY *)(GLenum , GLsizei , GLenum , const GLvoid *)>(resolve("glDrawElements"));
-    glEnable = reinterpret_cast<void (APIENTRY *)(GLenum )>(resolve("glEnable"));
-    glFinish = reinterpret_cast<void (APIENTRY *)()>(resolve("glFinish"));
-    glFlush = reinterpret_cast<void (APIENTRY *)()>(resolve("glFlush"));
-    glFrontFace = reinterpret_cast<void (APIENTRY *)(GLenum )>(resolve("glFrontFace"));
-    glGenTextures = reinterpret_cast<void (APIENTRY *)(GLsizei , GLuint *)>(resolve("glGenTextures"));
-    glGetBooleanv = reinterpret_cast<void (APIENTRY *)(GLenum , GLboolean *)>(resolve("glGetBooleanv"));
     glGetError = reinterpret_cast<GLenum (APIENTRY *)()>(resolve("glGetError"));
-    glGetFloatv = reinterpret_cast<void (APIENTRY *)(GLenum , GLfloat *)>(resolve("glGetFloatv"));
     glGetIntegerv = reinterpret_cast<void (APIENTRY *)(GLenum , GLint *)>(resolve("glGetIntegerv"));
     glGetString = reinterpret_cast<const GLubyte * (APIENTRY *)(GLenum )>(resolve("glGetString"));
-    glGetTexParameterfv = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , GLfloat *)>(resolve("glGetTexParameterfv"));
-    glGetTexParameteriv = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , GLint *)>(resolve("glGetTexParameteriv"));
-    glHint = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum )>(resolve("glHint"));
-    glIsEnabled = reinterpret_cast<GLboolean (APIENTRY *)(GLenum )>(resolve("glIsEnabled"));
-    glIsTexture = reinterpret_cast<GLboolean (APIENTRY *)(GLuint )>(resolve("glIsTexture"));
-    glLineWidth = reinterpret_cast<void (APIENTRY *)(GLfloat )>(resolve("glLineWidth"));
-    glPixelStorei = reinterpret_cast<void (APIENTRY *)(GLenum , GLint )>(resolve("glPixelStorei"));
-    glPolygonOffset = reinterpret_cast<void (APIENTRY *)(GLfloat , GLfloat )>(resolve("glPolygonOffset"));
-    glReadPixels = reinterpret_cast<void (APIENTRY *)(GLint , GLint , GLsizei , GLsizei , GLenum , GLenum , GLvoid *)>(resolve("glReadPixels"));
-    glScissor = reinterpret_cast<void (APIENTRY *)(GLint , GLint , GLsizei , GLsizei )>(resolve("glScissor"));
-    glStencilFunc = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLuint )>(resolve("glStencilFunc"));
-    glStencilMask = reinterpret_cast<void (APIENTRY *)(GLuint )>(resolve("glStencilMask"));
-    glStencilOp = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , GLenum )>(resolve("glStencilOp"));
-    glTexImage2D = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLint , GLsizei , GLsizei , GLint , GLenum , GLenum , const GLvoid *)>(resolve("glTexImage2D"));
-    glTexParameterf = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , GLfloat )>(resolve("glTexParameterf"));
-    glTexParameterfv = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , const GLfloat *)>(resolve("glTexParameterfv"));
-    glTexParameteri = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , GLint )>(resolve("glTexParameteri"));
-    glTexParameteriv = reinterpret_cast<void (APIENTRY *)(GLenum , GLenum , const GLint *)>(resolve("glTexParameteriv"));
-    glTexSubImage2D = reinterpret_cast<void (APIENTRY *)(GLenum , GLint , GLint , GLint , GLsizei , GLsizei , GLenum , GLenum , const GLvoid *)>(resolve("glTexSubImage2D"));
-    glViewport = reinterpret_cast<void (APIENTRY *)(GLint , GLint , GLsizei , GLsizei )>(resolve("glViewport"));
 
-    glClearDepth = reinterpret_cast<void (APIENTRY *)(GLdouble )>(resolve("glClearDepth"));
-    glDepthRange = reinterpret_cast<void (APIENTRY *)(GLdouble , GLdouble )>(resolve("glDepthRange"));
-
-    return wglCreateContext && glBindTexture && glClearDepth;
+    return wglCreateContext && glGetError && glGetString;
 }
 
 BOOL QWindowsOpengl32DLL::swapBuffers(HDC dc)
@@ -872,13 +825,6 @@ static inline QOpenGLContextData createDummyWindowOpenGLContextData()
     \ingroup qt-lighthouse-win
 */
 
-QWindowsOpenGLContextFormat::QWindowsOpenGLContextFormat() :
-    profile(QSurfaceFormat::NoProfile),
-    version(0),
-    options(0)
-{
-}
-
 QWindowsOpenGLContextFormat QWindowsOpenGLContextFormat::current()
 {
     QWindowsOpenGLContextFormat result;
@@ -1264,10 +1210,9 @@ bool QWindowsGLContext::updateObtainedParams(HDC hdc, int *obtainedSwapInterval)
 
 void QWindowsGLContext::releaseDCs()
 {
-    const QOpenGLContextData *end = m_windowContexts.end();
-    for (const QOpenGLContextData *p = m_windowContexts.begin(); p < end; ++p)
-        ReleaseDC(p->hwnd, p->hdc);
-    m_windowContexts.resize(0);
+    for (const auto &e : m_windowContexts)
+        ReleaseDC(e.hwnd, e.hdc);
+    m_windowContexts.clear();
 }
 
 static inline QWindowsWindow *glWindowOf(QPlatformSurface *s)
@@ -1282,12 +1227,12 @@ static inline HWND handleOf(QPlatformSurface *s)
 
 // Find a window in a context list.
 static inline const QOpenGLContextData *
-    findByHWND(const Array<QOpenGLContextData> &data, HWND hwnd)
+    findByHWND(const std::vector<QOpenGLContextData> &data, HWND hwnd)
 {
-    const QOpenGLContextData *end = data.end();
-    for (const QOpenGLContextData *p = data.begin(); p < end; ++p)
-        if (p->hwnd == hwnd)
-            return p;
+    for (const auto &e : data) {
+        if (e.hwnd == hwnd)
+            return &e;
+    }
     return 0;
 }
 
@@ -1341,7 +1286,7 @@ bool QWindowsGLContext::makeCurrent(QPlatformSurface *surface)
         if (m_obtainedFormat.swapBehavior() == QSurfaceFormat::DoubleBuffer)
             window->setFlag(QWindowsWindow::OpenGLDoubleBuffered);
     }
-    m_windowContexts.append(newContext);
+    m_windowContexts.push_back(newContext);
 
     m_lost = false;
     bool success = QOpenGLStaticContext::opengl32.wglMakeCurrent(newContext.hdc, newContext.renderingContext);
@@ -1376,81 +1321,26 @@ void QWindowsGLContext::doneCurrent()
     releaseDCs();
 }
 
-QFunctionPointer QWindowsGLContext::getProcAddress(const QByteArray &procName)
+QFunctionPointer QWindowsGLContext::getProcAddress(const char *procName)
 {
+    // Even though we use QFunctionPointer, it does not mean the function can be called.
+    // It will need to be cast to the proper function type with the correct calling
+    // convention. QFunctionPointer is nothing more than a glorified void* here.
+    PROC procAddress = QOpenGLStaticContext::opengl32.wglGetProcAddress(procName);
+
     // We support AllGLFunctionsQueryable, which means this function must be able to
     // return a function pointer even for functions that are in GL.h and exported
     // normally from opengl32.dll. wglGetProcAddress() is not guaranteed to work for such
     // functions, however in QT_OPENGL_DYNAMIC builds QOpenGLFunctions will just blindly
-    // call into here for _any_ OpenGL function. Hence the need to handle these specially
-    // here. The list has to match QOpenGLFunctions. See
-    // QOpenGLFunctionsPrivate::QOpenGLFunctionsPrivate(QOpenGLContext *).
-    static struct StdFunc {
-        const char *name;
-        void *func;
-    } standardFuncs[] = {
-        { "glBindTexture", (void *) QOpenGLStaticContext::opengl32.glBindTexture },
-        { "glBlendFunc", (void *) QOpenGLStaticContext::opengl32.glBlendFunc },
-        { "glClear", (void *) QOpenGLStaticContext::opengl32.glClear },
-        { "glClearColor", (void *) QOpenGLStaticContext::opengl32.glClearColor },
-        { "glClearStencil", (void *) QOpenGLStaticContext::opengl32.glClearStencil },
-        { "glColorMask", (void *) QOpenGLStaticContext::opengl32.glColorMask },
-        { "glCopyTexImage2D", (void *) QOpenGLStaticContext::opengl32.glCopyTexImage2D },
-        { "glCopyTexSubImage2D", (void *) QOpenGLStaticContext::opengl32.glCopyTexSubImage2D },
-        { "glCullFace", (void *) QOpenGLStaticContext::opengl32.glCullFace },
-        { "glDeleteTextures", (void *) QOpenGLStaticContext::opengl32.glDeleteTextures },
-        { "glDepthFunc", (void *) QOpenGLStaticContext::opengl32.glDepthFunc },
-        { "glDepthMask", (void *) QOpenGLStaticContext::opengl32.glDepthMask },
-        { "glDisable", (void *) QOpenGLStaticContext::opengl32.glDisable },
-        { "glDrawArrays", (void *) QOpenGLStaticContext::opengl32.glDrawArrays },
-        { "glDrawElements", (void *) QOpenGLStaticContext::opengl32.glDrawElements },
-        { "glEnable", (void *) QOpenGLStaticContext::opengl32.glEnable },
-        { "glFinish", (void *) QOpenGLStaticContext::opengl32.glFinish },
-        { "glFlush", (void *) QOpenGLStaticContext::opengl32.glFlush },
-        { "glFrontFace", (void *) QOpenGLStaticContext::opengl32.glFrontFace },
-        { "glGenTextures", (void *) QOpenGLStaticContext::opengl32.glGenTextures },
-        { "glGetBooleanv", (void *) QOpenGLStaticContext::opengl32.glGetBooleanv },
-        { "glGetError", (void *) QOpenGLStaticContext::opengl32.glGetError },
-        { "glGetFloatv", (void *) QOpenGLStaticContext::opengl32.glGetFloatv },
-        { "glGetIntegerv", (void *) QOpenGLStaticContext::opengl32.glGetIntegerv },
-        { "glGetString", (void *) QOpenGLStaticContext::opengl32.glGetString },
-        { "glGetTexParameterfv", (void *) QOpenGLStaticContext::opengl32.glGetTexParameterfv },
-        { "glGetTexParameteriv", (void *) QOpenGLStaticContext::opengl32.glGetTexParameteriv },
-        { "glHint", (void *) QOpenGLStaticContext::opengl32.glHint },
-        { "glIsEnabled", (void *) QOpenGLStaticContext::opengl32.glIsEnabled },
-        { "glIsTexture", (void *) QOpenGLStaticContext::opengl32.glIsTexture },
-        { "glLineWidth", (void *) QOpenGLStaticContext::opengl32.glLineWidth },
-        { "glPixelStorei", (void *) QOpenGLStaticContext::opengl32.glPixelStorei },
-        { "glPolygonOffset", (void *) QOpenGLStaticContext::opengl32.glPolygonOffset },
-        { "glReadPixels", (void *) QOpenGLStaticContext::opengl32.glReadPixels },
-        { "glScissor", (void *) QOpenGLStaticContext::opengl32.glScissor },
-        { "glStencilFunc", (void *) QOpenGLStaticContext::opengl32.glStencilFunc },
-        { "glStencilMask", (void *) QOpenGLStaticContext::opengl32.glStencilMask },
-        { "glStencilOp", (void *) QOpenGLStaticContext::opengl32.glStencilOp },
-        { "glTexImage2D", (void *) QOpenGLStaticContext::opengl32.glTexImage2D },
-        { "glTexParameterf", (void *) QOpenGLStaticContext::opengl32.glTexParameterf },
-        { "glTexParameterfv", (void *) QOpenGLStaticContext::opengl32.glTexParameterfv },
-        { "glTexParameteri", (void *) QOpenGLStaticContext::opengl32.glTexParameteri },
-        { "glTexParameteriv", (void *) QOpenGLStaticContext::opengl32.glTexParameteriv },
-        { "glTexSubImage2D", (void *) QOpenGLStaticContext::opengl32.glTexSubImage2D },
-        { "glViewport", (void *) QOpenGLStaticContext::opengl32.glViewport },
+    // call into here for _any_ OpenGL function.
+    if (!procAddress || procAddress == reinterpret_cast<PROC>(0x1) || procAddress == reinterpret_cast<PROC>(0x2)
+        || procAddress == reinterpret_cast<PROC>(0x3) || procAddress == reinterpret_cast<PROC>(-1))
+        procAddress = QOpenGLStaticContext::opengl32.resolve(procName);
 
-        { "glClearDepth", (void *) QOpenGLStaticContext::opengl32.glClearDepth },
-        { "glDepthRange", (void *) QOpenGLStaticContext::opengl32.glDepthRange },
-    };
-    for (size_t i = 0; i < sizeof(standardFuncs) / sizeof(StdFunc); ++i)
-        if (procName == standardFuncs[i].name)
-            return reinterpret_cast<QFunctionPointer>(standardFuncs[i].func);
-
-    // Even though we use QFunctionPointer, it does not mean the function can be called.
-    // It will need to be cast to the proper function type with the correct calling
-    // convention. QFunctionPointer is nothing more than a glorified void* here.
-    QFunctionPointer procAddress = reinterpret_cast<QFunctionPointer>(QOpenGLStaticContext::opengl32.wglGetProcAddress(procName.constData()));
     if (QWindowsContext::verbose > 1)
         qCDebug(lcQpaGl) << __FUNCTION__ <<  procName << QOpenGLStaticContext::opengl32.wglGetCurrentContext() << "returns" << procAddress;
-    if (!procAddress && QWindowsContext::verbose)
-        qWarning("%s: Unable to resolve '%s'", __FUNCTION__, procName.constData());
-    return procAddress;
+
+    return reinterpret_cast<QFunctionPointer>(procAddress);
 }
 
 QT_END_NAMESPACE

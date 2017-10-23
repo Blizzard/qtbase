@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,11 +54,11 @@ QT_BEGIN_NAMESPACE
 static QTimeZonePrivate *newBackendTimeZone()
 {
 #ifdef QT_NO_SYSTEMLOCALE
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
     return new QIcuTimeZonePrivate();
 #else
     return new QUtcTimeZonePrivate();
-#endif // QT_USE_ICU
+#endif
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate();
@@ -63,7 +69,7 @@ static QTimeZonePrivate *newBackendTimeZone()
     // Registry based timezone backend not available on WinRT
 #elif defined Q_OS_WIN
     return new QWinTimeZonePrivate();
-#elif defined QT_USE_ICU
+#elif QT_CONFIG(icu)
     return new QIcuTimeZonePrivate();
 #else
     return new QUtcTimeZonePrivate();
@@ -75,11 +81,11 @@ static QTimeZonePrivate *newBackendTimeZone()
 static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
 {
 #ifdef QT_NO_SYSTEMLOCALE
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
     return new QIcuTimeZonePrivate(ianaId);
 #else
     return new QUtcTimeZonePrivate(ianaId);
-#endif // QT_USE_ICU
+#endif
 #else
 #if defined Q_OS_MAC
     return new QMacTimeZonePrivate(ianaId);
@@ -90,7 +96,7 @@ static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
     // Registry based timezone backend not available on WinRT
 #elif defined Q_OS_WIN
     return new QWinTimeZonePrivate(ianaId);
-#elif defined QT_USE_ICU
+#elif QT_CONFIG(icu)
     return new QIcuTimeZonePrivate(ianaId);
 #else
     return new QUtcTimeZonePrivate(ianaId);
@@ -212,28 +218,8 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     \section2 License
 
     This class includes data obtained from the CLDR data files under the terms
-    of the Unicode license.
-
-    \legalese
-    COPYRIGHT AND PERMISSION NOTICE
-
-    Copyright © 1991-2012 Unicode, Inc. All rights reserved. Distributed under
-    the Terms of Use in http://www.unicode.org/copyright.html.
-
-    Permission is hereby granted, free of charge, to any person obtaining a
-    copy of the Unicode data files and any associated documentation (the "Data
-    Files") or Unicode software and any associated documentation (the "Software")
-    to deal in the Data Files or Software without restriction, including without
-    limitation the rights to use, copy, modify, merge, publish, distribute, and/or
-    sell copies of the Data Files or Software, and to permit persons to whom the
-    Data Files or Software are furnished to do so, provided that (a) the above
-    copyright notice(s) and this permission notice appear with all copies of the
-    Data Files or Software, (b) both the above copyright notice(s) and this
-    permission notice appear in associated documentation, and (c) there is clear
-    notice in each modified Data File or in the Software as well as in the
-    documentation associated with the Data File(s) or Software that the data or
-    software has been modified.
-    \endlegalese
+    of the Unicode Data Files and Software License. See
+    \l{Unicode CLDR (Unicode Common Locale Data Repository)} for the details.
 
     \sa QDateTime
 */
@@ -319,7 +305,7 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     Create a null/invalid time zone instance.
 */
 
-QTimeZone::QTimeZone()
+QTimeZone::QTimeZone() Q_DECL_NOTHROW
     : d(0)
 {
 }
@@ -688,9 +674,9 @@ bool QTimeZone::isDaylightTime(const QDateTime &atDateTime) const
 QTimeZone::OffsetData QTimeZone::offsetData(const QDateTime &forDateTime) const
 {
     if (hasTransitions())
-        return d->toOffsetData(d->data(forDateTime.toMSecsSinceEpoch()));
+        return QTimeZonePrivate::toOffsetData(d->data(forDateTime.toMSecsSinceEpoch()));
     else
-        return d->invalidOffsetData();
+        return QTimeZonePrivate::invalidOffsetData();
 }
 
 /*!
@@ -726,9 +712,9 @@ bool QTimeZone::hasTransitions() const
 QTimeZone::OffsetData QTimeZone::nextTransition(const QDateTime &afterDateTime) const
 {
     if (hasTransitions())
-        return d->toOffsetData(d->nextTransition(afterDateTime.toMSecsSinceEpoch()));
+        return QTimeZonePrivate::toOffsetData(d->nextTransition(afterDateTime.toMSecsSinceEpoch()));
     else
-        return d->invalidOffsetData();
+        return QTimeZonePrivate::invalidOffsetData();
 }
 
 /*!
@@ -747,9 +733,9 @@ QTimeZone::OffsetData QTimeZone::nextTransition(const QDateTime &afterDateTime) 
 QTimeZone::OffsetData QTimeZone::previousTransition(const QDateTime &beforeDateTime) const
 {
     if (hasTransitions())
-        return d->toOffsetData(d->previousTransition(beforeDateTime.toMSecsSinceEpoch()));
+        return QTimeZonePrivate::toOffsetData(d->previousTransition(beforeDateTime.toMSecsSinceEpoch()));
     else
-        return d->invalidOffsetData();
+        return QTimeZonePrivate::invalidOffsetData();
 }
 
 /*!
@@ -765,11 +751,11 @@ QTimeZone::OffsetDataList QTimeZone::transitions(const QDateTime &fromDateTime,
 {
     OffsetDataList list;
     if (hasTransitions()) {
-        QTimeZonePrivate::DataList plist = d->transitions(fromDateTime.toMSecsSinceEpoch(),
-                                                          toDateTime.toMSecsSinceEpoch());
+        const QTimeZonePrivate::DataList plist = d->transitions(fromDateTime.toMSecsSinceEpoch(),
+                                                                toDateTime.toMSecsSinceEpoch());
         list.reserve(plist.count());
-        foreach (const QTimeZonePrivate::Data &pdata, plist)
-            list.append(d->toOffsetData(pdata));
+        for (const QTimeZonePrivate::Data &pdata : plist)
+            list.append(QTimeZonePrivate::toOffsetData(pdata));
     }
     return list;
 }
@@ -975,7 +961,13 @@ QDataStream &operator>>(QDataStream &ds, QTimeZone &tz)
         int country;
         QString comment;
         ds >> ianaId >> utcOffset >> name >> abbreviation >> country >> comment;
-        tz = QTimeZone(ianaId.toUtf8(), utcOffset, name, abbreviation, (QLocale::Country) country, comment);
+        // Try creating as a system timezone, which succeeds (producing a valid
+        // zone) iff ianaId is valid; we can then ignore the other data.
+        tz = QTimeZone(ianaId.toUtf8());
+        // If not, then construct a custom timezone using all the saved values:
+        if (!tz.isValid())
+            tz = QTimeZone(ianaId.toUtf8(), utcOffset, name, abbreviation,
+                           QLocale::Country(country), comment);
     } else {
         tz = QTimeZone(ianaId.toUtf8());
     }

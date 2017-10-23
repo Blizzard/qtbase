@@ -1,36 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+#include <QtGui/private/qtguiglobal_p.h>
 #include "qdebug.h"
 #include "qtextformat.h"
 #include "qtextformat_p.h"
@@ -502,7 +509,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                 case QChar::DirAN:
                     if (eor >= 0)
                         appendItems(analysis, sor, eor, control, dir);
-                    // fall through
+                    Q_FALLTHROUGH();
                 case QChar::DirR:
                 case QChar::DirAL:
                     dir = QChar::DirR; eor = current; status.eor = QChar::DirR; break;
@@ -558,7 +565,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                             status.eor = QChar::DirON;
                             dir = QChar::DirAN;
                         }
-                        // fall through
+                        Q_FALLTHROUGH();
                     case QChar::DirEN:
                     case QChar::DirL:
                         eor = current;
@@ -572,12 +579,14 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                         else
                             eor = current;
                         status.eor = QChar::DirEN;
-                        dir = QChar::DirAN; break;
+                        dir = QChar::DirAN;
+                        break;
                     case QChar::DirES:
                     case QChar::DirCS:
                         if(status.eor == QChar::DirEN || dir == QChar::DirAN) {
                             eor = current; break;
                         }
+                        Q_FALLTHROUGH();
                     case QChar::DirBN:
                     case QChar::DirB:
                     case QChar::DirS:
@@ -607,11 +616,13 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                                 eor = current; status.eor = dirCurrent;
                             }
                         }
+                        break;
                     default:
                         break;
                     }
                 break;
             }
+            Q_FALLTHROUGH();
         case QChar::DirAN:
             hasBidi = true;
             dirCurrent = QChar::DirAN;
@@ -635,6 +646,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                     if(status.eor == QChar::DirAN) {
                         eor = current; break;
                     }
+                    Q_FALLTHROUGH();
                 case QChar::DirES:
                 case QChar::DirET:
                 case QChar::DirBN:
@@ -738,7 +750,7 @@ static bool bidiItemize(QTextEngine *engine, QScriptAnalysis *analysis, QBidiCon
                 status.last = QChar::DirL;
                 break;
             }
-            // fall through
+            Q_FALLTHROUGH();
         default:
             status.last = dirCurrent;
         }
@@ -810,7 +822,7 @@ void QTextEngine::bidiReorder(int numItems, const quint8 *levels, int *visualOrd
     }
 
 #if (BIDI_DEBUG >= 1)
-//     qDebug() << "visual order is:";
+//     qDebug("visual order is:");
 //     for (i = 0; i < numItems; i++)
 //         qDebug() << visualOrder[i];
 #endif
@@ -831,13 +843,13 @@ enum JustificationClass {
     Justification_Arabic_Kashida  = 13   // User-inserted Kashida(U+0640)
 };
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 
 /*
     Adds an inter character justification opportunity after the number or letter
     character and a space justification opportunity after the space character.
 */
-static inline void qt_getDefaultJustificationOpportunities(const ushort *string, int length, QGlyphLayout g, ushort *log_clusters, int spaceAs)
+static inline void qt_getDefaultJustificationOpportunities(const ushort *string, int length, const QGlyphLayout &g, ushort *log_clusters, int spaceAs)
 {
     int str_pos = 0;
     while (str_pos < length) {
@@ -871,7 +883,7 @@ static inline void qt_getDefaultJustificationOpportunities(const ushort *string,
     }
 }
 
-static inline void qt_getJustificationOpportunities(const ushort *string, int length, const QScriptItem &si, QGlyphLayout g, ushort *log_clusters)
+static inline void qt_getJustificationOpportunities(const ushort *string, int length, const QScriptItem &si, const QGlyphLayout &g, ushort *log_clusters)
 {
     Q_ASSERT(length > 0 && g.numGlyphs > 0);
 
@@ -910,7 +922,7 @@ static inline void qt_getJustificationOpportunities(const ushort *string, int le
     qt_getDefaultJustificationOpportunities(string, length, g, log_clusters, spaceAs);
 }
 
-#endif // QT_ENABLE_HARFBUZZ_NG
+#endif // harfbuzz
 
 
 // shape all the items that intersect with the line, taking tab widths into account to find out what text actually fits in the line.
@@ -922,7 +934,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
     if (item == -1)
         return;
 
-    const int end = findItem(line.from + line.length - 1, item);
+    const int end = findItem(line.from + line.length + line.trailingSpaces - 1, item);
     for ( ; item <= end; ++item) {
         QScriptItem &si = layoutData->items[item];
         if (si.analysis.flags == QScriptAnalysis::Tab) {
@@ -944,7 +956,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
     }
 }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 extern bool qt_useHarfbuzzNG(); // defined in qfontengine.cpp
 #endif
 
@@ -1057,7 +1069,7 @@ void QTextEngine::shapeText(int item) const
             letterSpacing *= font.d->dpi / qt_defaultDpiY();
     }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     if (Q_LIKELY(qt_useHarfbuzzNG()))
         si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled, letterSpacing != 0);
     else
@@ -1073,7 +1085,7 @@ void QTextEngine::shapeText(int item) const
 
     QGlyphLayout glyphs = shapedGlyphs(&si);
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     if (Q_LIKELY(qt_useHarfbuzzNG()))
         qt_getJustificationOpportunities(string, itemLength, si, glyphs, logClusters(&si));
 #endif
@@ -1113,7 +1125,7 @@ void QTextEngine::shapeText(int item) const
         si.width += glyphs.advances[i] * !glyphs.attributes[i].dontPrint;
 }
 
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
 
 QT_BEGIN_INCLUDE_NAMESPACE
 
@@ -1157,6 +1169,20 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
         // prepare buffer
         hb_buffer_clear_contents(buffer);
         hb_buffer_add_utf16(buffer, reinterpret_cast<const uint16_t *>(string) + item_pos, item_length, 0, item_length);
+
+#if defined(Q_OS_DARWIN)
+        // ### temporary workaround for QTBUG-38113
+        // CoreText throws away the PDF token, while the OpenType backend will replace it with
+        // a zero-advance glyph. This becomes a real issue when PDF is the last character,
+        // since it gets treated like if it were a grapheme extender, so we
+        // temporarily replace it with some visible grapheme starter.
+        bool endsWithPDF = actualFontEngine->type() == QFontEngine::Mac && string[item_pos + item_length - 1] == 0x202c;
+        if (Q_UNLIKELY(endsWithPDF)) {
+            uint num_glyphs;
+            hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, &num_glyphs);
+            infos[num_glyphs - 1].codepoint = '.';
+        }
+#endif
 
         hb_buffer_set_segment_properties(buffer, &props);
         hb_buffer_guess_segment_properties(buffer);
@@ -1279,6 +1305,20 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
         while (str_pos < item_length)
             log_clusters[str_pos++] = last_glyph_pos;
 
+#if defined(Q_OS_DARWIN)
+        if (Q_UNLIKELY(endsWithPDF)) {
+            int last_glyph_idx = num_glyphs - 1;
+            g.glyphs[last_glyph_idx] = 0xffff;
+            g.advances[last_glyph_idx] = QFixed();
+            g.offsets[last_glyph_idx].x = QFixed();
+            g.offsets[last_glyph_idx].y = QFixed();
+            g.attributes[last_glyph_idx].clusterStart = true;
+            g.attributes[last_glyph_idx].dontPrint = true;
+
+            log_clusters[item_length - 1] = glyphs_shaped + last_glyph_idx;
+        }
+#endif
+
         if (Q_UNLIKELY(engineIdx != 0)) {
             for (quint32 i = 0; i < num_glyphs; ++i)
                 g.glyphs[i] |= (engineIdx << 24);
@@ -1286,9 +1326,7 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
 
 #ifdef Q_OS_DARWIN
         if (actualFontEngine->type() == QFontEngine::Mac) {
-            // CTRunGetPosition has a bug which applies matrix on 10.6, so we disable
-            // scaling the advances for this particular version
-            if (QSysInfo::MacintoshVersion != QSysInfo::MV_10_6 && actualFontEngine->fontDef.stretch != 100) {
+            if (actualFontEngine->fontDef.stretch != 100) {
                 QFixed stretch = QFixed(int(actualFontEngine->fontDef.stretch)) / QFixed(100);
                 for (uint i = 0; i < num_glyphs; ++i)
                     g.advances[i] *= stretch;
@@ -1309,7 +1347,7 @@ int QTextEngine::shapeTextWithHarfbuzzNG(const QScriptItem &si,
     return glyphs_shaped;
 }
 
-#endif // QT_ENABLE_HARFBUZZ_NG
+#endif // harfbuzz
 
 
 QT_BEGIN_INCLUDE_NAMESPACE
@@ -1563,8 +1601,13 @@ void QTextEngine::validate() const
     layoutData = new LayoutData();
     if (block.docHandle()) {
         layoutData->string = block.text();
-        if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
-            layoutData->string += QLatin1Char(block.next().isValid() ? 0xb6 : 0x20);
+        const bool nextBlockValid = block.next().isValid();
+        if (!nextBlockValid && option.flags() & QTextOption::ShowDocumentTerminator) {
+            layoutData->string += QChar(0xA7);
+        } else if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+            layoutData->string += QLatin1Char(nextBlockValid ? 0xb6 : 0x20);
+        }
+
     } else {
         layoutData->string = text;
     }
@@ -1655,12 +1698,12 @@ void QTextEngine::itemize() const
                 analysis->bidiLevel = control.baseLevel();
                 break;
             }
-        // fall through
+            Q_FALLTHROUGH();
         default:
             analysis->flags = QScriptAnalysis::None;
             break;
         }
-#ifndef QT_ENABLE_HARFBUZZ_NG
+#if !QT_CONFIG(harfbuzz)
         analysis->script = hbscript_to_script(script_to_hbscript(analysis->script));
 #endif
         ++uc;
@@ -1669,7 +1712,7 @@ void QTextEngine::itemize() const
     if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
         (analysis-1)->flags = QScriptAnalysis::LineOrParagraphSeparator; // to exclude it from width
     }
-#ifdef QT_ENABLE_HARFBUZZ_NG
+#if QT_CONFIG(harfbuzz)
     analysis = scriptAnalysis.data();
     if (qt_useHarfbuzzNG()) {
         // ### pretend HB-old behavior for now
@@ -2058,6 +2101,9 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     font = font.resolve(fnt);
                 }
                 engine = font.d->engineForScript(script);
+                if (engine)
+                    engine->ref.ref();
+
                 QTextCharFormat::VerticalAlignment valign = f.verticalAlignment();
                 if (valign == QTextCharFormat::AlignSuperScript || valign == QTextCharFormat::AlignSubScript) {
                     if (font.pointSize() != -1)
@@ -2065,16 +2111,14 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     else
                         font.setPixelSize((font.pixelSize() * 2) / 3);
                     scaledEngine = font.d->engineForScript(script);
+                    if (scaledEngine)
+                        scaledEngine->ref.ref();
                 }
 
-                if (engine)
-                    engine->ref.ref();
                 if (feCache.prevFontEngine)
                     releaseCachedFontEngine(feCache.prevFontEngine);
                 feCache.prevFontEngine = engine;
 
-                if (scaledEngine)
-                    scaledEngine->ref.ref();
                 if (feCache.prevScaledFontEngine)
                     releaseCachedFontEngine(feCache.prevScaledFontEngine);
                 feCache.prevScaledFontEngine = scaledEngine;
@@ -2242,7 +2286,6 @@ void QTextEngine::justify(const QScriptLine &line)
             case Justification_Prohibited:
                 break;
             case Justification_Space:
-                // fall through
             case Justification_Arabic_Space:
                 if (kashida_pos >= 0) {
 //                     qDebug("kashida position at %d in word", kashida_pos);
@@ -2255,7 +2298,7 @@ void QTextEngine::justify(const QScriptLine &line)
                 }
                 kashida_pos = -1;
                 kashida_type = Justification_Arabic_Normal;
-                // fall through
+                Q_FALLTHROUGH();
             case Justification_Character:
                 set(&justificationPoints[nPoints++], justification, g.mid(i), fontEngine(si));
                 maxJustify = qMax(maxJustify, justification);
@@ -2703,7 +2746,7 @@ static QString stringMidRetainingBidiCC(const QString &string,
             suffix += c;
     }
 
-    return prefix + ellidePrefix + string.mid(midStart, midLength) + ellideSuffix + suffix;
+    return prefix + ellidePrefix + string.midRef(midStart, midLength) + ellideSuffix + suffix;
 }
 
 QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int flags, int from, int count) const
@@ -2866,7 +2909,7 @@ QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int
         if (prevCharJoins(layoutData->string, rightPos))
             ellipsisText.append(QChar(0x200d) /* ZWJ */);
 
-        return layoutData->string.mid(from, leftPos - from) + ellipsisText + layoutData->string.mid(rightPos, to - rightPos);
+        return layoutData->string.midRef(from, leftPos - from) + ellipsisText + layoutData->string.midRef(rightPos, to - rightPos);
     }
 
     return layoutData->string.mid(from, to - from);
@@ -2958,9 +3001,8 @@ QFixed QTextEngine::calculateTabWidth(int item, QFixed x) const
                     switch (tabSpec.type) {
                     case QTextOption::CenterTab:
                         length /= 2;
-                        // fall through
+                        Q_FALLTHROUGH();
                     case QTextOption::DelimiterTab:
-                        // fall through
                     case QTextOption::RightTab:
                         tab = QFixed::fromReal(tabSpec.position) * dpiScale - length;
                         if (tab < x) // default to tab taking no space
@@ -3055,7 +3097,7 @@ void QTextEngine::resolveFormats() const
             format = collection->charFormat(formatIndex(si));
         }
         if (!currentFormats.isEmpty()) {
-            foreach (int cur, currentFormats) {
+            for (int cur : currentFormats) {
                 const QTextLayout::FormatRange &range = specialData->formats.at(cur);
                 Q_ASSERT(range.start <= si->position && range.start + range.length >= end);
                 format.merge(range.format);
@@ -3270,7 +3312,7 @@ int QTextEngine::endOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.last();
+        return insertionPoints.constLast();
     return 0;
 }
 
@@ -3280,7 +3322,7 @@ int QTextEngine::beginningOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.first();
+        return insertionPoints.constFirst();
     return 0;
 }
 
@@ -3356,7 +3398,7 @@ void QTextEngine::drawItemDecorationList(QPainter *painter, const ItemDecoration
     if (decorationList.isEmpty())
         return;
 
-    foreach (const ItemDecoration &decoration, decorationList) {
+    for (const ItemDecoration &decoration : decorationList) {
         painter->setPen(decoration.pen);
         painter->drawLine(QLineF(decoration.x1, decoration.y, decoration.x2, decoration.y));
     }
@@ -3508,7 +3550,7 @@ QTextItemInt QTextItemInt::midItem(QFontEngine *fontEngine, int firstGlyphIndex,
 }
 
 
-QTransform qt_true_matrix(qreal w, qreal h, QTransform x)
+QTransform qt_true_matrix(qreal w, qreal h, const QTransform &x)
 {
     QRectF rect = x.mapRect(QRectF(0, 0, w, h));
     return x * QTransform::fromTranslate(-rect.x(), -rect.y());

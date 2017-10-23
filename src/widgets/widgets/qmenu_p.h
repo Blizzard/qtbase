@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,7 +51,10 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
+#if QT_CONFIG(menubar)
 #include "QtWidgets/qmenubar.h"
+#endif
 #include "QtWidgets/qstyleoption.h"
 #include "QtCore/qdatetime.h"
 #include "QtCore/qmap.h"
@@ -55,21 +64,12 @@
 
 #include <qpa/qplatformmenu.h>
 
-QT_BEGIN_NAMESPACE
+QT_REQUIRE_CONFIG(menu);
 
-#ifndef QT_NO_MENU
+QT_BEGIN_NAMESPACE
 
 class QTornOffMenu;
 class QEventLoop;
-
-#ifdef Q_OS_WINCE
-struct QWceMenuAction {
-    uint command;
-    QPointer<QAction> action;
-    HMENU menuHandle;
-    QWceMenuAction() : menuHandle(0), command(0) {}
-};
-#endif
 
 template <typename T>
 class QSetValueOnDestroy
@@ -97,6 +97,7 @@ public:
         , m_select_other_actions(false)
         , m_first_mouse(true)
         , m_init_guard(false)
+        , m_use_reset_action(true)
         , m_uni_dir_discarded_count(0)
         , m_uni_dir_fail_at_count(0)
         , m_timeout(0)
@@ -111,9 +112,9 @@ public:
     {
         m_menu = menu;
         m_uni_directional = menu->style()->styleHint(QStyle::SH_Menu_SubMenuUniDirection, 0, menu);
-        m_uni_dir_fail_at_count = menu->style()->styleHint(QStyle::SH_Menu_SubMenuUniDirectionFailCount, 0, menu);
+        m_uni_dir_fail_at_count = short(menu->style()->styleHint(QStyle::SH_Menu_SubMenuUniDirectionFailCount, 0, menu));
         m_select_other_actions = menu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppySelectOtherActions, 0 , menu);
-        m_timeout = menu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppyCloseTimeout);
+        m_timeout = short(menu->style()->styleHint(QStyle::SH_Menu_SubMenuSloppyCloseTimeout));
         m_discard_state_when_entering_parent = menu->style()->styleHint(QStyle::SH_Menu_SubMenuResetWhenReenteringParent);
         m_dont_start_time_on_leave = menu->style()->styleHint(QStyle::SH_Menu_SubMenuDontStartSloppyOnLeave);
         reset();
@@ -121,8 +122,6 @@ public:
 
     void reset();
     bool enabled() const { return m_enabled; }
-
-    void setResetAction(QAction *action) { m_reset_action = action; }
 
     enum MouseEventResult {
         EventIsProcessed,
@@ -148,30 +147,17 @@ public:
     }
 
     void enter();
+    void childEnter();
 
-    void childEnter()
-    {
-        stopTimer();
-        if (m_parent)
-            m_parent->childEnter();
-    }
-
-    void leave()
-    {
-        if (m_dont_start_time_on_leave)
-            return;
-        if (m_parent)
-            m_parent->childLeave();
-        startTimer();
-    }
+    void leave();
     void childLeave();
 
-    static float slope(const QPointF &p1, const QPointF &p2)
+    static qreal slope(const QPointF &p1, const QPointF &p2)
     {
         const QPointF slope = p2 - p1;
-        if (slope.x()== 0)
+        if (qFuzzyIsNull(slope.x()))
             return 9999;
-        return slope.y()/slope.x();
+        return slope.y() / slope.x();
     }
 
     bool checkSlope(qreal oldS, qreal newS, bool wantSteeper)
@@ -189,8 +175,7 @@ public:
         if (!m_enabled)
             return EventShouldBePropagated;
 
-        if (!m_time.isActive())
-            startTimer();
+        startTimerIfNotRunning();
 
         if (!m_sub_menu) {
             reset();
@@ -200,9 +185,17 @@ public:
         QSetValueOnDestroy<bool> setFirstMouse(m_first_mouse, false);
         QSetValueOnDestroy<QPointF> setPreviousPoint(m_previous_point, mousePos);
 
-        if (resetAction && resetAction->isSeparator())
+        if (resetAction && resetAction->isSeparator()) {
             m_reset_action = Q_NULLPTR;
-        else {
+            m_use_reset_action = true;
+        } else if (m_reset_action != resetAction) {
+            if (m_use_reset_action && resetAction) {
+                const QList<QAction *> actions = m_menu->actions();
+                const int resetIdx  = actions.indexOf(resetAction);
+                const int originIdx = actions.indexOf(m_origin_action);
+                if (resetIdx > -1 && originIdx > -1 && qAbs(resetIdx - originIdx) > 1)
+                    m_use_reset_action = false;
+            }
             m_reset_action = resetAction;
         }
 
@@ -227,7 +220,7 @@ public:
             bool slopeTop = checkSlope(prev_slope_top, current_slope_top, sub_menu_top.y() < mousePos.y());
             bool slopeBottom = checkSlope(prev_slope_bottom, current_slope_bottom, sub_menu_bottom.y() > mousePos.y());
             bool rightDirection = false;
-            int mouseDir = m_previous_point.y() - mousePos.y();
+            int mouseDir = int(m_previous_point.y() - mousePos.y());
             if (mouseDir >= 0) {
                 rightDirection = rightDirection || slopeTop;
             }
@@ -267,6 +260,7 @@ private:
     bool m_init_guard;
     bool m_discard_state_when_entering_parent;
     bool m_dont_start_time_on_leave;
+    bool m_use_reset_action;
     short m_uni_dir_discarded_count;
     short m_uni_dir_fail_at_count;
     short m_timeout;
@@ -294,22 +288,18 @@ public:
                       cancelAction(0),
 #endif
                       scroll(0), eventLoop(0), tearoff(0), tornoff(0), tearoffHighlighted(0),
-                      hasCheckableItems(0), doChildEffects(false), platformMenu(0)
-
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-                      ,wce_menu(0)
-#endif
+                      hasCheckableItems(0), doChildEffects(false), platformMenu(0),
+                      scrollUpTearOffItem(nullptr), scrollDownItem(nullptr)
     { }
+
     ~QMenuPrivate()
     {
         delete scroll;
         if (!platformMenu.isNull() && !platformMenu->parent())
             delete platformMenu.data();
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-        delete wce_menu;
-#endif
     }
     void init();
+    QPlatformMenu *createPlatformMenu();
     void setPlatformMenu(QPlatformMenu *menu);
     void syncPlatformMenu();
 #ifdef Q_OS_OSX
@@ -328,12 +318,11 @@ public:
     mutable QHash<QAction *, QWidget *> widgetItems;
     void updateActionRects() const;
     void updateActionRects(const QRect &screen) const;
-    QRect popupGeometry(const QWidget *widget) const;
-    QRect popupGeometry(int screen = -1) const;
+    QRect popupGeometry() const;
+    QRect popupGeometry(int screen) const;
     mutable uint ncols : 4; //4 bits is probably plenty
     uint collapsibleSeparators : 1;
     uint toolTipsVisible : 1;
-    QSize adjustMenuSizeForScreen(const QRect & screen);
     int getLastVisibleAction() const;
 
     bool activationRecursionGuard;
@@ -458,6 +447,7 @@ public:
 
     bool hasMouseMoved(const QPoint &globalPos);
 
+    void adjustMenuScreen(const QPoint &p);
     void updateLayoutDirection();
 
     //menu fading/scrolling effects
@@ -467,36 +457,27 @@ public:
 
     QPointer<QAction> actionAboutToTrigger;
 
-#if defined(Q_OS_WINCE) && !defined(QT_NO_MENUBAR)
-    struct QWceMenuPrivate {
-        QList<QWceMenuAction*> actionItems;
-        HMENU menuHandle;
-        QWceMenuPrivate();
-        ~QWceMenuPrivate();
-        void addAction(QAction *, QWceMenuAction* =0);
-        void addAction(QWceMenuAction *, QWceMenuAction* =0);
-        void syncAction(QWceMenuAction *);
-        inline void syncAction(QAction *a) { syncAction(findAction(a)); }
-        void removeAction(QWceMenuAction *);
-        void rebuild();
-        inline void removeAction(QAction *a) { removeAction(findAction(a)); }
-        inline QWceMenuAction *findAction(QAction *a) {
-            for(int i = 0; i < actionItems.size(); i++) {
-                QWceMenuAction *act = actionItems[i];
-                if(a == act->action)
-                    return act;
-            }
-            return 0;
-        }
-    } *wce_menu;
-    HMENU wceMenu();
-    QAction* wceCommands(uint command);
-#endif
     QPointer<QWidget> noReplayFor;
-    static QPointer<QMenu> previousMouseMenu;
-};
 
-#endif // QT_NO_MENU
+    class ScrollerTearOffItem : public QWidget {
+    public:
+        enum Type { ScrollUp, ScrollDown };
+        ScrollerTearOffItem(Type type, QMenuPrivate *mPrivate,
+                            QWidget *parent = Q_NULLPTR, Qt::WindowFlags f = Qt::WindowFlags());
+        void paintEvent(QPaintEvent *e) Q_DECL_OVERRIDE;
+        void updateScrollerRects(const QRect &rect);
+
+    private:
+        QMenuPrivate *menuPrivate;
+        Type scrollType;
+    };
+    ScrollerTearOffItem *scrollUpTearOffItem;
+    ScrollerTearOffItem *scrollDownItem;
+
+    void drawScroller(QPainter *painter, ScrollerTearOffItem::Type type, const QRect &rect);
+    void drawTearOff(QPainter *painter, const QRect &rect);
+    QRect rect() const;
+};
 
 QT_END_NAMESPACE
 

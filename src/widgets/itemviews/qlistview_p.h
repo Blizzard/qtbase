@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,14 +51,14 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractitemview_p.h"
-#include "qrubberband.h"
 #include "qbitarray.h"
 #include "qbsptree_p.h"
 #include <limits.h>
 #include <qscrollbar.h>
 
-#ifndef QT_NO_LISTVIEW
+QT_REQUIRE_CONFIG(listview);
 
 QT_BEGIN_NAMESPACE
 
@@ -62,31 +68,28 @@ class QListViewItem
     friend class QListModeViewBase;
     friend class QIconModeViewBase;
 public:
-    inline QListViewItem()
+    Q_DECL_CONSTEXPR QListViewItem()
         : x(-1), y(-1), w(0), h(0), indexHint(-1), visited(0xffff) {}
-    inline QListViewItem(const QListViewItem &other)
-        : x(other.x), y(other.y), w(other.w), h(other.h),
-          indexHint(other.indexHint), visited(other.visited) {}
-    inline QListViewItem(QRect r, int i)
+    Q_DECL_CONSTEXPR QListViewItem(QRect r, int i)
         : x(r.x()), y(r.y()), w(qMin(r.width(), SHRT_MAX)), h(qMin(r.height(), SHRT_MAX)),
           indexHint(i), visited(0xffff) {}
-    inline bool operator==(const QListViewItem &other) const {
+    Q_DECL_CONSTEXPR bool operator==(const QListViewItem &other) const {
         return (x == other.x && y == other.y && w == other.w && h == other.h &&
                 indexHint == other.indexHint); }
-    inline bool operator!=(const QListViewItem &other) const
+    Q_DECL_CONSTEXPR bool operator!=(const QListViewItem &other) const
         { return !(*this == other); }
-    inline bool isValid() const
+    Q_DECL_CONSTEXPR bool isValid() const
         { return rect().isValid() && (indexHint > -1); }
-    inline void invalidate()
+    Q_DECL_RELAXED_CONSTEXPR void invalidate()
         { x = -1; y = -1; w = 0; h = 0; }
-    inline void resize(const QSize &size)
+    Q_DECL_RELAXED_CONSTEXPR void resize(QSize size)
         { w = qMin(size.width(), SHRT_MAX); h = qMin(size.height(), SHRT_MAX); }
-    inline void move(const QPoint &position)
+    Q_DECL_RELAXED_CONSTEXPR void move(QPoint position)
         { x = position.x(); y = position.y(); }
-    inline int width() const { return w; }
-    inline int height() const { return h; }
+    Q_DECL_CONSTEXPR int width() const { return w; }
+    Q_DECL_CONSTEXPR int height() const { return h; }
 private:
-    inline QRect rect() const
+    Q_DECL_CONSTEXPR QRect rect() const
         { return QRect(x, y, w, h); }
     int x, y;
     short w, h;
@@ -205,24 +208,25 @@ public:
     int batchSavedPosition;
 
     //reimplementations
-    int itemIndex(const QListViewItem &item) const { return item.indexHint; }
-    QListViewItem indexToListViewItem(const QModelIndex &index) const;
-    bool doBatchedItemLayout(const QListViewLayoutInfo &info, int max);
-    void clear();
-    void setRowCount(int rowCount) { flowPositions.resize(rowCount); }
-    QVector<QModelIndex> intersectingSet(const QRect &area) const;
-    void dataChanged(const QModelIndex &, const QModelIndex &);
+    int itemIndex(const QListViewItem &item) const override { return item.indexHint; }
+    QListViewItem indexToListViewItem(const QModelIndex &index) const override;
+    bool doBatchedItemLayout(const QListViewLayoutInfo &info, int max) override;
+    void clear() override;
+    void setRowCount(int rowCount) override { flowPositions.resize(rowCount); }
+    QVector<QModelIndex> intersectingSet(const QRect &area) const override;
+    void dataChanged(const QModelIndex &, const QModelIndex &) override;
 
     int horizontalScrollToValue(int index, QListView::ScrollHint hint,
-        bool leftOf, bool rightOf,const QRect &area, const QRect &rect) const;
+        bool leftOf, bool rightOf,const QRect &area, const QRect &rect) const override;
     int verticalScrollToValue(int index, QListView::ScrollHint hint,
-        bool above, bool below, const QRect &area, const QRect &rect) const;
-    void scrollContentsBy(int dx, int dy, bool scrollElasticBand);
-    QRect mapToViewport(const QRect &rect) const;
-    int horizontalOffset() const;
-    int verticalOffset() const;
-    void updateHorizontalScrollBar(const QSize &step);
-    void updateVerticalScrollBar(const QSize &step);
+        bool above, bool below, const QRect &area, const QRect &rect) const override;
+    void scrollContentsBy(int dx, int dy, bool scrollElasticBand) override;
+    QRect mapToViewport(const QRect &rect) const override;
+    int horizontalOffset() const override;
+    int verticalOffset() const override;
+    inline static QSize viewportSize(const QAbstractItemView *v);
+    void updateHorizontalScrollBar(const QSize &step) override;
+    void updateVerticalScrollBar(const QSize &step) override;
 
 #ifndef QT_NO_DRAGANDDROP
     // The next two methods are to be used on LefToRight flow only.
@@ -257,24 +261,24 @@ public:
     QVector<QModelIndex> *interSectingVector; //used from within intersectingSet
 
     //reimplementations
-    int itemIndex(const QListViewItem &item) const;
-    QListViewItem indexToListViewItem(const QModelIndex &index) const;
-    bool doBatchedItemLayout(const QListViewLayoutInfo &info, int max);
-    void clear();
-    void setRowCount(int rowCount);
-    QVector<QModelIndex> intersectingSet(const QRect &area) const;
+    int itemIndex(const QListViewItem &item) const override;
+    QListViewItem indexToListViewItem(const QModelIndex &index) const override;
+    bool doBatchedItemLayout(const QListViewLayoutInfo &info, int max) override;
+    void clear() override;
+    void setRowCount(int rowCount) override;
+    QVector<QModelIndex> intersectingSet(const QRect &area) const override;
 
-    void scrollContentsBy(int dx, int dy, bool scrollElasticBand);
-    void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
-    void appendHiddenRow(int row);
-    void removeHiddenRow(int row);
-    void setPositionForIndex(const QPoint &position, const QModelIndex &index);
+    void scrollContentsBy(int dx, int dy, bool scrollElasticBand) override;
+    void dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight) override;
+    void appendHiddenRow(int row) override;
+    void removeHiddenRow(int row) override;
+    void setPositionForIndex(const QPoint &position, const QModelIndex &index) override;
 
 #ifndef QT_NO_DRAGANDDROP
-    bool filterDragMoveEvent(QDragMoveEvent *);
-    bool filterDragLeaveEvent(QDragLeaveEvent *);
-    bool filterDropEvent(QDropEvent *e);
-    bool filterStartDrag(Qt::DropActions);
+    bool filterDragMoveEvent(QDragMoveEvent *) override;
+    bool filterDragLeaveEvent(QDragLeaveEvent *) override;
+    bool filterDropEvent(QDropEvent *e) override;
+    bool filterStartDrag(Qt::DropActions) override;
 #endif
 
 private:
@@ -345,18 +349,18 @@ public:
     QModelIndex closestIndex(const QRect &target, const QVector<QModelIndex> &candidates) const;
     QSize itemSize(const QStyleOptionViewItem &option, const QModelIndex &index) const;
 
-    bool selectionAllowed(const QModelIndex &index) const
+    bool selectionAllowed(const QModelIndex &index) const override
         { if (viewMode == QListView::ListMode && !showElasticBand) return index.isValid(); return true; }
 
     int horizontalScrollToValue(const QModelIndex &index, const QRect &rect, QListView::ScrollHint hint) const;
     int verticalScrollToValue(const QModelIndex &index, const QRect &rect, QListView::ScrollHint hint) const;
 
     QItemSelection selection(const QRect &rect) const;
-    void selectAll(QItemSelectionModel::SelectionFlags command);
+    void selectAll(QItemSelectionModel::SelectionFlags command) override;
 
 #ifndef QT_NO_DRAGANDDROP
-    virtual QAbstractItemView::DropIndicatorPosition position(const QPoint &pos, const QRect &rect, const QModelIndex &idx) const;
-    bool dropOn(QDropEvent *event, int *row, int *col, QModelIndex *index);
+    QAbstractItemView::DropIndicatorPosition position(const QPoint &pos, const QRect &rect, const QModelIndex &idx) const override;
+    bool dropOn(QDropEvent *event, int *row, int *col, QModelIndex *index) override;
 #endif
 
     inline void setGridSize(const QSize &size) { grid = size; }
@@ -375,19 +379,11 @@ public:
     }
     inline bool isHiddenOrDisabled(int row) const { return isHidden(row) || !isIndexEnabled(modelIndex(row)); }
 
-    inline void removeCurrentAndDisabled(QVector<QModelIndex> *indexes, const QModelIndex &current) const {
-        QVector<QModelIndex>::iterator it = indexes->begin();
-        while (it != indexes->end()) {
-            if (!isIndexEnabled(*it) || (*it) == current)
-                indexes->erase(it);
-            else
-                ++it;
-        }
-    }
+    void removeCurrentAndDisabled(QVector<QModelIndex> *indexes, const QModelIndex &current) const;
 
     void scrollElasticBandBy(int dx, int dy);
 
-    QItemViewPaintPairs draggablePaintPairs(const QModelIndexList &indexes, QRect *r) const;
+    QItemViewPaintPairs draggablePaintPairs(const QModelIndexList &indexes, QRect *r) const override;
 
     void emitIndexesMoved(const QModelIndexList &indexes) { emit q_func()->indexesMoved(indexes); }
 
@@ -477,7 +473,5 @@ inline int QCommonListViewBase::hiddenCount() const { return dd->hiddenRows.coun
 inline bool QCommonListViewBase::isRightToLeft() const { return qq->isRightToLeft(); }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_LISTVIEW
 
 #endif // QLISTVIEW_P_H

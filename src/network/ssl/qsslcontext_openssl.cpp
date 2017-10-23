@@ -1,33 +1,39 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
 ** Copyright (C) 2014 Governikus GmbH & Co. KG.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,6 +41,7 @@
 
 
 #include <QtNetwork/qsslsocket.h>
+#include <QtNetwork/qssldiffiehellmanparameters.h>
 #include <QtCore/qmutex.h>
 
 #include "private/qssl_p.h"
@@ -42,28 +49,13 @@
 #include "private/qsslsocket_p.h"
 #include "private/qsslsocket_openssl_p.h"
 #include "private/qsslsocket_openssl_symbols_p.h"
+#include "private/qssldiffiehellmanparameters_p.h"
 
 QT_BEGIN_NAMESPACE
 
 // defined in qsslsocket_openssl.cpp:
 extern int q_X509Callback(int ok, X509_STORE_CTX *ctx);
 extern QString getErrorsFromOpenSsl();
-
-static DH *get_dh1024()
-{
-    // Default DH params
-    // 1024-bit MODP Group
-    // From RFC 2409
-    QByteArray params = QByteArray::fromBase64(
-       QByteArrayLiteral("MIGHAoGBAP//////////yQ/aoiFowjTExmKLgNwc0SkCTgiKZ8x0Agu+pjsTmyJR" \
-                         "Sgh5jjQE3e+VGbPNOkMbMCsKbfJfFDdP4TVtbVHCReSFtXZiXn7G9ExC6aY37WsL" \
-                         "/1y29Aa37e44a/taiZ+lrp8kEXxLH+ZJKGZR7OZTgf//////////AgEC"));
-
-    const char *ptr = params.constData();
-    DH *dh = q_d2i_DHparams(NULL, reinterpret_cast<const unsigned char **>(&ptr), params.length());
-
-    return dh;
-}
 
 QSslContext::QSslContext()
     : ctx(0),
@@ -91,9 +83,9 @@ static inline QString msgErrorSettingEllipticCurves(const QString &why)
     return QSslSocket::tr("Error when setting the elliptic curves (%1)").arg(why);
 }
 
-QSslContext* QSslContext::fromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
+// static
+void QSslContext::initSslContext(QSslContext *sslContext, QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
 {
-    QSslContext *sslContext = new QSslContext();
     sslContext->sslConfiguration = configuration;
     sslContext->errorCode = QSslError::NoError;
 
@@ -181,7 +173,7 @@ init_context:
             unsupportedProtocol ? QSslSocket::tr("unsupported protocol") : QSslSocketBackendPrivate::getErrorsFromOpenSsl()
         );
         sslContext->errorCode = QSslError::UnspecifiedError;
-        return sslContext;
+        return;
     }
 
     // Enable bug workarounds.
@@ -201,7 +193,7 @@ init_context:
     QList<QSslCipher> ciphers = sslContext->sslConfiguration.ciphers();
     if (ciphers.isEmpty())
         ciphers = QSslSocketPrivate::defaultCiphers();
-    foreach (const QSslCipher &cipher, ciphers) {
+    for (const QSslCipher &cipher : qAsConst(ciphers)) {
         if (first)
             first = false;
         else
@@ -212,13 +204,14 @@ init_context:
     if (!q_SSL_CTX_set_cipher_list(sslContext->ctx, cipherString.data())) {
         sslContext->errorStr = QSslSocket::tr("Invalid or empty cipher list (%1)").arg(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
         sslContext->errorCode = QSslError::UnspecifiedError;
-        return sslContext;
+        return;
     }
 
     const QDateTime now = QDateTime::currentDateTimeUtc();
 
     // Add all our CAs to this store.
-    foreach (const QSslCertificate &caCertificate, sslContext->sslConfiguration.caCertificates()) {
+    const auto caCertificates = sslContext->sslConfiguration.caCertificates();
+    for (const QSslCertificate &caCertificate : caCertificates) {
         // From https://www.openssl.org/docs/ssl/SSL_CTX_load_verify_locations.html:
         //
         // If several CA certificates matching the name, key identifier, and
@@ -237,9 +230,9 @@ init_context:
 
     if (QSslSocketPrivate::s_loadRootCertsOnDemand && allowRootCertOnDemandLoading) {
         // tell OpenSSL the directories where to look up the root certs on demand
-        QList<QByteArray> unixDirs = QSslSocketPrivate::unixRootCertDirectories();
-        for (int a = 0; a < unixDirs.count(); ++a)
-            q_SSL_CTX_load_verify_locations(sslContext->ctx, 0, unixDirs.at(a).constData());
+        const QList<QByteArray> unixDirs = QSslSocketPrivate::unixRootCertDirectories();
+        for (const QByteArray &unixDir : unixDirs)
+            q_SSL_CTX_load_verify_locations(sslContext->ctx, 0, unixDir.constData());
     }
 
     if (!sslContext->sslConfiguration.localCertificate().isNull()) {
@@ -247,14 +240,14 @@ init_context:
         if (sslContext->sslConfiguration.privateKey().isNull()) {
             sslContext->errorStr = QSslSocket::tr("Cannot provide a certificate with no key, %1").arg(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
             sslContext->errorCode = QSslError::UnspecifiedError;
-            return sslContext;
+            return;
         }
 
         // Load certificate
         if (!q_SSL_CTX_use_certificate(sslContext->ctx, (X509 *)sslContext->sslConfiguration.localCertificate().handle())) {
             sslContext->errorStr = QSslSocket::tr("Error loading local certificate, %1").arg(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
             sslContext->errorCode = QSslError::UnspecifiedError;
-            return sslContext;
+            return;
         }
 
         if (configuration.d->privateKey.algorithm() == QSsl::Opaque) {
@@ -278,7 +271,7 @@ init_context:
         if (!q_SSL_CTX_use_PrivateKey(sslContext->ctx, sslContext->pkey)) {
             sslContext->errorStr = QSslSocket::tr("Error loading private key, %1").arg(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
             sslContext->errorCode = QSslError::UnspecifiedError;
-            return sslContext;
+            return;
         }
         if (configuration.d->privateKey.algorithm() == QSsl::Opaque)
             sslContext->pkey = 0; // Don't free the private key, it belongs to QSslKey
@@ -287,12 +280,12 @@ init_context:
         if (!q_SSL_CTX_check_private_key(sslContext->ctx)) {
             sslContext->errorStr = QSslSocket::tr("Private key does not certify public key, %1").arg(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
             sslContext->errorCode = QSslError::UnspecifiedError;
-            return sslContext;
+            return;
         }
 
         // If we have any intermediate certificates then we need to add them to our chain
         bool first = true;
-        foreach (const QSslCertificate &cert, configuration.d->localCertificateChain) {
+        for (const QSslCertificate &cert : qAsConst(configuration.d->localCertificateChain)) {
             if (first) {
                 first = false;
                 continue;
@@ -318,10 +311,23 @@ init_context:
         sslContext->setSessionASN1(configuration.sessionTicket());
 
     // Set temp DH params
-    DH *dh = 0;
-    dh = get_dh1024();
-    q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);
-    q_DH_free(dh);
+    QSslDiffieHellmanParameters dhparams = configuration.diffieHellmanParameters();
+
+    if (!dhparams.isValid()) {
+        sslContext->errorStr = QSslSocket::tr("Diffie-Hellman parameters are not valid");
+        sslContext->errorCode = QSslError::UnspecifiedError;
+        return;
+    }
+
+    if (!dhparams.isEmpty()) {
+        const QByteArray &params = dhparams.d->derData;
+        const char *ptr = params.constData();
+        DH *dh = q_d2i_DHparams(NULL, reinterpret_cast<const unsigned char **>(&ptr), params.length());
+        if (dh == NULL)
+            qFatal("q_d2i_DHparams failed to convert QSslDiffieHellmanParameters to DER form");
+        q_SSL_CTX_set_tmp_dh(sslContext->ctx, dh);
+        q_DH_free(dh);
+    }
 
 #ifndef OPENSSL_NO_EC
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
@@ -338,6 +344,11 @@ init_context:
     }
 #endif // OPENSSL_NO_EC
 
+#if OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
+    if (!client)
+        q_SSL_CTX_use_psk_identity_hint(sslContext->ctx, sslContext->sslConfiguration.preSharedKeyIdentityHint().constData());
+#endif // OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(OPENSSL_NO_PSK)
+
     const QVector<QSslEllipticCurve> qcurves = sslContext->sslConfiguration.ellipticCurves();
     if (!qcurves.isEmpty()) {
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(OPENSSL_NO_EC)
@@ -351,7 +362,6 @@ init_context:
                                 const_cast<int *>(reinterpret_cast<const int *>(qcurves.data())))) {
                 sslContext->errorStr = msgErrorSettingEllipticCurves(QSslSocketBackendPrivate::getErrorsFromOpenSsl());
                 sslContext->errorCode = QSslError::UnspecifiedError;
-                return sslContext;
             }
         } else
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(OPENSSL_NO_EC)
@@ -359,10 +369,21 @@ init_context:
             // specific curves requested, but not possible to set -> error
             sslContext->errorStr = msgErrorSettingEllipticCurves(QSslSocket::tr("OpenSSL version too old, need at least v1.0.2"));
             sslContext->errorCode = QSslError::UnspecifiedError;
-            return sslContext;
         }
     }
+}
 
+QSslContext* QSslContext::fromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
+{
+    QSslContext *sslContext = new QSslContext();
+    initSslContext(sslContext, mode, configuration, allowRootCertOnDemandLoading);
+    return sslContext;
+}
+
+QSharedPointer<QSslContext> QSslContext::sharedFromConfiguration(QSslSocket::SslMode mode, const QSslConfiguration &configuration, bool allowRootCertOnDemandLoading)
+{
+    QSharedPointer<QSslContext> sslContext = QSharedPointer<QSslContext>::create();
+    initSslContext(sslContext.data(), mode, configuration, allowRootCertOnDemandLoading);
     return sslContext;
 }
 
@@ -441,6 +462,23 @@ SSL* QSslContext::createSsl()
         m_npnContext.data = reinterpret_cast<unsigned char *>(m_supportedNPNVersions.data());
         m_npnContext.len = m_supportedNPNVersions.count();
         m_npnContext.status = QSslConfiguration::NextProtocolNegotiationNone;
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+        if (q_SSLeay() >= 0x10002000L) {
+            // Callback's type has a parameter 'const unsigned char ** out'
+            // since it was introduced in 1.0.2. Internally, OpenSSL's own code
+            // (tests/examples) cast it to unsigned char * (since it's 'out').
+            // We just re-use our NPN callback and cast here:
+            typedef int (*alpn_callback_t) (SSL *, const unsigned char **, unsigned char *,
+                                            const unsigned char *, unsigned int, void *);
+            // With ALPN callback is for a server side only, for a client m_npnContext.status
+            // will stay in NextProtocolNegotiationNone.
+            q_SSL_CTX_set_alpn_select_cb(ctx, alpn_callback_t(next_proto_cb), &m_npnContext);
+            // Client:
+            q_SSL_set_alpn_protos(ssl, m_npnContext.data, m_npnContext.len);
+        }
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L ...
+
+        // And in case our peer does not support ALPN, but supports NPN:
         q_SSL_CTX_set_next_proto_select_cb(ctx, next_proto_cb, &m_npnContext);
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x1000100fL ...

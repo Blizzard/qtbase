@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +51,7 @@
 // We mean it.
 //
 
+#include <QtWidgets/private/qtwidgetsglobal_p.h>
 #include "private/qabstractscrollarea_p.h"
 #include "private/qabstractitemmodel_p.h"
 #include "QtWidgets/qapplication.h"
@@ -57,7 +64,7 @@
 #include "QtCore/qbasictimer.h"
 #include "QtCore/qelapsedtimer.h"
 
-#ifndef QT_NO_ITEMVIEWS
+QT_REQUIRE_CONFIG(itemviews);
 
 QT_BEGIN_NAMESPACE
 
@@ -73,20 +80,14 @@ struct QEditorInfo {
 typedef QHash<QWidget *, QPersistentModelIndex> QEditorIndexHash;
 typedef QHash<QPersistentModelIndex, QEditorInfo> QIndexEditorHash;
 
-typedef QPair<QRect, QModelIndex> QItemViewPaintPair;
-typedef QVector<QItemViewPaintPair> QItemViewPaintPairs;
-
-class QEmptyModel : public QAbstractItemModel
-{
-public:
-    explicit QEmptyModel(QObject *parent = 0) : QAbstractItemModel(parent) {}
-    QModelIndex index(int, int, const QModelIndex &) const { return QModelIndex(); }
-    QModelIndex parent(const QModelIndex &) const { return QModelIndex(); }
-    int rowCount(const QModelIndex &) const { return 0; }
-    int columnCount(const QModelIndex &) const { return 0; }
-    bool hasChildren(const QModelIndex &) const { return false; }
-    QVariant data(const QModelIndex &, int) const { return QVariant(); }
+struct QItemViewPaintPair {
+    QRect rect;
+    QModelIndex index;
 };
+template <>
+class QTypeInfo<QItemViewPaintPair> : public QTypeInfoMerger<QItemViewPaintPair, QRect, QModelIndex> {};
+
+typedef QVector<QItemViewPaintPair> QItemViewPaintPairs;
 
 class Q_AUTOTEST_EXPORT QAbstractItemViewPrivate : public QAbstractScrollAreaPrivate
 {
@@ -165,21 +166,21 @@ public:
     virtual QAbstractItemView::DropIndicatorPosition position(const QPoint &pos, const QRect &rect, const QModelIndex &idx) const;
 
     inline bool canDrop(QDropEvent *event) {
-        QModelIndex index;
-        int col = -1;
-        int row = -1;
         const QMimeData *mime = event->mimeData();
 
         // Drag enter event shall always be accepted, if mime type and action match.
         // Whether the data can actually be dropped will be checked in drag move.
-        if (event->type() == QEvent::DragEnter) {
+        if (event->type() == QEvent::DragEnter && (event->dropAction() & model->supportedDropActions())) {
             const QStringList modelTypes = model->mimeTypes();
-            for (int i = 0; i < modelTypes.count(); ++i)
-                if (mime->hasFormat(modelTypes.at(i))
-                    && (event->dropAction() & model->supportedDropActions()))
+            for (const auto &modelType : modelTypes) {
+                if (mime->hasFormat(modelType))
                     return true;
+            }
         }
 
+        QModelIndex index;
+        int col = -1;
+        int row = -1;
         if (dropOn(event, &row, &col, &index)) {
             return model->canDropMimeData(mime,
                                           dragDropMode == QAbstractItemView::InternalMove ? Qt::MoveAction : event->dropAction(),
@@ -310,7 +311,7 @@ public:
     }
 
     // reimplemented from QAbstractScrollAreaPrivate
-    virtual QPoint contentsOffset() const {
+    QPoint contentsOffset() const override {
         Q_Q(const QAbstractItemView);
         return QPoint(q->horizontalOffset(), q->verticalOffset());
     }
@@ -447,6 +448,10 @@ public:
     mutable bool delayedPendingLayout;
     bool moveCursorUpdatedView;
 
+    // Whether scroll mode has been explicitly set or its value come from SH_ItemView_ScrollMode
+    bool verticalScrollModeSet;
+    bool horizontalScrollModeSet;
+
 private:
     mutable QBasicTimer delayedLayout;
     mutable QBasicTimer fetchMoreTimer;
@@ -471,7 +476,5 @@ inline int qBinarySearch(const QVector<T> &vec, const T &item, int start, int en
 }
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_ITEMVIEWS
 
 #endif // QABSTRACTITEMVIEW_P_H

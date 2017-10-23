@@ -1,6 +1,6 @@
 include(../common/common.pri)
-DEF_FILE_TARGET=$${TARGET}
-TARGET=$$qtLibraryTarget($${LIBEGL_NAME})
+DEF_FILE_TARGET = $${TARGET}
+TARGET = $$qtLibraryTarget($${LIBEGL_NAME})
 winrt: LIBS_PRIVATE += -ld3d11
 
 LIBS_PRIVATE += -ldxguid -L$$QT_BUILD_TREE/lib -l$$qtLibraryTarget($${LIBGLESV2_NAME})

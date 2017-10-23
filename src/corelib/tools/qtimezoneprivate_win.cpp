@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -293,7 +299,7 @@ static QByteArray windowsSystemZoneId()
         id = readRegistryString(key, L"TimeZoneKeyName");
         RegCloseKey(key);
         if (!id.isEmpty())
-            return id.toUtf8();
+            return std::move(id).toUtf8();
     }
 
     // On XP we have to iterate over the zones until we find a match on
@@ -301,7 +307,8 @@ static QByteArray windowsSystemZoneId()
     TIME_ZONE_INFORMATION sysTzi;
     GetTimeZoneInformation(&sysTzi);
     bool ok = false;
-    foreach (const QByteArray &winId, availableWindowsIds()) {
+    const auto winIds = availableWindowsIds();
+    for (const QByteArray &winId : winIds) {
         if (equalTzi(getRegistryTzi(winId, &ok), sysTzi))
             return winId;
     }
@@ -376,17 +383,11 @@ static void calculateTransitionsForYear(const QWinTimeZonePrivate::QWinTransitio
 
 static QLocale::Country userCountry()
 {
-#if defined(Q_OS_WINCE)
-    // Guess that the syslem locale country is the right one to use
-    // TODO Find if WinCE has equivalent api
-    return QLocale::system().country();
-#else
     const GEOID id = GetUserGeoID(GEOCLASS_NATION);
     wchar_t code[3];
     const int size = GetGeoInfo(id, GEO_ISO2, code, 3, 0);
-    return (size == 3) ? QLocalePrivate::codeToCountry(QString::fromWCharArray(code))
+    return (size == 3) ? QLocalePrivate::codeToCountry(reinterpret_cast<const QChar*>(code), size)
                        : QLocale::AnyCountry;
-#endif // Q_OS_WINCE
 }
 
 // Create the system default time zone
@@ -414,7 +415,7 @@ QWinTimeZonePrivate::~QWinTimeZonePrivate()
 {
 }
 
-QTimeZonePrivate *QWinTimeZonePrivate::clone()
+QWinTimeZonePrivate *QWinTimeZonePrivate::clone() const
 {
     return new QWinTimeZonePrivate(*this);
 }
@@ -441,7 +442,7 @@ void QWinTimeZonePrivate::init(const QByteArray &ianaId)
             m_standardName = readRegistryString(baseKey, L"Std");
             m_daylightName = readRegistryString(baseKey, L"Dlt");
             // On Vista and later the optional dynamic key holds historic data
-            const QString dynamicKeyPath = baseKeyPath + QStringLiteral("\\Dynamic DST");
+            const QString dynamicKeyPath = baseKeyPath + QLatin1String("\\Dynamic DST");
             HKEY dynamicKey = NULL;
             if (openRegistryKey(dynamicKeyPath, &dynamicKey)) {
                 // Find out the start and end years stored, then iterate over them
@@ -604,7 +605,7 @@ QTimeZonePrivate::Data QWinTimeZonePrivate::data(qint64 forMSecsSinceEpoch) cons
 
 bool QWinTimeZonePrivate::hasTransitions() const
 {
-    foreach (const QWinTransitionRule &rule, m_tranRules) {
+    for (const QWinTransitionRule &rule : m_tranRules) {
         if (rule.standardTimeRule.wMonth > 0 && rule.daylightTimeRule.wMonth > 0)
             return true;
     }
@@ -735,10 +736,9 @@ QByteArray QWinTimeZonePrivate::systemTimeZoneId() const
 QList<QByteArray> QWinTimeZonePrivate::availableTimeZoneIds() const
 {
     QList<QByteArray> result;
-    foreach (const QByteArray &winId, availableWindowsIds()) {
-        foreach (const QByteArray &ianaId, windowsIdToIanaIds(winId))
-            result << ianaId;
-    }
+    const auto winIds = availableWindowsIds();
+    for (const QByteArray &winId : winIds)
+        result += windowsIdToIanaIds(winId);
     std::sort(result.begin(), result.end());
     result.erase(std::unique(result.begin(), result.end()), result.end());
     return result;

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,6 +46,7 @@
 #include <private/qfunctions_p.h>
 #include <private/qguiapplication_p.h>
 #include <private/qicon_p.h>
+#include <private/qfilesystementry_p.h>
 #include <qpa/qplatformintegration.h>
 #include <qpa/qplatformservices.h>
 #include <qpa/qplatformtheme.h>
@@ -52,111 +59,7 @@
 #  endif
 #endif
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_STYLE_GTK)
-#  include <private/qgtkstyle_p_p.h>
-#endif
-
 QT_BEGIN_NAMESPACE
-
-static bool isCacheable(const QFileInfo &fi);
-
-class QFileIconEngine : public QPixmapIconEngine
-{
-public:
-    QFileIconEngine(const QFileInfo &info, QFileIconProvider::Options opts)
-        : QPixmapIconEngine(), m_fileInfo(info), m_fipOpts(opts)
-    { }
-
-    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(mode);
-        Q_UNUSED(state);
-        QPixmap pixmap;
-
-        if (!size.isValid())
-            return pixmap;
-
-        const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
-        if (!theme)
-            return pixmap;
-
-        const QString &keyBase = QLatin1String("qt_.") + m_fileInfo.suffix().toUpper();
-
-        bool cacheable = isCacheable(m_fileInfo);
-        if (cacheable) {
-            QPixmapCache::find(keyBase + QString::number(size.width()), pixmap);
-            if (!pixmap.isNull())
-                return pixmap;
-        }
-
-        QPlatformTheme::IconOptions iconOptions;
-        if (m_fipOpts & QFileIconProvider::DontUseCustomDirectoryIcons)
-            iconOptions |= QPlatformTheme::DontUseCustomDirectoryIcons;
-
-        pixmap = theme->fileIconPixmap(m_fileInfo, size, iconOptions);
-        if (!pixmap.isNull()) {
-            if (cacheable)
-                QPixmapCache::insert(keyBase + QString::number(size.width()), pixmap);
-        }
-
-        return pixmap;
-    }
-
-    QList<QSize> availableSizes(QIcon::Mode mode = QIcon::Normal, QIcon::State state = QIcon::Off) const Q_DECL_OVERRIDE
-    {
-        Q_UNUSED(mode);
-        Q_UNUSED(state);
-        static QList<QSize> sizes;
-        static QPlatformTheme *theme = 0;
-        if (!theme) {
-            theme = QGuiApplicationPrivate::platformTheme();
-            if (!theme)
-                return sizes;
-
-            QList<int> themeSizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<int> >();
-            if (themeSizes.isEmpty())
-                return sizes;
-
-            sizes.reserve(themeSizes.count());
-            foreach (int size, themeSizes)
-                sizes << QSize(size, size);
-        }
-        return sizes;
-    }
-
-    QSize actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state) Q_DECL_OVERRIDE
-    {
-        const QList<QSize> &sizes = availableSizes(mode, state);
-        const int numberSizes = sizes.length();
-        if (numberSizes == 0)
-            return QSize();
-
-        // Find the smallest available size whose area is still larger than the input
-        // size. Otherwise, use the largest area available size. (We don't assume the
-        // platform theme sizes are sorted, hence the extra logic.)
-        const int sizeArea = size.width() * size.height();
-        QSize actualSize = sizes.first();
-        int actualArea = actualSize.width() * actualSize.height();
-        for (int i = 1; i < numberSizes; ++i) {
-            const QSize &s = sizes.at(i);
-            const int a = s.width() * s.height();
-            if ((sizeArea <= a && a < actualArea) || (actualArea < sizeArea && actualArea < a)) {
-                actualSize = s;
-                actualArea = a;
-            }
-        }
-
-        if (!actualSize.isNull() && (actualSize.width() > size.width() || actualSize.height() > size.height()))
-            actualSize.scale(size, Qt::KeepAspectRatio);
-
-        return actualSize;
-    }
-
-private:
-    QFileInfo m_fileInfo;
-    QFileIconProvider::Options m_fipOpts;
-};
-
 
 /*!
   \class QFileIconProvider
@@ -320,34 +223,17 @@ QIcon QFileIconProvider::icon(IconType type) const
     return QIcon();
 }
 
-static bool isCacheable(const QFileInfo &fi)
+static inline QPlatformTheme::IconOptions toThemeIconOptions(QFileIconProvider::Options options)
 {
-    if (!fi.isFile())
-        return false;
-
-#ifdef Q_OS_WIN
-    // On windows it's faster to just look at the file extensions. QTBUG-13182
-    const QString fileExtension = fi.suffix();
-    // Will return false for .exe, .lnk and .ico extensions
-    return fileExtension.compare(QLatin1String("exe"), Qt::CaseInsensitive) &&
-           fileExtension.compare(QLatin1String("lnk"), Qt::CaseInsensitive) &&
-           fileExtension.compare(QLatin1String("ico"), Qt::CaseInsensitive);
-#else
-    return !fi.isExecutable() && !fi.isSymLink();
-#endif
+    QPlatformTheme::IconOptions result;
+    if (options & QFileIconProvider::DontUseCustomDirectoryIcons)
+        result |= QPlatformTheme::DontUseCustomDirectoryIcons;
+    return result;
 }
 
 QIcon QFileIconProviderPrivate::getIcon(const QFileInfo &fi) const
 {
-    const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
-    if (!theme)
-        return QIcon();
-
-    QList<int> sizes = theme->themeHint(QPlatformTheme::IconPixmapSizes).value<QList<int> >();
-    if (sizes.isEmpty())
-        return QIcon();
-
-    return QIcon(new QFileIconEngine(fi, options));
+    return QGuiApplicationPrivate::platformTheme()->fileIcon(fi, toThemeIconOptions(options));
 }
 
 /*!
@@ -358,23 +244,15 @@ QIcon QFileIconProvider::icon(const QFileInfo &info) const
 {
     Q_D(const QFileIconProvider);
 
-#if defined(Q_OS_UNIX) && !defined(QT_NO_STYLE_GTK)
-    const QByteArray desktopEnvironment = QGuiApplicationPrivate::platformIntegration()->services()->desktopEnvironment();
-    if (desktopEnvironment != QByteArrayLiteral("KDE")) {
-        QIcon gtkIcon = QGtkStylePrivate::getFilesystemIcon(info);
-        if (!gtkIcon.isNull())
-            return gtkIcon;
-    }
-#endif
-
     QIcon retIcon = d->getIcon(info);
     if (!retIcon.isNull())
         return retIcon;
 
-    if (info.isRoot())
-#if defined (Q_OS_WIN) && !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+    const QString &path = info.absoluteFilePath();
+    if (path.isEmpty() || QFileSystemEntry::isRootPath(path))
+#if defined (Q_OS_WIN) && !defined(Q_OS_WINRT)
     {
-        UINT type = GetDriveType((wchar_t *)info.absoluteFilePath().utf16());
+        UINT type = GetDriveType(reinterpret_cast<const wchar_t *>(path.utf16()));
 
         switch (type) {
         case DRIVE_REMOVABLE:
@@ -422,7 +300,7 @@ QIcon QFileIconProvider::icon(const QFileInfo &info) const
 
 QString QFileIconProvider::type(const QFileInfo &info) const
 {
-    if (info.isRoot())
+    if (QFileSystemEntry::isRootPath(info.absoluteFilePath()))
         return QApplication::translate("QFileDialog", "Drive");
     if (info.isFile()) {
         if (!info.suffix().isEmpty()) {

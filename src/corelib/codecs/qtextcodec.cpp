@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -52,10 +58,10 @@
 #if !defined(QT_BOOTSTRAPPED)
 #  include "qtsciicodec_p.h"
 #  include "qisciicodec_p.h"
-#if defined(QT_USE_ICU)
+#if QT_CONFIG(icu)
 #include "qicucodec_p.h"
 #else
-#if !defined(QT_NO_ICONV)
+#if QT_CONFIG(iconv)
 #  include "qiconvcodec_p.h"
 #endif
 #ifdef Q_OS_WIN
@@ -73,7 +79,7 @@
 #  endif // !Q_OS_INTEGRITY
 #endif // !QT_NO_BIG_CODECS
 
-#endif // QT_USE_ICU
+#endif // icu
 #endif // QT_BOOTSTRAPPED
 
 #include "qmutex.h"
@@ -93,7 +99,7 @@ typedef QList<QByteArray>::ConstIterator ByteArrayListConstIt;
 Q_GLOBAL_STATIC_WITH_ARGS(QMutex, textCodecsMutex, (QMutex::Recursive));
 QMutex *qTextCodecsMutex() { return textCodecsMutex(); }
 
-#if !defined(QT_USE_ICU)
+#if !QT_CONFIG(icu)
 static char qtolower(char c)
 { if (c >= 'A' && c <= 'Z') return c + 0x20; return c; }
 static bool qisalnum(char c)
@@ -126,7 +132,7 @@ bool qTextCodecNameMatch(const char *n, const char *h)
 }
 
 
-#if !defined(Q_OS_WIN32) && !defined(Q_OS_WINCE) && !defined(QT_LOCALE_IS_UTF8)
+#if !defined(Q_OS_WIN32) && !defined(QT_LOCALE_IS_UTF8)
 static QTextCodec *checkForCodec(const QByteArray &name) {
     QTextCodec *c = QTextCodec::codecForName(name);
     if (!c) {
@@ -163,7 +169,7 @@ static QTextCodec *setupLocaleMapper()
 
 #if defined(QT_LOCALE_IS_UTF8)
     locale = QTextCodec::codecForName("UTF-8");
-#elif defined(Q_OS_WIN) || defined(Q_OS_WINCE)
+#elif defined(Q_OS_WIN)
     locale = QTextCodec::codecForName("System");
 #else
 
@@ -178,7 +184,7 @@ static QTextCodec *setupLocaleMapper()
     if (charset)
         locale = QTextCodec::codecForName(charset);
 #endif
-#if !defined(QT_NO_ICONV) && !defined(QT_BOOTSTRAPPED)
+#if QT_CONFIG(iconv)
     if (!locale) {
         // no builtin codec for the locale found, let's try using iconv
         (void) new QIconvCodec();
@@ -280,10 +286,10 @@ static void setup()
     (void)new QBig5Codec;
     (void)new QBig5hkscsCodec;
 #  endif // !QT_NO_BIG_CODECS && !Q_OS_INTEGRITY
-#if !defined(QT_NO_ICONV)
+#if QT_CONFIG(iconv)
     (void) new QIconvCodec;
 #endif
-#if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN32)
     (void) new QWindowsLocalCodec;
 #endif // Q_OS_WIN32
 #endif // !QT_NO_CODECS && !QT_BOOTSTRAPPED
@@ -300,7 +306,7 @@ static void setup()
 }
 #else
 static void setup() {}
-#endif // QT_USE_ICU
+#endif // icu
 
 /*!
     \enum QTextCodec::ConversionFlag
@@ -513,7 +519,7 @@ QTextCodec *QTextCodec::codecForName(const QByteArray &name)
         return 0;
     setup();
 
-#ifndef QT_USE_ICU
+#if !QT_CONFIG(icu)
     QTextCodecCache *cache = &globalData->codecCache;
     QTextCodec *codec;
     if (cache) {
@@ -580,7 +586,7 @@ QTextCodec* QTextCodec::codecForMib(int mib)
         }
     }
 
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
     return QIcuCodec::codecForMibUnlocked(mib);
 #else
     return 0;
@@ -612,7 +618,7 @@ QList<QByteArray> QTextCodec::availableCodecs()
         codecs += (*it)->aliases();
     }
 
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
     codecs += QIcuCodec::availableCodecs();
 #endif
 
@@ -628,7 +634,7 @@ QList<QByteArray> QTextCodec::availableCodecs()
 */
 QList<int> QTextCodec::availableMibs()
 {
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
     return QIcuCodec::availableMibs();
 #else
     QMutexLocker locker(textCodecsMutex());
@@ -682,7 +688,7 @@ QTextCodec* QTextCodec::codecForLocale()
 
     QTextCodec *codec = globalData->codecForLocale.loadAcquire();
     if (!codec) {
-#ifdef QT_USE_ICU
+#if QT_CONFIG(icu)
         textCodecsMutex()->lock();
         codec = QIcuCodec::defaultCodecUnlocked();
         textCodecsMutex()->unlock();

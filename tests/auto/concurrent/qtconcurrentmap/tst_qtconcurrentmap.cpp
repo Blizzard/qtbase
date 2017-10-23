@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -53,6 +48,7 @@ private slots:
     void blocking_mappedReduced();
     void assignResult();
     void functionOverloads();
+    void noExceptFunctionOverloads();
 #ifndef QT_NO_EXCEPTIONS
     void exceptions();
 #endif
@@ -2030,6 +2026,16 @@ int fn(int &i)
     return i;
 }
 
+int fnConstNoExcept(const int &i) Q_DECL_NOTHROW
+{
+    return i;
+}
+
+int fnNoExcept(int &i) Q_DECL_NOTHROW
+{
+    return i;
+}
+
 QString changeTypeConst(const int &)
 {
     return QString();
@@ -2040,12 +2046,32 @@ QString changeType(int &)
     return QString();
 }
 
+QString changeTypeConstNoExcept(const int &) Q_DECL_NOTHROW
+{
+    return QString();
+}
+
+QString changeTypeNoExcept(int &) Q_DECL_NOTHROW
+{
+    return QString();
+}
+
 int changeTypeQStringListConst(const QStringList &)
 {
     return 0;
 }
 
 int changeTypeQStringList(QStringList &)
+{
+    return 0;
+}
+
+int changeTypeQStringListConstNoExcept(const QStringList &) Q_DECL_NOTHROW
+{
+    return 0;
+}
+
+int changeTypeQStringListNoExcept(QStringList &) Q_DECL_NOTHROW
 {
     return 0;
 }
@@ -2071,6 +2097,26 @@ public:
     }
 
     QString changeTypeConst() const
+    {
+        return QString();
+    }
+
+    MemFnTester fnNoExcept() Q_DECL_NOTHROW
+    {
+        return MemFnTester();
+    }
+
+    MemFnTester fnConstNoExcept() const Q_DECL_NOTHROW
+    {
+        return MemFnTester();
+    }
+
+    QString changeTypeNoExcept() Q_DECL_NOTHROW
+    {
+        return QString();
+    }
+
+    QString changeTypeConstNoExcept() const Q_DECL_NOTHROW
     {
         return QString();
     }
@@ -2100,6 +2146,29 @@ void tst_QtConcurrentMap::functionOverloads()
     QtConcurrent::blockingMapped<QList<QString> >(constIntList, changeTypeConst);
     QtConcurrent::blockingMapped<QList<QString> >(classList, &MemFnTester::changeTypeConst);
     QtConcurrent::blockingMapped<QList<QString> >(constMemFnTesterList, &MemFnTester::changeTypeConst);
+}
+
+void tst_QtConcurrentMap::noExceptFunctionOverloads()
+{
+    QList<int> intList;
+    const QList<int> constIntList;
+    QList<MemFnTester> classList;
+    const QList<MemFnTester> constMemFnTesterList;
+
+    QtConcurrent::mapped(intList, fnConstNoExcept);
+    QtConcurrent::mapped(constIntList, fnConstNoExcept);
+    QtConcurrent::mapped(classList, &MemFnTester::fnConstNoExcept);
+    QtConcurrent::mapped(constMemFnTesterList, &MemFnTester::fnConstNoExcept);
+
+    QtConcurrent::blockingMapped<QVector<int> >(intList, fnConstNoExcept);
+    QtConcurrent::blockingMapped<QVector<int> >(constIntList, fnConstNoExcept);
+    QtConcurrent::blockingMapped<QVector<MemFnTester> >(classList, &MemFnTester::fnConstNoExcept);
+    QtConcurrent::blockingMapped<QVector<MemFnTester> >(constMemFnTesterList, &MemFnTester::fnConstNoExcept);
+
+    QtConcurrent::blockingMapped<QList<QString> >(intList, changeTypeConstNoExcept);
+    QtConcurrent::blockingMapped<QList<QString> >(constIntList, changeTypeConstNoExcept);
+    QtConcurrent::blockingMapped<QList<QString> >(classList, &MemFnTester::changeTypeConstNoExcept);
+    QtConcurrent::blockingMapped<QList<QString> >(constMemFnTesterList, &MemFnTester::changeTypeConstNoExcept);
 }
 
 QAtomicInt currentInstanceCount;

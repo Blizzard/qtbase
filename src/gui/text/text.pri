@@ -32,18 +32,15 @@ HEADERS += \
     text/qtextlist.h \
     text/qsyntaxhighlighter.h \
     text/qtextdocumentwriter.h \
-    text/qcssparser_p.h \
     text/qtexttable_p.h \
-    text/qzipreader_p.h \
-    text/qzipwriter_p.h \
-    text/qtextodfwriter_p.h \
     text/qstatictext_p.h \
     text/qstatictext.h \
     text/qrawfont.h \
     text/qrawfont_p.h \
     text/qglyphrun.h \
     text/qglyphrun_p.h \
-    text/qdistancefield_p.h
+    text/qdistancefield_p.h \
+    text/qinputcontrol_p.h
 
 SOURCES += \
     text/qfont.cpp \
@@ -70,13 +67,11 @@ SOURCES += \
     text/qtextlist.cpp \
     text/qtextdocumentwriter.cpp \
     text/qsyntaxhighlighter.cpp \
-    text/qcssparser.cpp \
-    text/qzip.cpp \
-    text/qtextodfwriter.cpp \
     text/qstatictext.cpp \
     text/qrawfont.cpp \
     text/qglyphrun.cpp \
-    text/qdistancefield.cpp
+    text/qdistancefield.cpp \
+    text/qinputcontrol.cpp
 
 SOURCES += \
     text/qfontengine_qpf2.cpp \
@@ -85,11 +80,26 @@ SOURCES += \
 HEADERS += \
     text/qplatformfontdatabase.h
 
-contains(QT_CONFIG, harfbuzz)|contains(QT_CONFIG, system-harfbuzz) {
-    DEFINES += QT_ENABLE_HARFBUZZ_NG
-
-    include($$PWD/../../3rdparty/harfbuzz_dependency.pri)
+qtConfig(harfbuzz) {
+    QMAKE_USE_PRIVATE += harfbuzz
 
     SOURCES += text/qharfbuzzng.cpp
     HEADERS += text/qharfbuzzng_p.h
+}
+
+qtConfig(textodfwriter) {
+    HEADERS += \
+        text/qtextodfwriter_p.h \
+        text/qzipreader_p.h \
+        text/qzipwriter_p.h
+    SOURCES += \
+        text/qtextodfwriter.cpp \
+        text/qzip.cpp
+}
+
+qtConfig(cssparser) {
+    HEADERS += \
+        text/qcssparser_p.h
+    SOURCES += \
+        text/qcssparser.cpp
 }

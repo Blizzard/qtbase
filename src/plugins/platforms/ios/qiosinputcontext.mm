@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -91,14 +97,14 @@ static QUIView *focusView()
 
 @interface QIOSKeyboardListener : UIGestureRecognizer <UIGestureRecognizerDelegate> {
   @private
-    QIOSInputContext *m_context;
+    QT_PREPEND_NAMESPACE(QIOSInputContext) *m_context;
 }
 @property BOOL hasDeferredScrollToCursor;
 @end
 
 @implementation QIOSKeyboardListener
 
-- (id)initWithQIOSInputContext:(QIOSInputContext *)context
+- (id)initWithQIOSInputContext:(QT_PREPEND_NAMESPACE(QIOSInputContext) *)context
 {
     if (self = [super initWithTarget:self action:@selector(gestureStateChanged:)]) {
 
@@ -111,6 +117,7 @@ static QUIView *focusView()
         self.cancelsTouchesInView = NO;
         self.delaysTouchesEnded = NO;
 
+#ifndef Q_OS_TVOS
         NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
 
         [notificationCenter addObserver:self
@@ -128,6 +135,7 @@ static QUIView *focusView()
         [notificationCenter addObserver:self
             selector:@selector(keyboardDidChangeFrame:)
             name:UIKeyboardDidChangeFrameNotification object:nil];
+#endif
     }
 
     return self;
@@ -254,7 +262,7 @@ static QUIView *focusView()
     Q_UNUSED(sender);
 
     if (self.state == UIGestureRecognizerStateBegan) {
-        qImDebug() << "hide keyboard gesture was triggered";
+        qImDebug("hide keyboard gesture was triggered");
         UIResponder *firstResponder = [UIResponder currentFirstResponder];
         Q_ASSERT([firstResponder isKindOfClass:[QIOSTextInputResponder class]]);
         [firstResponder resignFirstResponder];
@@ -266,12 +274,12 @@ static QUIView *focusView()
     [super reset];
 
     if (!m_context->isInputPanelVisible()) {
-        qImDebug() << "keyboard was hidden, disabling hide-keyboard gesture";
+        qImDebug("keyboard was hidden, disabling hide-keyboard gesture");
         self.enabled = NO;
     } else {
-        qImDebug() << "gesture completed without triggering";
+        qImDebug("gesture completed without triggering");
         if (self.hasDeferredScrollToCursor) {
-            qImDebug() << "applying deferred scroll to cursor";
+            qImDebug("applying deferred scroll to cursor");
             m_context->scrollToCursor();
         }
     }
@@ -282,6 +290,8 @@ static QUIView *focusView()
 @end
 
 // -------------------------------------------------------------------------
+
+QT_BEGIN_NAMESPACE
 
 Qt::InputMethodQueries ImeState::update(Qt::InputMethodQueries properties)
 {
@@ -342,22 +352,22 @@ QIOSInputContext::~QIOSInputContext()
 void QIOSInputContext::showInputPanel()
 {
     // No-op, keyboard controlled fully by platform based on focus
-    qImDebug() << "can't show virtual keyboard without a focus object, ignoring";
+    qImDebug("can't show virtual keyboard without a focus object, ignoring");
 }
 
 void QIOSInputContext::hideInputPanel()
 {
     if (![m_textResponder isFirstResponder]) {
-        qImDebug() << "QIOSTextInputResponder is not first responder, ignoring";
+        qImDebug("QIOSTextInputResponder is not first responder, ignoring");
         return;
     }
 
     if (qGuiApp->focusObject() != m_imeState.focusObject) {
-        qImDebug() << "current focus object does not match IM state, likely hiding from focusOut event, so ignoring";
+        qImDebug("current focus object does not match IM state, likely hiding from focusOut event, so ignoring");
         return;
     }
 
-    qImDebug() << "hiding VKB as requested by QInputMethod::hide()";
+    qImDebug("hiding VKB as requested by QInputMethod::hide()");
     [m_textResponder resignFirstResponder];
 }
 
@@ -371,6 +381,9 @@ void QIOSInputContext::clearCurrentFocusObject()
 
 void QIOSInputContext::updateKeyboardState(NSNotification *notification)
 {
+#ifdef Q_OS_TVOS
+    Q_UNUSED(notification);
+#else
     static CGRect currentKeyboardRect = CGRectZero;
 
     KeyboardState previousState = m_keyboardState;
@@ -406,16 +419,16 @@ void QIOSInputContext::updateKeyboardState(NSNotification *notification)
         m_keyboardState.animationDuration = [[userInfo objectForKey:UIKeyboardAnimationDurationUserInfoKey] doubleValue];
         m_keyboardState.keyboardAnimating = m_keyboardState.animationDuration > 0 && !atEndOfKeyboardTransition;
 
-        qImDebug() << qPrintable(QString::fromNSString(notification.name)) << "from" << fromCGRect(frameBegin) << "to" << fromCGRect(frameEnd)
+        qImDebug() << qPrintable(QString::fromNSString(notification.name)) << "from" << QRectF::fromCGRect(frameBegin) << "to" << QRectF::fromCGRect(frameEnd)
                    << "(curve =" << m_keyboardState.animationCurve << "duration =" << m_keyboardState.animationDuration << "s)";
     } else {
-        qImDebug() << "No notification to update keyboard state based on, just updating keyboard rect";
+        qImDebug("No notification to update keyboard state based on, just updating keyboard rect");
     }
 
     if (!focusView() || CGRectIsEmpty(currentKeyboardRect))
         m_keyboardState.keyboardRect = QRectF();
     else // QInputmethod::keyboardRectangle() is documented to be in window coordinates.
-        m_keyboardState.keyboardRect = fromCGRect([focusView() convertRect:currentKeyboardRect fromView:nil]);
+        m_keyboardState.keyboardRect = QRectF::fromCGRect([focusView() convertRect:currentKeyboardRect fromView:nil]);
 
     // Emit for all changed properties
     if (m_keyboardState.keyboardVisible != previousState.keyboardVisible)
@@ -424,6 +437,7 @@ void QIOSInputContext::updateKeyboardState(NSNotification *notification)
         emitAnimatingChanged();
     if (m_keyboardState.keyboardRect != previousState.keyboardRect)
         emitKeyboardRectChanged();
+#endif
 }
 
 bool QIOSInputContext::isInputPanelVisible() const
@@ -463,7 +477,7 @@ void QIOSInputContext::scrollToCursor()
     if (m_keyboardHideGesture.state == UIGestureRecognizerStatePossible && m_keyboardHideGesture.numberOfTouches == 1) {
         // Don't scroll to the cursor if the user is touching the screen and possibly
         // trying to trigger the hide-keyboard gesture.
-        qImDebug() << "deferring scrolling to cursor as we're still waiting for a possible gesture";
+        qImDebug("deferring scrolling to cursor as we're still waiting for a possible gesture");
         m_keyboardHideGesture.hasDeferredScrollToCursor = YES;
         return;
     }
@@ -480,19 +494,36 @@ void QIOSInputContext::scrollToCursor()
 
     // We only support auto-scroll for docked keyboards for now, so make sure that's the case
     if (CGRectGetMaxY(m_keyboardState.keyboardEndRect) != CGRectGetMaxY([UIScreen mainScreen].bounds)) {
-        qImDebug() << "Keyboard not docked, ignoring request to scroll to reveal cursor";
+        qImDebug("Keyboard not docked, ignoring request to scroll to reveal cursor");
         return;
     }
 
-    const int margin = 20;
-    QRectF translatedCursorPos = qApp->inputMethod()->cursorRectangle();
-    translatedCursorPos.translate(focusView().qwindow->geometry().topLeft());
+    QWindow *focusWindow = qApp->focusWindow();
+    QRect cursorRect = qApp->inputMethod()->cursorRectangle().translated(focusWindow->geometry().topLeft()).toRect();
+    if (cursorRect.isNull()) {
+         scroll(0);
+         return;
+    }
 
-    qreal keyboardY = [rootView convertRect:m_keyboardState.keyboardEndRect fromView:nil].origin.y;
-    int statusBarY = qGuiApp->primaryScreen()->availableGeometry().y();
+     // Add some padding so that the cusor does not end up directly above the keyboard
+    static const int kCursorRectPadding = 20;
+    cursorRect.adjust(0, -kCursorRectPadding, 0, kCursorRectPadding);
 
-    scroll((translatedCursorPos.bottomLeft().y() < keyboardY - margin) ? 0
-        : qMin(rootView.bounds.size.height - keyboardY, translatedCursorPos.y() - statusBarY - margin));
+    // We explicitly ask for the geometry of the screen instead of the availableGeometry,
+    // as we hide the statusbar when scrolling the screen, so the available geometry will
+    // include the space taken by the status bar at the moment.
+    QRect screenGeometry = focusWindow->screen()->geometry();
+    QRect keyboardGeometry = QRectF::fromCGRect(m_keyboardState.keyboardEndRect).toRect();
+    QRect availableGeometry = (QRegion(screenGeometry) - keyboardGeometry).boundingRect();
+
+    if (!availableGeometry.contains(cursorRect, true)) {
+        qImDebug() << "cursor rect" << cursorRect << "not fully within" << availableGeometry;
+        int scrollToCenter = -(availableGeometry.center() - cursorRect.center()).y();
+        int scrollToBottom = focusWindow->screen()->geometry().bottom() - availableGeometry.bottom();
+        scroll(qMin(scrollToCenter, scrollToBottom));
+    } else {
+        scroll(0);
+    }
 }
 
 void QIOSInputContext::scroll(int y)
@@ -504,6 +535,8 @@ void QIOSInputContext::scroll(int y)
     CATransform3D translationTransform = CATransform3DMakeTranslation(0.0, -y, 0.0);
     if (CATransform3DEqualToTransform(translationTransform, rootView.layer.sublayerTransform))
         return;
+
+    qImDebug() << "scrolling root view to y =" << -y;
 
     QPointer<QIOSInputContext> self = this;
     [UIView animateWithDuration:m_keyboardState.animationDuration delay:0
@@ -543,7 +576,11 @@ void QIOSInputContext::scroll(int y)
                 if (keyboardScrollIsActive && !originalWindowLevels.contains(window))
                     originalWindowLevels.insert(window, window.windowLevel);
 
+#ifndef Q_OS_TVOS
                 UIWindowLevel windowLevelAdjustment = keyboardScrollIsActive ? UIWindowLevelStatusBar : 0;
+#else
+                UIWindowLevel windowLevelAdjustment = 0;
+#endif
                 window.windowLevel = originalWindowLevels.value(window) + windowLevelAdjustment;
 
                 if (!keyboardScrollIsActive)
@@ -579,7 +616,7 @@ void QIOSInputContext::setFocusObject(QObject *focusObject)
         clearCurrentFocusObject();
         return;
     } else if (focusObject == m_imeState.focusObject) {
-        qImDebug() << "same focus object as last update, skipping reset";
+        qImDebug("same focus object as last update, skipping reset");
         return;
     }
 
@@ -613,33 +650,43 @@ void QIOSInputContext::focusWindowChanged(QWindow *focusWindow)
 */
 void QIOSInputContext::update(Qt::InputMethodQueries updatedProperties)
 {
+    qImDebug() << "fw =" << qApp->focusWindow() << "fo =" << qApp->focusObject();
+
+    // Changes to the focus object should always result in a call to setFocusObject(),
+    // triggering a reset() which will update all the properties based on the new
+    // focus object. We try to detect code paths that fail this assertion and smooth
+    // over the situation by doing a manual update of the focus object.
+    if (qApp->focusObject() != m_imeState.focusObject && updatedProperties != Qt::ImQueryAll) {
+        qWarning() << "stale focus object" << m_imeState.focusObject << ", doing manual update";
+        setFocusObject(qApp->focusObject());
+        return;
+    }
+
     // Mask for properties that we are interested in and see if any of them changed
     updatedProperties &= (Qt::ImEnabled | Qt::ImHints | Qt::ImQueryInput | Qt::ImEnterKeyType | Qt::ImPlatformData);
-
-    qImDebug() << "fw =" << qApp->focusWindow() << "fo =" << qApp->focusObject();
 
     // Perform update first, so we can trust the value of inputMethodAccepted()
     Qt::InputMethodQueries changedProperties = m_imeState.update(updatedProperties);
 
     if (inputMethodAccepted()) {
         if (!m_textResponder || [m_textResponder needsKeyboardReconfigure:changedProperties]) {
-            qImDebug() << "creating new text responder";
+            qImDebug("creating new text responder");
             [m_textResponder autorelease];
             m_textResponder = [[QIOSTextInputResponder alloc] initWithInputContext:this];
         } else {
-            qImDebug() << "no need to reconfigure keyboard, just notifying input delegate";
+            qImDebug("no need to reconfigure keyboard, just notifying input delegate");
             [m_textResponder notifyInputDelegate:changedProperties];
         }
 
         if (![m_textResponder isFirstResponder]) {
-            qImDebug() << "IM enabled, making text responder first responder";
+            qImDebug("IM enabled, making text responder first responder");
             [m_textResponder becomeFirstResponder];
         }
 
         if (changedProperties & Qt::ImCursorRectangle)
             scrollToCursor();
     } else if ([m_textResponder isFirstResponder]) {
-        qImDebug() << "IM not enabled, resigning text responder as first responder";
+        qImDebug("IM not enabled, resigning text responder as first responder");
         [m_textResponder resignFirstResponder];
     }
 }
@@ -669,7 +716,7 @@ bool QIOSInputContext::inputMethodAccepted() const
 */
 void QIOSInputContext::reset()
 {
-    qImDebug() << "updating Qt::ImQueryAll and unmarking text";
+    qImDebug("updating Qt::ImQueryAll and unmarking text");
 
     update(Qt::ImQueryAll);
 
@@ -687,7 +734,7 @@ void QIOSInputContext::reset()
 */
 void QIOSInputContext::commit()
 {
-    qImDebug() << "unmarking text";
+    qImDebug("unmarking text");
 
     [m_textResponder unmarkText];
     [m_textResponder notifyInputDelegate:Qt::ImSurroundingText];
@@ -697,3 +744,5 @@ QLocale QIOSInputContext::locale() const
 {
     return QLocale(QString::fromNSString([[NSLocale currentLocale] objectForKey:NSLocaleIdentifier]));
 }
+
+QT_END_NAMESPACE

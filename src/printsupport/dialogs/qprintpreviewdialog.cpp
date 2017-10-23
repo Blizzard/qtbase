@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,26 +40,28 @@
 #include "qprintpreviewdialog.h"
 #include "qprintpreviewwidget.h"
 #include <private/qprinter_p.h>
-#include "private/qdialog_p.h"
 #include "qprintdialog.h"
 
 #include <QtWidgets/qaction.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qcombobox.h>
-#include <QtWidgets/qlabel.h>
 #include <QtWidgets/qlineedit.h>
 #include <QtPrintSupport/qpagesetupdialog.h>
 #include <QtPrintSupport/qprinter.h>
 #include <QtWidgets/qstyle.h>
 #include <QtWidgets/qtoolbutton.h>
 #include <QtGui/qvalidator.h>
+#if QT_CONFIG(filedialog)
 #include <QtWidgets/qfiledialog.h>
+#endif
 #include <QtWidgets/qmainwindow.h>
 #include <QtWidgets/qtoolbar.h>
-#include <QtWidgets/qformlayout.h>
 #include <QtCore/QCoreApplication>
 
-#ifndef QT_NO_PRINTPREVIEWDIALOG
+#include "private/qdialog_p.h"
+
+#include <QtWidgets/qformlayout.h>
+#include <QtWidgets/qlabel.h>
 
 static void initResources()
 {
@@ -244,8 +252,8 @@ void QPrintPreviewDialogPrivate::init(QPrinter *_printer)
     zoomEditor->setValidator(new ZoomFactorValidator(1, 1000, 1, zoomEditor));
     zoomFactor->setLineEdit(zoomEditor);
     static const short factorsX2[] = { 25, 50, 100, 200, 250, 300, 400, 800, 1600 };
-    for (int i = 0; i < int(sizeof(factorsX2) / sizeof(factorsX2[0])); ++i)
-        zoomFactor->addItem(QPrintPreviewDialog::tr("%1%").arg(factorsX2[i] / 2.0));
+    for (auto factorX2 : factorsX2)
+        zoomFactor->addItem(QPrintPreviewDialog::tr("%1%").arg(factorX2 / 2.0));
     QObject::connect(zoomFactor->lineEdit(), SIGNAL(editingFinished()),
                      q, SLOT(_q_zoomFactorChanged()));
     QObject::connect(zoomFactor, SIGNAL(currentIndexChanged(int)),
@@ -328,7 +336,7 @@ void QPrintPreviewDialogPrivate::init(QPrinter *_printer)
 
     QString caption = QCoreApplication::translate("QPrintPreviewDialog", "Print Preview");
     if (!printer->docName().isEmpty())
-        caption += QString::fromLatin1(": ") + printer->docName();
+        caption += QLatin1String(": ") + printer->docName();
     q->setWindowTitle(caption);
 
     if (!printer->isValid()
@@ -779,7 +787,3 @@ QT_END_NAMESPACE
 
 #include "moc_qprintpreviewdialog.cpp"
 #include "qprintpreviewdialog.moc"
-
-#endif // QT_NO_PRINTPREVIEWDIALOG
-
-

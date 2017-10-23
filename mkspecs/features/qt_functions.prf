@@ -1,9 +1,6 @@
-defineReplace(qtPlatformTargetSuffix) {
-    ios:CONFIG(iphonesimulator, iphonesimulator|iphoneos): \
-        suffix = _iphonesimulator
-    else: \
-        suffix =
 
+defineReplace(qtPlatformTargetSuffix) {
+    suffix =
     CONFIG(debug, debug|release) {
         !debug_and_release|build_pass {
             mac: return($${suffix}_debug)
@@ -15,7 +12,7 @@ defineReplace(qtPlatformTargetSuffix) {
 
 defineReplace(qtLibraryTarget) {
    LIBRARY_NAME = $$1
-   CONFIG(shared, static|shared):contains(QT_CONFIG, qt_framework) {
+   CONFIG(shared, static|shared):qtConfig(framework) {
       QMAKE_FRAMEWORK_BUNDLE_NAME = $$LIBRARY_NAME
       export(QMAKE_FRAMEWORK_BUNDLE_NAME)
    }
@@ -36,11 +33,13 @@ defineReplace(qtRelativeRPathBase) {
     darwin {
         if(equals(TEMPLATE, app):app_bundle)|\
                 if(equals(TEMPLATE, lib):plugin:plugin_bundle) {
-            ios: return($$target.path/$${TARGET}.app)
+            shallow_bundle: return($$target.path/$${TARGET}.app)
             return($$target.path/$${TARGET}.app/Contents/MacOS)
         }
-        equals(TEMPLATE, lib):!plugin:lib_bundle: \
+        equals(TEMPLATE, lib):!plugin:lib_bundle {
+            shallow_bundle: return($$target.path/$${TARGET}.framework)
             return($$target.path/$${TARGET}.framework/Versions/Current)
+        }
     }
     return($$target.path)
 }
@@ -72,16 +71,24 @@ defineTest(qtPrepareTool) {
     isEmpty(cmd) {
         cmd = $$[QT_HOST_BINS]/$$2
         exists($${cmd}.pl) {
+            $${1}_EXE = $${cmd}.pl
             cmd = perl -w $$system_path($${cmd}.pl)
         } else: contains(QMAKE_HOST.os, Windows) {
+            $${1}_EXE = $${cmd}.exe
             cmd = $$system_path($${cmd}.exe)
         } else:contains(QMAKE_HOST.os, Darwin) {
             BUNDLENAME = $${cmd}.app/Contents/MacOS/$$2
             exists($$BUNDLENAME) {
                 cmd = $$BUNDLENAME
             }
+            $${1}_EXE = $$cmd
+        } else {
+            $${1}_EXE = $$cmd
         }
+    } else {
+        $${1}_EXE = $$last(cmd)
     }
+    export($${1}_EXE)
     QT_TOOL_ENV += $$eval(QT_TOOL.$${2}.envvars)
     QT_TOOL_NAME = $$2
     !isEmpty(3)|!isEmpty(4) {
@@ -162,7 +169,7 @@ defineTest(qtAddToolEnv) {
                 "EndLocal"
             $$1 = call
         }
-        !build_pass:!write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error("Aborting.")
+        !build_pass:!write_file($$OUT_PWD/$$batch_name, batch_cont, exe): error()
         isEmpty(3): \
             $$1 += $$shell_quote($$shell_path($$OUT_PWD/$$batch_name))
         else: \
@@ -178,8 +185,10 @@ defineTest(qtAddTargetEnv) {
     deps = $$replace($$2, -private$, _private)
     deps = $$resolve_depends(deps, "QT.", ".depends" ".run_depends")
     !isEmpty(deps) {
+        libs = libs
         deppath.CONFIG = prepend
         equals(QMAKE_HOST.os, Windows) {
+            libs = bins
             deppath.CONFIG = always_prepend
             deppath.name = PATH
         } else:contains(QMAKE_HOST.os, Linux|FreeBSD|OpenBSD|NetBSD|DragonFly|SunOS|HP-UX|QNX|GNU) {
@@ -187,7 +196,7 @@ defineTest(qtAddTargetEnv) {
         } else:contains(QMAKE_HOST.os, Haiku) {
             deppath.name = LIBRARY_PATH
         } else:equals(QMAKE_HOST.os, Darwin) {
-            contains(QT_CONFIG, qt_framework): \
+            qtConfig(framework): \
                 deppath.name = DYLD_FRAMEWORK_PATH
             else: \
                 deppath.name = DYLD_LIBRARY_PATH
@@ -199,9 +208,9 @@ defineTest(qtAddTargetEnv) {
         ptypes =
         for(dep, deps) {
             isEmpty(3): \
-                deppath += $$shell_path($$eval(QT.$${dep}.libs))
+                deppath += $$shell_path($$eval(QT.$${dep}.$$libs))
             else: \
-                deppath += $$system_path($$eval(QT.$${dep}.libs))
+                deppath += $$system_path($$eval(QT.$${dep}.$$libs))
             ptypes += $$eval(QT.$${dep}.plugin_types)
         }
         deppath.value = $$unique(deppath)
@@ -228,17 +237,58 @@ defineTest(qtAddTargetEnv) {
 
 defineReplace(pkgConfigExecutable) {
     isEmpty(PKG_CONFIG) {
-        !isEmpty(QMAKE_PKG_CONFIG): \
+        !isEmpty(QMAKE_PKG_CONFIG) {
+            # Assumed to be properly sysrootified.
             PKG_CONFIG = $$QMAKE_PKG_CONFIG
-        else: \
+            export(PKG_CONFIG)
+        } else {
             PKG_CONFIG = pkg-config
+            !cross_compile {
+                export(PKG_CONFIG)
+            } else {
+                # Cross compiling, ensure that pkg-config is set up sanely.
+                sysroot = $$[QT_SYSROOT]
 
-        sysroot.name = PKG_CONFIG_SYSROOT_DIR
-        sysroot.value = $$PKG_CONFIG_SYSROOT_DIR
-        libdir.name = PKG_CONFIG_LIBDIR
-        libdir.value = $$PKG_CONFIG_LIBDIR
-        QT_TOOL_NAME = pkg-config
-        qtAddToolEnv(PKG_CONFIG, sysroot libdir, SYS)
+                pkgConfigLibdir = $$(PKG_CONFIG_LIBDIR)
+                isEmpty(pkgConfigLibdir) {
+                    isEmpty(sysroot) {
+                        warning("Cross compiling without sysroot. Disabling pkg-config.")
+                        return()
+                    }
+                    !exists("$$sysroot/usr/lib/pkgconfig") {
+                        warning("Disabling pkg-config since PKG_CONFIG_LIBDIR is not set and the")
+                        warning("host's .pc files would be used (even if you set PKG_CONFIG_PATH).")
+                        warning("Set this variable to the directory that contains target .pc files")
+                        warning("for pkg-config to function correctly when cross-compiling.")
+                        return()
+                    }
+
+                    pkgConfigLibdir = $$system_path($$sysroot/usr/lib/pkgconfig)$$QMAKE_DIRLIST_SEP$$system_path($$sysroot/usr/share/pkgconfig)
+                    !isEmpty(GCC_MACHINE_DUMP): \
+                        pkgConfigLibdir = "$$pkgConfigLibdir$$QMAKE_DIRLIST_SEP$$system_path($$sysroot/usr/lib/$$GCC_MACHINE_DUMP/pkgconfig)"
+                    message("PKG_CONFIG_LIBDIR automatically set to $$pkgConfigLibdir")
+                }
+                pkgConfigSysrootDir = $$(PKG_CONFIG_SYSROOT_DIR)
+                isEmpty(pkgConfigSysrootDir) {
+                    isEmpty(sysroot) {
+                        warning("Disabling pkg-config since PKG_CONFIG_SYSROOT_DIR is not set.")
+                        warning("Set this variable to your sysroot for pkg-config to function")
+                        warning("correctly when cross-compiling.")
+                        return()
+                    }
+
+                    pkgConfigSysrootDir = $$sysroot
+                    message("PKG_CONFIG_SYSROOT_DIR automatically set to $$pkgConfigSysrootDir")
+                }
+
+                sysroot.name = PKG_CONFIG_SYSROOT_DIR
+                sysroot.value = $$pkgConfigSysrootDir
+                libdir.name = PKG_CONFIG_LIBDIR
+                libdir.value = $$pkgConfigLibdir
+                QT_TOOL_NAME = pkg-config
+                qtAddToolEnv(PKG_CONFIG, sysroot libdir, SYS)
+            }
+        }
     }
 
     equals(QMAKE_HOST.os, Windows): \
@@ -250,11 +300,6 @@ defineReplace(pkgConfigExecutable) {
 }
 
 defineTest(packagesExist) {
-    contains(QT_CONFIG, no-pkg-config) {
-        warning("pkg-config disabled, can't check package existence")
-        return(false)
-    }
-
     # this can't be done in global scope here because qt_functions is loaded
     # before the .pro is parsed, so if the .pro set PKG_CONFIG, we wouldn't know it
     # yet. oops.
@@ -292,4 +337,19 @@ defineTest(prepareRecursiveTarget) {
     export($${target}.recurse)
     export($${target}.CONFIG)
     export($${target}.recurse_target)
+}
+
+defineTest(qtConfig) {
+    modules = $$QT $$QT_PRIVATE $$QT_FOR_CONFIG
+    modules ~= s,-private$,_private,g
+    modules = $$resolve_depends(modules, "QT.", ".depends")
+    modules += global global_private
+    modules = $$reverse(modules)
+    for (module, modules) {
+        contains(QT.$${module}.enabled_features, $$1): \
+            return(true)
+        contains(QT.$${module}.disabled_features, $$1): \
+            return(false)
+    }
+    error("Could not find feature $${1}.")
 }

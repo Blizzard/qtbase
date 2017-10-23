@@ -1,31 +1,27 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,7 +29,7 @@
 #include <QtTest/QtTest>
 
 #include <qtextcodec.h>
-#include <qsharedpointer.h>
+#include <QScopedPointer>
 
 static const char utf8bom[] = "\xEF\xBB\xBF";
 
@@ -184,7 +180,7 @@ void tst_Utf8::charByChar()
 
     {
         // from utf16 to utf8 char by char:
-        QSharedPointer<QTextEncoder> encoder = QSharedPointer<QTextEncoder>(codec->makeEncoder());
+        const QScopedPointer<QTextEncoder> encoder(codec->makeEncoder());
         QByteArray encoded;
 
         for (int i = 0; i < utf16.length(); ++i) {
@@ -198,7 +194,7 @@ void tst_Utf8::charByChar()
     }
     {
         // from utf8 to utf16 char by char:
-        QSharedPointer<QTextDecoder> decoder = QSharedPointer<QTextDecoder>(codec->makeDecoder());
+        const QScopedPointer<QTextDecoder> decoder(codec->makeDecoder());
         QString decoded;
 
         for (int i = 0; i < utf8.length(); ++i) {
@@ -223,7 +219,7 @@ void tst_Utf8::invalidUtf8()
     QFETCH(QByteArray, utf8);
     QFETCH_GLOBAL(bool, useLocale);
 
-    QSharedPointer<QTextDecoder> decoder = QSharedPointer<QTextDecoder>(codec->makeDecoder());
+    const QScopedPointer<QTextDecoder> decoder(codec->makeDecoder());
     decoder->toUnicode(utf8);
 
     // Only enforce correctness on our UTF-8 decoder
@@ -241,39 +237,6 @@ void tst_Utf8::nonCharacters_data()
     QTest::addColumn<QByteArray>("utf8");
     QTest::addColumn<QString>("utf16");
 
-    // Unicode has a couple of "non-characters" that one can use internally
-    // These characters may be used for interchange;
-    // see: http://www.unicode.org/versions/corrigendum9.html
-    //
-    // Those are the last two entries each Unicode Plane (U+FFFE, U+FFFF,
-    // U+1FFFE, U+1FFFF, etc.) as well as the entries between U+FDD0 and
-    // U+FDEF (inclusive)
-
-    // U+FDD0 through U+FDEF
-    for (int i = 0; i < 32; ++i) {
-        char utf8[] = { char(0357), char(0267), char(0220 + i), 0 };
-        QString utf16 = QChar(0xfdd0 + i);
-        QTest::newRow(qPrintable(QString::number(0xfdd0 + i, 16))) << QByteArray(utf8) << utf16;
-    }
-
-    // the last two in Planes 1 through 16
-    for (uint plane = 1; plane <= 16; ++plane) {
-        for (uint lower = 0xfffe; lower < 0x10000; ++lower) {
-            uint ucs4 = (plane << 16) | lower;
-            char utf8[] = { char(0xf0 | uchar(ucs4 >> 18)),
-                            char(0x80 | (uchar(ucs4 >> 12) & 0x3f)),
-                            char(0x80 | (uchar(ucs4 >> 6) & 0x3f)),
-                            char(0x80 | (uchar(ucs4) & 0x3f)),
-                            0 };
-            ushort utf16[] = { QChar::highSurrogate(ucs4), QChar::lowSurrogate(ucs4), 0 };
-
-            QTest::newRow(qPrintable(QString::number(ucs4, 16))) << QByteArray(utf8) << QString::fromUtf16(utf16);
-        }
-    }
-
-    QTest::newRow("fffe") << QByteArray("\xEF\xBF\xBE") << QString(QChar(0xfffe));
-    QTest::newRow("ffff") << QByteArray("\xEF\xBF\xBF") << QString(QChar(0xffff));
-
     extern void loadNonCharactersRows();
     loadNonCharactersRows();
 }
@@ -284,7 +247,7 @@ void tst_Utf8::nonCharacters()
     QFETCH(QString, utf16);
     QFETCH_GLOBAL(bool, useLocale);
 
-    QSharedPointer<QTextDecoder> decoder = QSharedPointer<QTextDecoder>(codec->makeDecoder());
+    const QScopedPointer<QTextDecoder> decoder(codec->makeDecoder());
     decoder->toUnicode(utf8);
 
     // Only enforce correctness on our UTF-8 decoder
@@ -293,7 +256,7 @@ void tst_Utf8::nonCharacters()
     else if (decoder->hasFailure())
         qWarning("System codec reports failure when it shouldn't. Should report bug upstream.");
 
-    QSharedPointer<QTextEncoder> encoder(codec->makeEncoder());
+    const QScopedPointer<QTextEncoder> encoder(codec->makeEncoder());
     encoder->fromUnicode(utf16);
     if (!useLocale)
         QVERIFY(!encoder->hasFailure());

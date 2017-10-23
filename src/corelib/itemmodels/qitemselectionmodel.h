@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,15 +40,14 @@
 #ifndef QITEMSELECTIONMODEL_H
 #define QITEMSELECTIONMODEL_H
 
+#include <QtCore/qglobal.h>
+
 #include <QtCore/qset.h>
 #include <QtCore/qvector.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qabstractitemmodel.h>
 
 QT_BEGIN_NAMESPACE
-
-
-#ifndef QT_NO_ITEMVIEWS
 
 class Q_CORE_EXPORT QItemSelectionRange
 {
@@ -109,30 +114,7 @@ public:
         { return (tl == other.tl && br == other.br); }
     inline bool operator!=(const QItemSelectionRange &other) const
         { return !operator==(other); }
-    inline bool operator<(const QItemSelectionRange &other) const
-        {
-            // Comparing parents will compare the models, but if two equivalent ranges
-            // in two different models have invalid parents, they would appear the same
-            if (other.tl.model() == tl.model()) {
-                // parent has to be calculated, so we only do so once.
-                const QModelIndex topLeftParent = tl.parent();
-                const QModelIndex otherTopLeftParent = other.tl.parent();
-                if (topLeftParent == otherTopLeftParent) {
-                    if (other.tl.row() == tl.row()) {
-                        if (other.tl.column() == tl.column()) {
-                            if (other.br.row() == br.row()) {
-                                return br.column() < other.br.column();
-                            }
-                            return br.row() < other.br.row();
-                        }
-                        return tl.column() < other.tl.column();
-                    }
-                    return tl.row() < other.tl.row();
-                }
-                return topLeftParent < otherTopLeftParent;
-            }
-            return tl.model() < other.tl.model();
-        }
+    bool operator<(const QItemSelectionRange &other) const;
 
     inline bool isValid() const
     {
@@ -244,6 +226,24 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QItemSelectionModel::SelectionFlags)
 // dummy implentation of qHash() necessary for instantiating QList<QItemSelectionRange>::toSet() with MSVC
 inline uint qHash(const QItemSelectionRange &) { return 0; }
 
+#ifdef Q_CC_MSVC
+
+/*
+   ### Qt 6:
+   ### This needs to be removed for next releases of Qt. It is a workaround for vc++ because
+   ### Qt exports QItemSelection that inherits QList<QItemSelectionRange>.
+*/
+
+# ifndef Q_TEMPLATE_EXTERN
+#  if defined(QT_BUILD_CORE_LIB)
+#   define Q_TEMPLATE_EXTERN
+#  else
+#   define Q_TEMPLATE_EXTERN extern
+#  endif
+# endif
+Q_TEMPLATE_EXTERN template class Q_CORE_EXPORT QList<QItemSelectionRange>;
+#endif // Q_CC_MSVC
+
 class Q_CORE_EXPORT QItemSelection : public QList<QItemSelectionRange>
 {
 public:
@@ -265,8 +265,6 @@ Q_DECLARE_SHARED_NOT_MOVABLE_UNTIL_QT6(QItemSelection)
 #ifndef QT_NO_DEBUG_STREAM
 Q_CORE_EXPORT QDebug operator<<(QDebug, const QItemSelectionRange &);
 #endif
-
-#endif // QT_NO_ITEMVIEWS
 
 QT_END_NAMESPACE
 

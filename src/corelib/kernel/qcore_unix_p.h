@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,9 +52,9 @@
 // We mean it.
 //
 
+#include <QtCore/private/qglobal_p.h>
 #include "qplatformdefs.h"
 #include "qatomic.h"
-#include "qhash.h"
 
 #ifndef Q_OS_UNIX
 # error "qcore_unix_p.h included on a non-Unix system"
@@ -78,6 +85,12 @@
 
 #if defined(Q_OS_VXWORKS)
 #  include <ioLib.h>
+#endif
+
+#ifdef QT_NO_NATIVE_POLL
+#  include "qpoll_p.h"
+#else
+#  include <poll.h>
 #endif
 
 struct sockaddr;
@@ -135,6 +148,14 @@ inline timespec operator*(const timespec &t1, int mul)
     tmp.tv_nsec = t1.tv_nsec * mul;
     return normalizedTimespec(tmp);
 }
+inline timeval timespecToTimeval(const timespec &ts)
+{
+    timeval tv;
+    tv.tv_sec = ts.tv_sec;
+    tv.tv_usec = ts.tv_nsec / 1000;
+    return tv;
+}
+
 
 inline void qt_ignore_sigpipe()
 {
@@ -277,8 +298,8 @@ static inline int qt_safe_close(int fd)
 #undef QT_CLOSE
 #define QT_CLOSE qt_safe_close
 
-// - VxWorks doesn't have processes
-#if !defined(Q_OS_VXWORKS)
+// - VxWorks & iOS/tvOS/watchOS don't have processes
+#if QT_CONFIG(process)
 static inline int qt_safe_execve(const char *filename, char *const argv[],
                                  char *const envp[])
 {
@@ -307,7 +328,7 @@ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
     EINTR_LOOP(ret, ::waitpid(pid, status, options));
     return ret;
 }
-#endif // Q_OS_VXWORKS
+#endif // QT_CONFIG(process)
 
 #if !defined(_POSIX_MONOTONIC_CLOCK)
 #  define _POSIX_MONOTONIC_CLOCK -1
@@ -317,16 +338,26 @@ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
 timespec qt_gettime() Q_DECL_NOTHROW;
 void qt_nanosleep(timespec amount);
 
-Q_CORE_EXPORT int qt_safe_select(int nfds, fd_set *fdread, fd_set *fdwrite, fd_set *fdexcept,
-                                 const struct timespec *tv);
+Q_CORE_EXPORT int qt_safe_poll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout_ts);
 
-int qt_select_msecs(int nfds, fd_set *fdread, fd_set *fdwrite, int timeout);
+static inline int qt_poll_msecs(struct pollfd *fds, nfds_t nfds, int timeout)
+{
+    timespec ts, *pts = Q_NULLPTR;
 
-#ifdef Q_OS_BLACKBERRY
-class QSocketNotifier;
-Q_CORE_EXPORT int bb_select(QList<QSocketNotifier *> socketNotifiers, int nfds, fd_set *fdread,
-                            fd_set *fdwrite, int timeout);
-#endif // Q_OS_BLACKBERRY
+    if (timeout >= 0) {
+        ts.tv_sec = timeout / 1000;
+        ts.tv_nsec = (timeout % 1000) * 1000 * 1000;
+        pts = &ts;
+    }
+
+    return qt_safe_poll(fds, nfds, pts);
+}
+
+static inline struct pollfd qt_make_pollfd(int fd, short events)
+{
+    struct pollfd pfd = { fd, events, 0 };
+    return pfd;
+}
 
 // according to X/OPEN we have to define semun ourselves
 // we use prefix as on some systems sem.h will have it
@@ -336,19 +367,6 @@ union qt_semun {
     struct semid_ds *buf;       /* buffer for IPC_STAT, IPC_SET */
     unsigned short *array;      /* array for GETALL, SETALL */
 };
-
-#ifndef QT_POSIX_IPC
-#ifndef QT_NO_SHAREDMEMORY
-#ifndef Q_OS_ANDROID
-static inline key_t qt_safe_ftok(const QByteArray &filename, int proj_id)
-{
-    // Unfortunately ftok can return colliding keys even for different files.
-    // Try to add some more entropy via qHash.
-    return ::ftok(filename.constData(), qHash(filename, proj_id));
-}
-#endif // !Q_OS_ANDROID
-#endif // !QT_NO_SHAREDMEMORY
-#endif // !QT_POSIX_IPC
 
 QT_END_NAMESPACE
 

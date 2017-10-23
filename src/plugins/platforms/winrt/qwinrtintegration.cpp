@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -42,7 +45,6 @@
 #include "qwinrtinputcontext.h"
 #include "qwinrtservices.h"
 #include "qwinrteglcontext.h"
-#include "qwinrtfontdatabase.h"
 #include "qwinrttheme.h"
 #include "qwinrtclipboard.h"
 #ifndef QT_NO_DRAGANDDROP
@@ -53,7 +55,8 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QSurface>
 
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtFontDatabaseSupport/private/qwinrtfontdatabase_p.h>
+#include <QtEglSupport/private/qeglpbuffer_p.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformoffscreensurface.h>
@@ -71,10 +74,8 @@
 
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_PHONE_APP)
 #  include <windows.phone.ui.input.h>
-#  if _MSC_VER >= 1900
-#    include <windows.foundation.metadata.h>
-     using namespace ABI::Windows::Foundation::Metadata;
-#  endif
+#  include <windows.foundation.metadata.h>
+   using namespace ABI::Windows::Foundation::Metadata;
 #endif
 
 
@@ -150,7 +151,6 @@ QWinRTIntegration::QWinRTIntegration() : d_ptr(new QWinRTIntegrationPrivate)
     Q_ASSERT_SUCCEEDED(hr);
 
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_PHONE_APP)
-#if _MSC_VER >= 1900
     d->hasHardwareButtons = false;
     ComPtr<IApiInformationStatics> apiInformationStatics;
     hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Foundation_Metadata_ApiInformation).Get(),
@@ -160,9 +160,6 @@ QWinRTIntegration::QWinRTIntegration() : d_ptr(new QWinRTIntegrationPrivate)
         const HStringReference valueRef(L"Windows.Phone.UI.Input.HardwareButtons");
         hr = apiInformationStatics->IsTypePresent(valueRef.Get(), &d->hasHardwareButtons);
     }
-#else
-    d->hasHardwareButtons = true;
-#endif // _MSC_VER >= 1900
 
     if (d->hasHardwareButtons) {
         hr = RoGetActivationFactory(HString::MakeReference(RuntimeClass_Windows_Phone_UI_Input_HardwareButtons).Get(),
@@ -194,9 +191,9 @@ QWinRTIntegration::QWinRTIntegration() : d_ptr(new QWinRTIntegrationPrivate)
 
     QEventDispatcherWinRT::runOnXamlThread([d]() {
         d->mainScreen = new QWinRTScreen;
-        d->inputContext.reset(new QWinRTInputContext(d->mainScreen));
         return S_OK;
     });
+    d->inputContext.reset(new QWinRTInputContext(d->mainScreen));
 
     screenAdded(d->mainScreen);
     d->platformServices = new QWinRTServices;
@@ -223,12 +220,11 @@ QWinRTIntegration::~QWinRTIntegration()
     // Do not execute this on Windows Phone as the application is already
     // shutting down and trying to unregister suspending/resume handler will
     // cause exceptions and assert in debug mode
-#ifndef Q_OS_WINPHONE
     for (QHash<CoreApplicationCallbackRemover, EventRegistrationToken>::const_iterator i = d->applicationTokens.begin(); i != d->applicationTokens.end(); ++i) {
         hr = (d->application.Get()->*i.key())(i.value());
         Q_ASSERT_SUCCEEDED(hr);
     }
-#endif
+
     destroyScreen(d->mainScreen);
     Windows::Foundation::Uninitialize();
 }
@@ -315,11 +311,7 @@ QPlatformClipboard *QWinRTIntegration::clipboard() const
 #ifndef QT_NO_DRAGANDDROP
 QPlatformDrag *QWinRTIntegration::drag() const
 {
-#if _MSC_VER >= 1900
     return QWinRTDrag::instance();
-#else
-    return QPlatformIntegration::drag();
-#endif
 }
 #endif // QT_NO_DRAGANDDROP
 

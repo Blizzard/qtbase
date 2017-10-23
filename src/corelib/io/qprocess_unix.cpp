@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,9 +41,7 @@
 //#define QPROCESS_DEBUG
 #include "qdebug.h"
 
-#ifndef QT_NO_PROCESS
-
-#if defined QPROCESS_DEBUG
+#if QT_CONFIG(process) && defined(QPROCESS_DEBUG)
 #include "private/qtools_p.h"
 #include <ctype.h>
 
@@ -107,19 +112,86 @@ QT_END_NAMESPACE
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if QT_CONFIG(process)
 #include <forkfd.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
-// POSIX requires PIPE_BUF to be 512 or larger
-// so we will use 512
-static const int errorBufferMax = 512;
+#if !defined(Q_OS_DARWIN)
 
-static inline void add_fd(int &nfds, int fd, fd_set *fdset)
+QT_BEGIN_INCLUDE_NAMESPACE
+extern char **environ;
+QT_END_INCLUDE_NAMESPACE
+
+QProcessEnvironment QProcessEnvironment::systemEnvironment()
 {
-    FD_SET(fd, fdset);
-    if ((fd) > nfds)
-        nfds = fd;
+    QProcessEnvironment env;
+    const char *entry;
+    for (int count = 0; (entry = environ[count]); ++count) {
+        const char *equal = strchr(entry, '=');
+        if (!equal)
+            continue;
+
+        QByteArray name(entry, equal - entry);
+        QByteArray value(equal + 1);
+        env.d->vars.insert(QProcessEnvironmentPrivate::Key(name),
+                           QProcessEnvironmentPrivate::Value(value));
+    }
+    return env;
+}
+
+#endif // !defined(Q_OS_DARWIN)
+
+#if QT_CONFIG(process)
+
+namespace {
+struct QProcessPoller
+{
+    QProcessPoller(const QProcessPrivate &proc);
+
+    int poll(int timeout);
+
+    pollfd &stdinPipe() { return pfds[0]; }
+    pollfd &stdoutPipe() { return pfds[1]; }
+    pollfd &stderrPipe() { return pfds[2]; }
+    pollfd &forkfd() { return pfds[3]; }
+    pollfd &childStartedPipe() { return pfds[4]; }
+
+    enum { n_pfds = 5 };
+    pollfd pfds[n_pfds];
+};
+
+QProcessPoller::QProcessPoller(const QProcessPrivate &proc)
+{
+    for (int i = 0; i < n_pfds; i++)
+        pfds[i] = qt_make_pollfd(-1, POLLIN);
+
+    stdoutPipe().fd = proc.stdoutChannel.pipe[0];
+    stderrPipe().fd = proc.stderrChannel.pipe[0];
+
+    if (!proc.writeBuffer.isEmpty()) {
+        stdinPipe().fd = proc.stdinChannel.pipe[1];
+        stdinPipe().events = POLLOUT;
+    }
+
+    forkfd().fd = proc.forkfd;
+
+    if (proc.processState == QProcess::Starting)
+        childStartedPipe().fd = proc.childStartedPipe[0];
+}
+
+int QProcessPoller::poll(int timeout)
+{
+    const nfds_t nfds = (childStartedPipe().fd == -1) ? 4 : 5;
+    return qt_poll_msecs(pfds, nfds, timeout);
+}
+} // anonymous namespace
+
+static bool qt_pollfd_check(const pollfd &pfd, short revents)
+{
+    return pfd.fd >= 0 && (pfd.revents & (revents | POLLHUP | POLLERR | POLLNVAL)) != 0;
 }
 
 static int qt_create_pipe(int *pipe)
@@ -262,35 +334,7 @@ bool QProcessPrivate::openChannel(Channel &channel)
     }
 }
 
-QT_BEGIN_INCLUDE_NAMESPACE
-#if defined(Q_OS_MACX)
-# include <crt_externs.h>
-# define environ (*_NSGetEnviron())
-#else
-  extern char **environ;
-#endif
-QT_END_INCLUDE_NAMESPACE
-
-QProcessEnvironment QProcessEnvironment::systemEnvironment()
-{
-    QProcessEnvironment env;
-#if !defined(Q_OS_IOS)
-    const char *entry;
-    for (int count = 0; (entry = environ[count]); ++count) {
-        const char *equal = strchr(entry, '=');
-        if (!equal)
-            continue;
-
-        QByteArray name(entry, equal - entry);
-        QByteArray value(equal + 1);
-        env.d->hash.insert(QProcessEnvironmentPrivate::Key(name),
-                           QProcessEnvironmentPrivate::Value(value));
-    }
-#endif
-    return env;
-}
-
-static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Hash &environment, int *envc)
+static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Map &environment, int *envc)
 {
     *envc = 0;
     if (environment.isEmpty())
@@ -300,10 +344,10 @@ static char **_q_dupEnvironment(const QProcessEnvironmentPrivate::Hash &environm
     envp[environment.count()] = 0;
     envp[environment.count() + 1] = 0;
 
-    QProcessEnvironmentPrivate::Hash::ConstIterator it = environment.constBegin();
-    const QProcessEnvironmentPrivate::Hash::ConstIterator end = environment.constEnd();
+    auto it = environment.constBegin();
+    const auto end = environment.constEnd();
     for ( ; it != end; ++it) {
-        QByteArray key = it.key().key;
+        QByteArray key = it.key();
         QByteArray value = it.value().bytes();
         key.reserve(key.length() + 1 + value.length());
         key.append('=');
@@ -370,7 +414,7 @@ void QProcessPrivate::startProcess()
         }
         if (url) {
             const QCFString str = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
-            encodedProgramName += (QDir::separator() + QDir(program).relativeFilePath(QCFString::toQString(str))).toUtf8();
+            encodedProgramName += (QDir::separator() + QDir(program).relativeFilePath(QString::fromCFString(str))).toUtf8();
         }
     }
 #endif
@@ -388,7 +432,7 @@ void QProcessPrivate::startProcess()
     char **envp = 0;
     if (environment.d.constData()) {
         QProcessEnvironmentPrivate::MutexLocker locker(environment.d);
-        envp = _q_dupEnvironment(environment.d.constData()->hash, &envc);
+        envp = _q_dupEnvironment(environment.d.constData()->vars, &envc);
     }
 
     // Encode the working directory if it's non-empty, otherwise just pass 0.
@@ -500,11 +544,18 @@ void QProcessPrivate::startProcess()
     }
 }
 
+struct ChildError
+{
+    int code;
+    char function[8];
+};
+
 void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv, char **envp)
 {
     ::signal(SIGPIPE, SIG_DFL);         // reset the signal that we ignored
 
     Q_Q(QProcess);
+    ChildError error = { 0, {} };       // force zeroing of function[8]
 
     // copy the stdin socket if asked to (without closing on exec)
     if (inputChannelMode != QProcess::ForwardedInputChannel)
@@ -529,6 +580,7 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     // enter the working directory
     if (workingDir && QT_CHDIR(workingDir) == -1) {
         // failed, stop the process
+        strcpy(error.function, "chdir");
         goto report_errno;
     }
 
@@ -538,6 +590,7 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
     // execute the process
     if (!envp) {
         qt_safe_execvp(argv[0], argv);
+        strcpy(error.function, "execvp");
     } else {
         if (path) {
             char **arg = path;
@@ -555,23 +608,23 @@ void QProcessPrivate::execChild(const char *workingDir, char **path, char **argv
 #endif
             qt_safe_execve(argv[0], argv, envp);
         }
+        strcpy(error.function, "execve");
     }
 
     // notify failure
+    // don't use strerror or any other routines that may allocate memory, since
+    // some buggy libc versions can deadlock on locked mutexes.
 report_errno:
-    QString error = qt_error_string(errno);
-#if defined (QPROCESS_DEBUG)
-    fprintf(stderr, "QProcessPrivate::execChild() failed (%s), notifying parent process\n", qPrintable(error));
-#endif
-    qt_safe_write(childStartedPipe[1], error.data(), error.length() * sizeof(QChar));
-    qt_safe_close(childStartedPipe[1]);
+    error.code = errno;
+    qt_safe_write(childStartedPipe[1], &error, sizeof(error));
     childStartedPipe[1] = -1;
 }
 
 bool QProcessPrivate::processStarted(QString *errorMessage)
 {
-    ushort buf[errorBufferMax];
-    int i = qt_safe_read(childStartedPipe[0], &buf, sizeof buf);
+    ChildError buf;
+    int ret = qt_safe_read(childStartedPipe[0], &buf, sizeof(buf));
+
     if (startupSocketNotifier) {
         startupSocketNotifier->setEnabled(false);
         startupSocketNotifier->deleteLater();
@@ -585,10 +638,10 @@ bool QProcessPrivate::processStarted(QString *errorMessage)
 #endif
 
     // did we read an error message?
-    if ((i > 0) && errorMessage)
-        *errorMessage = QString((const QChar *)buf, i / sizeof(QChar));
+    if (ret > 0 && errorMessage)
+        *errorMessage = QLatin1String(buf.function) + QLatin1String(": ") + qt_error_string(buf.code);
 
-    return i <= 0;
+    return ret <= 0;
 }
 
 qint64 QProcessPrivate::bytesAvailableInChannel(const Channel *channel) const
@@ -622,8 +675,8 @@ qint64 QProcessPrivate::readFromChannel(const Channel *channel, char *data, qint
 
 bool QProcessPrivate::writeToStdin()
 {
-    const char *data = stdinChannel.buffer.readPointer();
-    const qint64 bytesToWrite = stdinChannel.buffer.nextDataBlockSize();
+    const char *data = writeBuffer.readPointer();
+    const qint64 bytesToWrite = writeBuffer.nextDataBlockSize();
 
     qint64 written = qt_safe_write_nosignal(stdinChannel.pipe[1], data, bytesToWrite);
 #if defined QPROCESS_DEBUG
@@ -643,7 +696,7 @@ bool QProcessPrivate::writeToStdin()
         setErrorAndEmit(QProcess::WriteError);
         return false;
     }
-    stdinChannel.buffer.free(written);
+    writeBuffer.free(written);
     if (!emittedBytesWritten && written != 0) {
         emittedBytesWritten = true;
         emit q_func()->bytesWritten(written);
@@ -677,10 +730,9 @@ bool QProcessPrivate::waitForStarted(int msecs)
            childStartedPipe[0]);
 #endif
 
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(childStartedPipe[0], &fds);
-    if (qt_select_msecs(childStartedPipe[0] + 1, &fds, 0, msecs) == 0) {
+    pollfd pfd = qt_make_pollfd(childStartedPipe[0], POLLIN);
+
+    if (qt_poll_msecs(&pfd, 1, msecs) == 0) {
         setError(QProcess::Timedout);
 #if defined (QPROCESS_DEBUG)
         qDebug("QProcessPrivate::waitForStarted(%d) == false (timed out)", msecs);
@@ -695,17 +747,6 @@ bool QProcessPrivate::waitForStarted(int msecs)
     return startedEmitted;
 }
 
-#ifdef Q_OS_BLACKBERRY
-QList<QSocketNotifier *> QProcessPrivate::defaultNotifiers() const
-{
-    QList<QSocketNotifier *> notifiers;
-    notifiers << stdoutChannel.notifier
-              << stderrChannel.notifier
-              << stdinChannel.notifier;
-    return notifiers;
-}
-#endif // Q_OS_BLACKBERRY
-
 bool QProcessPrivate::waitForReadyRead(int msecs)
 {
 #if defined (QPROCESS_DEBUG)
@@ -715,37 +756,12 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
     QElapsedTimer stopWatch;
     stopWatch.start();
 
-#ifdef Q_OS_BLACKBERRY
-    QList<QSocketNotifier *> notifiers = defaultNotifiers();
-#endif
-
     forever {
-        fd_set fdread;
-        fd_set fdwrite;
-
-        FD_ZERO(&fdread);
-        FD_ZERO(&fdwrite);
-
-        int nfds = forkfd;
-        FD_SET(forkfd, &fdread);
-
-        if (processState == QProcess::Starting)
-            add_fd(nfds, childStartedPipe[0], &fdread);
-
-        if (stdoutChannel.pipe[0] != -1)
-            add_fd(nfds, stdoutChannel.pipe[0], &fdread);
-        if (stderrChannel.pipe[0] != -1)
-            add_fd(nfds, stderrChannel.pipe[0], &fdread);
-
-        if (!stdinChannel.buffer.isEmpty() && stdinChannel.pipe[1] != -1)
-            add_fd(nfds, stdinChannel.pipe[1], &fdwrite);
+        QProcessPoller poller(*this);
 
         int timeout = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
-#ifdef Q_OS_BLACKBERRY
-        int ret = bb_select(notifiers, nfds + 1, &fdread, &fdwrite, timeout);
-#else
-        int ret = qt_select_msecs(nfds + 1, &fdread, &fdwrite, timeout);
-#endif
+        int ret = poller.poll(timeout);
+
         if (ret < 0) {
             break;
         }
@@ -754,29 +770,33 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
             return false;
         }
 
-        if (childStartedPipe[0] != -1 && FD_ISSET(childStartedPipe[0], &fdread)) {
+        if (qt_pollfd_check(poller.childStartedPipe(), POLLIN)) {
             if (!_q_startupNotification())
                 return false;
         }
 
         bool readyReadEmitted = false;
-        if (stdoutChannel.pipe[0] != -1 && FD_ISSET(stdoutChannel.pipe[0], &fdread)) {
+        if (qt_pollfd_check(poller.stdoutPipe(), POLLIN)) {
             bool canRead = _q_canReadStandardOutput();
-            if (processChannel == QProcess::StandardOutput && canRead)
+            if (currentReadChannel == QProcess::StandardOutput && canRead)
                 readyReadEmitted = true;
         }
-        if (stderrChannel.pipe[0] != -1 && FD_ISSET(stderrChannel.pipe[0], &fdread)) {
+        if (qt_pollfd_check(poller.stderrPipe(), POLLIN)) {
             bool canRead = _q_canReadStandardError();
-            if (processChannel == QProcess::StandardError && canRead)
+            if (currentReadChannel == QProcess::StandardError && canRead)
                 readyReadEmitted = true;
         }
         if (readyReadEmitted)
             return true;
 
-        if (stdinChannel.pipe[1] != -1 && FD_ISSET(stdinChannel.pipe[1], &fdwrite))
+        if (qt_pollfd_check(poller.stdinPipe(), POLLOUT))
             _q_canWrite();
 
-        if (forkfd == -1 || FD_ISSET(forkfd, &fdread)) {
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return false;
+
+        if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())
                 return false;
         }
@@ -793,38 +813,12 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
     QElapsedTimer stopWatch;
     stopWatch.start();
 
-#ifdef Q_OS_BLACKBERRY
-    QList<QSocketNotifier *> notifiers = defaultNotifiers();
-#endif
-
-    while (!stdinChannel.buffer.isEmpty()) {
-        fd_set fdread;
-        fd_set fdwrite;
-
-        FD_ZERO(&fdread);
-        FD_ZERO(&fdwrite);
-
-        int nfds = forkfd;
-        FD_SET(forkfd, &fdread);
-
-        if (processState == QProcess::Starting)
-            add_fd(nfds, childStartedPipe[0], &fdread);
-
-        if (stdoutChannel.pipe[0] != -1)
-            add_fd(nfds, stdoutChannel.pipe[0], &fdread);
-        if (stderrChannel.pipe[0] != -1)
-            add_fd(nfds, stderrChannel.pipe[0], &fdread);
-
-
-        if (!stdinChannel.buffer.isEmpty() && stdinChannel.pipe[1] != -1)
-            add_fd(nfds, stdinChannel.pipe[1], &fdwrite);
+    while (!writeBuffer.isEmpty()) {
+        QProcessPoller poller(*this);
 
         int timeout = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
-#ifdef Q_OS_BLACKBERRY
-        int ret = bb_select(notifiers, nfds + 1, &fdread, &fdwrite, timeout);
-#else
-        int ret = qt_select_msecs(nfds + 1, &fdread, &fdwrite, timeout);
-#endif
+        int ret = poller.poll(timeout);
+
         if (ret < 0) {
             break;
         }
@@ -834,21 +828,25 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
             return false;
         }
 
-        if (childStartedPipe[0] != -1 && FD_ISSET(childStartedPipe[0], &fdread)) {
+        if (qt_pollfd_check(poller.childStartedPipe(), POLLIN)) {
             if (!_q_startupNotification())
                 return false;
         }
 
-        if (stdinChannel.pipe[1] != -1 && FD_ISSET(stdinChannel.pipe[1], &fdwrite))
+        if (qt_pollfd_check(poller.stdinPipe(), POLLOUT))
             return _q_canWrite();
 
-        if (stdoutChannel.pipe[0] != -1 && FD_ISSET(stdoutChannel.pipe[0], &fdread))
+        if (qt_pollfd_check(poller.stdoutPipe(), POLLIN))
             _q_canReadStandardOutput();
 
-        if (stderrChannel.pipe[0] != -1 && FD_ISSET(stderrChannel.pipe[0], &fdread))
+        if (qt_pollfd_check(poller.stderrPipe(), POLLIN))
             _q_canReadStandardError();
 
-        if (forkfd == -1 || FD_ISSET(forkfd, &fdread)) {
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return false;
+
+        if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())
                 return false;
         }
@@ -866,38 +864,12 @@ bool QProcessPrivate::waitForFinished(int msecs)
     QElapsedTimer stopWatch;
     stopWatch.start();
 
-#ifdef Q_OS_BLACKBERRY
-    QList<QSocketNotifier *> notifiers = defaultNotifiers();
-#endif
-
     forever {
-        fd_set fdread;
-        fd_set fdwrite;
-        int nfds = -1;
-
-        FD_ZERO(&fdread);
-        FD_ZERO(&fdwrite);
-
-        if (processState == QProcess::Starting)
-            add_fd(nfds, childStartedPipe[0], &fdread);
-
-        if (stdoutChannel.pipe[0] != -1)
-            add_fd(nfds, stdoutChannel.pipe[0], &fdread);
-        if (stderrChannel.pipe[0] != -1)
-            add_fd(nfds, stderrChannel.pipe[0], &fdread);
-
-        if (processState == QProcess::Running && forkfd != -1)
-            add_fd(nfds, forkfd, &fdread);
-
-        if (!stdinChannel.buffer.isEmpty() && stdinChannel.pipe[1] != -1)
-            add_fd(nfds, stdinChannel.pipe[1], &fdwrite);
+        QProcessPoller poller(*this);
 
         int timeout = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
-#ifdef Q_OS_BLACKBERRY
-        int ret = bb_select(notifiers, nfds + 1, &fdread, &fdwrite, timeout);
-#else
-        int ret = qt_select_msecs(nfds + 1, &fdread, &fdwrite, timeout);
-#endif
+        int ret = poller.poll(timeout);
+
         if (ret < 0) {
             break;
         }
@@ -906,33 +878,29 @@ bool QProcessPrivate::waitForFinished(int msecs)
             return false;
         }
 
-        if (childStartedPipe[0] != -1 && FD_ISSET(childStartedPipe[0], &fdread)) {
+        if (qt_pollfd_check(poller.childStartedPipe(), POLLIN)) {
             if (!_q_startupNotification())
                 return false;
         }
-        if (stdinChannel.pipe[1] != -1 && FD_ISSET(stdinChannel.pipe[1], &fdwrite))
+        if (qt_pollfd_check(poller.stdinPipe(), POLLOUT))
             _q_canWrite();
 
-        if (stdoutChannel.pipe[0] != -1 && FD_ISSET(stdoutChannel.pipe[0], &fdread))
+        if (qt_pollfd_check(poller.stdoutPipe(), POLLIN))
             _q_canReadStandardOutput();
 
-        if (stderrChannel.pipe[0] != -1 && FD_ISSET(stderrChannel.pipe[0], &fdread))
+        if (qt_pollfd_check(poller.stderrPipe(), POLLIN))
             _q_canReadStandardError();
 
-        if (forkfd == -1 || FD_ISSET(forkfd, &fdread)) {
+        // Signals triggered by I/O may have stopped this process:
+        if (processState == QProcess::NotRunning)
+            return true;
+
+        if (qt_pollfd_check(poller.forkfd(), POLLIN)) {
             if (_q_processDied())
                 return true;
         }
     }
     return false;
-}
-
-bool QProcessPrivate::waitForWrite(int msecs)
-{
-    fd_set fdwrite;
-    FD_ZERO(&fdwrite);
-    FD_SET(stdinChannel.pipe[1], &fdwrite);
-    return qt_select_msecs(stdinChannel.pipe[1] + 1, 0, &fdwrite, msecs < 0 ? 0 : msecs) == 1;
 }
 
 void QProcessPrivate::findExitCode()
@@ -1080,6 +1048,6 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
     return success;
 }
 
-QT_END_NAMESPACE
+#endif // QT_CONFIG(process)
 
-#endif // QT_NO_PROCESS
+QT_END_NAMESPACE

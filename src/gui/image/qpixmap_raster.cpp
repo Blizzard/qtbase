@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,7 +42,6 @@
 #include <private/qfont_p.h>
 
 #include "qpixmap_raster_p.h"
-#include "qnativeimage_p.h"
 #include "qimage_p.h"
 #include "qpaintengine.h"
 
@@ -44,9 +49,11 @@
 #include "qimage.h"
 #include <QBuffer>
 #include <QImageReader>
-#include <private/qimage_p.h>
+#include <QGuiApplication>
+#include <QScreen>
 #include <private/qsimd_p.h>
 #include <private/qdrawhelper_p.h>
+#include <qpa/qplatformscreen.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -82,6 +89,13 @@ QRasterPlatformPixmap::~QRasterPlatformPixmap()
 {
 }
 
+QImage::Format QRasterPlatformPixmap::systemOpaqueFormat()
+{
+    if (!QGuiApplication::primaryScreen())
+        return QImage::Format_RGB32;
+    return QGuiApplication::primaryScreen()->handle()->format();
+}
+
 QPlatformPixmap *QRasterPlatformPixmap::createCompatiblePlatformPixmap() const
 {
     return new QRasterPlatformPixmap(pixelType());
@@ -93,7 +107,7 @@ void QRasterPlatformPixmap::resize(int width, int height)
     if (pixelType() == BitmapType)
         format = QImage::Format_MonoLSB;
     else
-        format = QNativeImage::systemFormat();
+        format = systemOpaqueFormat();
 
     image = QImage(width, height, format);
     w = width;
@@ -120,7 +134,7 @@ bool QRasterPlatformPixmap::fromData(const uchar *buffer, uint len, const char *
     if (image.isNull())
         return false;
 
-    createPixmapForImage(image, flags, /* inplace = */true);
+    createPixmapForImage(std::move(image), flags);
     return !isNull();
 }
 
@@ -128,13 +142,13 @@ void QRasterPlatformPixmap::fromImage(const QImage &sourceImage,
                                   Qt::ImageConversionFlags flags)
 {
     QImage image = sourceImage;
-    createPixmapForImage(image, flags, /* inplace = */false);
+    createPixmapForImage(std::move(image), flags);
 }
 
 void QRasterPlatformPixmap::fromImageInPlace(QImage &sourceImage,
                                              Qt::ImageConversionFlags flags)
 {
-    createPixmapForImage(sourceImage, flags, /* inplace = */true);
+    createPixmapForImage(std::move(sourceImage), flags);
 }
 
 void QRasterPlatformPixmap::fromImageReader(QImageReader *imageReader,
@@ -145,7 +159,7 @@ void QRasterPlatformPixmap::fromImageReader(QImageReader *imageReader,
     if (image.isNull())
         return;
 
-    createPixmapForImage(image, flags, /* inplace = */true);
+    createPixmapForImage(std::move(image), flags);
 }
 
 // from qbackingstore.cpp
@@ -189,7 +203,7 @@ void QRasterPlatformPixmap::fill(const QColor &color)
         }
         pixel = qPremultiply(color.rgba());
         const QPixelLayout *layout = &qPixelLayouts[image.format()];
-        layout->convertFromARGB32PM(&pixel, &pixel, 1, layout, 0);
+        layout->convertFromARGB32PM(&pixel, &pixel, 1, 0, 0);
     } else if (image.format() == QImage::Format_Alpha8) {
         pixel = qAlpha(color.rgba());
     } else if (image.format() == QImage::Format_Grayscale8) {
@@ -270,7 +284,7 @@ int QRasterPlatformPixmap::metric(QPaintDevice::PaintDeviceMetric metric) const
     case QPaintDevice::PdmPhysicalDpiX:
         return qt_defaultDpiX();
     case QPaintDevice::PdmDpiY:
-        return qt_defaultDpiX();
+        return qt_defaultDpiY();
     case QPaintDevice::PdmPhysicalDpiY:
         return qt_defaultDpiY();
     case QPaintDevice::PdmDevicePixelRatio:
@@ -286,7 +300,7 @@ int QRasterPlatformPixmap::metric(QPaintDevice::PaintDeviceMetric metric) const
     return 0;
 }
 
-void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageConversionFlags flags, bool inPlace)
+void QRasterPlatformPixmap::createPixmapForImage(QImage sourceImage, Qt::ImageConversionFlags flags)
 {
     QImage::Format format;
     if (flags & Qt::NoFormatConversion)
@@ -300,13 +314,13 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
                     ? QImage::Format_ARGB32_Premultiplied
                     : QImage::Format_RGB32;
         } else {
-            QImage::Format opaqueFormat = QNativeImage::systemFormat();
+            QImage::Format opaqueFormat = systemOpaqueFormat();
             QImage::Format alphaFormat = qt_alphaVersionForPainting(opaqueFormat);
 
             if (!sourceImage.hasAlphaChannel()) {
                 format = opaqueFormat;
             } else if ((flags & Qt::NoOpaqueDetection) == 0
-                       && !const_cast<QImage &>(sourceImage).data_ptr()->checkForAlphaPixels())
+                       && !sourceImage.data_ptr()->checkForAlphaPixels())
             {
                 format = opaqueFormat;
             } else {
@@ -320,16 +334,10 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
     if (format == QImage::Format_RGB32 && (sourceImage.format() == QImage::Format_ARGB32
         || sourceImage.format() == QImage::Format_ARGB32_Premultiplied))
     {
-        inPlace = inPlace && sourceImage.isDetached();
-        image = sourceImage;
-        if (!inPlace)
-            image.detach();
-        if (image.d)
-            image.d->format = QImage::Format_RGB32;
-    } else if (inPlace && sourceImage.d->convertInPlace(format, flags)) {
-        image = sourceImage;
+        image = std::move(sourceImage);
+        image.reinterpretAsFormat(QImage::Format_RGB32);
     } else {
-        image = sourceImage.convertToFormat(format);
+        image = std::move(sourceImage).convertToFormat(format, flags);
     }
 
     if (image.d) {
@@ -341,8 +349,6 @@ void QRasterPlatformPixmap::createPixmapForImage(QImage &sourceImage, Qt::ImageC
     }
     is_null = (w <= 0 || h <= 0);
 
-    if (image.d)
-        image.d->devicePixelRatio = sourceImage.devicePixelRatio();
     //ensure the pixmap and the image resulting from toImage() have the same cacheKey();
     setSerialNumber(image.cacheKey() >> 32);
     if (image.d)

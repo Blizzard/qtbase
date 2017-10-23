@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -43,6 +49,8 @@
 #include <qurl.h>
 #include <private/qnetworksession_p.h>
 
+#include <algorithm>
+
 #ifdef Q_OS_UNIX
 #  include <unistd.h>
 #endif
@@ -52,6 +60,74 @@ QT_BEGIN_NAMESPACE
 //#define QHOSTINFO_DEBUG
 
 Q_GLOBAL_STATIC(QHostInfoLookupManager, theHostInfoLookupManager)
+
+namespace {
+struct ToBeLookedUpEquals {
+    typedef bool result_type;
+    explicit ToBeLookedUpEquals(const QString &toBeLookedUp) Q_DECL_NOTHROW : m_toBeLookedUp(toBeLookedUp) {}
+    result_type operator()(QHostInfoRunnable* lookup) const Q_DECL_NOTHROW
+    {
+        return m_toBeLookedUp == lookup->toBeLookedUp;
+    }
+private:
+    QString m_toBeLookedUp;
+};
+
+// ### C++11: remove once we can use std::any_of()
+template<class InputIt, class UnaryPredicate>
+bool any_of(InputIt first, InputIt last, UnaryPredicate p)
+{
+    return std::find_if(first, last, p) != last;
+}
+
+template <typename InputIt, typename OutputIt1, typename OutputIt2, typename UnaryPredicate>
+std::pair<OutputIt1, OutputIt2> separate_if(InputIt first, InputIt last, OutputIt1 dest1, OutputIt2 dest2, UnaryPredicate p)
+{
+    while (first != last) {
+        if (p(*first)) {
+            *dest1 = *first;
+            ++dest1;
+        } else {
+            *dest2 = *first;
+            ++dest2;
+        }
+        ++first;
+    }
+    return std::make_pair(dest1, dest2);
+}
+
+int get_signal_index()
+{
+    static auto senderMetaObject = &QHostInfoResult::staticMetaObject;
+    static auto signal = &QHostInfoResult::resultsReady;
+    int signal_index = -1;
+    void *args[] = { &signal_index, &signal };
+    senderMetaObject->static_metacall(QMetaObject::IndexOfMethod, 0, args);
+    return signal_index + QMetaObjectPrivate::signalOffset(senderMetaObject);
+}
+
+void emit_results_ready(const QHostInfo &hostInfo, const QObject *receiver,
+                        QtPrivate::QSlotObjectBase *slotObj)
+{
+    static const int signal_index = get_signal_index();
+    auto result = new QHostInfoResult(receiver, slotObj);
+    Q_CHECK_PTR(result);
+    const int nargs = 2;
+    auto types = reinterpret_cast<int *>(malloc(nargs * sizeof(int)));
+    Q_CHECK_PTR(types);
+    types[0] = QMetaType::type("void");
+    types[1] = QMetaType::type("QHostInfo");
+    auto args = reinterpret_cast<void **>(malloc(nargs * sizeof(void *)));
+    Q_CHECK_PTR(args);
+    args[0] = 0;
+    args[1] = QMetaType::create(types[1], &hostInfo);
+    Q_CHECK_PTR(args[1]);
+    auto metaCallEvent = new QMetaCallEvent(slotObj, nullptr, signal_index, nargs, types, args);
+    Q_CHECK_PTR(metaCallEvent);
+    qApp->postEvent(result, metaCallEvent);
+}
+
+}
 
 /*!
     \class QHostInfo
@@ -107,7 +183,11 @@ Q_GLOBAL_STATIC(QHostInfoLookupManager, theHostInfoLookupManager)
     \sa QAbstractSocket, {http://www.rfc-editor.org/rfc/rfc3492.txt}{RFC 3492}
 */
 
-static QBasicAtomicInt theIdCounter = Q_BASIC_ATOMIC_INITIALIZER(1);
+static int nextId()
+{
+    static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(0);
+    return 1 + counter.fetchAndAddRelaxed(1);
+}
 
 /*!
     Looks up the IP address(es) associated with host name \a name, and
@@ -153,7 +233,7 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
 
     qRegisterMetaType<QHostInfo>();
 
-    int id = theIdCounter.fetchAndAddRelaxed(1); // generate unique ID
+    int id = nextId(); // generate unique ID
 
     if (name.isEmpty()) {
         if (!receiver)
@@ -197,6 +277,67 @@ int QHostInfo::lookupHost(const QString &name, QObject *receiver,
     }
     return id;
 }
+
+/*!
+    \fn int QHostInfo::lookupHost(const QString &name, const QObject *receiver, PointerToMemberFunction function)
+
+    \since 5.9
+
+    \overload
+
+    Looks up the IP address(es) associated with host name \a name, and
+    returns an ID for the lookup. When the result of the lookup is
+    ready, the slot or signal \a function in \a receiver is called with
+    a QHostInfo argument. The QHostInfo object can then be inspected
+    to get the results of the lookup.
+
+    \note There is no guarantee on the order the signals will be emitted
+    if you start multiple requests with lookupHost().
+
+    \sa abortHostLookup(), addresses(), error(), fromName()
+*/
+
+/*!
+    \fn int QHostInfo::lookupHost(const QString &name, Functor functor)
+
+    \since 5.9
+
+    \overload
+
+    Looks up the IP address(es) associated with host name \a name, and
+    returns an ID for the lookup. When the result of the lookup is
+    ready, the \a functor is called with a QHostInfo argument. The
+    QHostInfo object can then be inspected to get the results of the
+    lookup.
+    \note There is no guarantee on the order the signals will be emitted
+    if you start multiple requests with lookupHost().
+
+    \sa abortHostLookup(), addresses(), error(), fromName()
+*/
+
+/*!
+    \fn int QHostInfo::lookupHost(const QString &name, const QObject *context, Functor functor)
+
+    \since 5.9
+
+    \overload
+
+    Looks up the IP address(es) associated with host name \a name, and
+    returns an ID for the lookup. When the result of the lookup is
+    ready, the \a functor is called with a QHostInfo argument. The
+    QHostInfo object can then be inspected to get the results of the
+    lookup.
+
+    If \a context is destroyed before the lookup completes, the
+    \a functor will not be called. The \a functor will be run in the
+    thread of \a context. The context's thread must have a running Qt
+    event loop.
+
+    \note There is no guarantee on the order the signals will be emitted
+    if you start multiple requests with lookupHost().
+
+    \sa abortHostLookup(), addresses(), error(), fromName()
+*/
 
 /*!
     Aborts the host lookup with the ID \a id, as returned by lookupHost().
@@ -443,7 +584,62 @@ QString QHostInfo::localHostName()
     \sa hostName()
 */
 
+int QHostInfo::lookupHostImpl(const QString &name,
+                              const QObject *receiver,
+                              QtPrivate::QSlotObjectBase *slotObj)
+{
+#if defined QHOSTINFO_DEBUG
+    qDebug("QHostInfo::lookupHost(\"%s\", %p, %p)",
+           name.toLatin1().constData(), receiver, slotObj);
+#endif
+
+    if (!QAbstractEventDispatcher::instance(QThread::currentThread())) {
+        qWarning("QHostInfo::lookupHost() called with no event dispatcher");
+        return -1;
+    }
+
+    qRegisterMetaType<QHostInfo>();
+
+    int id = nextId(); // generate unique ID
+
+    if (Q_UNLIKELY(name.isEmpty())) {
+        QHostInfo hostInfo(id);
+        hostInfo.setError(QHostInfo::HostNotFound);
+        hostInfo.setErrorString(QCoreApplication::translate("QHostInfo", "No host name given"));
+        emit_results_ready(hostInfo, receiver, slotObj);
+        return id;
+    }
+
+    QHostInfoLookupManager *manager = theHostInfoLookupManager();
+
+    if (Q_LIKELY(manager)) {
+        // the application is still alive
+        if (manager->cache.isEnabled()) {
+            // check cache first
+            bool valid = false;
+            QHostInfo info = manager->cache.get(name, &valid);
+            if (valid) {
+                info.setLookupId(id);
+                emit_results_ready(info, receiver, slotObj);
+                return id;
+            }
+        }
+
+        // cache is not enabled or it was not in the cache, do normal lookup
+        QHostInfoRunnable* runnable = new QHostInfoRunnable(name, id, receiver, slotObj);
+        manager->scheduleLookup(runnable);
+    }
+    return id;
+}
+
 QHostInfoRunnable::QHostInfoRunnable(const QString &hn, int i) : toBeLookedUp(hn), id(i)
+{
+    setAutoDelete(true);
+}
+
+QHostInfoRunnable::QHostInfoRunnable(const QString &hn, int i, const QObject *receiver,
+                                     QtPrivate::QSlotObjectBase *slotObj) :
+    toBeLookedUp(hn), id(i), resultEmitter(receiver, slotObj)
 {
     setAutoDelete(true);
 }
@@ -490,17 +686,17 @@ void QHostInfoRunnable::run()
     // now also iterate through the postponed ones
     {
         QMutexLocker locker(&manager->mutex);
-        QMutableListIterator<QHostInfoRunnable*> iterator(manager->postponedLookups);
-        while (iterator.hasNext()) {
-            QHostInfoRunnable* postponed = iterator.next();
-            if (toBeLookedUp == postponed->toBeLookedUp) {
-                // we can now emit
-                iterator.remove();
-                hostInfo.setLookupId(postponed->id);
-                postponed->resultEmitter.emitResultsReady(hostInfo);
-                delete postponed;
-            }
+        const auto partitionBegin = std::stable_partition(manager->postponedLookups.rbegin(), manager->postponedLookups.rend(),
+                                                          ToBeLookedUpEquals(toBeLookedUp)).base();
+        const auto partitionEnd = manager->postponedLookups.end();
+        for (auto it = partitionBegin; it != partitionEnd; ++it) {
+            QHostInfoRunnable* postponed = *it;
+            // we can now emit
+            hostInfo.setLookupId(postponed->id);
+            postponed->resultEmitter.emitResultsReady(hostInfo);
+            delete postponed;
         }
+        manager->postponedLookups.erase(partitionBegin, partitionEnd);
     }
 
     manager->lookupFinished(this);
@@ -559,54 +755,37 @@ void QHostInfoLookupManager::work()
         finishedLookups.clear();
     }
 
-    if (!postponedLookups.isEmpty()) {
-        // try to start the postponed ones
+    auto isAlreadyRunning = [this](QHostInfoRunnable *lookup) {
+        return any_of(currentLookups.cbegin(), currentLookups.cend(), ToBeLookedUpEquals(lookup->toBeLookedUp));
+    };
 
-        QMutableListIterator<QHostInfoRunnable*> iterator(postponedLookups);
-        while (iterator.hasNext()) {
-            QHostInfoRunnable* postponed = iterator.next();
+    // Transfer any postponed lookups that aren't currently running to the scheduled list, keeping already-running lookups:
+    postponedLookups.erase(separate_if(postponedLookups.begin(),
+                                       postponedLookups.end(),
+                                       postponedLookups.begin(),
+                                       std::front_inserter(scheduledLookups), // prepend! we want to finish it ASAP
+                                       isAlreadyRunning).first,
+                           postponedLookups.end());
 
-            // check if none of the postponed hostnames is currently running
-            bool alreadyRunning = false;
-            for (int i = 0; i < currentLookups.length(); i++) {
-                if (currentLookups.at(i)->toBeLookedUp == postponed->toBeLookedUp) {
-                    alreadyRunning = true;
-                    break;
-                }
-            }
-            if (!alreadyRunning) {
-                iterator.remove();
-                scheduledLookups.prepend(postponed); // prepend! we want to finish it ASAP
-            }
+    // Unschedule and postpone any that are currently running:
+    scheduledLookups.erase(separate_if(scheduledLookups.begin(),
+                                       scheduledLookups.end(),
+                                       std::back_inserter(postponedLookups),
+                                       scheduledLookups.begin(),
+                                       isAlreadyRunning).second,
+                           scheduledLookups.end());
+
+    const int availableThreads = threadPool.maxThreadCount() - currentLookups.size();
+    if (availableThreads > 0) {
+        int readyToStartCount = qMin(availableThreads, scheduledLookups.size());
+        auto it = scheduledLookups.begin();
+        while (readyToStartCount--) {
+            // runnable now running in new thread, track this in currentLookups
+            threadPool.start(*it);
+            currentLookups.push_back(std::move(*it));
+            ++it;
         }
-    }
-
-    if (!scheduledLookups.isEmpty()) {
-        // try to start the new ones
-        QMutableListIterator<QHostInfoRunnable*> iterator(scheduledLookups);
-        while (iterator.hasNext()) {
-            QHostInfoRunnable *scheduled = iterator.next();
-
-            // check if a lookup for this host is already running, then postpone
-            for (int i = 0; i < currentLookups.size(); i++) {
-                if (currentLookups.at(i)->toBeLookedUp == scheduled->toBeLookedUp) {
-                    iterator.remove();
-                    postponedLookups.append(scheduled);
-                    scheduled = 0;
-                    break;
-                }
-            }
-
-            if (scheduled && currentLookups.size() < threadPool.maxThreadCount()) {
-                // runnable now running in new thread, track this in currentLookups
-                threadPool.start(scheduled);
-                iterator.remove();
-                currentLookups.append(scheduled);
-            } else {
-                // was postponed, continue iterating
-                continue;
-            }
-        };
+        scheduledLookups.erase(scheduledLookups.begin(), it);
     }
 }
 

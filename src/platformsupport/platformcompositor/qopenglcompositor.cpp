@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,7 +40,6 @@
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFramebufferObject>
 #include <QtGui/QWindow>
-#include <QtGui/QMatrix4x4>
 #include <qpa/qplatformbackingstore.h>
 
 #include "qopenglcompositor_p.h"
@@ -72,7 +77,8 @@ static QOpenGLCompositor *compositor = 0;
 
 QOpenGLCompositor::QOpenGLCompositor()
     : m_context(0),
-      m_targetWindow(0)
+      m_targetWindow(0),
+      m_rotation(0)
 {
     Q_ASSERT(!compositor);
     m_updateTimer.setSingleShot(true);
@@ -87,10 +93,19 @@ QOpenGLCompositor::~QOpenGLCompositor()
     compositor = 0;
 }
 
-void QOpenGLCompositor::setTarget(QOpenGLContext *context, QWindow *targetWindow)
+void QOpenGLCompositor::setTarget(QOpenGLContext *context, QWindow *targetWindow,
+                                  const QRect &nativeTargetGeometry)
 {
     m_context = context;
     m_targetWindow = targetWindow;
+    m_nativeTargetGeometry = nativeTargetGeometry;
+}
+
+void QOpenGLCompositor::setRotation(int degrees)
+{
+    m_rotation = degrees;
+    m_rotationMatrix.setToIdentity();
+    m_rotationMatrix.rotate(degrees, 0, 0, 1);
 }
 
 void QOpenGLCompositor::update()
@@ -103,7 +118,7 @@ QImage QOpenGLCompositor::grab()
 {
     Q_ASSERT(m_context && m_targetWindow);
     m_context->makeCurrent(m_targetWindow);
-    QScopedPointer<QOpenGLFramebufferObject> fbo(new QOpenGLFramebufferObject(m_targetWindow->geometry().size()));
+    QScopedPointer<QOpenGLFramebufferObject> fbo(new QOpenGLFramebufferObject(m_nativeTargetGeometry.size()));
     renderAll(fbo.data());
     return fbo->toImage();
 }
@@ -121,9 +136,7 @@ void QOpenGLCompositor::renderAll(QOpenGLFramebufferObject *fbo)
         fbo->bind();
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-    const QRect targetWindowRect(QPoint(0, 0), m_targetWindow->geometry().size());
-    glViewport(0, 0, targetWindowRect.width(), targetWindowRect.height());
+    glViewport(0, 0, m_nativeTargetGeometry.width(), m_nativeTargetGeometry.height());
 
     if (!m_blitter.isCreated())
         m_blitter.create();
@@ -175,7 +188,8 @@ static inline QRect toBottomLeftRect(const QRect &topLeftRect, int windowHeight)
                  topLeftRect.width(), topLeftRect.height());
 }
 
-static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRect &targetWindowRect, QOpenGLTextureBlitter *blitter)
+static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRect &targetWindowRect,
+                        QOpenGLTextureBlitter *blitter, QMatrix4x4 *rotationMatrix)
 {
     const QRect clipRect = textures->clipRect(idx);
     if (clipRect.isEmpty())
@@ -185,7 +199,10 @@ static void clippedBlit(const QPlatformTextureList *textures, int idx, const QRe
     const QRect clippedRectInWindow = rectInWindow & clipRect.translated(rectInWindow.topLeft());
     const QRect srcRect = toBottomLeftRect(clipRect, rectInWindow.height());
 
-    const QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(clippedRectInWindow, targetWindowRect);
+    QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(clippedRectInWindow, targetWindowRect);
+    if (rotationMatrix)
+        target = *rotationMatrix * target;
+
     const QMatrix3x3 source = QOpenGLTextureBlitter::sourceTransform(srcRect, rectInWindow.size(),
                                                                      QOpenGLTextureBlitter::OriginBottomLeft);
 
@@ -213,25 +230,29 @@ void QOpenGLCompositor::render(QOpenGLCompositorWindow *window)
         if (textures->count() > 1 && i == textures->count() - 1) {
             // Backingstore for a widget with QOpenGLWidget subwidgets
             blend.set(true);
-            const QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
+            QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
+            if (m_rotation)
+                target = m_rotationMatrix * target;
             m_blitter.blit(textureId, target, QOpenGLTextureBlitter::OriginTopLeft);
         } else if (textures->count() == 1) {
             // A regular QWidget window
             const bool translucent = window->sourceWindow()->requestedFormat().alphaBufferSize() > 0;
             blend.set(translucent);
-            const QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
+            QMatrix4x4 target = QOpenGLTextureBlitter::targetTransform(textures->geometry(i), targetWindowRect);
+            if (m_rotation)
+                target = m_rotationMatrix * target;
             m_blitter.blit(textureId, target, QOpenGLTextureBlitter::OriginTopLeft);
         } else if (!textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop)) {
             // Texture from an FBO belonging to a QOpenGLWidget
             blend.set(false);
-            clippedBlit(textures, i, targetWindowRect, &m_blitter);
+            clippedBlit(textures, i, targetWindowRect, &m_blitter, m_rotation ? &m_rotationMatrix : nullptr);
         }
     }
 
     for (int i = 0; i < textures->count(); ++i) {
         if (textures->flags(i).testFlag(QPlatformTextureList::StacksOnTop)) {
             blend.set(true);
-            clippedBlit(textures, i, targetWindowRect, &m_blitter);
+            clippedBlit(textures, i, targetWindowRect, &m_blitter, m_rotation ? &m_rotationMatrix : nullptr);
         }
     }
 

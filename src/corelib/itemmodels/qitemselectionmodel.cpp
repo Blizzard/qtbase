@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -36,8 +42,7 @@
 #include <qdebug.h>
 
 #include <algorithm>
-
-#ifndef QT_NO_ITEMVIEWS
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -268,8 +273,6 @@ QItemSelectionRange QItemSelectionRange::intersected(const QItemSelectionRange &
 */
 
 /*!
-    \fn bool QItemSelectionRange::operator<(const QItemSelectionRange &other) const
-
     Returns \c true if the selection range is less than the \a other
     range given; otherwise returns \c false.
 
@@ -278,6 +281,35 @@ QItemSelectionRange QItemSelectionRange::intersected(const QItemSelectionRange &
     class can be used with QMap.
 
 */
+bool QItemSelectionRange::operator<(const QItemSelectionRange &other) const
+{
+    // ### Qt 6: This is inconsistent with op== and needs to be fixed, nay,
+    // ###       removed, but cannot, because it was inline up to and including 5.9
+
+    // Comparing parents will compare the models, but if two equivalent ranges
+    // in two different models have invalid parents, they would appear the same
+    if (other.tl.model() == tl.model()) {
+        // parent has to be calculated, so we only do so once.
+        const QModelIndex topLeftParent = tl.parent();
+        const QModelIndex otherTopLeftParent = other.tl.parent();
+        if (topLeftParent == otherTopLeftParent) {
+            if (other.tl.row() == tl.row()) {
+                if (other.tl.column() == tl.column()) {
+                    if (other.br.row() == br.row()) {
+                        return br.column() < other.br.column();
+                    }
+                    return br.row() < other.br.row();
+                }
+                return tl.column() < other.tl.column();
+            }
+            return tl.row() < other.tl.row();
+        }
+        return topLeftParent < otherTopLeftParent;
+    }
+
+    std::less<const QAbstractItemModel *> less;
+    return less(tl.model(), other.tl.model());
+}
 
 /*!
     \fn bool QItemSelectionRange::isValid() const
@@ -319,6 +351,15 @@ static void indexesFromRange(const QItemSelectionRange &range, ModelIndexContain
             }
         }
     }
+}
+
+template<typename ModelIndexContainer>
+static ModelIndexContainer qSelectionIndexes(const QItemSelection &selection)
+{
+    ModelIndexContainer result;
+    for (const auto &range : selection)
+        indexesFromRange(range, result);
+    return result;
 }
 
 /*!
@@ -463,26 +504,13 @@ bool QItemSelection::contains(const QModelIndex &index) const
 
 QModelIndexList QItemSelection::indexes() const
 {
-    QModelIndexList result;
-    QList<QItemSelectionRange>::const_iterator it = begin();
-    for (; it != end(); ++it)
-        indexesFromRange(*it, result);
-    return result;
-}
-
-static QVector<QPersistentModelIndex> qSelectionPersistentindexes(const QItemSelection &sel)
-{
-    QVector<QPersistentModelIndex> result;
-    QList<QItemSelectionRange>::const_iterator it = sel.constBegin();
-    for (; it != sel.constEnd(); ++it)
-        indexesFromRange(*it, result);
-    return result;
+    return qSelectionIndexes<QModelIndexList>(*this);
 }
 
 static QVector<QPair<QPersistentModelIndex, uint> > qSelectionPersistentRowLengths(const QItemSelection &sel)
 {
     QVector<QPair<QPersistentModelIndex, uint> > result;
-    Q_FOREACH (const QItemSelectionRange &range, sel)
+    for (const QItemSelectionRange &range : sel)
         rowLengthsFromRange(range, result);
     return result;
 }
@@ -861,7 +889,7 @@ void QItemSelectionModelPrivate::_q_layoutAboutToBeChanged(const QList<QPersiste
     // optimization for when all indexes are selected
     // (only if there is lots of items (1000) because this is not entirely correct)
     if (ranges.isEmpty() && currentSelection.count() == 1) {
-        QItemSelectionRange range = currentSelection.first();
+        QItemSelectionRange range = currentSelection.constFirst();
         QModelIndex parent = range.parent();
         tableRowCount = model->rowCount(parent);
         tableColCount = model->columnCount(parent);
@@ -886,8 +914,8 @@ void QItemSelectionModelPrivate::_q_layoutAboutToBeChanged(const QList<QPersiste
         savedPersistentRowLengths = qSelectionPersistentRowLengths(ranges);
         savedPersistentCurrentRowLengths = qSelectionPersistentRowLengths(currentSelection);
     } else {
-        savedPersistentIndexes = qSelectionPersistentindexes(ranges);
-        savedPersistentCurrentIndexes = qSelectionPersistentindexes(currentSelection);
+        savedPersistentIndexes = qSelectionIndexes<QVector<QPersistentModelIndex>>(ranges);
+        savedPersistentCurrentIndexes = qSelectionIndexes<QVector<QPersistentModelIndex>>(currentSelection);
     }
 }
 /*!
@@ -915,13 +943,14 @@ static QItemSelection mergeRowLengths(const QVector<QPair<QPersistentModelIndex,
             const uint nextLength = rowLengths.at(i).second;
             if ((nextLength == length)
                 && (next.row() == br.row() + 1)
+                && (next.column() == br.column())
                 && (next.parent() == br.parent())) {
                 br = next;
             } else {
                 break;
             }
         }
-        result.append(QItemSelectionRange(tl, br.sibling(br.row(),  length - 1)));
+        result.append(QItemSelectionRange(tl, br.sibling(br.row(), br.column() + length - 1)));
     }
     return result;
 }
@@ -1236,6 +1265,21 @@ void QItemSelectionModel::select(const QModelIndex &index, QItemSelectionModel::
                           convenience.
 */
 
+namespace {
+namespace QtFunctionObjects {
+struct IsNotValid {
+    typedef bool result_type;
+    struct is_transparent : std::true_type {};
+    template <typename T>
+    Q_DECL_CONSTEXPR bool operator()(T &t) const Q_DECL_NOEXCEPT_EXPR(noexcept(t.isValid()))
+    { return !t.isValid(); }
+    template <typename T>
+    Q_DECL_CONSTEXPR bool operator()(T *t) const Q_DECL_NOEXCEPT_EXPR(noexcept(t->isValid()))
+    { return !t->isValid(); }
+};
+}
+} // unnamed namespace
+
 /*!
     Selects the item \a selection using the specified \a command, and emits
     selectionChanged().
@@ -1259,13 +1303,9 @@ void QItemSelectionModel::select(const QItemSelection &selection, QItemSelection
     // be too late if another model observer is connected to the same modelReset slot and is invoked first
     // it might call select() on this selection model before any such QItemSelectionModelPrivate::_q_modelReset() slot
     // is invoked, so it would not be cleared yet. We clear it invalid ranges in it here.
-    QItemSelection::iterator it = d->ranges.begin();
-    while (it != d->ranges.end()) {
-      if (!it->isValid())
-        it = d->ranges.erase(it);
-      else
-        ++it;
-    }
+    using namespace QtFunctionObjects;
+    d->ranges.erase(std::remove_if(d->ranges.begin(), d->ranges.end(), IsNotValid()),
+                    d->ranges.end());
 
     QItemSelection old = d->ranges;
     old.merge(d->currentSelection, d->currentCommand);
@@ -1715,15 +1755,12 @@ const QItemSelection QItemSelectionModel::selection() const
     Q_D(const QItemSelectionModel);
     QItemSelection selected = d->ranges;
     selected.merge(d->currentSelection, d->currentCommand);
-    int i = 0;
     // make sure we have no invalid ranges
     // ###  should probably be handled more generic somewhere else
-    while (i<selected.count()) {
-        if (selected.at(i).isValid())
-            ++i;
-        else
-            (selected.removeAt(i));
-    }
+    using namespace QtFunctionObjects;
+    selected.erase(std::remove_if(selected.begin(), selected.end(),
+                                  IsNotValid()),
+                   selected.end());
     return selected;
 }
 
@@ -1878,5 +1915,3 @@ QDebug operator<<(QDebug dbg, const QItemSelectionRange &range)
 QT_END_NAMESPACE
 
 #include "moc_qitemselectionmodel.cpp"
-
-#endif // QT_NO_ITEMVIEWS

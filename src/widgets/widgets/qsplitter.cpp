@@ -1,38 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qsplitter.h"
-#ifndef QT_NO_SPLITTER
 
 #include "qapplication.h"
 #include "qcursor.h"
@@ -41,7 +46,9 @@
 #include "qlayout.h"
 #include "qlist.h"
 #include "qpainter.h"
+#if QT_CONFIG(rubberband)
 #include "qrubberband.h"
+#endif
 #include "qstyle.h"
 #include "qstyleoption.h"
 #include "qtextstream.h"
@@ -235,21 +242,24 @@ void QSplitterHandle::resizeEvent(QResizeEvent *event)
 {
     Q_D(const QSplitterHandle);
 
-    // When splitters are only 1 or 0 pixel large we increase the
-    // actual grab area to five pixels
+    // Ensure the actual grab area is at least 4 or 5 pixels
+    const int handleMargin = (5 - d->s->handleWidth()) / 2;
 
     // Note that QSplitter uses contentsRect for layouting
     // and ensures that handles are drawn on top of widgets
     // We simply use the contents margins for draggin and only
     // paint the mask area
-    bool useTinyMode = (d->s->handleWidth() <= 1);
+    const bool useTinyMode = handleMargin > 0;
     setAttribute(Qt::WA_MouseNoMask, useTinyMode);
     if (useTinyMode) {
         if (orientation() == Qt::Horizontal)
-            setContentsMargins(2, 0, 2, 0);
+            setContentsMargins(handleMargin, 0, handleMargin, 0);
         else
-            setContentsMargins(0, 2, 0, 2);
+            setContentsMargins(0, handleMargin, 0, handleMargin);
         setMask(QRegion(contentsRect()));
+    } else {
+        setContentsMargins(0, 0, 0, 0);
+        clearMask();
     }
 
     QWidget::resizeEvent(event);
@@ -725,6 +735,12 @@ void QSplitterPrivate::setSizes_helper(const QList<int> &sizes, bool clampNegati
     doResize();
 }
 
+bool QSplitterPrivate::shouldShowWidget(const QWidget *w) const
+{
+    Q_Q(const QSplitter);
+    return q->isVisible() && !(w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide));
+}
+
 void QSplitterPrivate::setGeo(QSplitterLayoutStruct *sls, int p, int s, bool allowCollapse)
 {
     Q_Q(QSplitter);
@@ -821,8 +837,7 @@ void QSplitterPrivate::insertWidget_helper(int index, QWidget *widget, bool show
 {
     Q_Q(QSplitter);
     QBoolBlocker b(blockChildAdd);
-    bool needShow = show && q->isVisible() &&
-                    !(widget->isHidden() && widget->testAttribute(Qt::WA_WState_ExplicitShowHide));
+    const bool needShow = show && shouldShowWidget(widget);
     if (widget->parentWidget() != q)
         widget->setParent(q);
     if (needShow)
@@ -935,11 +950,8 @@ QSplitterLayoutStruct *QSplitterPrivate::insertWidget(int index, QWidget *w)
     \sa setOrientation()
 */
 QSplitter::QSplitter(QWidget *parent)
-    : QFrame(*new QSplitterPrivate, parent)
+    : QSplitter(Qt::Horizontal, parent)
 {
-    Q_D(QSplitter);
-    d->orient = Qt::Horizontal;
-    d->init();
 }
 
 
@@ -964,7 +976,9 @@ QSplitter::QSplitter(Qt::Orientation orientation, QWidget *parent)
 QSplitter::~QSplitter()
 {
     Q_D(QSplitter);
+#if QT_CONFIG(rubberband)
     delete d->rubberBand;
+#endif
     while (!d->list.isEmpty())
         delete d->list.takeFirst();
 }
@@ -997,9 +1011,7 @@ void QSplitter::setOrientation(Qt::Orientation orientation)
         return;
 
     if (!testAttribute(Qt::WA_WState_OwnSizePolicy)) {
-        QSizePolicy sp = sizePolicy();
-        sp.transpose();
-        setSizePolicy(sp);
+        setSizePolicy(sizePolicy().transposed());
         setAttribute(Qt::WA_WState_OwnSizePolicy, false);
     }
 
@@ -1058,7 +1070,7 @@ void QSplitter::setCollapsible(int index, bool collapse)
 {
     Q_D(QSplitter);
 
-    if (index < 0 || index >= d->list.size()) {
+    if (Q_UNLIKELY(index < 0 || index >= d->list.size())) {
         qWarning("QSplitter::setCollapsible: Index %d out of range", index);
         return;
     }
@@ -1071,7 +1083,7 @@ void QSplitter::setCollapsible(int index, bool collapse)
 bool QSplitter::isCollapsible(int index) const
 {
     Q_D(const QSplitter);
-    if (index < 0 || index >= d->list.size()) {
+    if (Q_UNLIKELY(index < 0 || index >= d->list.size())) {
         qWarning("QSplitter::isCollapsible: Index %d out of range", index);
         return false;
     }
@@ -1119,6 +1131,70 @@ void QSplitter::insertWidget(int index, QWidget *widget)
 {
     Q_D(QSplitter);
     d->insertWidget_helper(index, widget, true);
+}
+
+/*!
+    \since 5.9
+
+    Replaces the widget in the splitter's layout at the given \a index by \a widget.
+
+    Returns the widget that has just been replaced if \a index is valid and \a widget
+    is not already a child of the splitter. Otherwise, it returns null and no replacement
+    or addition is made.
+
+    The geometry of the newly inserted widget will be the same as the widget it replaces.
+    Its visible and collapsed states are also inherited.
+
+    \note The splitter takes ownership of \a widget and sets the parent of the
+    replaced widget to null.
+
+    \note Because \a widget gets \l{QWidget::setParent()}{reparented} into the splitter,
+    its \l{QWidget::}{geometry} may not be set right away, but only after \a widget will
+    receive the appropriate events.
+
+    \sa insertWidget(), indexOf()
+*/
+QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
+{
+    Q_D(QSplitter);
+    if (!widget) {
+        qWarning("QSplitter::replaceWidget: Widget can't be null");
+        return nullptr;
+    }
+
+    if (index < 0 || index >= d->list.count()) {
+        qWarning("QSplitter::replaceWidget: Index %d out of range", index);
+        return nullptr;
+    }
+
+    QSplitterLayoutStruct *s = d->list.at(index);
+    QWidget *current = s->widget;
+    if (current == widget) {
+        qWarning("QSplitter::replaceWidget: Trying to replace a widget with itself");
+        return nullptr;
+    }
+
+    if (widget->parentWidget() == this) {
+        qWarning("QSplitter::replaceWidget: Trying to replace a widget with one of its siblings");
+        return nullptr;
+    }
+
+    QBoolBlocker b(d->blockChildAdd);
+
+    const QRect geom = current->geometry();
+    const bool shouldShow = d->shouldShowWidget(current);
+
+    s->widget = widget;
+    current->setParent(nullptr);
+    widget->setParent(this);
+
+    // The splitter layout struct's geometry is already set and
+    // should not change. Only set the geometry on the new widget
+    widget->setGeometry(geom);
+    widget->lower();
+    widget->setVisible(shouldShow);
+
+    return current;
 }
 
 /*!
@@ -1219,22 +1295,23 @@ void QSplitter::childEvent(QChildEvent *c)
 {
     Q_D(QSplitter);
     if (!c->child()->isWidgetType()) {
-        if (c->type() == QEvent::ChildAdded && qobject_cast<QLayout *>(c->child()))
+        if (Q_UNLIKELY(c->type() == QEvent::ChildAdded && qobject_cast<QLayout *>(c->child())))
             qWarning("Adding a QLayout to a QSplitter is not supported.");
         return;
     }
-    QWidget *w = static_cast<QWidget*>(c->child());
-    if (w->isWindow())
-        return;
-    if (c->added() && !d->blockChildAdd && !d->findWidget(w)) {
-        d->insertWidget_helper(d->list.count(), w, false);
-    } else if (c->polished() && !d->blockChildAdd) {
-        if (isVisible() && !(w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide)))
+    if (c->added()) {
+        QWidget *w = static_cast<QWidget*>(c->child());
+        if (!d->blockChildAdd && !w->isWindow() && !d->findWidget(w))
+            d->insertWidget_helper(d->list.count(), w, false);
+    } else if (c->polished()) {
+        QWidget *w = static_cast<QWidget*>(c->child());
+        if (!d->blockChildAdd && !w->isWindow() && d->shouldShowWidget(w))
             w->show();
-    } else if (c->type() == QEvent::ChildRemoved) {
+    } else if (c->removed()) {
+        QObject *child = c->child();
         for (int i = 0; i < d->list.size(); ++i) {
             QSplitterLayoutStruct *s = d->list.at(i);
-            if (s->widget == w) {
+            if (s->widget == child) {
                 d->list.removeAt(i);
                 delete s;
                 d->recalc(isVisible());
@@ -1252,6 +1329,7 @@ void QSplitter::childEvent(QChildEvent *c)
 
 void QSplitter::setRubberBand(int pos)
 {
+#if QT_CONFIG(rubberband)
     Q_D(QSplitter);
     if (pos < 0) {
         if (d->rubberBand)
@@ -1272,6 +1350,9 @@ void QSplitter::setRubberBand(int pos)
                                                       : QRect(QPoint(r.x(), pos + hw / 2 - rBord), QSize(r.width(), 2 * rBord));
     d->rubberBand->setGeometry(newGeom);
     d->rubberBand->show();
+#else
+    Q_UNUSED(pos);
+#endif
 }
 
 /*!
@@ -1729,14 +1810,12 @@ QTextStream& operator>>(QTextStream& ts, QSplitter& splitter)
     QString line = ts.readLine();
     line = line.simplified();
     line.replace(QLatin1Char(' '), QString());
-    line = line.toUpper();
+    line = std::move(line).toUpper();
 
-    splitter.restoreState(line.toLatin1());
+    splitter.restoreState(std::move(line).toLatin1());
     return ts;
 }
 
 QT_END_NAMESPACE
 
 #include "moc_qsplitter.cpp"
-
-#endif // QT_NO_SPLITTER

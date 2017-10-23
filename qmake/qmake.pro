@@ -7,6 +7,7 @@ CONFIG += console bootstrap
 CONFIG -= qt
 DEFINES += \
     QT_BUILD_QMAKE \
+    QT_NO_FOREACH \
     PROEVALUATOR_FULL
 
 VPATH += \
@@ -26,7 +27,6 @@ INCLUDEPATH += . \
            generators/unix \
            generators/win32 \
            generators/mac \
-           generators/integrity \
            ../tools/shared
 
 include(qmake.pri)

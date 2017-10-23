@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +32,7 @@
 #include <qmap.h>
 
 #include <algorithm>
+#include <vector>
 
 class tst_QHash : public QObject
 {
@@ -53,8 +49,9 @@ private slots:
     void find(); // copied from tst_QMap
     void constFind(); // copied from tst_QMap
     void contains(); // copied from tst_QMap
+    void qhash();
     void take(); // copied from tst_QMap
-    void operator_eq(); // copied from tst_QMap
+    void operator_eq(); // slightly modified from tst_QMap
     void rehash_isnt_quadratic();
     void dont_need_default_constructor();
     void qmultihash_specific();
@@ -70,6 +67,7 @@ private slots:
     void twoArguments_qHash();
     void initializerList();
     void eraseValidIteratorOnSharedHash();
+    void equal_range();
 };
 
 struct IdentityTracker {
@@ -510,24 +508,24 @@ void tst_QHash::key()
         QCOMPARE(hash1.key(1, def), def);
 
         hash1.insert("one", 1);
-        QCOMPARE(hash1.key(1), QString("one"));
-        QCOMPARE(hash1.key(1, def), QString("one"));
+        QCOMPARE(hash1.key(1), QLatin1String("one"));
+        QCOMPARE(hash1.key(1, def), QLatin1String("one"));
         QCOMPARE(hash1.key(2), QString());
         QCOMPARE(hash1.key(2, def), def);
 
         hash1.insert("two", 2);
-        QCOMPARE(hash1.key(1), QString("one"));
-        QCOMPARE(hash1.key(1, def), QString("one"));
-        QCOMPARE(hash1.key(2), QString("two"));
-        QCOMPARE(hash1.key(2, def), QString("two"));
+        QCOMPARE(hash1.key(1), QLatin1String("one"));
+        QCOMPARE(hash1.key(1, def), QLatin1String("one"));
+        QCOMPARE(hash1.key(2), QLatin1String("two"));
+        QCOMPARE(hash1.key(2, def), QLatin1String("two"));
         QCOMPARE(hash1.key(3), QString());
         QCOMPARE(hash1.key(3, def), def);
 
         hash1.insert("deux", 2);
-        QCOMPARE(hash1.key(1), QString("one"));
-        QCOMPARE(hash1.key(1, def), QString("one"));
-        QVERIFY(hash1.key(2) == "deux" || hash1.key(2) == "two");
-        QVERIFY(hash1.key(2, def) == "deux" || hash1.key(2, def) == "two");
+        QCOMPARE(hash1.key(1), QLatin1String("one"));
+        QCOMPARE(hash1.key(1, def), QLatin1String("one"));
+        QVERIFY(hash1.key(2) == QLatin1String("deux") || hash1.key(2) == QLatin1String("two"));
+        QVERIFY(hash1.key(2, def) == QLatin1String("deux") || hash1.key(2, def) == QLatin1String("two"));
         QCOMPARE(hash1.key(3), QString());
         QCOMPARE(hash1.key(3, def), def);
     }
@@ -628,8 +626,8 @@ void tst_QHash::find()
     map1.insert(1,"Mayer");
     map1.insert(2,"Hej");
 
-    QVERIFY(map1.find(1).value() == "Mayer");
-    QVERIFY(map1.find(2).value() == "Hej");
+    QCOMPARE(map1.find(1).value(), QLatin1String("Mayer"));
+    QCOMPARE(map1.find(2).value(), QLatin1String("Hej"));
 
     for(i = 3; i < 10; ++i) {
         compareString = testString.arg(i);
@@ -661,8 +659,8 @@ void tst_QHash::constFind()
     map1.insert(1,"Mayer");
     map1.insert(2,"Hej");
 
-    QVERIFY(map1.constFind(1).value() == "Mayer");
-    QVERIFY(map1.constFind(2).value() == "Hej");
+    QCOMPARE(map1.constFind(1).value(), QLatin1String("Mayer"));
+    QCOMPARE(map1.constFind(2).value(), QLatin1String("Hej"));
 
     for(i = 3; i < 10; ++i) {
         compareString = testString.arg(i);
@@ -698,6 +696,69 @@ void tst_QHash::contains()
     QVERIFY(!map1.contains(43));
 }
 
+namespace {
+class QGlobalQHashSeedResetter
+{
+    int oldSeed;
+public:
+    // not entirely correct (may lost changes made by another thread between the query
+    // of the old and the setting of the new seed), but qSetGlobalQHashSeed doesn't
+    // return the old value, so this is the best we can do:
+    explicit QGlobalQHashSeedResetter(int newSeed)
+        : oldSeed(qGlobalQHashSeed())
+    {
+        qSetGlobalQHashSeed(newSeed);
+    }
+    ~QGlobalQHashSeedResetter()
+    {
+        qSetGlobalQHashSeed(oldSeed);
+    }
+};
+
+template <typename Key, typename T>
+QHash<T, Key> inverted(const QHash<Key, T> &in)
+{
+    QHash<T, Key> result;
+    for (auto it = in.begin(), end = in.end(); it != end; ++it)
+        result[it.value()] = it.key();
+    return result;
+}
+
+template <typename AssociativeContainer>
+void make_test_data(AssociativeContainer &c)
+{
+    c["one"] = "1";
+    c["two"] = "2";
+}
+
+}
+
+void tst_QHash::qhash()
+{
+    const QGlobalQHashSeedResetter seed1(0);
+
+    QHash<QString, QString> hash1;
+    make_test_data(hash1);
+    const QHash<QString, QString> hsah1 = inverted(hash1);
+
+    const QGlobalQHashSeedResetter seed2(1);
+
+    QHash<QString, QString> hash2;
+    make_test_data(hash2);
+    const QHash<QString, QString> hsah2 = inverted(hash2);
+
+    QCOMPARE(hash1, hash2);
+    QCOMPARE(hsah1, hsah2);
+    QCOMPARE(qHash(hash1), qHash(hash2));
+    QCOMPARE(qHash(hsah1), qHash(hsah2));
+
+    // by construction this is almost impossible to cause false collisions:
+    QVERIFY(hash1 != hsah1);
+    QVERIFY(hash2 != hsah2);
+    QVERIFY(qHash(hash1) != qHash(hsah1));
+    QVERIFY(qHash(hash2) != qHash(hsah2));
+}
+
 //copied from tst_QMap
 void tst_QHash::take()
 {
@@ -706,11 +767,11 @@ void tst_QHash::take()
     map.insert(2, "zwei");
     map.insert(3, "drei");
 
-    QVERIFY(map.take(3) == "drei");
+    QCOMPARE(map.take(3), QLatin1String("drei"));
     QVERIFY(!map.contains(3));
 }
 
-//copied from tst_QMap
+// slightly modified from tst_QMap
 void tst_QHash::operator_eq()
 {
     {
@@ -786,6 +847,71 @@ void tst_QHash::operator_eq()
         b.insert("willy", 1);
         QVERIFY(a != b);
         QVERIFY(!(a == b));
+    }
+
+    // unlike multi-maps, multi-hashes should be equal iff their contents are equal,
+    // regardless of insertion or iteration order
+
+    {
+        QHash<int, int> a;
+        QHash<int, int> b;
+
+        a.insertMulti(0, 0);
+        a.insertMulti(0, 1);
+
+        b.insertMulti(0, 1);
+        b.insertMulti(0, 0);
+
+        QVERIFY(a == b);
+        QVERIFY(!(a != b));
+    }
+
+    {
+        QHash<int, int> a;
+        QHash<int, int> b;
+
+        enum { Count = 100 };
+
+        for (int key = 0; key < Count; ++key) {
+            for (int value = 0; value < Count; ++value)
+                a.insertMulti(key, value);
+        }
+
+        for (int key = Count - 1; key >= 0; --key) {
+            for (int value = 0; value < Count; ++value)
+                b.insertMulti(key, value);
+        }
+
+        QVERIFY(a == b);
+        QVERIFY(!(a != b));
+    }
+
+    {
+        QHash<int, int> a;
+        QHash<int, int> b;
+
+        enum {
+            Count = 100,
+            KeyStep = 17,   // coprime with Count
+            ValueStep = 23, // coprime with Count
+        };
+
+        for (int key = 0; key < Count; ++key) {
+            for (int value = 0; value < Count; ++value)
+                a.insertMulti(key, value);
+        }
+
+        // Generates two permutations of [0, Count) for the keys and values,
+        // so that b will be identical to a, just built in a very different order.
+
+        for (int k = 0; k < Count; ++k) {
+           const int key = (k * KeyStep) % Count;
+           for (int v = 0; v < Count; ++v)
+               b.insertMulti(key, (v * ValueStep) % Count);
+        }
+
+        QVERIFY(a == b);
+        QVERIFY(!(a != b));
     }
 }
 
@@ -992,6 +1118,10 @@ void tst_QHash::keyIterator()
     QCOMPARE(*(--key_it), (--it).key());
 
     QCOMPARE(std::count(hash.keyBegin(), hash.keyEnd(), 99), 1);
+
+    // DefaultConstructible test
+    typedef QHash<int, int>::key_iterator keyIterator;
+    Q_STATIC_ASSERT(std::is_default_constructible<keyIterator>::value);
 }
 
 void tst_QHash::rehash_isnt_quadratic()
@@ -999,11 +1129,7 @@ void tst_QHash::rehash_isnt_quadratic()
     // this test should be incredibly slow if rehash() is quadratic
     for (int j = 0; j < 5; ++j) {
         QHash<int, int> testHash;
-#if defined(Q_OS_WINCE) // mobiles do not have infinite mem...
-        for (int i = 0; i < 50000; ++i)
-#else
         for (int i = 0; i < 500000; ++i)
-#endif
             testHash.insertMulti(1, 1);
     }
 }
@@ -1358,6 +1484,112 @@ void tst_QHash::eraseValidIteratorOnSharedHash()
         itemsWith10 += (i.key() == 10);
 
     QCOMPARE(itemsWith10, 3);
+}
+
+void tst_QHash::equal_range()
+{
+    QHash<int, QString> hash;
+
+    auto result = hash.equal_range(0);
+    QCOMPARE(result.first, hash.end());
+    QCOMPARE(result.second, hash.end());
+
+    hash.insert(1, "one");
+
+    result = hash.equal_range(1);
+
+    QCOMPARE(result.first, hash.find(1));
+    QVERIFY(std::distance(result.first, result.second) == 1);
+
+    QHash<int, int> h1;
+    {
+        auto p = h1.equal_range(0);
+        QVERIFY(p.first == p.second);
+        QVERIFY(p.first == h1.end());
+    }
+
+    h1.insert(1, 2);
+    {
+        auto p1 = h1.equal_range(9);
+        QVERIFY(p1.first == p1.second);
+        QVERIFY(p1.first == h1.end());
+    }
+    {
+        auto p2 = h1.equal_range(1);
+        QVERIFY(p2.first != p2.second);
+        QVERIFY(p2.first == h1.begin());
+        QVERIFY(p2.second == h1.end());
+    }
+
+    QMultiHash<int, int> m1 = h1;
+    m1.insert(1, 0);
+    QCOMPARE(m1.size(), 2);
+    {
+        auto p1 = m1.equal_range(9);
+        QVERIFY(p1.first == p1.second);
+        QVERIFY(p1.first == m1.end());
+    }
+    {
+        auto p2 = m1.equal_range(1);
+        QVERIFY(p2.first != p2.second);
+        QVERIFY(p2.first == m1.begin());
+        QVERIFY(p2.second == m1.end());
+        QCOMPARE(std::distance(p2.first, p2.second), 2);
+    }
+
+    m1.insert(0, 0);
+    QCOMPARE(m1.size(), 3);
+    {
+        auto p1 = m1.equal_range(9);
+        QVERIFY(p1.first == p1.second);
+        QVERIFY(p1.first == m1.end());
+    }
+    {
+        const auto p2 = m1.equal_range(1);
+        QVERIFY(p2.first != p2.second);
+        QCOMPARE(p2.first.key(), 1);
+        QCOMPARE(std::distance(p2.first, p2.second), 2);
+        QVERIFY(p2.first == m1.begin() || p2.second == m1.end());
+    }
+
+    const QHash<int, int> ch1 = h1;
+    {
+        auto p1 = ch1.equal_range(9);
+        QVERIFY(p1.first == p1.second);
+        QVERIFY(p1.first == ch1.end());
+    }
+    {
+        auto p2 = ch1.equal_range(1);
+        QVERIFY(p2.first != p2.second);
+        QVERIFY(p2.first == ch1.begin());
+        QVERIFY(p2.second == ch1.end());
+    }
+
+    const QMultiHash<int, int> cm1 = m1;
+    {
+        auto p1 = cm1.equal_range(9);
+        QVERIFY(p1.first == p1.second);
+        QVERIFY(p1.first == cm1.end());
+    }
+    {
+        auto p2 = cm1.equal_range(1);
+        QVERIFY(p2.first != p2.second);
+        QCOMPARE(std::distance(p2.first, p2.second), 2);
+        QVERIFY(p2.first == cm1.cbegin() || p2.second == cm1.cend());
+    }
+
+    QHash<int, int> h2;
+    for (int i = 0; i < 8; ++i)
+        for (int j = 0; j < 8; ++j)
+            h2.insertMulti(i, i*j);
+
+    for (int i = 0; i < 8; ++i) {
+        auto pair = h2.equal_range(i);
+        std::vector<int> vec(pair.first, pair.second);
+        std::sort(vec.begin(), vec.end());
+        for (int j = 0; j < 8; ++j)
+            QCOMPARE(i*j, vec[j]);
+    }
 }
 
 QTEST_APPLESS_MAIN(tst_QHash)

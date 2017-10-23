@@ -1,31 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB)
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -72,29 +78,29 @@ QOpenGLFunctions_1_2::QOpenGLFunctions_1_2()
 
 QOpenGLFunctions_1_2::~QOpenGLFunctions_1_2()
 {
-    if (d_1_0_Core && !d_1_0_Core->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_0_Core->context, QOpenGLFunctions_1_0_CoreBackend::versionStatus());
-        delete d_1_0_Core;
+    if (d_1_0_Core) {
+        d_1_0_Core->refs.deref();
+        Q_ASSERT(d_1_0_Core->refs.load());
     }
-    if (d_1_1_Core && !d_1_1_Core->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_1_Core->context, QOpenGLFunctions_1_1_CoreBackend::versionStatus());
-        delete d_1_1_Core;
+    if (d_1_1_Core) {
+        d_1_1_Core->refs.deref();
+        Q_ASSERT(d_1_1_Core->refs.load());
     }
-    if (d_1_2_Core && !d_1_2_Core->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_2_Core->context, QOpenGLFunctions_1_2_CoreBackend::versionStatus());
-        delete d_1_2_Core;
+    if (d_1_2_Core) {
+        d_1_2_Core->refs.deref();
+        Q_ASSERT(d_1_2_Core->refs.load());
     }
-    if (d_1_0_Deprecated && !d_1_0_Deprecated->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_0_Deprecated->context, QOpenGLFunctions_1_0_DeprecatedBackend::versionStatus());
-        delete d_1_0_Deprecated;
+    if (d_1_0_Deprecated) {
+        d_1_0_Deprecated->refs.deref();
+        Q_ASSERT(d_1_0_Deprecated->refs.load());
     }
-    if (d_1_1_Deprecated && !d_1_1_Deprecated->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_1_Deprecated->context, QOpenGLFunctions_1_1_DeprecatedBackend::versionStatus());
-        delete d_1_1_Deprecated;
+    if (d_1_1_Deprecated) {
+        d_1_1_Deprecated->refs.deref();
+        Q_ASSERT(d_1_1_Deprecated->refs.load());
     }
-    if (d_1_2_Deprecated && !d_1_2_Deprecated->refs.deref()) {
-        QAbstractOpenGLFunctionsPrivate::removeFunctionsBackend(d_1_2_Deprecated->context, QOpenGLFunctions_1_2_DeprecatedBackend::versionStatus());
-        delete d_1_2_Deprecated;
+    if (d_1_2_Deprecated) {
+        d_1_2_Deprecated->refs.deref();
+        Q_ASSERT(d_1_2_Deprecated->refs.load());
     }
 }
 
@@ -114,50 +120,26 @@ bool QOpenGLFunctions_1_2::initializeOpenGLFunctions()
         // Function pointers in the backends are resolved at creation time
         QOpenGLVersionFunctionsBackend* d = 0;
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_0_CoreBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_0_CoreBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_0_CoreBackend::versionStatus(), d);
-        }
         d_1_0_Core = static_cast<QOpenGLFunctions_1_0_CoreBackend*>(d);
         d->refs.ref();
 
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_1_CoreBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_1_CoreBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_1_CoreBackend::versionStatus(), d);
-        }
         d_1_1_Core = static_cast<QOpenGLFunctions_1_1_CoreBackend*>(d);
         d->refs.ref();
 
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_2_CoreBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_2_CoreBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_2_CoreBackend::versionStatus(), d);
-        }
         d_1_2_Core = static_cast<QOpenGLFunctions_1_2_CoreBackend*>(d);
         d->refs.ref();
 
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_0_DeprecatedBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_0_DeprecatedBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_0_DeprecatedBackend::versionStatus(), d);
-        }
         d_1_0_Deprecated = static_cast<QOpenGLFunctions_1_0_DeprecatedBackend*>(d);
         d->refs.ref();
 
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_1_DeprecatedBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_1_DeprecatedBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_1_DeprecatedBackend::versionStatus(), d);
-        }
         d_1_1_Deprecated = static_cast<QOpenGLFunctions_1_1_DeprecatedBackend*>(d);
         d->refs.ref();
 
         d = QAbstractOpenGLFunctionsPrivate::functionsBackend(context, QOpenGLFunctions_1_2_DeprecatedBackend::versionStatus());
-        if (!d) {
-            d = new QOpenGLFunctions_1_2_DeprecatedBackend(context);
-            QAbstractOpenGLFunctionsPrivate::insertFunctionsBackend(context, QOpenGLFunctions_1_2_DeprecatedBackend::versionStatus(), d);
-        }
         d_1_2_Deprecated = static_cast<QOpenGLFunctions_1_2_DeprecatedBackend*>(d);
         d->refs.ref();
 

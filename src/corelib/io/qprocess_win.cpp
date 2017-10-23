@@ -1,36 +1,44 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
+//#define QPROCESS_DEBUG
 #include "qprocess.h"
 #include "qprocess_p.h"
 #include "qwindowspipereader_p.h"
@@ -52,11 +60,31 @@
 #define PIPE_REJECT_REMOTE_CLIENTS 0x08
 #endif
 
-#ifndef QT_NO_PROCESS
-
 QT_BEGIN_NAMESPACE
 
-//#define QPROCESS_DEBUG
+QProcessEnvironment QProcessEnvironment::systemEnvironment()
+{
+    QProcessEnvironment env;
+    // Calls to setenv() affect the low-level environment as well.
+    // This is not the case the other way round.
+    if (wchar_t *envStrings = GetEnvironmentStringsW()) {
+        for (const wchar_t *entry = envStrings; *entry; ) {
+            const int entryLen = int(wcslen(entry));
+            // + 1 to permit magic cmd variable names starting with =
+            if (const wchar_t *equal = wcschr(entry + 1, L'=')) {
+                int nameLen = equal - entry;
+                QString name = QString::fromWCharArray(entry, nameLen);
+                QString value = QString::fromWCharArray(equal + 1, entryLen - nameLen - 1);
+                env.d->vars.insert(QProcessEnvironmentPrivate::Key(name), value);
+            }
+            entry += entryLen + 1;
+        }
+        FreeEnvironmentStringsW(envStrings);
+    }
+    return env;
+}
+
+#if QT_CONFIG(process)
 
 static void qt_create_pipe(Q_PIPE *pipe, bool isInputPipe)
 {
@@ -362,33 +390,11 @@ static QString qt_create_commandline(const QString &program, const QStringList &
     return args;
 }
 
-QProcessEnvironment QProcessEnvironment::systemEnvironment()
-{
-    QProcessEnvironment env;
-    // Calls to setenv() affect the low-level environment as well.
-    // This is not the case the other way round.
-    if (wchar_t *envStrings = GetEnvironmentStringsW()) {
-        for (const wchar_t *entry = envStrings; *entry; ) {
-            const int entryLen = int(wcslen(entry));
-            // + 1 to permit magic cmd variable names starting with =
-            if (const wchar_t *equal = wcschr(entry + 1, L'=')) {
-                int nameLen = equal - entry;
-                QString name = QString::fromWCharArray(entry, nameLen);
-                QString value = QString::fromWCharArray(equal + 1, entryLen - nameLen - 1);
-                env.d->hash.insert(QProcessEnvironmentPrivate::Key(name), value);
-            }
-            entry += entryLen + 1;
-        }
-        FreeEnvironmentStringsW(envStrings);
-    }
-    return env;
-}
-
-static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Hash &environment)
+static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Map &environment)
 {
     QByteArray envlist;
     if (!environment.isEmpty()) {
-        QProcessEnvironmentPrivate::Hash copy = environment;
+        QProcessEnvironmentPrivate::Map copy = environment;
 
         // add PATH if necessary (for DLL loading)
         QProcessEnvironmentPrivate::Key pathKey(QLatin1String("PATH"));
@@ -407,8 +413,8 @@ static QByteArray qt_create_environment(const QProcessEnvironmentPrivate::Hash &
         }
 
         int pos = 0;
-        QProcessEnvironmentPrivate::Hash::ConstIterator it = copy.constBegin(),
-                                                       end = copy.constEnd();
+        auto it = copy.constBegin();
+        const auto end = copy.constEnd();
 
         static const wchar_t equal = L'=';
         static const wchar_t nul = L'\0';
@@ -469,7 +475,7 @@ void QProcessPrivate::startProcess()
     QString args = qt_create_commandline(program, arguments);
     QByteArray envlist;
     if (environment.d.constData())
-        envlist = qt_create_environment(environment.d.constData()->hash);
+        envlist = qt_create_environment(environment.d.constData()->vars);
     if (!nativeArguments.isEmpty()) {
         if (!args.isEmpty())
              args += QLatin1Char(' ');
@@ -498,11 +504,22 @@ void QProcessPrivate::startProcess()
                                  0, 0, 0,
                                  stdinChannel.pipe[0], stdoutChannel.pipe[1], stderrChannel.pipe[1]
     };
-    success = CreateProcess(0, (wchar_t*)args.utf16(),
-                            0, 0, TRUE, dwCreationFlags,
-                            environment.isEmpty() ? 0 : envlist.data(),
-                            workingDirectory.isEmpty() ? 0 : (wchar_t*)QDir::toNativeSeparators(workingDirectory).utf16(),
-                            &startupInfo, pid);
+
+    const QString nativeWorkingDirectory = QDir::toNativeSeparators(workingDirectory);
+    QProcess::CreateProcessArguments cpargs = {
+        0, (wchar_t*)args.utf16(),
+        0, 0, TRUE, dwCreationFlags,
+        environment.isEmpty() ? 0 : envlist.data(),
+        nativeWorkingDirectory.isEmpty() ? Q_NULLPTR : (wchar_t*)nativeWorkingDirectory.utf16(),
+        &startupInfo, pid
+    };
+    if (modifyCreateProcessArgs)
+        modifyCreateProcessArgs(&cpargs);
+    success = CreateProcess(cpargs.applicationName, cpargs.arguments, cpargs.processAttributes,
+                            cpargs.threadAttributes, cpargs.inheritHandles, cpargs.flags,
+                            cpargs.environment, cpargs.currentDirectory, cpargs.startupInfo,
+                            cpargs.processInformation);
+
     QString errorString;
     if (!success) {
         // Capture the error string before we do CloseHandle below
@@ -635,7 +652,7 @@ bool QProcessPrivate::waitForReadyRead(int msecs)
     QIncrementalSleepTimer timer(msecs);
 
     forever {
-        if (!stdinChannel.buffer.isEmpty() && !_q_canWrite())
+        if (!writeBuffer.isEmpty() && !_q_canWrite())
             return false;
         if (stdinChannel.writer && stdinChannel.writer->waitForWrite(0))
             timer.resetIncrements();
@@ -671,7 +688,7 @@ bool QProcessPrivate::waitForBytesWritten(int msecs)
 
         // If we don't have pending data, and our write buffer is
         // empty, we fail.
-        if (!pendingDataInPipe && stdinChannel.buffer.isEmpty())
+        if (!pendingDataInPipe && writeBuffer.isEmpty())
             return false;
 
         // If we don't have pending data and we do have data in our
@@ -735,7 +752,7 @@ bool QProcessPrivate::waitForFinished(int msecs)
     QIncrementalSleepTimer timer(msecs);
 
     forever {
-        if (!stdinChannel.buffer.isEmpty() && !_q_canWrite())
+        if (!writeBuffer.isEmpty() && !_q_canWrite())
             return false;
         if (stdinChannel.writer && stdinChannel.writer->waitForWrite(0))
             timer.resetIncrements();
@@ -802,17 +819,8 @@ bool QProcessPrivate::writeToStdin()
             return true;
     }
 
-    stdinChannel.writer->write(stdinChannel.buffer.read());
+    stdinChannel.writer->write(writeBuffer.read());
     return true;
-}
-
-bool QProcessPrivate::waitForWrite(int msecs)
-{
-    if (!stdinChannel.writer || stdinChannel.writer->waitForWrite(msecs))
-        return true;
-
-    setError(QProcess::Timedout);
-    return false;
 }
 
 // Use ShellExecuteEx() to trigger an UAC prompt when CreateProcess()fails
@@ -832,7 +840,8 @@ static bool startDetachedUacPrompt(const QString &programIn, const QStringList &
     SHELLEXECUTEINFOW shellExecuteExInfo;
     memset(&shellExecuteExInfo, 0, sizeof(SHELLEXECUTEINFOW));
     shellExecuteExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
-    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI;
+    shellExecuteExInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_UNICODE | SEE_MASK_FLAG_NO_UI | SEE_MASK_CLASSNAME;
+    shellExecuteExInfo.lpClass = L"exefile";
     shellExecuteExInfo.lpVerb = L"runas";
     const QString program = QDir::toNativeSeparators(programIn);
     shellExecuteExInfo.lpFile = reinterpret_cast<LPCWSTR>(program.utf16());
@@ -858,13 +867,15 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
     bool success = false;
     PROCESS_INFORMATION pinfo;
 
+    DWORD dwCreationFlags = (GetConsoleWindow() ? 0 : CREATE_NO_WINDOW);
+    dwCreationFlags |= CREATE_UNICODE_ENVIRONMENT;
     STARTUPINFOW startupInfo = { sizeof( STARTUPINFO ), 0, 0, 0,
                                  (ulong)CW_USEDEFAULT, (ulong)CW_USEDEFAULT,
                                  (ulong)CW_USEDEFAULT, (ulong)CW_USEDEFAULT,
                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                                };
     success = CreateProcess(0, (wchar_t*)args.utf16(),
-                            0, 0, FALSE, CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE, 0,
+                            0, 0, FALSE, dwCreationFlags, 0,
                             workingDir.isEmpty() ? 0 : (wchar_t*)workingDir.utf16(),
                             &startupInfo, &pinfo);
 
@@ -880,6 +891,6 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
     return success;
 }
 
-QT_END_NAMESPACE
+#endif // QT_CONFIG(process)
 
-#endif // QT_NO_PROCESS
+QT_END_NAMESPACE

@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -96,6 +91,7 @@ static void printHelp()
 #ifndef QT_NO_OPENGL
            "    -opengl         Paints the files to a QGLWidget (Qt4 style) on screen\n"
            "    -glbuffer       Paints the files to a QOpenGLFrameBufferObject (Qt5 style) \n"
+           "    -coreglbuffer   Paints the files to a Core Profile context QOpenGLFrameBufferObject\n"
 #endif
 #ifdef USE_CUSTOM_DEVICE
            "    -customdevice   Paints the files to the custom paint device\n"
@@ -218,6 +214,7 @@ int main(int argc, char **argv)
 #endif
 
     DeviceType type = WidgetType;
+    QSurfaceFormat contextFormat;
     bool checkers_background = true;
 
     QImage::Format imageFormat = QImage::Format_ARGB32_Premultiplied;
@@ -286,6 +283,11 @@ int main(int argc, char **argv)
                 type = OpenGLType;
             else if (option == "glbuffer")
                 type = OpenGLBufferType;
+            else if (option == "coreglbuffer") {
+                type = OpenGLBufferType;
+                contextFormat.setVersion(3, 2);
+                contextFormat.setProfile(QSurfaceFormat::CoreProfile);
+            }
 #endif
 #ifdef USE_CUSTOM_DEVICE
             else if (option == "customdevice")
@@ -332,7 +334,7 @@ int main(int argc, char **argv)
                 checkers_background = false;
             }
         } else {
-#if defined (Q_DEAD_CODE_FROM_QT4_WIN)
+#if 0 // Used to be included in Qt4 for Q_WS_WIN
             QString input = QString::fromLocal8Bit(argv[i]);
             if (input.indexOf('*') >= 0) {
                 QFileInfo info(input);
@@ -351,7 +353,7 @@ int main(int argc, char **argv)
     scaledWidth = width * scalefactor;
     scaledHeight = height * scalefactor;
 
-    PaintCommands pcmd(QStringList(), 800, 800);
+    PaintCommands pcmd(QStringList(), 800, 800, imageFormat);
     pcmd.setVerboseMode(verboseMode);
     pcmd.setType(type);
     pcmd.setCheckersBackground(checkers_background);
@@ -428,11 +430,13 @@ int main(int argc, char **argv)
             {
                 QWindow win;
                 win.setSurfaceType(QSurface::OpenGLSurface);
+                win.setFormat(contextFormat);
                 win.create();
                 QOpenGLFramebufferObjectFormat fmt;
                 fmt.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
                 fmt.setSamples(4);
                 QOpenGLContext ctx;
+                ctx.setFormat(contextFormat);
                 ctx.create();
                 ctx.makeCurrent(&win);
                 QOpenGLFramebufferObject fbo(width, height, fmt);
@@ -597,12 +601,12 @@ int main(int argc, char **argv)
             case PrinterType:
             {
 #ifndef QT_NO_PRINTER
-                PaintCommands pcmd(QStringList(), 800, 800);
+                PaintCommands pcmd(QStringList(), 800, 800, imageFormat);
                 pcmd.setVerboseMode(verboseMode);
                 pcmd.setType(type);
                 pcmd.setCheckersBackground(checkers_background);
                 pcmd.setContents(content);
-                QString file = QString(files.at(j)).replace(".", "_") + ".ps";
+                QString file = QString(files.at(j)).replace(QLatin1Char('.'), QLatin1Char('_')) + ".ps";
 
                 QPrinter p(highres ? QPrinter::HighResolution : QPrinter::ScreenResolution);
                 if (printdlg) {
@@ -631,7 +635,7 @@ int main(int argc, char **argv)
             case PdfType:
             {
 #ifndef QT_NO_PRINTER
-                PaintCommands pcmd(QStringList(), 800, 800);
+                PaintCommands pcmd(QStringList(), 800, 800, QImage::Format_ARGB32_Premultiplied);
                 pcmd.setVerboseMode(verboseMode);
                 pcmd.setType(type);
                 pcmd.setCheckersBackground(checkers_background);

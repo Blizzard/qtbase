@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +47,7 @@
 #include <qvector.h>
 #include <qstack.h>
 #include <qbitarray.h>
+#include <qdatetime.h>
 
 #include <limits.h>
 
@@ -52,8 +59,8 @@ QPersistentModelIndexData *QPersistentModelIndexData::create(const QModelIndex &
     QPersistentModelIndexData *d = 0;
     QAbstractItemModel *model = const_cast<QAbstractItemModel *>(index.model());
     QHash<QModelIndex, QPersistentModelIndexData *> &indexes = model->d_func()->persistent.indexes;
-    const QHash<QModelIndex, QPersistentModelIndexData *>::iterator it = indexes.find(index);
-    if (it != indexes.end()) {
+    const auto it = indexes.constFind(index);
+    if (it != indexes.cend()) {
         d = (*it);
     } else {
         d = new QPersistentModelIndexData(index);
@@ -357,7 +364,7 @@ quintptr QPersistentModelIndex::internalId() const
     Returns the parent QModelIndex for this persistent index, or an invalid
     QModelIndex if it has no parent.
 
-    \sa child(), sibling(), model()
+    \sa sibling(), model()
 */
 QModelIndex QPersistentModelIndex::parent() const
 {
@@ -370,7 +377,7 @@ QModelIndex QPersistentModelIndex::parent() const
     Returns the sibling at \a row and \a column or an invalid QModelIndex if
     there is no sibling at this position.
 
-    \sa parent(), child()
+    \sa parent()
 */
 
 QModelIndex QPersistentModelIndex::sibling(int row, int column) const
@@ -380,7 +387,12 @@ QModelIndex QPersistentModelIndex::sibling(int row, int column) const
     return QModelIndex();
 }
 
+#if QT_DEPRECATED_SINCE(5, 8)
 /*!
+    \obsolete
+
+    Use QAbstractItemModel::index() instead.
+
     Returns the child of the model index that is stored in the given \a row
     and \a column.
 
@@ -390,9 +402,10 @@ QModelIndex QPersistentModelIndex::sibling(int row, int column) const
 QModelIndex QPersistentModelIndex::child(int row, int column) const
 {
     if (d)
-        return d->index.child(row, column);
+        return d->index.model()->index(row, column, d->index);
     return QModelIndex();
 }
+#endif
 
 /*!
     Returns the data for the given \a role for the item referred to by the
@@ -480,6 +493,13 @@ public:
 Q_GLOBAL_STATIC(QEmptyItemModel, qEmptyModel)
 
 
+QAbstractItemModelPrivate::QAbstractItemModelPrivate()
+    : QObjectPrivate(),
+      supportedDragActions(-1),
+      roleNames(defaultRoleNames())
+{
+}
+
 QAbstractItemModelPrivate::~QAbstractItemModelPrivate()
 {
 }
@@ -487,6 +507,30 @@ QAbstractItemModelPrivate::~QAbstractItemModelPrivate()
 QAbstractItemModel *QAbstractItemModelPrivate::staticEmptyModel()
 {
     return qEmptyModel();
+}
+
+void QAbstractItemModelPrivate::invalidatePersistentIndexes()
+{
+    for (QPersistentModelIndexData *data : qAsConst(persistent.indexes)) {
+        data->index = QModelIndex();
+        data->model = 0;
+    }
+    persistent.indexes.clear();
+}
+
+/*!
+    \internal
+    Clean the QPersistentModelIndex relative to the index if there is one.
+    To be used before an index is invalided
+*/
+void QAbstractItemModelPrivate::invalidatePersistentIndex(const QModelIndex &index) {
+    const auto it = persistent.indexes.constFind(index);
+    if (it != persistent.indexes.cend()) {
+        QPersistentModelIndexData *data = *it;
+        persistent.indexes.erase(it);
+        data->index = QModelIndex();
+        data->model = 0;
+    }
 }
 
 namespace {
@@ -508,6 +552,43 @@ Q_GLOBAL_STATIC(DefaultRoleNames, qDefaultRoleNames)
 const QHash<int,QByteArray> &QAbstractItemModelPrivate::defaultRoleNames()
 {
     return *qDefaultRoleNames();
+}
+
+bool QAbstractItemModelPrivate::isVariantLessThan(const QVariant &left, const QVariant &right,
+                                                  Qt::CaseSensitivity cs, bool isLocaleAware)
+{
+    if (left.userType() == QVariant::Invalid)
+        return false;
+    if (right.userType() == QVariant::Invalid)
+        return true;
+    switch (left.userType()) {
+    case QVariant::Int:
+        return left.toInt() < right.toInt();
+    case QVariant::UInt:
+        return left.toUInt() < right.toUInt();
+    case QVariant::LongLong:
+        return left.toLongLong() < right.toLongLong();
+    case QVariant::ULongLong:
+        return left.toULongLong() < right.toULongLong();
+    case QMetaType::Float:
+        return left.toFloat() < right.toFloat();
+    case QVariant::Double:
+        return left.toDouble() < right.toDouble();
+    case QVariant::Char:
+        return left.toChar() < right.toChar();
+    case QVariant::Date:
+        return left.toDate() < right.toDate();
+    case QVariant::Time:
+        return left.toTime() < right.toTime();
+    case QVariant::DateTime:
+        return left.toDateTime() < right.toDateTime();
+    case QVariant::String:
+    default:
+        if (isLocaleAware)
+            return left.toString().localeAwareCompare(right.toString()) < 0;
+        else
+            return left.toString().compare(right.toString(), cs) < 0;
+    }
 }
 
 
@@ -566,13 +647,13 @@ void QAbstractItemModelPrivate::removePersistentIndexData(QPersistentModelIndexD
     }
     // make sure our optimization still works
     for (int i = persistent.moved.count() - 1; i >= 0; --i) {
-        int idx = persistent.moved[i].indexOf(data);
+        int idx = persistent.moved.at(i).indexOf(data);
         if (idx >= 0)
             persistent.moved[i].remove(idx);
     }
     // update the references to invalidated persistent indexes
     for (int i = persistent.invalidated.count() - 1; i >= 0; --i) {
-        int idx = persistent.invalidated[i].indexOf(data);
+        int idx = persistent.invalidated.at(i).indexOf(data);
         if (idx >= 0)
             persistent.invalidated[i].remove(idx);
     }
@@ -607,7 +688,7 @@ void QAbstractItemModelPrivate::rowsInserted(const QModelIndex &parent,
          it != persistent_moved.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
         QModelIndex old = data->index;
-        persistent.indexes.erase(persistent.indexes.find(old));
+        persistent.indexes.erase(persistent.indexes.constFind(old));
         data->index = q_func()->index(old.row() + count, old.column(), parent);
         if (data->index.isValid()) {
             persistent.insertMultiAtEnd(data->index, data);
@@ -700,7 +781,7 @@ void QAbstractItemModelPrivate::movePersistentIndexes(const QVector<QPersistentM
         else
             column += change;
 
-        persistent.indexes.erase(persistent.indexes.find(data->index));
+        persistent.indexes.erase(persistent.indexes.constFind(data->index));
         data->index = q_func()->index(row, column, parent);
         if (data->index.isValid()) {
             persistent.insertMultiAtEnd(data->index, data);
@@ -767,7 +848,7 @@ void QAbstractItemModelPrivate::rowsRemoved(const QModelIndex &parent,
          it != persistent_moved.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
         QModelIndex old = data->index;
-        persistent.indexes.erase(persistent.indexes.find(old));
+        persistent.indexes.erase(persistent.indexes.constFind(old));
         data->index = q_func()->index(old.row() - count, old.column(), parent);
         if (data->index.isValid()) {
             persistent.insertMultiAtEnd(data->index, data);
@@ -779,7 +860,7 @@ void QAbstractItemModelPrivate::rowsRemoved(const QModelIndex &parent,
     for (QVector<QPersistentModelIndexData *>::const_iterator it = persistent_invalidated.constBegin();
          it != persistent_invalidated.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
-        persistent.indexes.erase(persistent.indexes.find(data->index));
+        persistent.indexes.erase(persistent.indexes.constFind(data->index));
         data->index = QModelIndex();
         data->model = 0;
     }
@@ -812,7 +893,7 @@ void QAbstractItemModelPrivate::columnsInserted(const QModelIndex &parent,
          it != persistent_moved.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
         QModelIndex old = data->index;
-        persistent.indexes.erase(persistent.indexes.find(old));
+        persistent.indexes.erase(persistent.indexes.constFind(old));
         data->index = q_func()->index(old.row(), old.column() + count, parent);
         if (data->index.isValid()) {
             persistent.insertMultiAtEnd(data->index, data);
@@ -862,7 +943,7 @@ void QAbstractItemModelPrivate::columnsRemoved(const QModelIndex &parent,
          it != persistent_moved.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
         QModelIndex old = data->index;
-        persistent.indexes.erase(persistent.indexes.find(old));
+        persistent.indexes.erase(persistent.indexes.constFind(old));
         data->index = q_func()->index(old.row(), old.column() - count, parent);
         if (data->index.isValid()) {
             persistent.insertMultiAtEnd(data->index, data);
@@ -874,7 +955,7 @@ void QAbstractItemModelPrivate::columnsRemoved(const QModelIndex &parent,
     for (QVector<QPersistentModelIndexData *>::const_iterator it = persistent_invalidated.constBegin();
          it != persistent_invalidated.constEnd(); ++it) {
         QPersistentModelIndexData *data = *it;
-        persistent.indexes.erase(persistent.indexes.find(data->index));
+        persistent.indexes.erase(persistent.indexes.constFind(data->index));
         data->index = QModelIndex();
         data->model = 0;
     }
@@ -1024,11 +1105,15 @@ void QAbstractItemModel::resetInternalData()
     Returns the sibling at \a row and \a column. If there is no sibling at this
     position, an invalid QModelIndex is returned.
 
-    \sa parent(), child()
+    \sa parent()
 */
 
 /*!
     \fn QModelIndex QModelIndex::child(int row, int column) const
+
+    \obsolete
+
+    Use QAbstractItemModel::index() instead.
 
     Returns the child of the model index that is stored in the given \a row and
     \a column.
@@ -1078,7 +1163,7 @@ void QAbstractItemModel::resetInternalData()
     Returns the parent of the model index, or QModelIndex() if it has no
     parent.
 
-    \sa child(), sibling(), model()
+    \sa sibling(), model()
 */
 
 /*!
@@ -1808,7 +1893,7 @@ bool QAbstractItemModel::setItemData(const QModelIndex &index, const QMap<int, Q
 QStringList QAbstractItemModel::mimeTypes() const
 {
     QStringList types;
-    types << QLatin1String("application/x-qabstractitemmodeldatalist");
+    types << QStringLiteral("application/x-qabstractitemmodeldatalist");
     return types;
 }
 
@@ -1959,7 +2044,7 @@ Qt::DropActions QAbstractItemModel::supportedDropActions() const
 Qt::DropActions QAbstractItemModel::supportedDragActions() const
 {
     Q_D(const QAbstractItemModel);
-    if (d->supportedDragActions != -1)
+    if (int(d->supportedDragActions) != -1)
         return d->supportedDragActions;
     return supportedDropActions();
 }
@@ -2507,13 +2592,13 @@ bool QAbstractItemModel::decodeData(int row, int column, const QModelIndex &pare
     for (int i = 0; i < rows.count(); ++i)
         rowsToInsert[rows.at(i)] = 1;
     for (int i = 0; i < rowsToInsert.count(); ++i) {
-        if (rowsToInsert[i] == 1){
+        if (rowsToInsert.at(i) == 1){
             rowsToInsert[i] = dragRowCount;
             ++dragRowCount;
         }
     }
     for (int i = 0; i < rows.count(); ++i)
-        rows[i] = top + rowsToInsert[rows[i]];
+        rows[i] = top + rowsToInsert.at(rows.at(i));
 
     QBitArray isWrittenTo(dragRowCount * dragColumnCount);
 
@@ -2986,7 +3071,7 @@ void QAbstractItemModel::endRemoveColumns()
     When reimplementing a subclass, this method simplifies moving
     entities in your model. This method is responsible for moving
     persistent indexes in the model, which you would otherwise be
-    required to do yourself. Using beginMoveRows and endMoveRows
+    required to do yourself. Using beginMoveColumns and endMoveColumns
     is an alternative to emitting layoutAboutToBeChanged and
     layoutChanged directly along with changePersistentIndex.
 
@@ -3160,8 +3245,8 @@ void QAbstractItemModel::changePersistentIndex(const QModelIndex &from, const QM
     if (d->persistent.indexes.isEmpty())
         return;
     // find the data and reinsert it sorted
-    const QHash<QModelIndex, QPersistentModelIndexData *>::iterator it = d->persistent.indexes.find(from);
-    if (it != d->persistent.indexes.end()) {
+    const auto it = d->persistent.indexes.constFind(from);
+    if (it != d->persistent.indexes.cend()) {
         QPersistentModelIndexData *data = *it;
         d->persistent.indexes.erase(it);
         data->index = to;
@@ -3194,8 +3279,8 @@ void QAbstractItemModel::changePersistentIndexList(const QModelIndexList &from,
     for (int i = 0; i < from.count(); ++i) {
         if (from.at(i) == to.at(i))
             continue;
-        const QHash<QModelIndex, QPersistentModelIndexData *>::iterator it = d->persistent.indexes.find(from.at(i));
-        if (it != d->persistent.indexes.end()) {
+        const auto it = d->persistent.indexes.constFind(from.at(i));
+        if (it != d->persistent.indexes.cend()) {
             QPersistentModelIndexData *data = *it;
             d->persistent.indexes.erase(it);
             data->index = to.at(i);
@@ -3719,3 +3804,5 @@ void QAbstractItemModelPrivate::Persistent::insertMultiAtEnd(const QModelIndex& 
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qabstractitemmodel.cpp"

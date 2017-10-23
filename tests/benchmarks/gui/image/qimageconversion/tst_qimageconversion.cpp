@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -95,10 +90,8 @@ void tst_QImageConversion::convertRgb888ToRgb32()
     QFETCH(QImage, inputImage);
 
     QBENCHMARK {
-        volatile QImage output = inputImage.convertToFormat(QImage::Format_RGB32);
-        // we need the volatile and the following to make sure the compiler does not do
-        // anything stupid :)
-        (void)output;
+        QImage output = inputImage.convertToFormat(QImage::Format_RGB32);
+        output.constBits();
     }
 }
 
@@ -112,10 +105,8 @@ void tst_QImageConversion::convertRgb888ToRgbx8888()
     QFETCH(QImage, inputImage);
 
     QBENCHMARK {
-        volatile QImage output = inputImage.convertToFormat(QImage::Format_RGBX8888);
-        // we need the volatile and the following to make sure the compiler does not do
-        // anything stupid :)
-        (void)output;
+        QImage output = inputImage.convertToFormat(QImage::Format_RGBX8888);
+        output.constBits();
     }
 }
 
@@ -145,10 +136,8 @@ void tst_QImageConversion::convertRgb32ToRgb888()
     QFETCH(QImage, inputImage);
 
     QBENCHMARK {
-        volatile QImage output = inputImage.convertToFormat(QImage::Format_RGB888);
-        // we need the volatile and the following to make sure the compiler does not do
-        // anything stupid :)
-        (void)output;
+        QImage output = inputImage.convertToFormat(QImage::Format_RGB888);
+        output.constBits();
     }
 }
 
@@ -162,6 +151,8 @@ void tst_QImageConversion::convertRgb16_data()
     QTest::newRow("rgb888") << rgb16 << QImage::Format_RGB888;
     QTest::newRow("rgb666") << rgb16 << QImage::Format_RGB666;
     QTest::newRow("rgb555") << rgb16 << QImage::Format_RGB555;
+    QTest::newRow("argb8565") << rgb16 << QImage::Format_ARGB8565_Premultiplied;
+    QTest::newRow("argb8555") << rgb16 << QImage::Format_ARGB8555_Premultiplied;
 }
 
 void tst_QImageConversion::convertRgb16()
@@ -194,6 +185,7 @@ void tst_QImageConversion::convertRgb32_data()
     QTest::newRow("rgb32 -> rgb888") << rgb32 << QImage::Format_RGB888;
     QTest::newRow("rgb32 -> rgb666") << rgb32 << QImage::Format_RGB666;
     QTest::newRow("rgb32 -> rgb555") << rgb32 << QImage::Format_RGB555;
+    QTest::newRow("rgb32 -> argb8565pm") << rgb32 << QImage::Format_ARGB8565_Premultiplied;
 
     QTest::newRow("argb32 -> rgb16") << argb32 << QImage::Format_RGB16;
     QTest::newRow("argb32 -> rgb32") << argb32 << QImage::Format_RGB32;
@@ -207,6 +199,7 @@ void tst_QImageConversion::convertRgb32_data()
     QTest::newRow("argb32 -> rgb666") << argb32 << QImage::Format_RGB666;
     QTest::newRow("argb32 -> argb8565pm") << argb32 << QImage::Format_ARGB8565_Premultiplied;
     QTest::newRow("argb32 -> argb4444pm") << argb32 << QImage::Format_ARGB4444_Premultiplied;
+    QTest::newRow("argb32 -> argb6666pm") << argb32 << QImage::Format_ARGB6666_Premultiplied;
 
     QTest::newRow("argb32pm -> rgb16") << argb32pm << QImage::Format_RGB16;
     QTest::newRow("argb32pm -> rgb32") << argb32pm << QImage::Format_RGB32;
@@ -220,6 +213,7 @@ void tst_QImageConversion::convertRgb32_data()
     QTest::newRow("argb32pm -> rgb666") << argb32pm << QImage::Format_RGB666;
     QTest::newRow("argb32pm -> argb8565pm") << argb32pm << QImage::Format_ARGB8565_Premultiplied;
     QTest::newRow("argb32pm -> argb4444pm") << argb32pm << QImage::Format_ARGB4444_Premultiplied;
+    QTest::newRow("argb32pm -> argb6666pm") << argb32pm << QImage::Format_ARGB6666_Premultiplied;
 }
 
 void tst_QImageConversion::convertRgb32()
@@ -239,15 +233,25 @@ void tst_QImageConversion::convertGeneric_data()
     QTest::addColumn<QImage::Format>("outputFormat");
     QImage rgb32 = generateImageRgb32(1000, 1000);
     QImage argb32 = generateImageArgb32(1000, 1000);
+    QImage i8 = argb32.convertToFormat(QImage::Format_Indexed8);
     QImage rgba32 = argb32.convertToFormat(QImage::Format_RGBA8888);
     QImage bgr30 = rgb32.convertToFormat(QImage::Format_BGR30);
     QImage a2rgb30 = argb32.convertToFormat(QImage::Format_A2RGB30_Premultiplied);
+    QImage rgb666 = rgb32.convertToFormat(QImage::Format_RGB666);
+    QImage argb4444 = argb32.convertToFormat(QImage::Format_ARGB4444_Premultiplied);
+
+    QTest::newRow("indexed8 -> rgb32") << i8 << QImage::Format_RGB32;
+    QTest::newRow("indexed8 -> argb32") << i8 << QImage::Format_ARGB32;
+    QTest::newRow("indexed8 -> argb32pm") << i8 << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("indexed8 -> rgbx8888") << i8 << QImage::Format_RGBX8888;
+    QTest::newRow("indexed8 -> rgb16") << i8 << QImage::Format_RGB16;
 
     QTest::newRow("rgba8888 -> rgb32") << rgba32 << QImage::Format_RGB32;
     QTest::newRow("rgba8888 -> argb32") << rgba32 << QImage::Format_ARGB32;
     QTest::newRow("rgba8888 -> argb32pm") << rgba32 << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("rgba8888 -> rgbx8888") << rgba32 << QImage::Format_RGBX8888;
     QTest::newRow("rgba8888 -> rgba8888pm") << rgba32 << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("rgba8888 -> rgb888") << rgba32 << QImage::Format_RGB888;
     QTest::newRow("rgba8888 -> rgb30") << rgba32 << QImage::Format_RGB30;
     QTest::newRow("rgba8888 -> a2bgr30") << rgba32 << QImage::Format_A2BGR30_Premultiplied;
 
@@ -269,6 +273,22 @@ void tst_QImageConversion::convertGeneric_data()
     QTest::newRow("a2rgb30 -> rgb30") << a2rgb30 << QImage::Format_RGB30;
     QTest::newRow("a2rgb30 -> bgr30") << a2rgb30 << QImage::Format_BGR30;
     QTest::newRow("a2rgb30 -> a2bgr30") << a2rgb30 << QImage::Format_A2BGR30_Premultiplied;
+
+    QTest::newRow("rgb666 -> rgb32") << rgb666 << QImage::Format_RGB32;
+    QTest::newRow("rgb666 -> argb32") << rgb666 << QImage::Format_ARGB32;
+    QTest::newRow("rgb666 -> argb32pm") << rgb666 << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("rgb666 -> rgb888") << rgb666 << QImage::Format_RGB888;
+    QTest::newRow("rgb666 -> rgb16") << rgb666 << QImage::Format_RGB16;
+    QTest::newRow("rgb666 -> rgb555") << rgb666 << QImage::Format_RGB555;
+    QTest::newRow("rgb666 -> rgb30") << rgb666 << QImage::Format_RGB30;
+
+    QTest::newRow("argb4444pm -> rgb32") << argb4444 << QImage::Format_RGB32;
+    QTest::newRow("argb4444pm -> argb32") << argb4444 << QImage::Format_ARGB32;
+    QTest::newRow("argb4444pm -> argb32pm") << argb4444 << QImage::Format_ARGB32_Premultiplied;
+    QTest::newRow("argb4444pm -> rgbx8888") << argb4444 << QImage::Format_RGBX8888;
+    QTest::newRow("argb4444pm -> rgba8888pm") << argb4444 << QImage::Format_RGBA8888_Premultiplied;
+    QTest::newRow("argb4444pm -> rgb30") << argb4444 << QImage::Format_RGB30;
+    QTest::newRow("argb4444pm -> a2bgr30") << argb4444 << QImage::Format_A2BGR30_Premultiplied;
 }
 
 void tst_QImageConversion::convertGeneric()
@@ -290,6 +310,9 @@ void tst_QImageConversion::convertGenericInplace_data()
     QImage argb32 = generateImageArgb32(1000, 1000);
     QImage argb32pm = argb32.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QImage rgba8888 = argb32.convertToFormat(QImage::Format_RGBA8888);
+    QImage argb6666 = argb32.convertToFormat(QImage::Format_ARGB6666_Premultiplied);
+    QImage argb4444 = argb32.convertToFormat(QImage::Format_ARGB4444_Premultiplied);
+    QImage rgb16 = argb32.convertToFormat(QImage::Format_RGB16);
 
     QTest::newRow("argb32 -> argb32pm -> argb32") << argb32 << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("argb32 -> rgb32 -> argb32") << argb32 << QImage::Format_RGB32;
@@ -306,6 +329,16 @@ void tst_QImageConversion::convertGenericInplace_data()
     QTest::newRow("rgba8888 -> rgb32 -> rgba8888") << rgba8888 << QImage::Format_RGB32;
     QTest::newRow("rgba8888 -> argb32pm -> rgba8888") << rgba8888 << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("rgba8888 -> rgba8888pm -> rgba8888") << rgba8888 << QImage::Format_RGBA8888_Premultiplied;
+
+    QTest::newRow("argb6666pm -> argb8565pm -> argb6666pm") << argb6666 << QImage::Format_ARGB8565_Premultiplied;
+    QTest::newRow("argb6666pm -> rgb888 -> argb6666pm") << argb6666 << QImage::Format_RGB888;
+
+    QTest::newRow("argb4444pm -> rgb16 -> argb4444pm") << argb4444 << QImage::Format_RGB16;
+    QTest::newRow("argb4444pm -> rgb444 -> argb4444pm") << argb4444 << QImage::Format_RGB444;
+
+    QTest::newRow("rgb16 -> rgb555 -> rgb16") << rgb16 << QImage::Format_RGB555;
+    QTest::newRow("rgb16 -> rgb444 -> rgb16") << rgb16 << QImage::Format_RGB444;
+    QTest::newRow("rgb16 -> argb4444pm -> rgb16") << rgb16 << QImage::Format_ARGB4444_Premultiplied;
 }
 
 void tst_QImageConversion::convertGenericInplace()

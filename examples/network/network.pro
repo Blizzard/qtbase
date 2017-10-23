@@ -1,30 +1,36 @@
 requires(qtHaveModule(network))
 
 TEMPLATE      = subdirs
+QT_FOR_CONFIG += network-private
 SUBDIRS       = \
-                dnslookup \
                 download \
                 downloadmanager
-
+!integrity: SUBDIRS += dnslookup
 qtHaveModule(widgets) {
     SUBDIRS +=  \
                 blockingfortuneclient \
                 broadcastreceiver \
                 broadcastsender \
-                fortuneclient \
-                fortuneserver \
                 http \
                 loopback \
                 threadedfortuneserver \
                 googlesuggest \
                 torrent \
-                bearermonitor \
                 multicastreceiver \
                 multicastsender
 
-    # no QProcess
-    !vxworks:!qnx:!winrt:SUBDIRS += network-chat
+    qtConfig(bearermanagement) {
+        qtConfig(processenvironment): SUBDIRS += network-chat
 
-    contains(QT_CONFIG, openssl):SUBDIRS += securesocketclient
-    contains(QT_CONFIG, openssl-linked):SUBDIRS += securesocketclient
+        SUBDIRS += \
+                bearermonitor \
+                fortuneclient \
+                fortuneserver
+
+    }
+
+    qtConfig(openssl): SUBDIRS += securesocketclient
+    qtConfig(sctp): SUBDIRS += multistreamserver multistreamclient
 }
+
+EXAMPLE_FILES = shared

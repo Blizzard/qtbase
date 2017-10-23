@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -34,13 +40,15 @@
 #ifndef QWINDOWSGLCONTEXT_H
 #define QWINDOWSGLCONTEXT_H
 
-#include "array.h"
-#include "qtwindows_additional.h"
+#include <QtCore/qt_windows.h>
 #include "qwindowsopenglcontext.h"
 
 #include <QtGui/QOpenGLContext>
 
+#include <vector>
+
 QT_BEGIN_NAMESPACE
+#ifndef QT_NO_OPENGL
 
 class QDebug;
 
@@ -65,24 +73,23 @@ struct QWindowsOpenGLAdditionalFormat
 struct QOpenGLContextData
 {
     QOpenGLContextData(HGLRC r, HWND h, HDC d) : renderingContext(r), hwnd(h), hdc(d) {}
-    QOpenGLContextData() : renderingContext(0), hwnd(0), hdc(0) {}
+    QOpenGLContextData() {}
 
-    HGLRC renderingContext;
-    HWND hwnd;
-    HDC hdc;
+    HGLRC renderingContext = 0;
+    HWND hwnd = 0;
+    HDC hdc = 0;
 };
 
 class QOpenGLStaticContext;
 
 struct QWindowsOpenGLContextFormat
 {
-    QWindowsOpenGLContextFormat();
     static QWindowsOpenGLContextFormat current();
     void apply(QSurfaceFormat *format) const;
 
-    QSurfaceFormat::OpenGLContextProfile profile;
-    int version; //! majorVersion<<8 + minorVersion
-    QSurfaceFormat::FormatOptions options;
+    QSurfaceFormat::OpenGLContextProfile profile = QSurfaceFormat::NoProfile;
+    int version = 0; //! majorVersion<<8 + minorVersion
+    QSurfaceFormat::FormatOptions options = 0;
 };
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -111,58 +118,12 @@ struct QWindowsOpengl32DLL
     BOOL (WINAPI * wglShareLists)(HGLRC context1, HGLRC context2);
 
     // GL1+GLES2 common
-    void (APIENTRY * glBindTexture)(GLenum target, GLuint texture);
-    void (APIENTRY * glBlendFunc)(GLenum sfactor, GLenum dfactor);
-    void (APIENTRY * glClear)(GLbitfield mask);
-    void (APIENTRY * glClearColor)(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
-    void (APIENTRY * glClearStencil)(GLint s);
-    void (APIENTRY * glColorMask)(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
-    void (APIENTRY * glCopyTexImage2D)(GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border);
-    void (APIENTRY * glCopyTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height);
-    void (APIENTRY * glCullFace)(GLenum mode);
-    void (APIENTRY * glDeleteTextures)(GLsizei n, const GLuint* textures);
-    void (APIENTRY * glDepthFunc)(GLenum func);
-    void (APIENTRY * glDepthMask)(GLboolean flag);
-    void (APIENTRY * glDisable)(GLenum cap);
-    void (APIENTRY * glDrawArrays)(GLenum mode, GLint first, GLsizei count);
-    void (APIENTRY * glDrawElements)(GLenum mode, GLsizei count, GLenum type, const GLvoid* indices);
-    void (APIENTRY * glEnable)(GLenum cap);
-    void (APIENTRY * glFinish)();
-    void (APIENTRY * glFlush)();
-    void (APIENTRY * glFrontFace)(GLenum mode);
-    void (APIENTRY * glGenTextures)(GLsizei n, GLuint* textures);
-    void (APIENTRY * glGetBooleanv)(GLenum pname, GLboolean* params);
     GLenum (APIENTRY * glGetError)();
-    void (APIENTRY * glGetFloatv)(GLenum pname, GLfloat* params);
     void (APIENTRY * glGetIntegerv)(GLenum pname, GLint* params);
     const GLubyte * (APIENTRY * glGetString)(GLenum name);
-    void (APIENTRY * glGetTexParameterfv)(GLenum target, GLenum pname, GLfloat* params);
-    void (APIENTRY * glGetTexParameteriv)(GLenum target, GLenum pname, GLint* params);
-    void (APIENTRY * glHint)(GLenum target, GLenum mode);
-    GLboolean (APIENTRY * glIsEnabled)(GLenum cap);
-    GLboolean (APIENTRY * glIsTexture)(GLuint texture);
-    void (APIENTRY * glLineWidth)(GLfloat width);
-    void (APIENTRY * glPixelStorei)(GLenum pname, GLint param);
-    void (APIENTRY * glPolygonOffset)(GLfloat factor, GLfloat units);
-    void (APIENTRY * glReadPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid* pixels);
-    void (APIENTRY * glScissor)(GLint x, GLint y, GLsizei width, GLsizei height);
-    void (APIENTRY * glStencilFunc)(GLenum func, GLint ref, GLuint mask);
-    void (APIENTRY * glStencilMask)(GLuint mask);
-    void (APIENTRY * glStencilOp)(GLenum fail, GLenum zfail, GLenum zpass);
-    void (APIENTRY * glTexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid* pixels);
-    void (APIENTRY * glTexParameterf)(GLenum target, GLenum pname, GLfloat param);
-    void (APIENTRY * glTexParameterfv)(GLenum target, GLenum pname, const GLfloat* params);
-    void (APIENTRY * glTexParameteri)(GLenum target, GLenum pname, GLint param);
-    void (APIENTRY * glTexParameteriv)(GLenum target, GLenum pname, const GLint* params);
-    void (APIENTRY * glTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid* pixels);
-    void (APIENTRY * glViewport)(GLint x, GLint y, GLsizei width, GLsizei height);
 
-    // GL only
-    void (APIENTRY * glClearDepth)(GLdouble depth);
-    void (APIENTRY * glDepthRange)(GLdouble zNear, GLdouble zFar);
-
+    FARPROC resolve(const char *name);
 private:
-    void *resolve(const char *name);
     HMODULE m_lib;
     bool m_nonOpengl32;
 
@@ -233,22 +194,22 @@ class QWindowsGLContext : public QWindowsOpenGLContext
 public:
     explicit QWindowsGLContext(QOpenGLStaticContext *staticContext, QOpenGLContext *context);
     ~QWindowsGLContext();
-    bool isSharing() const Q_DECL_OVERRIDE { return m_context->shareHandle(); }
-    bool isValid() const Q_DECL_OVERRIDE { return m_renderingContext && !m_lost; }
-    QSurfaceFormat format() const Q_DECL_OVERRIDE { return m_obtainedFormat; }
+    bool isSharing() const override { return m_context->shareHandle(); }
+    bool isValid() const override { return m_renderingContext && !m_lost; }
+    QSurfaceFormat format() const override { return m_obtainedFormat; }
 
-    void swapBuffers(QPlatformSurface *surface) Q_DECL_OVERRIDE;
+    void swapBuffers(QPlatformSurface *surface) override;
 
-    bool makeCurrent(QPlatformSurface *surface) Q_DECL_OVERRIDE;
-    void doneCurrent() Q_DECL_OVERRIDE;
+    bool makeCurrent(QPlatformSurface *surface) override;
+    void doneCurrent() override;
 
     typedef void (*GL_Proc) ();
 
-    QFunctionPointer getProcAddress(const QByteArray &procName) Q_DECL_OVERRIDE;
+    QFunctionPointer getProcAddress(const char *procName) override;
 
     HGLRC renderingContext() const { return m_renderingContext; }
 
-    void *nativeContext() const Q_DECL_OVERRIDE { return m_renderingContext; }
+    void *nativeContext() const override { return m_renderingContext; }
 
 private:
     inline void releaseDCs();
@@ -258,7 +219,7 @@ private:
     QOpenGLContext *m_context;
     QSurfaceFormat m_obtainedFormat;
     HGLRC m_renderingContext;
-    Array<QOpenGLContextData> m_windowContexts;
+    std::vector<QOpenGLContextData> m_windowContexts;
     PIXELFORMATDESCRIPTOR m_obtainedPixelFormatDescriptor;
     int m_pixelFormat;
     bool m_extensionsUsed;
@@ -267,7 +228,7 @@ private:
     GLenum (APIENTRY * m_getGraphicsResetStatus)();
     bool m_lost;
 };
-
+#endif
 QT_END_NAMESPACE
 
 #endif // QWINDOWSGLCONTEXT_H

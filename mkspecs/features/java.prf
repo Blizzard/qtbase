@@ -1,14 +1,6 @@
 TEMPLATE = lib
 android {
-    API_VERSION_TO_USE = $$(ANDROID_API_VERSION)
-    isEmpty(API_VERSION_TO_USE): API_VERSION_TO_USE = $$API_VERSION
-    isEmpty(API_VERSION_TO_USE): API_VERSION_TO_USE = android-10
-
-    ANDROID_JAR_FILE = $$ANDROID_SDK_ROOT/platforms/$$API_VERSION_TO_USE/android.jar
-    !exists($$ANDROID_JAR_FILE) {
-        error("The Path $$ANDROID_JAR_FILE does not exist. Make sure the ANDROID_SDK_ROOT and ANDROID_API_VERSION environment variables are correctly set.")
-    }
-    JAVACLASSPATH += $$ANDROID_JAR_FILE
+    load(sdk)
 
     # FIXME: This is a hack to work around some hardcoded values in the android.prf. The
     # android.prf should be fixed and this should be removed.
@@ -36,7 +28,7 @@ javac.commands = javac -source 6 -target 6 -Xlint:unchecked -bootclasspath $$AND
 javac.depends = FORCE
 QMAKE_EXTRA_COMPILERS += javac
 
-mkpath($$absolute_path($$CLASS_DIR, $$OUT_PWD)) | error("Aborting.")
+mkpath($$absolute_path($$CLASS_DIR, $$OUT_PWD))|error()
 
 # Disable all linker flags since we are overriding the regular linker
 QMAKE_LFLAGS =

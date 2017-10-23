@@ -1,39 +1,43 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include "qsplashscreen.h"
-
-#ifndef QT_NO_SPLASHSCREEN
 
 #include "qapplication.h"
 #include "qdesktopwidget.h"
@@ -158,15 +162,14 @@ void QSplashScreen::mousePressEvent(QMouseEvent *)
 }
 
 /*!
-    This overrides QWidget::repaint(). It differs from the standard
-    repaint function in that it also calls QApplication::flush() to
-    ensure the updates are displayed, even when there is no event loop
-    present.
+    This overrides QWidget::repaint(). It differs from the standard repaint
+    function in that it also calls QApplication::processEvents() to ensure
+    the updates are displayed, even when there is no event loop present.
 */
 void QSplashScreen::repaint()
 {
     QWidget::repaint();
-    QApplication::flush();
+    QApplication::processEvents();
 }
 
 /*!
@@ -184,13 +187,9 @@ void QSplashScreen::repaint()
 /*!
     Draws the \a message text onto the splash screen with color \a
     color and aligns the text according to the flags in \a alignment.
-
-    To make sure the splash screen is repainted immediately, you can
-    call \l{QCoreApplication}'s
-    \l{QCoreApplication::}{processEvents()} after the call to
-    showMessage(). You usually want this to make sure that the message
-    is kept up to date with what your application is doing (e.g.,
-    loading files).
+    This function calls repaint() to make sure the splash screen is
+    repainted immediately. As a result the message is kept up
+    to date with what your application is doing (e.g. loading files).
 
     \sa Qt::Alignment, clearMessage(), message()
 */
@@ -353,5 +352,3 @@ bool QSplashScreen::event(QEvent *e)
 QT_END_NAMESPACE
 
 #include "moc_qsplashscreen.cpp"
-
-#endif //QT_NO_SPLASHSCREEN

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -87,7 +93,7 @@ QPixmap QPlatformScreen::grabWindow(WId window, int x, int y, int width, int hei
 */
 QWindow *QPlatformScreen::topLevelAt(const QPoint & pos) const
 {
-    QWindowList list = QGuiApplication::topLevelWindows();
+    const QWindowList list = QGuiApplication::topLevelWindows();
     for (int i = list.size()-1; i >= 0; --i) {
         QWindow *w = list[i];
         if (w->isVisible() && QHighDpi::toNativePixels(w->geometry(), w).contains(pos))
@@ -105,7 +111,8 @@ QWindow *QPlatformScreen::topLevelAt(const QPoint & pos) const
 const QPlatformScreen *QPlatformScreen::screenForPosition(const QPoint &point) const
 {
     if (!geometry().contains(point)) {
-        Q_FOREACH (const QPlatformScreen* screen, virtualSiblings()) {
+        const auto screens = virtualSiblings();
+        for (const QPlatformScreen *screen : screens) {
             if (screen->geometry().contains(point))
                 return screen;
         }
@@ -273,6 +280,45 @@ QPlatformScreen * QPlatformScreen::platformScreenForWindow(const QWindow *window
 }
 
 /*!
+    Reimplement this function in subclass to return the manufacturer
+    of this screen.
+
+    The default implementation returns an empty string.
+
+    \since 5.9
+*/
+QString QPlatformScreen::manufacturer() const
+{
+    return QString();
+}
+
+/*!
+    Reimplement this function in subclass to return the model
+    of this screen.
+
+    The default implementation returns an empty string.
+
+    \since 5.9
+*/
+QString QPlatformScreen::model() const
+{
+    return QString();
+}
+
+/*!
+    Reimplement this function in subclass to return the serial number
+    of this screen.
+
+    The default implementation returns an empty string.
+
+    \since 5.9
+*/
+QString QPlatformScreen::serialNumber() const
+{
+    return QString();
+}
+
+/*!
     \class QPlatformScreen
     \since 4.8
     \internal
@@ -334,6 +380,10 @@ void QPlatformScreen::resizeMaximizedWindows()
     // make sure maximized and fullscreen windows are updated
     for (int i = 0; i < windows.size(); ++i) {
         QWindow *w = windows.at(i);
+
+        // Skip non-platform windows, e.g., offscreen windows.
+        if (!w->handle())
+            continue;
 
         if (platformScreenForWindow(w) != this)
             continue;
@@ -481,6 +531,55 @@ QPlatformScreen::PowerState QPlatformScreen::powerState() const
 void QPlatformScreen::setPowerState(PowerState state)
 {
     Q_UNUSED(state);
+}
+
+/*!
+    Reimplement this function in subclass to return the list
+    of modes for this screen.
+
+    The default implementation returns a list with
+    only one mode from the current screen size and refresh rate.
+
+    \sa QPlatformScreen::geometry
+    \sa QPlatformScreen::refreshRate
+
+    \since 5.9
+*/
+QVector<QPlatformScreen::Mode> QPlatformScreen::modes() const
+{
+    QVector<QPlatformScreen::Mode> list;
+    list.append({geometry().size(), refreshRate()});
+    return list;
+}
+
+/*!
+    Reimplement this function in subclass to return the
+    index of the current mode from the modes list.
+
+    The default implementation returns 0.
+
+    \sa QPlatformScreen::modes
+
+    \since 5.9
+*/
+int QPlatformScreen::currentMode() const
+{
+    return 0;
+}
+
+/*!
+    Reimplement this function in subclass to return the preferred
+    mode index from the modes list.
+
+    The default implementation returns 0.
+
+    \sa QPlatformScreen::modes
+
+    \since 5.9
+*/
+int QPlatformScreen::preferredMode() const
+{
+    return 0;
 }
 
 QT_END_NAMESPACE

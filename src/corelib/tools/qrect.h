@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -40,6 +46,10 @@
 
 #ifdef topLeft
 #error qrect.h must be included before any header file that defines topLeft
+#endif
+
+#if defined(Q_OS_DARWIN) || defined(Q_QDOC)
+struct CGRect;
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -60,7 +70,7 @@ public:
     Q_DECL_CONSTEXPR inline int top() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline int right() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline int bottom() const Q_DECL_NOTHROW;
-    QRect normalized() const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QRect normalized() const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline int x() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline int y() const Q_DECL_NOTHROW;
@@ -94,8 +104,9 @@ public:
 
     Q_DECL_RELAXED_CONSTEXPR inline void translate(int dx, int dy) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void translate(const QPoint &p) Q_DECL_NOTHROW;
-    Q_DECL_CONSTEXPR inline QRect translated(int dx, int dy) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
-    Q_DECL_CONSTEXPR inline QRect translated(const QPoint &p) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRect translated(int dx, int dy) const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRect translated(const QPoint &p) const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRect transposed() const Q_DECL_NOTHROW;
 
     Q_DECL_RELAXED_CONSTEXPR inline void moveTo(int x, int t) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void moveTo(const QPoint &p) Q_DECL_NOTHROW;
@@ -107,7 +118,7 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline void getCoords(int *x1, int *y1, int *x2, int *y2) const;
 
     Q_DECL_RELAXED_CONSTEXPR inline void adjust(int x1, int y1, int x2, int y2) Q_DECL_NOTHROW;
-    Q_DECL_CONSTEXPR inline QRect adjusted(int x1, int y1, int x2, int y2) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRect adjusted(int x1, int y1, int x2, int y2) const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline QSize size() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline int width() const Q_DECL_NOTHROW;
@@ -125,8 +136,8 @@ public:
     bool contains(const QPoint &p, bool proper=false) const Q_DECL_NOTHROW;
     inline bool contains(int x, int y) const Q_DECL_NOTHROW;
     inline bool contains(int x, int y, bool proper) const Q_DECL_NOTHROW;
-    inline QRect united(const QRect &other) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
-    inline QRect intersected(const QRect &other) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT inline QRect united(const QRect &other) const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT inline QRect intersected(const QRect &other) const Q_DECL_NOTHROW;
     bool intersects(const QRect &r) const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline QRect marginsAdded(const QMargins &margins) const Q_DECL_NOTHROW;
@@ -135,12 +146,16 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline QRect &operator-=(const QMargins &margins) Q_DECL_NOTHROW;
 
 #if QT_DEPRECATED_SINCE(5, 0)
-    QT_DEPRECATED QRect unite(const QRect &r) const Q_DECL_NOTHROW Q_REQUIRED_RESULT { return united(r); }
-    QT_DEPRECATED QRect intersect(const QRect &r) const Q_DECL_NOTHROW Q_REQUIRED_RESULT { return intersected(r); }
+    Q_REQUIRED_RESULT QT_DEPRECATED QRect unite(const QRect &r) const Q_DECL_NOTHROW { return united(r); }
+    Q_REQUIRED_RESULT QT_DEPRECATED QRect intersect(const QRect &r) const Q_DECL_NOTHROW { return intersected(r); }
 #endif
 
     friend Q_DECL_CONSTEXPR inline bool operator==(const QRect &, const QRect &) Q_DECL_NOTHROW;
     friend Q_DECL_CONSTEXPR inline bool operator!=(const QRect &, const QRect &) Q_DECL_NOTHROW;
+
+#if defined(Q_OS_DARWIN) || defined(Q_QDOC)
+    Q_REQUIRED_RESULT CGRect toCGRect() const Q_DECL_NOTHROW;
+#endif
 
 private:
     int x1;
@@ -277,6 +292,9 @@ Q_DECL_CONSTEXPR inline QRect QRect::translated(int dx, int dy) const Q_DECL_NOT
 
 Q_DECL_CONSTEXPR inline QRect QRect::translated(const QPoint &p) const Q_DECL_NOTHROW
 { return QRect(QPoint(x1 + p.x(), y1 + p.y()), QPoint(x2 + p.x(), y2 + p.y())); }
+
+Q_DECL_CONSTEXPR inline QRect QRect::transposed() const Q_DECL_NOTHROW
+{ return QRect(topLeft(), size().transposed()); }
 
 Q_DECL_RELAXED_CONSTEXPR inline void QRect::moveTo(int ax, int ay) Q_DECL_NOTHROW
 {
@@ -502,7 +520,7 @@ public:
     Q_DECL_CONSTEXPR inline bool isNull() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline bool isEmpty() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline bool isValid() const Q_DECL_NOTHROW;
-    QRectF normalized() const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT QRectF normalized() const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline qreal left() const Q_DECL_NOTHROW { return xp; }
     Q_DECL_CONSTEXPR inline qreal top() const Q_DECL_NOTHROW { return yp; }
@@ -542,8 +560,10 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline void translate(qreal dx, qreal dy) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void translate(const QPointF &p) Q_DECL_NOTHROW;
 
-    Q_DECL_CONSTEXPR inline QRectF translated(qreal dx, qreal dy) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
-    Q_DECL_CONSTEXPR inline QRectF translated(const QPointF &p) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRectF translated(qreal dx, qreal dy) const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRectF translated(const QPointF &p) const Q_DECL_NOTHROW;
+
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRectF transposed() const Q_DECL_NOTHROW;
 
     Q_DECL_RELAXED_CONSTEXPR inline void moveTo(qreal x, qreal y) Q_DECL_NOTHROW;
     Q_DECL_RELAXED_CONSTEXPR inline void moveTo(const QPointF &p) Q_DECL_NOTHROW;
@@ -555,7 +575,7 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline void getCoords(qreal *x1, qreal *y1, qreal *x2, qreal *y2) const;
 
     Q_DECL_RELAXED_CONSTEXPR inline void adjust(qreal x1, qreal y1, qreal x2, qreal y2) Q_DECL_NOTHROW;
-    Q_DECL_CONSTEXPR inline QRectF adjusted(qreal x1, qreal y1, qreal x2, qreal y2) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRectF adjusted(qreal x1, qreal y1, qreal x2, qreal y2) const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline QSizeF size() const Q_DECL_NOTHROW;
     Q_DECL_CONSTEXPR inline qreal width() const Q_DECL_NOTHROW;
@@ -572,8 +592,8 @@ public:
     bool contains(const QRectF &r) const Q_DECL_NOTHROW;
     bool contains(const QPointF &p) const Q_DECL_NOTHROW;
     inline bool contains(qreal x, qreal y) const Q_DECL_NOTHROW;
-    inline QRectF united(const QRectF &other) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
-    inline QRectF intersected(const QRectF &other) const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT inline QRectF united(const QRectF &other) const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT inline QRectF intersected(const QRectF &other) const Q_DECL_NOTHROW;
     bool intersects(const QRectF &r) const Q_DECL_NOTHROW;
 
     Q_DECL_CONSTEXPR inline QRectF marginsAdded(const QMarginsF &margins) const Q_DECL_NOTHROW;
@@ -582,15 +602,20 @@ public:
     Q_DECL_RELAXED_CONSTEXPR inline QRectF &operator-=(const QMarginsF &margins) Q_DECL_NOTHROW;
 
 #if QT_DEPRECATED_SINCE(5, 0)
-    QT_DEPRECATED QRectF unite(const QRectF &r) const Q_DECL_NOTHROW Q_REQUIRED_RESULT { return united(r); }
-    QT_DEPRECATED QRectF intersect(const QRectF &r) const Q_DECL_NOTHROW Q_REQUIRED_RESULT { return intersected(r); }
+    Q_REQUIRED_RESULT QT_DEPRECATED QRectF unite(const QRectF &r) const Q_DECL_NOTHROW { return united(r); }
+    Q_REQUIRED_RESULT QT_DEPRECATED QRectF intersect(const QRectF &r) const Q_DECL_NOTHROW { return intersected(r); }
 #endif
 
     friend Q_DECL_CONSTEXPR inline bool operator==(const QRectF &, const QRectF &) Q_DECL_NOTHROW;
     friend Q_DECL_CONSTEXPR inline bool operator!=(const QRectF &, const QRectF &) Q_DECL_NOTHROW;
 
-    Q_DECL_CONSTEXPR inline QRect toRect() const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
-    QRect toAlignedRect() const Q_DECL_NOTHROW Q_REQUIRED_RESULT;
+    Q_REQUIRED_RESULT Q_DECL_CONSTEXPR inline QRect toRect() const Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT QRect toAlignedRect() const Q_DECL_NOTHROW;
+
+#if defined(Q_OS_DARWIN) || defined(Q_QDOC)
+    Q_REQUIRED_RESULT static QRectF fromCGRect(CGRect rect) Q_DECL_NOTHROW;
+    Q_REQUIRED_RESULT CGRect toCGRect() const Q_DECL_NOTHROW;
+#endif
 
 private:
     qreal xp;
@@ -637,11 +662,17 @@ Q_DECL_CONSTEXPR inline QRectF::QRectF(const QRect &r) Q_DECL_NOTHROW
 {
 }
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wfloat-equal")
+QT_WARNING_DISABLE_GCC("-Wfloat-equal")
+
 Q_DECL_CONSTEXPR inline bool QRectF::isNull() const Q_DECL_NOTHROW
 { return w == 0. && h == 0.; }
 
 Q_DECL_CONSTEXPR inline bool QRectF::isEmpty() const Q_DECL_NOTHROW
 { return w <= 0. || h <= 0.; }
+
+QT_WARNING_POP
 
 Q_DECL_CONSTEXPR inline bool QRectF::isValid() const Q_DECL_NOTHROW
 { return w > 0. && h > 0.; }
@@ -744,6 +775,9 @@ Q_DECL_CONSTEXPR inline QRectF QRectF::translated(qreal dx, qreal dy) const Q_DE
 
 Q_DECL_CONSTEXPR inline QRectF QRectF::translated(const QPointF &p) const Q_DECL_NOTHROW
 { return QRectF(xp + p.x(), yp + p.y(), w, h); }
+
+Q_DECL_CONSTEXPR inline QRectF QRectF::transposed() const Q_DECL_NOTHROW
+{ return QRectF(topLeft(), size().transposed()); }
 
 Q_DECL_RELAXED_CONSTEXPR inline void QRectF::getRect(qreal *ax, qreal *ay, qreal *aaw, qreal *aah) const
 {

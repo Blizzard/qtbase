@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +39,8 @@
 #include <qpainter.h>
 #include <qprintengine.h>
 #include <qpagelayout.h>
+#include <qsharedpointer.h>
+#include <qtemporarydir.h>
 
 #include <math.h>
 
@@ -51,36 +48,23 @@
 #include <windows.h>
 #endif
 
+#if QT_CONFIG(printer)
+typedef QSharedPointer<QPrinter> PrinterPtr;
 
-QT_FORWARD_DECLARE_CLASS(QPrinter)
+Q_DECLARE_METATYPE(PrinterPtr)
+Q_DECLARE_METATYPE(QPrinter::Orientation)
+Q_DECLARE_METATYPE(QPrinter::PageSize)
+#endif // printer
 
-// Helper class to make sure temp files are cleaned up after test complete
-class TempFileCleanup
-{
-public:
-    TempFileCleanup(const QString &file)
-        : m_file(file)
-    {
-    }
-
-    ~TempFileCleanup()
-    {
-        QFile::remove(m_file);
-    }
-private:
-    QString m_file;
-};
+static int fileNumber = 0;
 
 class tst_QPrinter : public QObject
 {
     Q_OBJECT
 
-public slots:
-#ifdef QT_NO_PRINTER
-    void initTestCase();
-    void cleanupTestCase();
-#else
 private slots:
+    void initTestCase();
+#if QT_CONFIG(printer)
     void testPageRectAndPaperRect();
     void testPageRectAndPaperRect_data();
     void testSetOptions();
@@ -99,7 +83,7 @@ private slots:
     void customPaperSizeAndMargins();
     void customPaperNameSettingBySize();
     void customPaperNameSettingByName();
-#if !defined(QT_NO_COMPLETER) && !defined(QT_NO_FILEDIALOG)
+#if QT_CONFIG(completer) && QT_CONFIG(filedialog)
     void printDialogCompleter();
 #endif
     void testCurrentPage();
@@ -139,19 +123,22 @@ private slots:
     void testPageMetrics_data();
     void testPageMetrics();
 #endif
+private:
+    QString testFileName(const QString &prefix, const QString &suffix);
+    QString testPdfFileName(const QString &prefix) { return testFileName(prefix, QStringLiteral("pdf")); }
+
+    QTemporaryDir m_tempDir;
 };
 
-#ifdef QT_NO_PRINTER
 void tst_QPrinter::initTestCase()
 {
+#if !QT_CONFIG(printer)
     QSKIP("This test requires printing support");
+#endif
+    QVERIFY2(m_tempDir.isValid(), qPrintable(m_tempDir.errorString()));
 }
 
-void tst_QPrinter::cleanupTestCase()
-{
-    QSKIP("This test requires printing support");
-}
-#else
+#if QT_CONFIG(printer)
 
 #define MYCOMPARE(a, b) QCOMPARE(QVariant((int)a), QVariant((int)b))
 
@@ -209,71 +196,72 @@ void tst_QPrinter::testPrintPreviewDialog()
 
 void tst_QPrinter::testPageRectAndPaperRect_data()
 {
-    QTest::addColumn<int>("orientation");
+    QTest::addColumn<PrinterPtr>("printer");
+    QTest::addColumn<QPrinter::Orientation>("orientation");
     QTest::addColumn<bool>("withPainter");
     QTest::addColumn<int>("resolution");
     QTest::addColumn<bool>("doPaperRect");
 
+    const PrinterPtr printer(new QPrinter(QPrinter::HighResolution));
     // paperrect
-    QTest::newRow("paperRect0") << int(QPrinter::Portrait) << true << 300 << true;
-    QTest::newRow("paperRect1") << int(QPrinter::Portrait) << false << 300 << true;
-    QTest::newRow("paperRect2") << int(QPrinter::Landscape) << true << 300 << true;
-    QTest::newRow("paperRect3") << int(QPrinter::Landscape) << false << 300 << true;
-    QTest::newRow("paperRect4") << int(QPrinter::Portrait) << true << 600 << true;
-    QTest::newRow("paperRect5") << int(QPrinter::Portrait) << false << 600 << true;
-    QTest::newRow("paperRect6") << int(QPrinter::Landscape) << true << 600 << true;
-    QTest::newRow("paperRect7") << int(QPrinter::Landscape) << false << 600 << true;
-    QTest::newRow("paperRect8") << int(QPrinter::Portrait) << true << 1200 << true;
-    QTest::newRow("paperRect9") << int(QPrinter::Portrait) << false << 1200 << true;
-    QTest::newRow("paperRect10") << int(QPrinter::Landscape) << true << 1200 << true;
-    QTest::newRow("paperRect11") << int(QPrinter::Landscape) << false << 1200 << true;
+    QTest::newRow("paperRect0") << printer << QPrinter::Portrait << true << 300 << true;
+    QTest::newRow("paperRect1") << printer << QPrinter::Portrait << false << 300 << true;
+    QTest::newRow("paperRect2") << printer << QPrinter::Landscape << true << 300 << true;
+    QTest::newRow("paperRect3") << printer << QPrinter::Landscape << false << 300 << true;
+    QTest::newRow("paperRect4") << printer << QPrinter::Portrait << true << 600 << true;
+    QTest::newRow("paperRect5") << printer << QPrinter::Portrait << false << 600 << true;
+    QTest::newRow("paperRect6") << printer << QPrinter::Landscape << true << 600 << true;
+    QTest::newRow("paperRect7") << printer << QPrinter::Landscape << false << 600 << true;
+    QTest::newRow("paperRect8") << printer << QPrinter::Portrait << true << 1200 << true;
+    QTest::newRow("paperRect9") << printer << QPrinter::Portrait << false << 1200 << true;
+    QTest::newRow("paperRect10") << printer << QPrinter::Landscape << true << 1200 << true;
+    QTest::newRow("paperRect11") << printer << QPrinter::Landscape << false << 1200 << true;
 
     // page rect
-    QTest::newRow("pageRect0") << int(QPrinter::Portrait) << true << 300 << false;
-    QTest::newRow("pageRect1") << int(QPrinter::Portrait) << false << 300 << false;
-    QTest::newRow("pageRect2") << int(QPrinter::Landscape) << true << 300 << false;
-    QTest::newRow("pageRect3") << int(QPrinter::Landscape) << false << 300 << false;
-    QTest::newRow("pageRect4") << int(QPrinter::Portrait) << true << 600 << false;
-    QTest::newRow("pageRect5") << int(QPrinter::Portrait) << false << 600 << false;
-    QTest::newRow("pageRect6") << int(QPrinter::Landscape) << true << 600 << false;
-    QTest::newRow("pageRect7") << int(QPrinter::Landscape) << false << 600 << false;
-    QTest::newRow("pageRect8") << int(QPrinter::Portrait) << true << 1200 << false;
-    QTest::newRow("pageRect9") << int(QPrinter::Portrait) << false << 1200 << false;
-    QTest::newRow("pageRect10") << int(QPrinter::Landscape) << true << 1200 << false;
-    QTest::newRow("pageRect11") << int(QPrinter::Landscape) << false << 1200 << false;
+    QTest::newRow("pageRect0") << printer << QPrinter::Portrait << true << 300 << false;
+    QTest::newRow("pageRect1") << printer << QPrinter::Portrait << false << 300 << false;
+    QTest::newRow("pageRect2") << printer << QPrinter::Landscape << true << 300 << false;
+    QTest::newRow("pageRect3") << printer << QPrinter::Landscape << false << 300 << false;
+    QTest::newRow("pageRect4") << printer << QPrinter::Portrait << true << 600 << false;
+    QTest::newRow("pageRect5") << printer << QPrinter::Portrait << false << 600 << false;
+    QTest::newRow("pageRect6") << printer << QPrinter::Landscape << true << 600 << false;
+    QTest::newRow("pageRect7") << printer << QPrinter::Landscape << false << 600 << false;
+    QTest::newRow("pageRect8") << printer << QPrinter::Portrait << true << 1200 << false;
+    QTest::newRow("pageRect9") << printer << QPrinter::Portrait << false << 1200 << false;
+    QTest::newRow("pageRect10") << printer << QPrinter::Landscape << true << 1200 << false;
+    QTest::newRow("pageRect11") << printer << QPrinter::Landscape << false << 1200 << false;
 }
 
 void tst_QPrinter::testPageRectAndPaperRect()
 {
+    QFETCH(PrinterPtr, printer);
     QFETCH(bool,  withPainter);
-    QFETCH(int,  orientation);
+    QFETCH(QPrinter::Orientation, orientation);
     QFETCH(int, resolution);
     QFETCH(bool, doPaperRect);
 
     QPainter *painter = 0;
-    QPrinter printer(QPrinter::HighResolution);
-    printer.setOrientation(QPrinter::Orientation(orientation));
-    printer.setOutputFileName("silly");
-    TempFileCleanup tmpFile("silly");
+    printer->setOrientation(orientation);
+    printer->setOutputFileName(testFileName(QLatin1String("silly"), QString()));
 
-    QRect pageRect = doPaperRect ? printer.paperRect() : printer.pageRect();
-    float inchesX = float(pageRect.width()) / float(printer.resolution());
-    float inchesY = float(pageRect.height()) / float(printer.resolution());
-    printer.setResolution(resolution);
+    QRect pageRect = doPaperRect ? printer->paperRect() : printer->pageRect();
+    float inchesX = float(pageRect.width()) / float(printer->resolution());
+    float inchesY = float(pageRect.height()) / float(printer->resolution());
+    printer->setResolution(resolution);
     if (withPainter)
-        painter = new QPainter(&printer);
+        painter = new QPainter(printer.data());
 
-    QRect otherRect = doPaperRect ? printer.paperRect() : printer.pageRect();
-    float otherInchesX = float(otherRect.width()) / float(printer.resolution());
-    float otherInchesY = float(otherRect.height()) / float(printer.resolution());
+    QRect otherRect = doPaperRect ? printer->paperRect() : printer->pageRect();
+    float otherInchesX = float(otherRect.width()) / float(printer->resolution());
+    float otherInchesY = float(otherRect.height()) / float(printer->resolution());
     if (painter != 0)
         delete painter;
 
     QVERIFY(qAbs(otherInchesX - inchesX) < 0.01);
     QVERIFY(qAbs(otherInchesY - inchesY) < 0.01);
 
-    QVERIFY(printer.orientation() == QPrinter::Portrait || pageRect.width() > pageRect.height());
-    QVERIFY(printer.orientation() != QPrinter::Portrait || pageRect.width() < pageRect.height());
+    QVERIFY(printer->orientation() == QPrinter::Portrait || pageRect.width() > pageRect.height());
+    QVERIFY(printer->orientation() != QPrinter::Portrait || pageRect.width() < pageRect.height());
 }
 
 void tst_QPrinter::testSetOptions()
@@ -305,45 +293,40 @@ void tst_QPrinter::testSetOptions()
 
 void tst_QPrinter::testMargins_data()
 {
-    QTest::addColumn<int>("orientation");
+    QTest::addColumn<PrinterPtr>("printer");
+    QTest::addColumn<QPrinter::Orientation>("orientation");
     QTest::addColumn<bool>("fullpage");
-    QTest::addColumn<int>("pagesize");
-    QTest::addColumn<int>("width");
-    QTest::addColumn<int>("height");
+    QTest::addColumn<QPrinter::PageSize>("pagesize");
     QTest::addColumn<bool>("withPainter");
 
-    QTest::newRow("data0") << int(QPrinter::Portrait) << true << int(QPrinter::A4) << 210 << 297 << false;
-    QTest::newRow("data1") << int(QPrinter::Landscape) << true << int(QPrinter::A4) << 297 << 210 << false;
-    QTest::newRow("data2") << int(QPrinter::Landscape) << false << int(QPrinter::A4) << 297 << 210 << false;
-    QTest::newRow("data3") << int(QPrinter::Portrait) << false << int(QPrinter::A4) << 210 << 297 << false;
-    QTest::newRow("data4") << int(QPrinter::Portrait) << true << int(QPrinter::A4) << 210 << 297 << true;
-    QTest::newRow("data5") << int(QPrinter::Landscape) << true << int(QPrinter::A4) << 297 << 210 << true;
-    QTest::newRow("data6") << int(QPrinter::Landscape) << false << int(QPrinter::A4) << 297 << 210 << true;
-    QTest::newRow("data7") << int(QPrinter::Portrait) << false << int(QPrinter::A4) << 210 << 297 << true;
+    const PrinterPtr printer(new QPrinter);
+    QTest::newRow("data0") << printer << QPrinter::Portrait << true << QPrinter::A4 << false;
+    QTest::newRow("data1") << printer << QPrinter::Landscape << true << QPrinter::A4 << false;
+    QTest::newRow("data2") << printer << QPrinter::Landscape << false << QPrinter::A4 << false;
+    QTest::newRow("data3") << printer << QPrinter::Portrait << false << QPrinter::A4 << false;
+    QTest::newRow("data4") << printer << QPrinter::Portrait << true << QPrinter::A4 << true;
+    QTest::newRow("data5") << printer << QPrinter::Landscape << true << QPrinter::A4 << true;
+    QTest::newRow("data6") << printer << QPrinter::Landscape << false << QPrinter::A4 << true;
+    QTest::newRow("data7") << printer << QPrinter::Portrait << false << QPrinter::A4 << true;
 }
 
 void tst_QPrinter::testMargins()
 {
+    QFETCH(PrinterPtr, printer);
     QFETCH(bool,  withPainter);
-    QFETCH(int,  orientation);
-    QFETCH(int,  pagesize);
-    QFETCH(int,  width);
-    QFETCH(int,  height);
+    QFETCH(QPrinter::Orientation, orientation);
+    QFETCH(QPrinter::PageSize, pagesize);
     QFETCH(bool, fullpage);
-    Q_UNUSED(width);
-    Q_UNUSED(height);
-    QPrinter printer;
     QPainter *painter = 0;
-    printer.setOutputFileName("silly");
-    printer.setOrientation((QPrinter::Orientation)orientation);
-    printer.setFullPage(fullpage);
-    printer.setPageSize((QPrinter::PageSize)pagesize);
+    printer->setOutputFileName(testFileName(QLatin1String("silly"), QString()));
+    printer->setOrientation(orientation);
+    printer->setFullPage(fullpage);
+    printer->setPageSize(pagesize);
     if (withPainter)
-        painter = new QPainter(&printer);
+        painter = new QPainter(printer.data());
 
     if (painter)
         delete painter;
-    QFile::remove("silly");
 }
 
 void tst_QPrinter::testMulitpleSets_data()
@@ -426,8 +409,7 @@ void tst_QPrinter::outputFormatFromSuffix()
         QSKIP("No printers available.");
     QPrinter p;
     QCOMPARE(p.outputFormat(), QPrinter::NativeFormat);
-    p.setOutputFileName("test.pdf");
-    TempFileCleanup tmpFile("test.pdf");
+    p.setOutputFileName(testPdfFileName(QLatin1String("test")));
     QCOMPARE(p.outputFormat(), QPrinter::PdfFormat);
     p.setOutputFileName(QString());
     QCOMPARE(p.outputFormat(), QPrinter::NativeFormat);
@@ -515,8 +497,7 @@ void tst_QPrinter::errorReporting()
     p.setOutputFileName("/foobar/nonwritable.pdf");
     QCOMPARE(painter.begin(&p), false); // it should check the output file is writable
 #endif
-    p.setOutputFileName("test.pdf");
-    TempFileCleanup tmpFile("test.pdf");
+    p.setOutputFileName(testPdfFileName(QLatin1String("test")));
     QCOMPARE(painter.begin(&p), true); // it should check the output
     QCOMPARE(p.isValid(), true);
     painter.end();
@@ -606,12 +587,11 @@ void tst_QPrinter::customPaperSizeAndMargins()
     }
 }
 
-#if !defined(QT_NO_COMPLETER) && !defined(QT_NO_FILEDIALOG)
+#if QT_CONFIG(completer) && QT_CONFIG(filedialog)
 void tst_QPrinter::printDialogCompleter()
 {
     QPrintDialog dialog;
-    dialog.printer()->setOutputFileName("file.pdf");
-    TempFileCleanup tmpFile("file.pdf");
+    dialog.printer()->setOutputFileName(testPdfFileName(QLatin1String("file")));
     dialog.setEnabledOptions(QAbstractPrintDialog::PrintToFile);
     dialog.show();
 
@@ -631,28 +611,28 @@ static void printPage(QPainter *painter)
 
 void tst_QPrinter::taskQTBUG4497_reusePrinterOnDifferentFiles()
 {
-    TempFileCleanup tmpFile1("out1.pdf");
-    TempFileCleanup tmpFile2("out2.pdf");
+    const QString fileName1 = testPdfFileName(QLatin1String("out1_"));
+    const QString fileName2 = testPdfFileName(QLatin1String("out2_"));
 
     QPrinter printer;
     {
 
-        printer.setOutputFileName("out1.pdf");
+        printer.setOutputFileName(fileName1);
         QPainter painter(&printer);
         printPage(&painter);
 
     }
     {
 
-        printer.setOutputFileName("out2.pdf");
+        printer.setOutputFileName(fileName2);
         QPainter painter(&printer);
         printPage(&painter);
 
     }
-    QFile file1("out1.pdf");
+    QFile file1(fileName1);
     QVERIFY(file1.open(QIODevice::ReadOnly));
 
-    QFile file2("out2.pdf");
+    QFile file2(fileName2);
     QVERIFY(file2.open(QIODevice::ReadOnly));
 
     while (!file1.atEnd() && !file2.atEnd()) {
@@ -691,6 +671,8 @@ void tst_QPrinter::testCurrentPage()
 
 void tst_QPrinter::testPdfTitle()
 {
+    const QString fileName = testPdfFileName(QLatin1String("file"));
+
     // Check the document name is represented correctly in produced pdf
     {
         QPainter painter;
@@ -698,13 +680,12 @@ void tst_QPrinter::testPdfTitle()
         // This string is just the UTF-8 encoding of the string: \()f &oslash; hiragana o
         const unsigned char titleBuf[]={0x5c, 0x28, 0x29, 0x66, 0xc3, 0xb8, 0xe3, 0x81, 0x8a, 0x00};
         const char *title = reinterpret_cast<const char*>(titleBuf);
-        printer.setOutputFileName("file.pdf");
+        printer.setOutputFileName(fileName);
         printer.setDocName(QString::fromUtf8(title));
         painter.begin(&printer);
         painter.end();
     }
-    TempFileCleanup tmpFile("file.pdf");
-    QFile file("file.pdf");
+    QFile file(fileName);
     QVERIFY(file.open(QIODevice::ReadOnly));
     // The we expect the title to appear in the PDF as:
     // ASCII('\title (') UTF16(\\\(\)f &oslash; hiragana o) ASCII(')').
@@ -1244,8 +1225,9 @@ void tst_QPrinter::outputFileName()
     QPrinter pdf;
     pdf.setOutputFormat(QPrinter::PdfFormat);
     QCOMPARE(pdf.outputFileName(), QString());
-    pdf.setOutputFileName(QStringLiteral("Test File"));
-    QCOMPARE(pdf.outputFileName(), QString("Test File"));
+    const QString fileName = testFileName(QStringLiteral("Test File"), QString());
+    pdf.setOutputFileName(fileName);
+    QCOMPARE(pdf.outputFileName(), fileName);
 
     QPrinter native;
     if (native.outputFormat() == QPrinter::NativeFormat) {
@@ -1253,7 +1235,7 @@ void tst_QPrinter::outputFileName()
         QCOMPARE(native.outputFileName(), QString());
 
         // Test set/get
-        QString expected = QStringLiteral("Test File");
+        QString expected = fileName;
         native.setOutputFileName(expected);
         QCOMPARE(native.outputFileName(), expected);
 
@@ -1960,7 +1942,16 @@ void tst_QPrinter::testPageMetrics()
     QCOMPARE(printer.pageRect(QPrinter::Millimeter), QRectF(leftMMf, topMMf, heightMMf - leftMMf - rightMMf, widthMMf - topMMf - bottomMMf));
 }
 
-#endif // QT_NO_PRINTER
+QString tst_QPrinter::testFileName(const QString &prefix, const QString &suffix)
+{
+    QString result = m_tempDir.path() + QLatin1Char('/') + prefix
+        + QString::number(fileNumber++);
+    if (!suffix.isEmpty())
+        result += QLatin1Char('.') + suffix;
+    return result;
+}
+
+#endif // QT_CONFIG(printer)
 
 QTEST_MAIN(tst_QPrinter)
 #include "tst_qprinter.moc"

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,8 +39,12 @@
 
 #include "qaccessiblemenu_p.h"
 
+#if QT_CONFIG(menu)
 #include <qmenu.h>
+#endif
+#if QT_CONFIG(menubar)
 #include <qmenubar.h>
+#endif
 #include <QtWidgets/QAction>
 #include <qstyle.h>
 
@@ -42,7 +52,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_MENU
+#if QT_CONFIG(menu)
 
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
@@ -111,7 +121,11 @@ QAccessibleInterface *QAccessibleMenu::parent() const
         parentCandidates << menu()->parentWidget();
         parentCandidates << menuAction->associatedWidgets();
         foreach (QWidget *w, parentCandidates) {
-            if (qobject_cast<QMenu*>(w) || qobject_cast<QMenuBar*>(w)) {
+            if (qobject_cast<QMenu*>(w)
+#if QT_CONFIG(menubar)
+                || qobject_cast<QMenuBar*>(w)
+#endif
+                ) {
                 if (w->actions().indexOf(menuAction) != -1)
                     return getOrCreateMenu(w, menuAction);
             }
@@ -129,7 +143,7 @@ int QAccessibleMenu::indexOfChild( const QAccessibleInterface *child) const
     return -1;
 }
 
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
 QAccessibleMenuBar::QAccessibleMenuBar(QWidget *w)
     : QAccessibleWidget(w, QAccessible::MenuBar)
 {
@@ -163,7 +177,7 @@ int QAccessibleMenuBar::indexOfChild(const QAccessibleInterface *child) const
     return -1;
 }
 
-#endif // QT_NO_MENUBAR
+#endif // QT_CONFIG(menubar)
 
 QAccessibleMenuItem::QAccessibleMenuItem(QWidget *owner, QAction *action)
 : m_action(action), m_owner(owner)
@@ -243,13 +257,13 @@ QRect QAccessibleMenuItem::rect() const
 {
     QRect rect;
     QWidget *own = owner();
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
     if (QMenuBar *menuBar = qobject_cast<QMenuBar*>(own)) {
         rect = menuBar->actionGeometry(m_action);
         QPoint globalPos = menuBar->mapToGlobal(QPoint(0,0));
         rect = rect.translated(globalPos);
     } else
-#endif // QT_NO_MENUBAR
+#endif // QT_CONFIG(menubar)
     if (QMenu *menu = qobject_cast<QMenu*>(own)) {
         rect = menu->actionGeometry(m_action);
         QPoint globalPos = menu->mapToGlobal(QPoint(0,0));
@@ -279,7 +293,7 @@ QAccessible::State QAccessibleMenuItem::state() const
     if (QMenu *menu = qobject_cast<QMenu*>(own)) {
         if (menu->activeAction() == m_action)
             s.focused = true;
-#ifndef QT_NO_MENUBAR
+#if QT_CONFIG(menubar)
     } else if (QMenuBar *menuBar = qobject_cast<QMenuBar*>(own)) {
         if (menuBar->activeAction() == m_action)
             s.focused = true;
@@ -342,13 +356,16 @@ void QAccessibleMenuItem::doAction(const QString &actionName)
     if (actionName == pressAction()) {
         m_action->trigger();
     } else if (actionName == showMenuAction()) {
+#if QT_CONFIG(menubar)
         if (QMenuBar *bar = qobject_cast<QMenuBar*>(owner())) {
             if (m_action->menu() && m_action->menu()->isVisible()) {
                 m_action->menu()->hide();
             } else {
                 bar->setActiveAction(m_action);
             }
-        } else if (QMenu *menu = qobject_cast<QMenu*>(owner())){
+        } else
+#endif
+          if (QMenu *menu = qobject_cast<QMenu*>(owner())){
             if (m_action->menu() && m_action->menu()->isVisible()) {
                 m_action->menu()->hide();
             } else {
@@ -374,7 +391,7 @@ QWidget *QAccessibleMenuItem::owner() const
     return m_owner;
 }
 
-#endif // QT_NO_MENU
+#endif // QT_CONFIG(menu)
 
 QT_END_NAMESPACE
 

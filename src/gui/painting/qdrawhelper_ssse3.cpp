@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,15 +44,6 @@
 #include <private/qdrawingprimitive_sse2_p.h>
 
 QT_BEGIN_NAMESPACE
-
-inline static void blend_pixel(quint32 &dst, const quint32 src)
-{
-    if (src >= 0xff000000)
-        dst = src;
-    else if (src != 0)
-        dst = src + BYTE_MUL(dst, qAlpha(~src));
-}
-
 
 /* The instruction palignr uses direct arguments, so we have to generate the code fo the different
    shift (4, 8, 12). Checking the alignment inside the loop is unfortunatelly way too slow.
@@ -168,6 +165,73 @@ void qt_blend_argb32_on_argb32_ssse3(uchar *destPixels, int dbpl,
             src = (const quint32 *)(((const uchar *) src) + sbpl);
         }
     }
+}
+
+static inline void store_uint24_ssse3(uchar *dst, const uint *src, int len)
+{
+    int i = 0;
+
+    quint24 *dst24 = reinterpret_cast<quint24*>(dst);
+    // Align dst on 16 bytes
+    for (; i < len && (reinterpret_cast<quintptr>(dst24) & 0xf); ++i)
+        *dst24++ = quint24(*src++);
+
+    // Shuffle masks for first and second half of every output, all outputs are aligned so the shuffled ends are not used.
+    const __m128i shuffleMask1 = _mm_setr_epi8(char(0x80), char(0x80), char(0x80), char(0x80), 2, 1, 0, 6, 5, 4, 10, 9, 8, 14, 13, 12);
+    const __m128i shuffleMask2 = _mm_setr_epi8(2, 1, 0, 6, 5, 4, 10, 9, 8, 14, 13, 12, char(0x80), char(0x80), char(0x80), char(0x80));
+
+    const __m128i *inVectorPtr = (const __m128i *)src;
+    __m128i *dstVectorPtr = (__m128i *)dst24;
+
+    for (; i < (len - 15); i += 16) {
+        // Load four vectors, store three.
+        // Create each output vector by combining two shuffled input vectors.
+        __m128i srcVector1 = _mm_loadu_si128(inVectorPtr);
+        ++inVectorPtr;
+        __m128i srcVector2 = _mm_loadu_si128(inVectorPtr);
+        ++inVectorPtr;
+        __m128i outputVector1 = _mm_shuffle_epi8(srcVector1, shuffleMask1);
+        __m128i outputVector2 = _mm_shuffle_epi8(srcVector2, shuffleMask2);
+        __m128i outputVector = _mm_alignr_epi8(outputVector2, outputVector1, 4);
+        _mm_store_si128(dstVectorPtr, outputVector);
+        ++dstVectorPtr;
+
+        srcVector1 = _mm_loadu_si128(inVectorPtr);
+        ++inVectorPtr;
+        outputVector1 = _mm_shuffle_epi8(srcVector2, shuffleMask1);
+        outputVector2 = _mm_shuffle_epi8(srcVector1, shuffleMask2);
+        outputVector = _mm_alignr_epi8(outputVector2, outputVector1, 8);
+        _mm_store_si128(dstVectorPtr, outputVector);
+        ++dstVectorPtr;
+
+        srcVector2 = _mm_loadu_si128(inVectorPtr);
+        ++inVectorPtr;
+        outputVector1 = _mm_shuffle_epi8(srcVector1, shuffleMask1);
+        outputVector2 = _mm_shuffle_epi8(srcVector2, shuffleMask2);
+        outputVector = _mm_alignr_epi8(outputVector2, outputVector1, 12);
+        _mm_store_si128(dstVectorPtr, outputVector);
+        ++dstVectorPtr;
+    }
+    dst24 = reinterpret_cast<quint24*>(dstVectorPtr);
+    src = reinterpret_cast<const uint*>(inVectorPtr);
+
+    SIMD_EPILOGUE(i, len, 15)
+        *dst24++ = quint24(*src++);
+}
+
+void QT_FASTCALL storePixelsBPP24_ssse3(uchar *dest, const uint *src, int index, int count)
+{
+    store_uint24_ssse3(dest + index * 3, src, count);
+}
+
+extern void QT_FASTCALL qt_convert_rgb888_to_rgb32_ssse3(quint32 *dst, const uchar *src, int len);
+
+const uint * QT_FASTCALL qt_fetchUntransformed_888_ssse3(uint *buffer, const Operator *, const QSpanData *data,
+                                                         int y, int x, int length)
+{
+    const uchar *line = data->texture.scanLine(y) + x * 3;
+    qt_convert_rgb888_to_rgb32_ssse3(buffer, line, length);
+    return buffer;
 }
 
 QT_END_NAMESPACE

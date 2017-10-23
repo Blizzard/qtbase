@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,6 +30,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtTest/QtTest>
 #ifdef QT_GUI_LIB
+#include <QtGui/QColor>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
 #endif
@@ -123,10 +119,16 @@ class tst_Cmptest: public QObject
 {
     Q_OBJECT
 
+public:
+    enum class MyClassEnum { MyClassEnumValue1, MyClassEnumValue2 };
+    Q_ENUM(MyClassEnum)
+
 private slots:
     void compare_unregistered_enums();
     void compare_registered_enums();
+    void compare_class_enums();
     void compare_boolfuncs();
+    void compare_to_nullptr();
     void compare_pointerfuncs();
     void compare_tostring();
     void compare_tostring_data();
@@ -135,15 +137,19 @@ private slots:
     void compareQListInt();
     void compareQListDouble();
 #ifdef QT_GUI_LIB
+    void compareQColor();
     void compareQPixmaps();
     void compareQPixmaps_data();
     void compareQImages();
     void compareQImages_data();
+    void compareQRegion_data();
+    void compareQRegion();
 #endif
     void verify();
     void verify2();
     void tryVerify();
     void tryVerify2();
+    void verifyExplicitOperatorBool();
 };
 
 enum MyUnregisteredEnum { MyUnregisteredEnumValue1, MyUnregisteredEnumValue2 };
@@ -161,6 +167,12 @@ void tst_Cmptest::compare_registered_enums()
     QCOMPARE(Qt::Monday, Qt::Sunday);
 }
 
+void tst_Cmptest::compare_class_enums()
+{
+    QCOMPARE(MyClassEnum::MyClassEnumValue1, MyClassEnum::MyClassEnumValue1);
+    QCOMPARE(MyClassEnum::MyClassEnumValue1, MyClassEnum::MyClassEnumValue2);
+}
+
 static bool boolfunc() { return true; }
 static bool boolfunc2() { return true; }
 
@@ -171,6 +183,24 @@ void tst_Cmptest::compare_boolfuncs()
     QCOMPARE(!boolfunc(), !boolfunc2());
     QCOMPARE(boolfunc(), true);
     QCOMPARE(!boolfunc(), false);
+}
+
+namespace {
+template <typename T>
+T *null() Q_DECL_NOTHROW { return nullptr; }
+}
+
+void tst_Cmptest::compare_to_nullptr()
+{
+    QCOMPARE(null<int>(), nullptr);
+    QCOMPARE(null<const int>(), nullptr);
+    QCOMPARE(null<volatile int>(), nullptr);
+    QCOMPARE(null<const volatile int>(), nullptr);
+
+    QCOMPARE(nullptr, null<int>());
+    QCOMPARE(nullptr, null<const int>());
+    QCOMPARE(nullptr, null<volatile int>());
+    QCOMPARE(nullptr, null<const volatile int>());
 }
 
 static int i = 0;
@@ -341,6 +371,15 @@ void tst_Cmptest::compareQListDouble()
 }
 
 #ifdef QT_GUI_LIB
+void tst_Cmptest::compareQColor()
+{
+    const QColor yellow(Qt::yellow);
+    const QColor yellowFromName(QStringLiteral("yellow"));
+    const QColor green(Qt::green);
+    QCOMPARE(yellow, yellowFromName);
+    QCOMPARE(yellow, green);
+}
+
 void tst_Cmptest::compareQPixmaps_data()
 {
     QTest::addColumn<QPixmap>("opA");
@@ -392,6 +431,29 @@ void tst_Cmptest::compareQImages()
 
     QCOMPARE(opA, opB);
 }
+
+void tst_Cmptest::compareQRegion_data()
+{
+    QTest::addColumn<QRegion>("rA");
+    QTest::addColumn<QRegion>("rB");
+    const QRect rect1(QPoint(10, 10), QSize(200, 50));
+    const QRegion region1(rect1);
+    QRegion listRegion2;
+    const QVector<QRect> list2 = QVector<QRect>() << QRect(QPoint(100, 200), QSize(50, 200)) << rect1;
+    listRegion2.setRects(list2.constData(), list2.size());
+    QTest::newRow("equal-empty") << QRegion() << QRegion();
+    QTest::newRow("1-empty") << region1 << QRegion();
+    QTest::newRow("equal") << region1 << region1;
+    QTest::newRow("different lists") << region1 << listRegion2;
+}
+
+void tst_Cmptest::compareQRegion()
+{
+    QFETCH(QRegion, rA);
+    QFETCH(QRegion, rB);
+
+    QCOMPARE(rA, rB);
+}
 #endif // QT_GUI_LIB
 
 static int opaqueFunc()
@@ -421,6 +483,22 @@ void tst_Cmptest::tryVerify2()
 {
     QTRY_VERIFY2(opaqueFunc() > 2, QByteArray::number(opaqueFunc()).constData());
     QTRY_VERIFY2_WITH_TIMEOUT(opaqueFunc() < 2, QByteArray::number(opaqueFunc()).constData(), 1);
+}
+
+void tst_Cmptest::verifyExplicitOperatorBool()
+{
+    struct ExplicitOperatorBool {
+        int m_i;
+        explicit ExplicitOperatorBool(int i) : m_i(i) {}
+        explicit operator bool() const { return m_i > 0; }
+        bool operator !() const { return !bool(*this); }
+    };
+
+    ExplicitOperatorBool val1(42);
+    QVERIFY(val1);
+
+    ExplicitOperatorBool val2(-273);
+    QVERIFY(!val2);
 }
 
 QTEST_MAIN(tst_Cmptest)

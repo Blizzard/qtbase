@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -61,6 +67,7 @@ struct QCssKnownValue
 static const QCssKnownValue properties[NumProperties - 1] = {
     { "-qt-background-role", QtBackgroundRole },
     { "-qt-block-indent", QtBlockIndent },
+    { "-qt-line-height-type", QtLineHeightType },
     { "-qt-list-indent", QtListIndent },
     { "-qt-list-number-prefix", QtListNumberPrefix },
     { "-qt-list-number-suffix", QtListNumberSuffix },
@@ -396,8 +403,8 @@ ValueExtractor::ValueExtractor(const QVector<Declaration> &decls, const QPalette
 
 LengthData ValueExtractor::lengthValue(const Value& v)
 {
-    QString s = v.variant.toString();
-    s.reserve(s.length());
+    const QString str = v.variant.toString();
+    QStringRef s(&str);
     LengthData data;
     data.unit = LengthData::None;
     if (s.endsWith(QLatin1String("px"), Qt::CaseInsensitive))
@@ -739,8 +746,9 @@ static ColorData parseColorValue(QCss::Value v)
     QVector<QCss::Value> colorDigits;
     if (!p.parseExpr(&colorDigits))
         return ColorData();
+    const int tokenCount = colorDigits.count();
 
-    for (int i = 0; i < qMin(colorDigits.count(), 7); i += 2) {
+    for (int i = 0; i < qMin(tokenCount, 7); i += 2) {
         if (colorDigits.at(i).type == Value::Percentage) {
             colorDigits[i].variant = colorDigits.at(i).variant.toReal() * (255. / 100.);
             colorDigits[i].type = Value::Number;
@@ -749,11 +757,15 @@ static ColorData parseColorValue(QCss::Value v)
         }
     }
 
+
+    if (tokenCount < 5)
+        return ColorData();
+
     int v1 = colorDigits.at(0).variant.toInt();
     int v2 = colorDigits.at(2).variant.toInt();
     int v3 = colorDigits.at(4).variant.toInt();
     int alpha = 255;
-    if (colorDigits.count() >= 7) {
+    if (tokenCount >= 7) {
         int alphaValue = colorDigits.at(6).variant.toInt();
         if (rgba && alphaValue <= 1)
             alpha = colorDigits.at(6).variant.toReal() * 255.;
@@ -893,7 +905,7 @@ static QBrush brushFromData(const BrushData& c, const QPalette &pal)
     }
 }
 
-static BorderStyle parseStyleValue(QCss::Value v)
+static BorderStyle parseStyleValue(const QCss::Value &v)
 {
     if (v.type == Value::KnownIdentifier) {
         switch (v.variant.toInt()) {
@@ -1435,11 +1447,13 @@ bool Declaration::realValue(qreal *real, const char *unit) const
     const Value &v = d->values.at(0);
     if (unit && v.type != Value::Length)
         return false;
-    QString s = v.variant.toString();
+    const QString str = v.variant.toString();
+    QStringRef s(&str);
     if (unit) {
-        if (!s.endsWith(QLatin1String(unit), Qt::CaseInsensitive))
+        const QLatin1String unitStr(unit);
+        if (!s.endsWith(unitStr, Qt::CaseInsensitive))
             return false;
-        s.chop(qstrlen(unit));
+        s.chop(unitStr.size());
     }
     bool ok = false;
     qreal val = s.toDouble(&ok);
@@ -1452,11 +1466,13 @@ static bool intValueHelper(const QCss::Value &v, int *i, const char *unit)
 {
     if (unit && v.type != Value::Length)
         return false;
-    QString s = v.variant.toString();
+    const QString str = v.variant.toString();
+    QStringRef s(&str);
     if (unit) {
-        if (!s.endsWith(QLatin1String(unit), Qt::CaseInsensitive))
+        const QLatin1String unitStr(unit);
+        if (!s.endsWith(unitStr, Qt::CaseInsensitive))
             return false;
-        s.chop(qstrlen(unit));
+        s.chop(unitStr.size());
     }
     bool ok = false;
     int val = s.toInt(&ok);
@@ -1500,10 +1516,10 @@ QRect Declaration::rectValue() const
     const QCss::Value &v = d->values.at(0);
     if (v.type != Value::Function)
         return QRect();
-    QStringList func = v.variant.toStringList();
+    const QStringList func = v.variant.toStringList();
     if (func.count() != 2 || func.at(0).compare(QLatin1String("rect")) != 0)
         return QRect();
-    QStringList args = func[1].split(QLatin1Char(' '), QString::SkipEmptyParts);
+    const auto args = func[1].splitRef(QLatin1Char(' '), QString::SkipEmptyParts);
     if (args.count() != 4)
         return QRect();
     QRect rect(args[0].toInt(), args[1].toInt(), args[2].toInt(), args[3].toInt());
@@ -1646,6 +1662,7 @@ Qt::Alignment Declaration::alignmentValue() const
 void Declaration::borderImageValue(QString *image, int *cuts,
                                    TileMode *h, TileMode *v) const
 {
+    const DeclarationData *d = this->d.data(); // make it const and shadow d
     *image = uriValue();
     for (int i = 0; i < 4; i++)
         cuts[i] = -1;
@@ -1805,7 +1822,7 @@ void StyleSheet::buildIndexes(Qt::CaseSensitivity nameCaseSensitivity)
                 nr.order = i;
                 QString name = sel.elementName;
                 if (nameCaseSensitivity == Qt::CaseInsensitive)
-                    name=name.toLower();
+                    name = std::move(name).toLower();
                 nameIndex.insert(name, nr);
             } else {
                 universalsSelectors += selector;
@@ -1859,12 +1876,15 @@ bool StyleSelector::selectorMatches(const Selector &selector, NodePtr node)
     do {
         match = basicSelectorMatches(sel, node);
         if (!match) {
-            if (sel.relationToNext == BasicSelector::MatchNextSelectorIfParent
-                || i == selector.basicSelectors.count() - 1) // first element must always match!
+            if (i == selector.basicSelectors.count() - 1) // first element must always match!
+                break;
+            if (sel.relationToNext != BasicSelector::MatchNextSelectorIfAncestor &&
+                sel.relationToNext != BasicSelector::MatchNextSelectorIfIndirectAdjecent)
                 break;
         }
 
-        if (match || sel.relationToNext != BasicSelector::MatchNextSelectorIfAncestor)
+        if (match || (sel.relationToNext != BasicSelector::MatchNextSelectorIfAncestor &&
+                      sel.relationToNext != BasicSelector::MatchNextSelectorIfIndirectAdjecent))
             --i;
 
         if (i < 0)
@@ -1877,16 +1897,18 @@ bool StyleSelector::selectorMatches(const Selector &selector, NodePtr node)
             NodePtr nextParent = parentNode(node);
             freeNode(node);
             node = nextParent;
-       } else if (sel.relationToNext == BasicSelector::MatchNextSelectorIfPreceeds) {
+        } else if (sel.relationToNext == BasicSelector::MatchNextSelectorIfDirectAdjecent
+                  || sel.relationToNext == BasicSelector::MatchNextSelectorIfIndirectAdjecent) {
             NodePtr previousSibling = previousSiblingNode(node);
             freeNode(node);
             node = previousSibling;
-       }
+        }
         if (isNullNode(node)) {
             match = false;
             break;
         }
-   } while (i >= 0 && (match || sel.relationToNext == BasicSelector::MatchNextSelectorIfAncestor));
+   } while (i >= 0 && (match || sel.relationToNext == BasicSelector::MatchNextSelectorIfAncestor
+                             || sel.relationToNext == BasicSelector::MatchNextSelectorIfIndirectAdjecent));
 
     freeNode(node);
 
@@ -1906,19 +1928,38 @@ bool StyleSelector::basicSelectorMatches(const BasicSelector &sel, NodePtr node)
             if (attrValue.isNull())
                 return false;
 
-            if (a.valueMatchCriterium == QCss::AttributeSelector::MatchContains) {
-
-                QStringList lst = attrValue.split(QLatin1Char(' '));
-                if (!lst.contains(a.value))
+            switch (a.valueMatchCriterium) {
+            case QCss::AttributeSelector::NoMatch:
+                break;
+            case QCss::AttributeSelector::MatchEqual:
+                if (attrValue != a.value)
                     return false;
-            } else if (
-                (a.valueMatchCriterium == QCss::AttributeSelector::MatchEqual
-                 && attrValue != a.value)
-                ||
-                (a.valueMatchCriterium == QCss::AttributeSelector::MatchBeginsWith
-                 && !attrValue.startsWith(a.value))
-               )
-                return false;
+                break;
+            case QCss::AttributeSelector::MatchIncludes: {
+                const auto lst = attrValue.splitRef(QLatin1Char(' '));
+                if (!lst.contains(QStringRef(&a.value)))
+                    return false;
+                break;
+            }
+            case QCss::AttributeSelector::MatchDashMatch: {
+                const QString dashPrefix = a.value + QLatin1Char('-');
+                if (attrValue != a.value && !attrValue.startsWith(dashPrefix))
+                    return false;
+                break;
+            }
+            case QCss::AttributeSelector::MatchBeginsWith:
+                if (!attrValue.startsWith(a.value))
+                    return false;
+                break;
+            case QCss::AttributeSelector::MatchEndsWith:
+                if (!attrValue.endsWith(a.value))
+                    return false;
+                break;
+            case QCss::AttributeSelector::MatchContains:
+                if (!attrValue.contains(a.value))
+                    return false;
+                break;
+            }
         }
     }
 
@@ -1986,7 +2027,7 @@ QVector<StyleRule> StyleSelector::styleRulesForNode(NodePtr node)
             for (int i = 0; i < names.count(); i++) {
                 QString name = names.at(i);
                 if (nameCaseSensitivity == Qt::CaseInsensitive)
-                    name = name.toLower();
+                    name = std::move(name).toLower();
                 QMultiHash<QString, StyleRule>::const_iterator it = styleSheet.nameIndex.constFind(name);
                 while (it != styleSheet.nameIndex.constEnd() && it.key() == name) {
                     matchRule(node, it.value(), styleSheet.origin, styleSheet.depth, &weightedRules);
@@ -2075,7 +2116,7 @@ QString Scanner::preprocess(const QString &input, bool *hasEscapeSequences)
 
             hexCount = qMin(hexCount, 6);
             bool ok = false;
-            ushort code = output.mid(hexStart, hexCount).toUShort(&ok, 16);
+            ushort code = output.midRef(hexStart, hexCount).toUShort(&ok, 16);
             if (ok) {
                 output.replace(hexStart - 1, hexCount + 1, QChar(code));
                 i = hexStart;
@@ -2160,7 +2201,7 @@ void Parser::init(const QString &css, bool isFile)
     }
 
     hasEscapeSequences = false;
-    symbols.resize(0);
+    symbols.clear();
     symbols.reserve(8);
     Scanner::scan(Scanner::preprocess(styleSheet, &hasEscapeSequences), &symbols);
     index = 0;
@@ -2170,6 +2211,7 @@ void Parser::init(const QString &css, bool isFile)
 bool Parser::parse(StyleSheet *styleSheet, Qt::CaseSensitivity nameCaseSensitivity)
 {
     if (testTokenAndEndsWith(ATKEYWORD_SYM, QLatin1String("charset"))) {
+        while (test(S) || test(CDO) || test(CDC)) {}
         if (!next(STRING)) return false;
         if (!next(SEMICOLON)) return false;
     }
@@ -2329,9 +2371,11 @@ bool Parser::parseCombinator(BasicSelector::Relation *relation)
         prev();
     }
     if (test(PLUS)) {
-        *relation = BasicSelector::MatchNextSelectorIfPreceeds;
+        *relation = BasicSelector::MatchNextSelectorIfDirectAdjecent;
     } else if (test(GREATER)) {
         *relation = BasicSelector::MatchNextSelectorIfParent;
+    } else if (test(TILDE)) {
+        *relation = BasicSelector::MatchNextSelectorIfIndirectAdjecent;
     }
     skipSpace();
     return true;
@@ -2432,7 +2476,7 @@ bool Parser::parseSimpleSelector(BasicSelector *basicSel)
             onceMore = true;
             AttributeSelector a;
             a.name = QLatin1String("class");
-            a.valueMatchCriterium = AttributeSelector::MatchContains;
+            a.valueMatchCriterium = AttributeSelector::MatchIncludes;
             if (!parseClass(&a.value)) return false;
             basicSel->attributeSelectors.append(a);
         } else if (testAttrib()) {
@@ -2478,9 +2522,15 @@ bool Parser::parseAttrib(AttributeSelector *attr)
     if (test(EQUAL)) {
         attr->valueMatchCriterium = AttributeSelector::MatchEqual;
     } else if (test(INCLUDES)) {
-        attr->valueMatchCriterium = AttributeSelector::MatchContains;
+        attr->valueMatchCriterium = AttributeSelector::MatchIncludes;
     } else if (test(DASHMATCH)) {
+        attr->valueMatchCriterium = AttributeSelector::MatchDashMatch;
+    } else if (test(BEGINSWITH)) {
         attr->valueMatchCriterium = AttributeSelector::MatchBeginsWith;
+    } else if (test(ENDSWITH)) {
+        attr->valueMatchCriterium = AttributeSelector::MatchEndsWith;
+    } else if (test(CONTAINS)) {
+        attr->valueMatchCriterium = AttributeSelector::MatchContains;
     } else {
         return next(RBRACKET);
     }
@@ -2698,7 +2748,7 @@ bool Parser::testAndParseUri(QString *uri)
         index = rewind;
         return false;
     }
-    if (name.toLower() != QLatin1String("url")) {
+    if (name.compare(QLatin1String("url"), Qt::CaseInsensitive) != 0) {
         index = rewind;
         return false;
     }

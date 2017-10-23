@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,10 +52,11 @@
 //
 //
 
+#include <QtPrintSupport/private/qtprintsupportglobal_p.h>
 #include <QtGui/qpaintengine.h>
 #include <QtPrintSupport/qprintengine.h>
 
-#ifndef QT_NO_PRINTPREVIEWWIDGET
+QT_REQUIRE_CONFIG(printpreviewwidget);
 
 QT_BEGIN_NAMESPACE
 
@@ -62,37 +69,35 @@ public:
     QPreviewPaintEngine();
     ~QPreviewPaintEngine();
 
-    bool begin(QPaintDevice *dev);
-    bool end();
+    bool begin(QPaintDevice *dev) override;
+    bool end() override;
 
-    void updateState(const QPaintEngineState &state);
+    void updateState(const QPaintEngineState &state) override;
 
-    void drawPath(const QPainterPath &path);
-    void drawPolygon(const QPointF *points, int pointCount, PolygonDrawMode mode);
-    void drawTextItem(const QPointF &p, const QTextItem &textItem);
+    void drawPath(const QPainterPath &path) override;
+    void drawPolygon(const QPointF *points, int pointCount, PolygonDrawMode mode) override;
+    void drawTextItem(const QPointF &p, const QTextItem &textItem) override;
 
-    void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr);
-    void drawTiledPixmap(const QRectF &r, const QPixmap &pm, const QPointF &p);
+    void drawPixmap(const QRectF &r, const QPixmap &pm, const QRectF &sr) override;
+    void drawTiledPixmap(const QRectF &r, const QPixmap &pm, const QPointF &p) override;
 
     QList<const QPicture *> pages();
 
-    QPaintEngine::Type type() const { return Picture; }
+    QPaintEngine::Type type() const override { return Picture; }
 
     void setProxyEngines(QPrintEngine *printEngine, QPaintEngine *paintEngine);
 
-    void setProperty(PrintEnginePropertyKey key, const QVariant &value);
-    QVariant property(PrintEnginePropertyKey key) const;
+    void setProperty(PrintEnginePropertyKey key, const QVariant &value) override;
+    QVariant property(PrintEnginePropertyKey key) const override;
 
-    bool newPage();
-    bool abort();
+    bool newPage() override;
+    bool abort() override;
 
-    int metric(QPaintDevice::PaintDeviceMetric) const;
+    int metric(QPaintDevice::PaintDeviceMetric) const override;
 
-    QPrinter::PrinterState printerState() const;
+    QPrinter::PrinterState printerState() const override;
 };
 
 QT_END_NAMESPACE
-
-#endif // QT_NO_PRINTPREVIEWWIDGET
 
 #endif

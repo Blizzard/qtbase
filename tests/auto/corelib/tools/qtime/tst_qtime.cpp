@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -33,10 +28,26 @@
 
 #include <QtTest/QtTest>
 #include "qdatetime.h"
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#  include <locale.h>
+#endif
 
 class tst_QTime : public QObject
 {
     Q_OBJECT
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+public:
+    tst_QTime()
+    {
+        // Some tests depend on C locale - BF&I it with belt *and* braces:
+        qputenv("LC_ALL", "C");
+        setlocale(LC_ALL, "C");
+        // Need to instantiate as early as possible, before anything accesses
+        // the QSystemLocale singleton; once it exists, there's no changing it.
+    }
+#endif // remove for ### Qt 6
+
 private slots:
     void msecsTo_data();
     void msecsTo();
@@ -549,6 +560,8 @@ void tst_QTime::fromStringFormat_data()
     QTest::newRow("data9") << QString("2221") << QString("hhhh") << invalidTime();
     QTest::newRow("data10") << QString("02:23PM") << QString("hh:mmAP") << QTime(14,23,0,0);
     QTest::newRow("data11") << QString("02:23pm") << QString("hh:mmap") << QTime(14,23,0,0);
+    QTest::newRow("short-msecs-lt100") << QString("10:12:34:045") << QString("hh:m:ss:z") << QTime(10,12,34,45);
+    QTest::newRow("short-msecs-gt100") << QString("10:12:34:45") << QString("hh:m:ss:z") << QTime(10,12,34,450);
 }
 
 void tst_QTime::fromStringFormat()
@@ -680,6 +693,9 @@ void tst_QTime::toStringDateFormat_data()
     QTest::newRow("Text 10:12:34.999") << QTime(10, 12, 34, 999) << Qt::TextDate << QString("10:12:34");
     QTest::newRow("ISO 10:12:34.999") << QTime(10, 12, 34, 999) << Qt::ISODate << QString("10:12:34");
     QTest::newRow("RFC2822Date") << QTime(10, 12, 34, 999) << Qt::RFC2822Date << QString("10:12:34");
+    QTest::newRow("ISOWithMs 10:12:34.000") << QTime(10, 12, 34, 0) << Qt::ISODateWithMs << QString("10:12:34.000");
+    QTest::newRow("ISOWithMs 10:12:34.020") << QTime(10, 12, 34, 20) << Qt::ISODateWithMs << QString("10:12:34.020");
+    QTest::newRow("ISOWithMs 10:12:34.999") << QTime(10, 12, 34, 999) << Qt::ISODateWithMs << QString("10:12:34.999");
 }
 
 void tst_QTime::toStringDateFormat()
@@ -697,12 +713,13 @@ void tst_QTime::toStringFormat_data()
     QTest::addColumn<QString>("format");
     QTest::addColumn<QString>("str");
 
-    QTest::newRow( "data0" ) << QTime(0,0,0,0) << QString("h:m:s:z") << QString("0:0:0:0");
-    QTest::newRow( "data1" ) << QTime(10,12,34,53) << QString("hh:mm:ss:zzz") << QString("10:12:34:053");
-    QTest::newRow( "data2" ) << QTime(10,12,34,45) << QString("hh:m:ss:z") << QString("10:12:34:45");
-    QTest::newRow( "data3" ) << QTime(10,12,34,45) << QString("hh:ss ap") << QString("10:34 am");
-    QTest::newRow( "data4" ) << QTime(22,12,34,45) << QString("hh:zzz AP") << QString("10:045 PM");
-    QTest::newRow( "data5" ) << QTime(230,230,230,230) << QString("hh:mm:ss") << QString();
+    QTest::newRow( "midnight" ) << QTime(0,0,0,0) << QString("h:m:s:z") << QString("0:0:0:0");
+    QTest::newRow( "full" ) << QTime(10,12,34,53) << QString("hh:mm:ss:zzz") << QString("10:12:34:053");
+    QTest::newRow( "short-msecs-lt100" ) << QTime(10,12,34,45) << QString("hh:m:ss:z") << QString("10:12:34:045");
+    QTest::newRow( "short-msecs-gt100" ) << QTime(10,12,34,450) << QString("hh:m:ss:z") << QString("10:12:34:45");
+    QTest::newRow( "am-pm" ) << QTime(10,12,34,45) << QString("hh:ss ap") << QString("10:34 am");
+    QTest::newRow( "AM-PM" ) << QTime(22,12,34,45) << QString("hh:zzz AP") << QString("10:045 PM");
+    QTest::newRow( "invalid" ) << QTime(230,230,230,230) << QString("hh:mm:ss") << QString();
 }
 
 void tst_QTime::toStringFormat()

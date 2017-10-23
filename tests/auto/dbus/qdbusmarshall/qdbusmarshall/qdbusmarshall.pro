@@ -5,11 +5,9 @@ DESTDIR = ./
 
 QT = core-private dbus-private testlib
 
-contains(QT_CONFIG, dbus-linked) {
+qtConfig(dbus-linked) {
     DEFINES += QT_LINKED_LIBDBUS
-    LIBS += $$QT_LIBS_DBUS
-    QMAKE_CXXFLAGS += $$QT_CFLAGS_DBUS
+    QMAKE_USE += dbus
 } else {
     SOURCES += ../../../../../src/dbus/qdbus_symbols.cpp
 }
-DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0

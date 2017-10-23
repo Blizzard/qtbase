@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -128,7 +138,8 @@ void MainWindow::aboutToShowSaveAsMenu()
 void MainWindow::findCodecs()
 {
     QMap<QString, QTextCodec *> codecMap;
-    QRegExp iso8859RegExp("ISO[- ]8859-([0-9]+).*");
+    QRegularExpression iso8859RegExp("^ISO[- ]8859-([0-9]+).*$");
+    QRegularExpressionMatch match;
 
     foreach (int mib, QTextCodec::availableMibs()) {
         QTextCodec *codec = QTextCodec::codecForMib(mib);
@@ -140,8 +151,8 @@ void MainWindow::findCodecs()
             rank = 1;
         } else if (sortKey.startsWith(QLatin1String("UTF-16"))) {
             rank = 2;
-        } else if (iso8859RegExp.exactMatch(sortKey)) {
-            if (iso8859RegExp.cap(1).size() == 1)
+        } else if ((match = iso8859RegExp.match(sortKey)).hasMatch()) {
+            if (match.captured(1).size() == 1)
                 rank = 3;
             else
                 rank = 4;

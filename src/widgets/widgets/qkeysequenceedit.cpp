@@ -1,32 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Copyright (C) 2013 Ivan Komissarov.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,10 +43,9 @@
 
 #include "qboxlayout.h"
 #include "qlineedit.h"
+#include <private/qkeymapper_p.h>
 
 QT_BEGIN_NAMESPACE
-
-#ifndef QT_NO_KEYSEQUENCEEDIT
 
 Q_STATIC_ASSERT(QKeySequencePrivate::MaxKeyCount == 4); // assumed by the code around here
 
@@ -74,15 +79,8 @@ void QKeySequenceEditPrivate::init()
 
 int QKeySequenceEditPrivate::translateModifiers(Qt::KeyboardModifiers state, const QString &text)
 {
+    Q_UNUSED(text);
     int result = 0;
-    // The shift modifier only counts when it is not used to type a symbol
-    // that is only reachable using the shift key anyway
-    if ((state & Qt::ShiftModifier) && (text.isEmpty() ||
-                                        !text.at(0).isPrint() ||
-                                        text.at(0).isLetterOrNumber() ||
-                                        text.at(0).isSpace()))
-        result |= Qt::SHIFT;
-
     if (state & Qt::ControlModifier)
         result |= Qt::CTRL;
     if (state & Qt::MetaModifier)
@@ -132,21 +130,17 @@ void QKeySequenceEditPrivate::finishEditing()
 /*!
     Constructs a QKeySequenceEdit widget with the given \a parent.
 */
-QKeySequenceEdit::QKeySequenceEdit(QWidget *parent) :
-    QWidget(*new QKeySequenceEditPrivate, parent, 0)
+QKeySequenceEdit::QKeySequenceEdit(QWidget *parent)
+    : QKeySequenceEdit(*new QKeySequenceEditPrivate, parent, 0)
 {
-    Q_D(QKeySequenceEdit);
-    d->init();
 }
 
 /*!
     Constructs a QKeySequenceEdit widget with the given \a keySequence and \a parent.
 */
-QKeySequenceEdit::QKeySequenceEdit(const QKeySequence &keySequence, QWidget *parent) :
-    QWidget(*new QKeySequenceEditPrivate, parent, 0)
+QKeySequenceEdit::QKeySequenceEdit(const QKeySequence &keySequence, QWidget *parent)
+    : QKeySequenceEdit(parent)
 {
-    Q_D(QKeySequenceEdit);
-    d->init();
     setKeySequence(keySequence);
 }
 
@@ -255,7 +249,8 @@ void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
     if (nextKey == Qt::Key_Control
             || nextKey == Qt::Key_Shift
             || nextKey == Qt::Key_Meta
-            || nextKey == Qt::Key_Alt) {
+            || nextKey == Qt::Key_Alt
+            || nextKey == Qt::Key_unknown) {
         return;
     }
 
@@ -269,7 +264,27 @@ void QKeySequenceEdit::keyPressEvent(QKeyEvent *e)
     if (d->keyNum >= QKeySequencePrivate::MaxKeyCount)
         return;
 
-    nextKey |= d->translateModifiers(e->modifiers(), e->text());
+    if (e->modifiers() & Qt::ShiftModifier) {
+        QList<int> possibleKeys = QKeyMapper::possibleKeys(e);
+        int pkTotal = possibleKeys.count();
+        if (!pkTotal)
+            return;
+        bool found = false;
+        for (int i = 0; i < possibleKeys.size(); ++i) {
+            if (possibleKeys.at(i) - nextKey == int(e->modifiers())
+                || (possibleKeys.at(i) == nextKey && e->modifiers() == Qt::ShiftModifier)) {
+                nextKey = possibleKeys.at(i);
+                found = true;
+                break;
+            }
+        }
+        // Use as fallback
+        if (!found)
+            nextKey = possibleKeys.first();
+    } else {
+        nextKey |= d->translateModifiers(e->modifiers(), e->text());
+    }
+
 
     d->key[d->keyNum] = nextKey;
     d->keyNum++;
@@ -314,8 +329,6 @@ void QKeySequenceEdit::timerEvent(QTimerEvent *e)
 
     QWidget::timerEvent(e);
 }
-
-#endif // QT_NO_KEYSEQUENCEEDIT
 
 QT_END_NAMESPACE
 

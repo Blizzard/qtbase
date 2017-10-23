@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,7 +54,7 @@
 #include <private/qfontengine_p.h>
 #include <private/qcore_mac_p.h>
 
-#ifndef Q_OS_IOS
+#ifdef Q_OS_OSX
 #include <ApplicationServices/ApplicationServices.h>
 #else
 #include <CoreText/CoreText.h>
@@ -72,6 +78,7 @@ public:
     glyph_metrics_t boundingBox(glyph_t glyph) Q_DECL_OVERRIDE;
 
     QFixed ascent() const Q_DECL_OVERRIDE;
+    QFixed capHeight() const Q_DECL_OVERRIDE;
     QFixed descent() const Q_DECL_OVERRIDE;
     QFixed leading() const Q_DECL_OVERRIDE;
     QFixed xHeight() const Q_DECL_OVERRIDE;
@@ -86,6 +93,9 @@ public:
     int synthesized() const Q_DECL_OVERRIDE { return synthesisFlags; }
     bool supportsSubPixelPositions() const Q_DECL_OVERRIDE { return true; }
 
+    QFixed lineThickness() const Q_DECL_OVERRIDE;
+    QFixed underlinePosition() const Q_DECL_OVERRIDE;
+
     void draw(CGContextRef ctx, qreal x, qreal y, const QTextItemInt &ti, int paintDeviceHeight);
 
     FaceId faceId() const Q_DECL_OVERRIDE;
@@ -97,8 +107,10 @@ public:
     glyph_metrics_t alphaMapBoundingBox(glyph_t glyph, QFixed, const QTransform &matrix, GlyphFormat) Q_DECL_OVERRIDE;
     QImage bitmapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform &t) Q_DECL_OVERRIDE;
     QFixed emSquareSize() const Q_DECL_OVERRIDE;
+    void doKerning(QGlyphLayout *g, ShaperFlags flags) const Q_DECL_OVERRIDE;
 
     bool supportsTransformation(const QTransform &transform) const Q_DECL_OVERRIDE;
+    bool expectsGammaCorrectedBlending() const Q_DECL_OVERRIDE;
 
     QFontEngine *cloneWithSize(qreal pixelSize) const Q_DECL_OVERRIDE;
     Qt::HANDLE handle() const Q_DECL_OVERRIDE;
@@ -111,6 +123,8 @@ public:
 
     static int antialiasingThreshold;
     static QFontEngine::GlyphFormat defaultGlyphFormat;
+
+    static QCoreTextFontEngine *create(const QByteArray &fontData, qreal pixelSize, QFont::HintingPreference hintingPreference);
 private:
     void init();
     QImage imageForGlyph(glyph_t glyph, QFixed subPixelPosition, bool colorful, const QTransform &m);
@@ -119,7 +133,10 @@ private:
     int synthesisFlags;
     CGAffineTransform transform;
     QFixed avgCharWidth;
+    QFixed underlineThickness;
+    QFixed underlinePos;
     QFontEngine::FaceId face_id;
+    mutable bool kerningPairsLoaded;
 };
 
 CGAffineTransform qt_transform_from_fontdef(const QFontDef &fontDef);

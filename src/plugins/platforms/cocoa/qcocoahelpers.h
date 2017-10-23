@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -46,7 +52,10 @@
 //
 #include "qt_mac_p.h"
 #include <private/qguiapplication_p.h>
+#include <QtGui/qpalette.h>
 #include <QtGui/qscreen.h>
+
+Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QNSView));
 
 QT_BEGIN_NAMESPACE
 
@@ -62,37 +71,15 @@ void *qt_mac_QStringListToNSMutableArrayVoid(const QStringList &list);
 inline NSMutableArray *qt_mac_QStringListToNSMutableArray(const QStringList &qstrlist)
 { return reinterpret_cast<NSMutableArray *>(qt_mac_QStringListToNSMutableArrayVoid(qstrlist)); }
 
-NSImage *qt_mac_cgimage_to_nsimage(CGImageRef iamge);
-NSImage *qt_mac_create_nsimage(const QPixmap &pm);
-NSImage *qt_mac_create_nsimage(const QIcon &icon);
-CGImageRef qt_mac_toCGImage(const QImage &qImage);
-CGImageRef qt_mac_toCGImageMask(const QImage &qImage);
-QImage qt_mac_toQImage(CGImageRef image);
-
-NSSize qt_mac_toNSSize(const QSize &qtSize);
-NSRect qt_mac_toNSRect(const QRect &rect);
-QRect qt_mac_toQRect(const NSRect &rect);
-
-QColor qt_mac_toQColor(const NSColor *color);
-QColor qt_mac_toQColor(CGColorRef color);
-
-
-// Creates a mutable shape, it's the caller's responsibility to release.
-HIMutableShapeRef qt_mac_QRegionToHIMutableShape(const QRegion &region);
-
-OSStatus qt_mac_drawCGImage(CGContextRef inContext, const CGRect *inBounds, CGImageRef inImage);
-
 NSDragOperation qt_mac_mapDropAction(Qt::DropAction action);
 NSDragOperation qt_mac_mapDropActions(Qt::DropActions actions);
 Qt::DropAction qt_mac_mapNSDragOperation(NSDragOperation nsActions);
 Qt::DropActions qt_mac_mapNSDragOperations(NSDragOperation nsActions);
 
+QT_MANGLE_NAMESPACE(QNSView) *qnsview_cast(NSView *view);
+
 // Misc
 void qt_mac_transformProccessToForegroundApplication();
-QString qt_mac_removeMnemonics(const QString &original);
-CGColorSpaceRef qt_mac_genericColorSpace();
-CGColorSpaceRef qt_mac_displayColorSpace(const QWidget *widget);
-CGColorSpaceRef qt_mac_colorSpaceForDeviceType(const QPaintDevice *paintDevice);
 QString qt_mac_applicationName();
 
 int qt_mac_flipYCoordinate(int y);
@@ -104,10 +91,6 @@ NSPoint qt_mac_flipPoint(const QPointF &p);
 NSRect qt_mac_flipRect(const QRect &rect);
 
 Qt::MouseButton cocoaButton2QtButton(NSInteger buttonNum);
-
-bool qt_mac_execute_apple_script(const char *script, long script_len, AEDesc *ret);
-bool qt_mac_execute_apple_script(const char *script, AEDesc *ret);
-bool qt_mac_execute_apple_script(const QString &script, AEDesc *ret);
 
 // strip out '&' characters, and convert "&&" to a single '&', in menu
 // text - since menu text is sometimes decorated with these for Windows
@@ -142,8 +125,6 @@ public:
     }
 };
 
-CGContextRef qt_mac_cg_context(QPaintDevice *pdev);
-
 template<typename T>
 T qt_mac_resolveOption(const T &fallback, const QByteArray &environment)
 {
@@ -177,7 +158,35 @@ T qt_mac_resolveOption(const T &fallback, QWindow *window, const QByteArray &pro
     // return default value.
     return fallback;
 }
+
 QT_END_NAMESPACE
+
+@protocol QT_MANGLE_NAMESPACE(QNSPanelDelegate)
+@required
+- (void)onOkClicked;
+- (void)onCancelClicked;
+@end
+
+@interface QT_MANGLE_NAMESPACE(QNSPanelContentsWrapper) : NSView {
+    NSButton *_okButton;
+    NSButton *_cancelButton;
+    NSView *_panelContents;
+    NSEdgeInsets _panelContentsMargins;
+}
+
+@property (nonatomic, readonly) NSButton *okButton;
+@property (nonatomic, readonly) NSButton *cancelButton;
+@property (nonatomic, readonly) NSView *panelContents; // ARC: unretained, make it weak
+@property (nonatomic, assign) NSEdgeInsets panelContentsMargins;
+
+- (instancetype)initWithPanelDelegate:(id<QT_MANGLE_NAMESPACE(QNSPanelDelegate)>)panelDelegate;
+- (void)dealloc;
+
+- (NSButton *)createButtonWithTitle:(const char *)title;
+- (void)layout;
+@end
+
+QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSPanelContentsWrapper);
 
 #endif //QCOCOAHELPERS_H
 

@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -59,7 +65,6 @@
 #include <private/qimagepixmapcleanuphooks_p.h>
 #include "qcolormap.h"
 #include "qfile.h"
-#include "qlibrary.h"
 #include <qmutex.h>
 
 #include "qsurfaceformat.h"
@@ -1258,7 +1263,7 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
     QGLFormat::OpenGLVersionFlags versionFlags = QGLFormat::OpenGL_Version_None;
 
     if (versionString.startsWith(QLatin1String("OpenGL ES"))) {
-        QStringList parts = versionString.split(QLatin1Char(' '));
+        const auto parts = versionString.splitRef(QLatin1Char(' '));
         if (parts.size() >= 3) {
             if (parts[2].startsWith(QLatin1String("1."))) {
                 if (parts[1].endsWith(QLatin1String("-CM"))) {
@@ -1287,14 +1292,19 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '5':
                 versionFlags |= QGLFormat::OpenGL_Version_1_5;
+                // fall through
             case '4':
                 versionFlags |= QGLFormat::OpenGL_Version_1_4;
+                // fall through
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_1_3;
+                // fall through
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_1_2;
+                // fall through
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_1_1;
+                // fall through
             default:
                 break;
             }
@@ -1319,10 +1329,13 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_3_3;
+                // fall through
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_3_2;
+                // fall through
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_3_1;
+                // fall through
             case '0':
                 break;
             default:
@@ -1347,10 +1360,13 @@ QGLFormat::OpenGLVersionFlags Q_AUTOTEST_EXPORT qOpenGLVersionFlagsFromString(co
             switch (versionString[2].toLatin1()) {
             case '3':
                 versionFlags |= QGLFormat::OpenGL_Version_4_3;
+                // fall through
             case '2':
                 versionFlags |= QGLFormat::OpenGL_Version_4_2;
+                // fall through
             case '1':
                 versionFlags |= QGLFormat::OpenGL_Version_4_1;
+                // fall through
             case '0':
                 break;
             default:
@@ -1912,7 +1928,8 @@ void QGLTextureCache::insert(QGLContext* ctx, qint64 key, QGLTexture* texture, i
 {
     QWriteLocker locker(&m_lock);
     const QGLTextureCacheKey cacheKey = {key, QGLContextPrivate::contextGroup(ctx)};
-    m_cache.insert(cacheKey, texture, cost);
+    const bool inserted = m_cache.insert(cacheKey, texture, cost);
+    Q_UNUSED(inserted) Q_ASSERT(inserted);
 }
 
 void QGLTextureCache::remove(qint64 key)
@@ -5228,7 +5245,7 @@ void QGLContextGroup::removeShare(const QGLContext *context) {
     // Update context group representative.
     Q_ASSERT(group->m_shares.size() != 0);
     if (group->m_context == context)
-        group->m_context = group->m_shares[0];
+        group->m_context = group->m_shares.at(0);
 
     // If there is only one context left, then make the list empty.
     if (group->m_shares.size() == 1)
@@ -5547,10 +5564,7 @@ QSize QGLTexture::bindCompressedTexturePVR(const char *buf, int len)
 
     // Set the invert flag for the texture.  The "vertical flip"
     // flag in PVR is the opposite sense to our sense of inversion.
-    if ((pvrHeader->flags & PVR_VERTICAL_FLIP) != 0)
-        options &= ~QGLContext::InvertedYBindOption;
-    else
-        options |= QGLContext::InvertedYBindOption;
+    options.setFlag(QGLContext::InvertedYBindOption, !(pvrHeader->flags & PVR_VERTICAL_FLIP));
 
     return QSize(pvrHeader->width, pvrHeader->height);
 }

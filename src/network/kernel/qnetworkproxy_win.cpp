@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -47,7 +53,6 @@
 #include <qt_windows.h>
 #include <wininet.h>
 #include <lmcons.h>
-#include "qnetworkfunctions_wince.h"
 
 /*
  * Information on the WinHTTP DLL:
@@ -117,7 +122,6 @@ static PtrWinHttpGetIEProxyConfigForCurrentUser ptrWinHttpGetIEProxyConfigForCur
 static PtrWinHttpCloseHandle ptrWinHttpCloseHandle = 0;
 
 
-#ifndef Q_OS_WINCE
 static bool currentProcessIsService()
 {
     typedef BOOL (WINAPI *PtrGetUserName)(LPTSTR lpBuffer, LPDWORD lpnSize);
@@ -147,7 +151,6 @@ static bool currentProcessIsService()
     }
     return false;
 }
-#endif // ! Q_OS_WINCE
 
 static QStringList splitSpaceSemicolon(const QString &source)
 {
@@ -188,14 +191,16 @@ static bool isBypassed(const QString &host, const QStringList &bypassList)
         return true;
 
     // does it match the list of exclusions?
-    foreach (const QString &entry, bypassList) {
+    for (const QString &entry : bypassList) {
         if (entry == QLatin1String("<local>")) {
             if (isSimple)
                 return true;
             if (isIpAddress) {
                 //exclude all local subnets
-                foreach (const QNetworkInterface &iface, QNetworkInterface::allInterfaces()) {
-                    foreach (const QNetworkAddressEntry netaddr, iface.addressEntries()) {
+                const auto ifaces = QNetworkInterface::allInterfaces();
+                for (const QNetworkInterface &iface : ifaces) {
+                    const auto netaddrs = iface.addressEntries();
+                    for (const QNetworkAddressEntry &netaddr : netaddrs) {
                         if (ipAddress.isInSubnet(netaddr.ip(), netaddr.prefixLength())) {
                             return true;
                         }
@@ -227,15 +232,21 @@ static QList<QNetworkProxy> filterProxyListByCapabilities(const QList<QNetworkPr
     case QNetworkProxyQuery::UdpSocket:
         requiredCaps = QNetworkProxy::UdpTunnelingCapability;
         break;
+    case QNetworkProxyQuery::SctpSocket:
+        requiredCaps = QNetworkProxy::SctpTunnelingCapability;
+        break;
     case QNetworkProxyQuery::TcpServer:
         requiredCaps = QNetworkProxy::ListeningCapability;
+        break;
+    case QNetworkProxyQuery::SctpServer:
+        requiredCaps = QNetworkProxy::SctpListeningCapability;
         break;
     default:
         return proxyList;
         break;
     }
     QList<QNetworkProxy> result;
-    foreach (const QNetworkProxy& proxy, proxyList) {
+    for (const QNetworkProxy &proxy : proxyList) {
         if (proxy.capabilities() & requiredCaps)
             result.append(proxy);
     }
@@ -245,7 +256,7 @@ static QList<QNetworkProxy> filterProxyListByCapabilities(const QList<QNetworkPr
 static QList<QNetworkProxy> removeDuplicateProxies(const QList<QNetworkProxy> &proxyList)
 {
     QList<QNetworkProxy> result;
-     foreach (QNetworkProxy proxy, proxyList) {
+    for (const QNetworkProxy &proxy : proxyList) {
          bool append = true;
          for (int i=0; i < result.count(); i++) {
              if (proxy.hostName() == result.at(i).hostName()
@@ -276,8 +287,11 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
     QList<QNetworkProxy> result;
     QHash<QString, QNetworkProxy> taggedProxies;
     const QString requiredTag = query.protocolTag();
-    bool checkTags = !requiredTag.isEmpty() && query.queryType() != QNetworkProxyQuery::TcpServer; //windows tags are only for clients
-    foreach (const QString &entry, proxyList) {
+    // windows tags are only for clients
+    bool checkTags = !requiredTag.isEmpty()
+            && query.queryType() != QNetworkProxyQuery::TcpServer
+            && query.queryType() != QNetworkProxyQuery::SctpServer;
+    for (const QString &entry : proxyList) {
         int server = 0;
 
         QNetworkProxy::ProxyType proxyType = QNetworkProxy::HttpProxy;
@@ -315,7 +329,7 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
         pos = entry.indexOf(QLatin1Char(':'), server);
         if (pos != -1) {
             bool ok;
-            uint value = entry.mid(pos + 1).toUInt(&ok);
+            uint value = entry.midRef(pos + 1).toUInt(&ok);
             if (!ok || value > 65535)
                 continue;       // invalid port number
 
@@ -326,7 +340,7 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
 
         result << QNetworkProxy(proxyType, entry.mid(server, pos - server), port);
         if (!protocolTag.isEmpty())
-            taggedProxies.insert(protocolTag.toString(), result.last());
+            taggedProxies.insert(protocolTag.toString(), result.constLast());
     }
 
     if (checkTags && taggedProxies.contains(requiredTag)) {
@@ -353,7 +367,7 @@ static QList<QNetworkProxy> parseServerList(const QNetworkProxyQuery &query, con
     return removeDuplicateProxies(result);
 }
 
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
 namespace {
 class QRegistryWatcher {
 public:
@@ -386,9 +400,9 @@ public:
     }
 
     void clear() {
-        foreach (HANDLE event, m_watchEvents)
+        for (HANDLE event : qAsConst(m_watchEvents))
             CloseHandle(event);
-        foreach (HKEY key, m_registryHandles)
+        for (HKEY key : qAsConst(m_registryHandles))
             RegCloseKey(key);
 
         m_watchEvents.clear();
@@ -404,7 +418,7 @@ private:
     QVector<HKEY> m_registryHandles;
 };
 } // namespace
-#endif // !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#endif // !defined(Q_OS_WINRT)
 
 class QWindowsSystemProxy
 {
@@ -423,7 +437,7 @@ public:
     QStringList proxyServerList;
     QStringList proxyBypass;
     QList<QNetworkProxy> defaultResult;
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
     QRegistryWatcher proxySettingsWatcher;
 #endif
     bool initialized;
@@ -459,7 +473,7 @@ void QWindowsSystemProxy::reset()
 void QWindowsSystemProxy::init()
 {
     bool proxySettingsChanged = false;
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
     proxySettingsChanged = proxySettingsWatcher.hasChanged();
 #endif
 
@@ -469,12 +483,7 @@ void QWindowsSystemProxy::init()
 
     reset();
 
-#ifdef Q_OS_WINCE
-    // Windows CE does not have any of the following API
-    return;
-#else
-
-#if !defined(Q_OS_WINCE) && !defined(Q_OS_WINRT)
+#if !defined(Q_OS_WINRT)
     proxySettingsWatcher.clear(); // needs reset to trigger a new detection
     proxySettingsWatcher.addLocation(HKEY_CURRENT_USER,  QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
     proxySettingsWatcher.addLocation(HKEY_LOCAL_MACHINE, QStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"));
@@ -562,7 +571,6 @@ void QWindowsSystemProxy::init()
     }
 
     functional = isAutoConfig || !proxyServerList.isEmpty();
-#endif
 }
 
 QList<QNetworkProxy> QNetworkProxyFactory::systemProxyForQuery(const QNetworkProxyQuery &query)

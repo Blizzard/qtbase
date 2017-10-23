@@ -1,4 +1,5 @@
 TEMPLATE = subdirs
+QT_FOR_CONFIG += network-private
 
 !android:linux*:qtHaveModule(dbus) {
     SUBDIRS += generic
@@ -7,10 +8,9 @@ TEMPLATE = subdirs
 
 #win32:SUBDIRS += nla
 win32:SUBDIRS += generic
-blackberry:SUBDIRS += blackberry
-win32:!wince:!winrt: SUBDIRS += nativewifi
-mac:contains(QT_CONFIG, corewlan):SUBDIRS += corewlan
+win32:!winrt: SUBDIRS += nativewifi
+darwin:qtConfig(corewlan): SUBDIRS += corewlan
 mac:SUBDIRS += generic
-android:!android-no-sdk:SUBDIRS += android
+android:SUBDIRS += android
 
 isEmpty(SUBDIRS):SUBDIRS = generic

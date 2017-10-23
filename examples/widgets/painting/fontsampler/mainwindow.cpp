@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -39,10 +49,15 @@
 ****************************************************************************/
 
 #include <QtWidgets>
-#ifndef QT_NO_PRINTER
+#if defined(QT_PRINTSUPPORT_LIB)
+#include <QtPrintSupport/qtprintsupportglobal.h>
+#if QT_CONFIG(printdialog)
 #include <QPrinter>
 #include <QPrintDialog>
+#if QT_CONFIG(printpreviewdialog)
 #include <QPrintPreviewDialog>
+#endif
+#endif
 #endif
 
 #include "mainwindow.h"
@@ -204,9 +219,9 @@ QMap<QString, StyleItems> MainWindow::currentPageMap()
     return pageMap;
 }
 
-#if !defined(QT_NO_PRINTER) && !defined(QT_NO_PRINTDIALOG)
 void MainWindow::on_printAction_triggered()
 {
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
     pageMap = currentPageMap();
 
     if (pageMap.count() == 0)
@@ -223,10 +238,12 @@ void MainWindow::on_printAction_triggered()
         printer.setFromTo(1, pageMap.keys().count());
 
     printDocument(&printer);
+#endif
 }
 
 void MainWindow::printDocument(QPrinter *printer)
 {
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
     printer->setFromTo(1, pageMap.count());
 
     QProgressDialog progress(tr("Preparing font samples..."), tr("&Cancel"),
@@ -255,10 +272,12 @@ void MainWindow::printDocument(QPrinter *printer)
     }
 
     painter.end();
+#endif
 }
 
 void MainWindow::on_printPreviewAction_triggered()
 {
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printpreviewdialog)
     pageMap = currentPageMap();
 
     if (pageMap.count() == 0)
@@ -269,10 +288,12 @@ void MainWindow::on_printPreviewAction_triggered()
     connect(&preview, SIGNAL(paintRequested(QPrinter*)),
             this, SLOT(printDocument(QPrinter*)));
     preview.exec();
+#endif
 }
 
 void MainWindow::printPage(int index, QPainter *painter, QPrinter *printer)
 {
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
     QString family = pageMap.keys()[index];
     StyleItems items = pageMap[family];
 
@@ -335,5 +356,5 @@ void MainWindow::printPage(int index, QPainter *painter, QPrinter *printer)
     }
 
     painter->restore();
+#endif
 }
-#endif // QT_NO_PRINTER

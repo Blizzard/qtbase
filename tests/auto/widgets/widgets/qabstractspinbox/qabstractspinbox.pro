@@ -3,9 +3,8 @@
 ############################################################
 
 CONFIG += testcase
-CONFIG += parallel_test
 TARGET = tst_qabstractspinbox
-QT += widgets testlib
+QT += widgets gui-private core-private testlib
 SOURCES += tst_qabstractspinbox.cpp
 
 

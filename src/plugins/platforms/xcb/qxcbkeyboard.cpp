@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -670,13 +676,13 @@ void QXcbKeyboard::printKeymapError(const char *error) const
 {
     qWarning() << error;
     if (xkb_context) {
-        qWarning() << "Current XKB configuration data search paths are: ";
+        qWarning("Current XKB configuration data search paths are: ");
         for (unsigned int i = 0; i < xkb_context_num_include_paths(xkb_context); ++i)
             qWarning() << xkb_context_include_path_get(xkb_context, i);
     }
-    qWarning() << "Use QT_XKB_CONFIG_ROOT environmental variable to provide an additional search path, "
-                  "add ':' as separator to provide several search paths and/or make sure that XKB configuration data "
-                  "directory contains recent enough contents, to update please see http://cgit.freedesktop.org/xkeyboard-config/ .";
+    qWarning("Use QT_XKB_CONFIG_ROOT environmental variable to provide an additional search path, "
+             "add ':' as separator to provide several search paths and/or make sure that XKB configuration data "
+             "directory contains recent enough contents, to update please see http://cgit.freedesktop.org/xkeyboard-config/ .");
 }
 
 void QXcbKeyboard::updateKeymap()
@@ -686,8 +692,8 @@ void QXcbKeyboard::updateKeymap()
     if (!xkb_context) {
         if (qEnvironmentVariableIsSet("QT_XKB_CONFIG_ROOT")) {
             xkb_context = xkb_context_new((xkb_context_flags)XKB_CONTEXT_NO_DEFAULT_INCLUDES);
-            QList<QByteArray> xkbRootList = QByteArray(qgetenv("QT_XKB_CONFIG_ROOT")).split(':');
-            foreach (const QByteArray &xkbRoot, xkbRootList)
+            const QList<QByteArray> xkbRootList = QByteArray(qgetenv("QT_XKB_CONFIG_ROOT")).split(':');
+            for (const QByteArray &xkbRoot : xkbRootList)
                 xkb_context_include_path_append(xkb_context, xkbRoot.constData());
         } else {
             xkb_context = xkb_context_new((xkb_context_flags)0);
@@ -705,7 +711,7 @@ void QXcbKeyboard::updateKeymap()
     xkb_keymap = 0;
 
     struct xkb_state *new_state = 0;
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     if (connection()->hasXKB()) {
         xkb_keymap = xkb_x11_keymap_new_from_device(xkb_context, xcb_connection(), core_device_id, (xkb_keymap_compile_flags)0);
         if (xkb_keymap) {
@@ -742,13 +748,12 @@ void QXcbKeyboard::updateKeymap()
     // update xkb state object
     xkb_state_unref(xkb_state);
     xkb_state = new_state;
-    if (!connection()->hasXKB())
-        updateXKBMods();
+    updateXKBMods();
 
     checkForLatinLayout();
 }
 
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
 void QXcbKeyboard::updateXKBState(xcb_xkb_state_notify_event_t *state)
 {
     if (m_config && connection()->hasXKB()) {
@@ -768,32 +773,37 @@ void QXcbKeyboard::updateXKBState(xcb_xkb_state_notify_event_t *state)
 }
 #endif
 
+void QXcbKeyboard::updateXKBStateFromState(struct xkb_state *kb_state, quint16 state)
+{
+    const quint32 modsDepressed = xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_DEPRESSED);
+    const quint32 modsLatched = xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_LATCHED);
+    const quint32 modsLocked = xkb_state_serialize_mods(kb_state, XKB_STATE_MODS_LOCKED);
+    const quint32 xkbMask = xkbModMask(state);
+
+    const quint32 latched = modsLatched & xkbMask;
+    const quint32 locked = modsLocked & xkbMask;
+    quint32 depressed = modsDepressed & xkbMask;
+    // set modifiers in depressed if they don't appear in any of the final masks
+    depressed |= ~(depressed | latched | locked) & xkbMask;
+
+    const xkb_state_component newState
+            = xkb_state_update_mask(kb_state,
+                            depressed,
+                            latched,
+                            locked,
+                            0,
+                            0,
+                            (state >> 13) & 3); // bits 13 and 14 report the state keyboard group
+
+    if ((newState & XKB_STATE_LAYOUT_EFFECTIVE) == XKB_STATE_LAYOUT_EFFECTIVE) {
+        //qWarning("TODO: Support KeyboardLayoutChange on QPA (QTBUG-27681)");
+    }
+}
+
 void QXcbKeyboard::updateXKBStateFromCore(quint16 state)
 {
     if (m_config && !connection()->hasXKB()) {
-        const quint32 modsDepressed = xkb_state_serialize_mods(xkb_state, XKB_STATE_MODS_DEPRESSED);
-        const quint32 modsLatched = xkb_state_serialize_mods(xkb_state, XKB_STATE_MODS_LATCHED);
-        const quint32 modsLocked = xkb_state_serialize_mods(xkb_state, XKB_STATE_MODS_LOCKED);
-        const quint32 xkbMask = xkbModMask(state);
-
-        const quint32 latched = modsLatched & xkbMask;
-        const quint32 locked = modsLocked & xkbMask;
-        quint32 depressed = modsDepressed & xkbMask;
-        // set modifiers in depressed if they don't appear in any of the final masks
-        depressed |= ~(depressed | latched | locked) & xkbMask;
-
-        const xkb_state_component newState
-                = xkb_state_update_mask(xkb_state,
-                              depressed,
-                              latched,
-                              locked,
-                              0,
-                              0,
-                              (state >> 13) & 3); // bits 13 and 14 report the state keyboard group
-
-        if ((newState & XKB_STATE_LAYOUT_EFFECTIVE) == XKB_STATE_LAYOUT_EFFECTIVE) {
-            //qWarning("TODO: Support KeyboardLayoutChange on QPA (QTBUG-27681)");
-        }
+        updateXKBStateFromState(xkb_state, state);
     }
 }
 
@@ -1043,7 +1053,7 @@ QList<int> QXcbKeyboard::possibleKeys(const QKeyEvent *event) const
             // catch only more specific shortcuts, i.e. Ctrl+Shift+= also generates Ctrl++ and +,
             // but Ctrl++ is more specific than +, so we should skip the last one
             bool ambiguous = false;
-            foreach (int shortcut, result) {
+            for (int shortcut : qAsConst(result)) {
                 if (int(shortcut & ~Qt::KeyboardModifierMask) == qtKey && (shortcut & mods) == mods) {
                     ambiguous = true;
                     break;
@@ -1126,15 +1136,9 @@ int QXcbKeyboard::keysymToQtKey(xcb_keysym_t keysym, Qt::KeyboardModifiers &modi
 
 QXcbKeyboard::QXcbKeyboard(QXcbConnection *connection)
     : QXcbObject(connection)
-    , m_autorepeat_code(0)
-    , xkb_context(0)
-    , xkb_keymap(0)
-    , xkb_state(0)
-    , latin_keymap(0)
-    , m_hasLatinLayout(false)
 {
     memset(&xkb_names, 0, sizeof(xkb_names));
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     core_device_id = 0;
     if (connection->hasXKB()) {
         updateVModMapping();
@@ -1148,7 +1152,7 @@ QXcbKeyboard::QXcbKeyboard(QXcbConnection *connection)
 #endif
         m_key_symbols = xcb_key_symbols_alloc(xcb_connection());
         updateModifiers();
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     }
 #endif
     updateKeymap();
@@ -1167,7 +1171,7 @@ QXcbKeyboard::~QXcbKeyboard()
 
 void QXcbKeyboard::updateVModMapping()
 {
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     xcb_xkb_get_names_cookie_t names_cookie;
     xcb_xkb_get_names_reply_t *name_reply;
     xcb_xkb_get_names_value_list_t names_list;
@@ -1236,7 +1240,7 @@ void QXcbKeyboard::updateVModMapping()
 
 void QXcbKeyboard::updateVModToRModMapping()
 {
-#ifndef QT_NO_XKB
+#if QT_CONFIG(xkb)
     xcb_xkb_get_map_cookie_t map_cookie;
     xcb_xkb_get_map_reply_t *map_reply;
     xcb_xkb_get_map_map_t map;
@@ -1387,10 +1391,11 @@ void QXcbKeyboard::resolveMaskConflicts()
 class KeyChecker
 {
 public:
-    KeyChecker(xcb_window_t window, xcb_keycode_t code, xcb_timestamp_t time)
+    KeyChecker(xcb_window_t window, xcb_keycode_t code, xcb_timestamp_t time, quint16 state)
         : m_window(window)
         , m_code(code)
         , m_time(time)
+        , m_state(state)
         , m_error(false)
         , m_release(true)
     {
@@ -1407,7 +1412,7 @@ public:
 
         xcb_key_press_event_t *event = (xcb_key_press_event_t *)ev;
 
-        if (event->event != m_window || event->detail != m_code) {
+        if (event->event != m_window || event->detail != m_code || event->state != m_state) {
             m_error = true;
             return false;
         }
@@ -1435,6 +1440,7 @@ private:
     xcb_window_t m_window;
     xcb_keycode_t m_code;
     xcb_timestamp_t m_time;
+    quint16 m_state;
 
     bool m_error;
     bool m_release;
@@ -1455,7 +1461,16 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
     if (type == QEvent::KeyPress)
         targetWindow->updateNetWmUserTime(time);
 
-    xcb_keysym_t sym = xkb_state_key_get_one_sym(xkb_state, code);
+    // Have a temporary keyboard state filled in from state
+    // this way we allow for synthetic events to have different state
+    // from the current state i.e. you can have Alt+Ctrl pressed
+    // and receive a synthetic key event that has neither Alt nor Ctrl pressed
+    struct xkb_state *kb_state = xkb_state_new(xkb_keymap);
+    if (!kb_state)
+        return;
+    updateXKBStateFromState(kb_state, state);
+
+    xcb_keysym_t sym = xkb_state_key_get_one_sym(kb_state, code);
 
     QPlatformInputContext *inputContext = QGuiApplicationPrivate::platformIntegration()->inputContext();
     QMetaMethod method;
@@ -1474,11 +1489,13 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
                       Q_ARG(uint, code),
                       Q_ARG(uint, state),
                       Q_ARG(bool, type == QEvent::KeyPress));
-        if (retval)
+        if (retval) {
+            xkb_state_unref(kb_state);
             return;
+        }
     }
 
-    QString string = lookupString(xkb_state, code);
+    QString string = lookupString(kb_state, code);
 
     // Ιf control modifier is set we should prefer latin character, this is
     // used for standard shortcuts in checks like "key == QKeySequence::Copy",
@@ -1499,7 +1516,7 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
         }
     } else {
         // look ahead for auto-repeat
-        KeyChecker checker(source->xcb_window(), code, time);
+        KeyChecker checker(source->xcb_window(), code, time, state);
         xcb_generic_event_t *event = connection()->checkEvent(checker);
         if (event) {
             isAutoRepeat = true;
@@ -1517,11 +1534,13 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
 
     QWindow *window = targetWindow->window();
     if (!filtered) {
+#ifndef QT_NO_CONTEXTMENU
         if (type == QEvent::KeyPress && qtcode == Qt::Key_Menu) {
             const QPoint globalPos = window->screen()->handle()->cursor()->pos();
             const QPoint pos = window->mapFromGlobal(globalPos);
             QWindowSystemInterface::handleContextMenuEvent(window, false, pos, globalPos, modifiers);
         }
+#endif // QT_NO_CONTEXTMENU
         QWindowSystemInterface::handleExtendedKeyEvent(window, time, type, qtcode, modifiers,
                                                        code, sym, state, string, isAutoRepeat);
     }
@@ -1547,6 +1566,7 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
             QWindowSystemInterface::handleExtendedKeyEvent(window, time, QEvent::KeyPress, qtcode, modifiers,
                                                            code, sym, state, string, isAutoRepeat);
     }
+    xkb_state_unref(kb_state);
 }
 
 QString QXcbKeyboard::lookupString(struct xkb_state *state, xcb_keycode_t code) const

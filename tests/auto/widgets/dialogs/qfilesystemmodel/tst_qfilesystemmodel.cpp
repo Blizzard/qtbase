@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,7 +40,7 @@
 #include <QStyle>
 #include <QtGlobal>
 #include <QTemporaryDir>
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
 # include <qt_windows.h> // for SetFileAttributes
 #endif
 
@@ -140,7 +135,7 @@ tst_QFileSystemModel::tst_QFileSystemModel() : model(0)
 void tst_QFileSystemModel::init()
 {
     cleanup();
-    QCOMPARE(model, (QFileSystemModel*)0);
+    QCOMPARE(model, nullptr);
     model = new QFileSystemModel;
 }
 
@@ -337,7 +332,7 @@ bool tst_QFileSystemModel::createFiles(const QString &test_path, const QStringLi
             return false;
         }
         file.close();
-#if defined(Q_OS_WIN) && !defined(Q_OS_WINCE)
+#if defined(Q_OS_WIN)
         if (initial_files.at(i)[0] == '.') {
             QString hiddenFile = QDir::toNativeSeparators(file.fileName());
             wchar_t nativeHiddenFile[MAX_PATH];
@@ -374,14 +369,9 @@ void tst_QFileSystemModel::rowCount()
     QSignalSpy spy2(model, SIGNAL(rowsInserted(QModelIndex,int,int)));
     QSignalSpy spy3(model, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)));
 
-#if !defined(Q_OS_WINCE)
     QStringList files = QStringList() <<  "b" << "d" << "f" << "h" << "j" << ".a" << ".c" << ".e" << ".g";
     QString l = "b,d,f,h,j,.a,.c,.e,.g";
-#else
-    // Cannot hide them on CE
-    QStringList files = QStringList() <<  "b" << "d" << "f" << "h" << "j";
-    QString l = "b,d,f,h,j";
-#endif
+
     QVERIFY(createFiles(tmp, files));
 
     QModelIndex root = model->setRootPath(tmp);
@@ -395,8 +385,9 @@ void tst_QFileSystemModel::rowsInserted_data()
     QTest::addColumn<int>("count");
     QTest::addColumn<int>("ascending");
     for (int i = 0; i < 4; ++i) {
-        QTest::newRow(QString("Qt::AscendingOrder %1").arg(i).toLocal8Bit().constData())  << i << (int)Qt::AscendingOrder;
-        QTest::newRow(QString("Qt::DescendingOrder %1").arg(i).toLocal8Bit().constData()) << i << (int)Qt::DescendingOrder;
+        const QByteArray iB = QByteArray::number(i);
+        QTest::newRow(("Qt::AscendingOrder " + iB).constData()) << i << (int)Qt::AscendingOrder;
+        QTest::newRow(("Qt::DescendingOrder " + iB).constData()) << i << (int)Qt::DescendingOrder;
     }
 }
 
@@ -408,9 +399,6 @@ static inline QString lastEntry(const QModelIndex &root)
 
 void tst_QFileSystemModel::rowsInserted()
 {
-#if defined(Q_OS_WINCE)
-    QSKIP("Watching directories does not work on CE(see #137910)");
-#endif
     QString tmp = flatDirTestPath;
     rowCount();
     QModelIndex root = model->index(model->rootPath());
@@ -424,7 +412,7 @@ void tst_QFileSystemModel::rowsInserted()
     int oldCount = model->rowCount(root);
     QStringList files;
     for (int i = 0; i < count; ++i)
-        files.append(QString("c%1").arg(i));
+        files.append(QLatin1Char('c') + QString::number(i));
     QVERIFY(createFiles(tmp, files, 5));
     TRY_WAIT(model->rowCount(root) == oldCount + count);
     QTRY_COMPARE(model->rowCount(root), oldCount + count);
@@ -465,9 +453,6 @@ void tst_QFileSystemModel::rowsRemoved_data()
 
 void tst_QFileSystemModel::rowsRemoved()
 {
-#if defined(Q_OS_WINCE)
-    QSKIP("Watching directories does not work on CE(see #137910)");
-#endif
     QString tmp = flatDirTestPath;
     rowCount();
     QModelIndex root = model->index(model->rootPath());
@@ -556,7 +541,6 @@ void tst_QFileSystemModel::filters_data()
     QTest::addColumn<int>("dirFilters");
     QTest::addColumn<QStringList>("nameFilters");
     QTest::addColumn<int>("rowCount");
-#if !defined(Q_OS_WINCE)
     QTest::newRow("no dirs") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs) << QStringList() << 2;
     QTest::newRow("no dirs - dot") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::NoDot) << QStringList() << 1;
     QTest::newRow("no dirs - dotdot") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::NoDotDot) << QStringList() << 1;
@@ -578,30 +562,6 @@ void tst_QFileSystemModel::filters_data()
                          (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot | QDir::CaseSensitive) << (QStringList() << "a") << 1;
     QTest::newRow("dir+files+hid+dot+cas+alldir") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") <<
                          (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot | QDir::CaseSensitive | QDir::AllDirs) << (QStringList() << "Z") << 1;
-#else
-    QTest::qWait(3000); // We need to calm down a bit...
-    QTest::newRow("no dirs") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs) << QStringList() << 0;
-    QTest::newRow("no dirs - dot") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::NoDot) << QStringList() << 1;
-    QTest::newRow("no dirs - dotdot") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::NoDotDot) << QStringList() << 1;
-    QTest::newRow("no dirs - dotanddotdot") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::NoDotAndDotDot) << QStringList() << 0;
-    QTest::newRow("one dir - dot") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") << (int)(QDir::Dirs | QDir::NoDot) << QStringList() << 2;
-    QTest::newRow("one dir - dotdot") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") << (int)(QDir::Dirs | QDir::NoDotDot) << QStringList() << 2;
-    QTest::newRow("one dir - dotanddotdot") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") << (int)(QDir::Dirs | QDir::NoDotAndDotDot) << QStringList() << 1;
-    QTest::newRow("one dir") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") << (int)(QDir::Dirs) << QStringList() << 1;
-    QTest::newRow("no dir + hidden") << (QStringList() << "a" << "b" << "c") << QStringList() << (int)(QDir::Dirs | QDir::Hidden) << QStringList() << 0;
-    QTest::newRow("dir+hid+files") << (QStringList() << "a" << "b" << "c") << QStringList() <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden) << QStringList() << 3;
-    QTest::newRow("dir+file+hid-dot .A") << (QStringList() << "a" << "b" << "c") << (QStringList() << ".A") <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot) << QStringList() << 4;
-    QTest::newRow("dir+files+hid+dot A") << (QStringList() << "a" << "b" << "c") << (QStringList() << "AFolder") <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot) << (QStringList() << "A*") << 2;
-    QTest::newRow("dir+files+hid+dot+cas1") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot | QDir::CaseSensitive) << (QStringList() << "Z") << 1;
-    QTest::newRow("dir+files+hid+dot+cas2") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot | QDir::CaseSensitive) << (QStringList() << "a") << 1;
-    QTest::newRow("dir+files+hid+dot+cas+alldir") << (QStringList() << "a" << "b" << "c") << (QStringList() << "Z") <<
-                         (int)(QDir::Dirs | QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot | QDir::CaseSensitive | QDir::AllDirs) << (QStringList() << "Z") << 1;
-#endif
 
     QTest::newRow("case sensitive") << (QStringList() << "Antiguagdb" << "Antiguamtd"
         << "Antiguamtp" << "afghanistangdb" << "afghanistanmtd")
@@ -957,8 +917,8 @@ void tst_QFileSystemModel::dirsBeforeFiles()
 
     for (int i = 0; i < 3; ++i) {
         QLatin1Char c('a' + i);
-        dir.mkdir(QString("%1-dir").arg(c));
-        QFile file(flatDirTestPath + QString("/%1-file").arg(c));
+        dir.mkdir(c + QLatin1String("-dir"));
+        QFile file(flatDirTestPath + QLatin1Char('/') + c + QLatin1String("-file"));
         file.open(QIODevice::ReadWrite);
         file.close();
     }
@@ -1035,7 +995,7 @@ void tst_QFileSystemModel::permissions() // checks QTBUG-20503
     QFETCH(bool, readOnly);
 
     const QString tmp = flatDirTestPath;
-    const QString file  = tmp + '/' + "f";
+    const QString file = tmp + QLatin1String("/f");
     QVERIFY(createFiles(tmp, QStringList() << "f"));
 
     QVERIFY(QFile::setPermissions(file,  QFile::Permissions(permissions)));
@@ -1097,6 +1057,10 @@ static QSet<QString> fileListUnderIndex(const QFileSystemModel *model, const QMo
 
 void tst_QFileSystemModel::specialFiles()
 {
+#ifndef Q_OS_UNIX
+     QSKIP("Not implemented");
+#endif
+
     QFileSystemModel model;
 
     model.setFilter(QDir::AllEntries | QDir::System | QDir::Hidden);
@@ -1105,23 +1069,8 @@ void tst_QFileSystemModel::specialFiles()
     // as it will always return a valid index for existing files,
     // even if the file is not visible with the given filter.
 
-#if defined(Q_OS_UNIX)
     const QModelIndex rootIndex = model.setRootPath(QStringLiteral("/dev/"));
     const QString testFileName = QStringLiteral("null");
-#elif defined(Q_OS_WIN)
-    const QModelIndex rootIndex = model.setRootPath(flatDirTestPath);
-
-    const QString testFileName = QStringLiteral("linkSource.lnk");
-
-    QFile file(flatDirTestPath + QLatin1String("/linkTarget.txt"));
-    QVERIFY(file.open(QIODevice::WriteOnly));
-    file.close();
-    QVERIFY(file.link(flatDirTestPath + '/' + testFileName));
-#else
-    QSKIP("Not implemented");
-    QModelIndex rootIndex;
-    QString testFileName;
-#endif
 
     QTRY_VERIFY(fileListUnderIndex(&model, rootIndex).contains(testFileName));
 

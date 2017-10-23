@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -55,20 +50,20 @@
 bool optIgnoreTouch = false;
 QVector<Qt::GestureType> optGestures;
 
-static inline void drawCircle(const QPointF &center, qreal radius, const QColor &color, QPainter &painter)
+static inline void drawEllipse(const QPointF &center, qreal hDiameter, qreal vDiameter, const QColor &color, QPainter &painter)
 {
     const QPen oldPen = painter.pen();
     QPen pen = oldPen;
     pen.setColor(color);
     painter.setPen(pen);
-    painter.drawEllipse(center, radius, radius);
+    painter.drawEllipse(center, hDiameter / 2, vDiameter / 2);
     painter.setPen(oldPen);
 }
 
-static inline void fillCircle(const QPointF &center, qreal radius, const QColor &color, QPainter &painter)
+static inline void fillEllipse(const QPointF &center, qreal hDiameter, qreal vDiameter, const QColor &color, QPainter &painter)
 {
     QPainterPath painterPath;
-    painterPath.addEllipse(center, radius, radius);
+    painterPath.addEllipse(center, hDiameter / 2, vDiameter / 2);
     painter.fillPath(painterPath, color);
 }
 
@@ -241,11 +236,15 @@ enum PointType {
 struct Point
 {
     Point(const QPointF &p = QPoint(), PointType t = TouchPoint,
-          Qt::MouseEventSource s = Qt::MouseEventNotSynthesized) : pos(p), type(t), source(s) {}
+          Qt::MouseEventSource s = Qt::MouseEventNotSynthesized, QSizeF diameters = QSizeF(4, 4)) :
+            pos(p), horizontalDiameter(qMax(2., diameters.width())),
+            verticalDiameter(qMax(2., diameters.height())), type(t), source(s) {}
 
     QColor color() const;
 
     QPointF pos;
+    qreal horizontalDiameter;
+    qreal verticalDiameter;
     PointType type;
     Qt::MouseEventSource source;
 };
@@ -339,7 +338,7 @@ bool TouchTestWidget::event(QEvent *event)
     case QEvent::TouchUpdate:
         if (m_drawPoints) {
             foreach (const QTouchEvent::TouchPoint &p, static_cast<const QTouchEvent *>(event)->touchPoints())
-                m_points.append(Point(p.pos(), TouchPoint));
+                m_points.append(Point(p.pos(), TouchPoint, Qt::MouseEventNotSynthesized, p.ellipseDiameters()));
             update();
         }
     case QEvent::TouchEnd:
@@ -392,11 +391,10 @@ void TouchTestWidget::paintEvent(QPaintEvent *)
     painter.drawRect(QRectF(geom.topLeft(), geom.bottomRight() - QPointF(1, 1)));
     foreach (const Point &point, m_points) {
         if (geom.contains(point.pos)) {
-            const qreal radius = point.type == TouchPoint ? 1 : 4;
-            if (point.type == MouseRelease) {
-                drawCircle(point.pos, radius, point.color(), painter);
-            } else
-                fillCircle(point.pos, radius, point.color(), painter);
+            if (point.type == MouseRelease)
+                drawEllipse(point.pos, point.horizontalDiameter, point.verticalDiameter, point.color(), painter);
+            else
+                fillEllipse(point.pos, point.horizontalDiameter, point.verticalDiameter, point.color(), painter);
         }
     }
     foreach (const GesturePtr &gp, m_gestures)

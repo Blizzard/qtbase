@@ -1,32 +1,27 @@
 /*
 *********************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the autotests of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -201,40 +196,40 @@ public:
 
     void retranslateUi(QDialog *FindDialog)
     {
-        FindDialog->setWindowTitle(QApplication::translate("FindDialog", "Find", 0));
+        FindDialog->setWindowTitle(QApplication::translate("FindDialog", "Find", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        FindDialog->setWhatsThis(QApplication::translate("FindDialog", "This window allows you to search for some text in the translation source file.", 0));
+        FindDialog->setWhatsThis(QApplication::translate("FindDialog", "This window allows you to search for some text in the translation source file.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        findWhat->setText(QApplication::translate("FindDialog", "&Find what:", 0));
+        findWhat->setText(QApplication::translate("FindDialog", "&Find what:", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        led->setWhatsThis(QApplication::translate("FindDialog", "Type in the text to search for.", 0));
+        led->setWhatsThis(QApplication::translate("FindDialog", "Type in the text to search for.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        groupBox->setTitle(QApplication::translate("FindDialog", "Options", 0));
+        groupBox->setTitle(QApplication::translate("FindDialog", "Options", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        sourceText->setWhatsThis(QApplication::translate("FindDialog", "Source texts are searched when checked.", 0));
+        sourceText->setWhatsThis(QApplication::translate("FindDialog", "Source texts are searched when checked.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        sourceText->setText(QApplication::translate("FindDialog", "&Source texts", 0));
+        sourceText->setText(QApplication::translate("FindDialog", "&Source texts", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        translations->setWhatsThis(QApplication::translate("FindDialog", "Translations are searched when checked.", 0));
+        translations->setWhatsThis(QApplication::translate("FindDialog", "Translations are searched when checked.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        translations->setText(QApplication::translate("FindDialog", "&Translations", 0));
+        translations->setText(QApplication::translate("FindDialog", "&Translations", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        matchCase->setWhatsThis(QApplication::translate("FindDialog", "Texts such as 'TeX' and 'tex' are considered as different when checked.", 0));
+        matchCase->setWhatsThis(QApplication::translate("FindDialog", "Texts such as 'TeX' and 'tex' are considered as different when checked.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        matchCase->setText(QApplication::translate("FindDialog", "&Match case", 0));
+        matchCase->setText(QApplication::translate("FindDialog", "&Match case", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        comments->setWhatsThis(QApplication::translate("FindDialog", "Comments and contexts are searched when checked.", 0));
+        comments->setWhatsThis(QApplication::translate("FindDialog", "Comments and contexts are searched when checked.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        comments->setText(QApplication::translate("FindDialog", "&Comments", 0));
-        ignoreAccelerators->setText(QApplication::translate("FindDialog", "Ignore &accelerators", 0));
+        comments->setText(QApplication::translate("FindDialog", "&Comments", Q_NULLPTR));
+        ignoreAccelerators->setText(QApplication::translate("FindDialog", "Ignore &accelerators", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        findNxt->setWhatsThis(QApplication::translate("FindDialog", "Click here to find the next occurrence of the text you typed in.", 0));
+        findNxt->setWhatsThis(QApplication::translate("FindDialog", "Click here to find the next occurrence of the text you typed in.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        findNxt->setText(QApplication::translate("FindDialog", "Find Next", 0));
+        findNxt->setText(QApplication::translate("FindDialog", "Find Next", Q_NULLPTR));
 #ifndef QT_NO_WHATSTHIS
-        cancel->setWhatsThis(QApplication::translate("FindDialog", "Click here to close this window.", 0));
+        cancel->setWhatsThis(QApplication::translate("FindDialog", "Click here to close this window.", Q_NULLPTR));
 #endif // QT_NO_WHATSTHIS
-        cancel->setText(QApplication::translate("FindDialog", "Cancel", 0));
+        cancel->setText(QApplication::translate("FindDialog", "Cancel", Q_NULLPTR));
     } // retranslateUi
 
 };

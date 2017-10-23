@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -312,24 +307,24 @@ void tst_QAlgorithms::swap()
     {
         QString a = "1", b = "2";
         qSwap(a, b);
-        QVERIFY(a == "2");
-        QVERIFY(b == "1");
+        QCOMPARE(a, QLatin1String("2"));
+        QCOMPARE(b, QLatin1String("1"));
 
         qSwap(a, a);
-        QVERIFY(a == "2");
-        QVERIFY(b == "1");
+        QCOMPARE(a, QLatin1String("2"));
+        QCOMPARE(b, QLatin1String("1"));
 
         qSwap(b, b);
-        QVERIFY(a == "2");
-        QVERIFY(b == "1");
+        QCOMPARE(a, QLatin1String("2"));
+        QCOMPARE(b, QLatin1String("1"));
 
         qSwap(a, b);
-        QVERIFY(a == "1");
-        QVERIFY(b == "2");
+        QCOMPARE(a, QLatin1String("1"));
+        QCOMPARE(b, QLatin1String("2"));
 
         qSwap(b, a);
-        QVERIFY(a == "2");
-        QVERIFY(b == "1");
+        QCOMPARE(a, QLatin1String("2"));
+        QCOMPARE(b, QLatin1String("1"));
     }
 
     {
@@ -1081,22 +1076,22 @@ void tst_QAlgorithms::popCount_data_impl(size_t sizeof_T_Int)
         const uint bits = bitsSetInByte(byte);
         const quint64 value = static_cast<quint64>(byte);
         const quint64 input = value << ((i % sizeof_T_Int) * 8U);
-        newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bits;
+        QTest::addRow("0x%016llx", input) << input << bits;
     }
 
     // and some random ones:
     if (sizeof_T_Int >= 8)
         for (size_t i = 0; i < 1000; ++i) {
             const quint64 input = quint64(qrand()) << 32 | quint32(qrand());
-            newRow(qPrintable(QString::asprintf("0x%016llx", input))) << input << bitsSetInInt64(input);
+            QTest::addRow("0x%016llx", input) << input << bitsSetInInt64(input);
         }
         else if (sizeof_T_Int >= 2)
             for (size_t i = 0; i < 1000 ; ++i) {
                 const quint32 input = qrand();
                 if (sizeof_T_Int >= 4)
-                    newRow(qPrintable(QString::asprintf("0x%08x", input))) << quint64(input) << bitsSetInInt(input);
+                    QTest::addRow("0x%08x", input) << quint64(input) << bitsSetInInt(input);
                 else
-                    newRow(qPrintable(QString::asprintf("0x%04x", quint16(input & 0xFFFF)))) << quint64(input & 0xFFFF) << bitsSetInShort(input & 0xFFFF);
+                    QTest::addRow("0x%04x", quint16(input & 0xFFFF)) << quint64(input & 0xFFFF) << bitsSetInShort(input & 0xFFFF);
             }
 }
 

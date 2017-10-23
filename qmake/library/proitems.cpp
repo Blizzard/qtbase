@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -76,6 +71,11 @@ ProString::ProString(const QString &str, DoPreHashing) :
 
 ProString::ProString(const QString &str) :
     m_string(str), m_offset(0), m_length(str.length()), m_file(0), m_hash(0x80000000)
+{
+}
+
+ProString::ProString(const QStringRef &str) :
+    m_string(*str.string()), m_offset(str.position()), m_length(str.size()), m_file(0), m_hash(0x80000000)
 {
 }
 
@@ -159,7 +159,7 @@ QString &ProString::toQString(QString &tmp) const
     return tmp.setRawData(m_string.constData() + m_offset, m_length);
 }
 
-/*!
+/*
  * \brief ProString::prepareExtend
  * \param extraLen number of new characters to be added
  * \param thisTarget offset to which current contents should be moved
@@ -341,7 +341,7 @@ ProString ProString::trimmed() const
 
 QTextStream &operator<<(QTextStream &t, const ProString &str)
 {
-    t << str.toQString(); // XXX optimize ... somehow
+    t << str.toQStringRef();
     return t;
 }
 
@@ -370,6 +370,11 @@ static QString ProStringList_join(const ProStringList &this_, const QChar *sep, 
     return res;
 }
 
+QString ProStringList::join(const ProString &sep) const
+{
+    return ProStringList_join(*this, sep.constData(), sep.size());
+}
+
 QString ProStringList::join(const QString &sep) const
 {
     return ProStringList_join(*this, sep.constData(), sep.size());
@@ -396,9 +401,12 @@ void ProStringList::removeAll(const char *str)
 
 void ProStringList::removeEach(const ProStringList &value)
 {
-    foreach (const ProString &str, value)
+    for (const ProString &str : value) {
+        if (isEmpty())
+            break;
         if (!str.isEmpty())
             removeAll(str);
+    }
 }
 
 void ProStringList::removeEmpty()
@@ -429,7 +437,7 @@ void ProStringList::removeDuplicates()
 
 void ProStringList::insertUnique(const ProStringList &value)
 {
-    foreach (const ProString &str, value)
+    for (const ProString &str : value)
         if (!str.isEmpty() && !contains(str))
             append(str);
 }
@@ -437,7 +445,7 @@ void ProStringList::insertUnique(const ProStringList &value)
 ProStringList::ProStringList(const QStringList &list)
 {
     reserve(list.size());
-    foreach (const QString &str, list)
+    for (const QString &str : list)
         *this << ProString(str);
 }
 
@@ -445,8 +453,8 @@ QStringList ProStringList::toQStringList() const
 {
     QStringList ret;
     ret.reserve(size());
-    for (int i = 0; i < size(); i++) // foreach causes MSVC2010 ICE
-        ret << at(i).toQString();
+    for (const auto &e : *this)
+        ret.append(e.toQString());
     return ret;
 }
 
@@ -454,6 +462,14 @@ bool ProStringList::contains(const ProString &str, Qt::CaseSensitivity cs) const
 {
     for (int i = 0; i < size(); i++)
         if (!at(i).compare(str, cs))
+            return true;
+    return false;
+}
+
+bool ProStringList::contains(const QStringRef &str, Qt::CaseSensitivity cs) const
+{
+    for (int i = 0; i < size(); i++)
+        if (!at(i).toQStringRef().compare(str, cs))
             return true;
     return false;
 }
@@ -466,9 +482,10 @@ bool ProStringList::contains(const char *str, Qt::CaseSensitivity cs) const
     return false;
 }
 
-ProFile::ProFile(const QString &fileName)
+ProFile::ProFile(int id, const QString &fileName)
     : m_refCount(1),
       m_fileName(fileName),
+      m_id(id),
       m_ok(true),
       m_hostBuild(false)
 {
@@ -485,7 +502,7 @@ ProString ProFile::getStr(const ushort *&tPtr)
 {
     uint len = *tPtr++;
     ProString ret(items(), tPtr - tokPtr(), len);
-    ret.setSource(this);
+    ret.setSource(m_id);
     tPtr += len;
     return ret;
 }

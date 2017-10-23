@@ -1,38 +1,46 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
 #include <QDebug>
+#if QT_CONFIG(library)
 #include <QLibrary>
+#endif
 
 #include "qxcbwindow.h"
 #include "qxcbscreen.h"
@@ -45,10 +53,12 @@
 #include <QtGui/QOffscreenSurface>
 
 #include "qglxintegration.h"
-#include <QtPlatformSupport/private/qglxconvenience_p.h>
+#include <QtGlxSupport/private/qglxconvenience_p.h>
 #include <QtPlatformHeaders/QGLXNativeContext>
 
-#if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
+#include "qxcbglintegration.h"
+
+#if !defined(QT_STATIC) && QT_CONFIG(dlopen)
 #include <dlfcn.h>
 #endif
 
@@ -99,7 +109,7 @@ static Window createDummyWindow(Display *dpy, XVisualInfo *visualInfo, int scree
 static Window createDummyWindow(Display *dpy, GLXFBConfig config, int screenNumber, Window rootWin)
 {
     XVisualInfo *visualInfo = glXGetVisualFromFBConfig(dpy, config);
-    if (!visualInfo)
+    if (Q_UNLIKELY(!visualInfo))
         qFatal("Could not initialize GLX");
     Window window = createDummyWindow(dpy, visualInfo, screenNumber, rootWin);
     XFree(visualInfo);
@@ -211,17 +221,17 @@ void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
 
             QVector<int> glVersions;
             if (m_format.renderableType() == QSurfaceFormat::OpenGL) {
-                if (requestedVersion > 45)
+                if (requestedVersion > 46)
                     glVersions << requestedVersion;
 
                 // Don't bother with versions below 2.0
-                glVersions << 45 << 44 << 43 << 42 << 41 << 40 << 33 << 32 << 31 << 30 << 21 << 20;
+                glVersions << 46 << 45 << 44 << 43 << 42 << 41 << 40 << 33 << 32 << 31 << 30 << 21 << 20;
             } else if (m_format.renderableType() == QSurfaceFormat::OpenGLES) {
-                if (requestedVersion > 31)
+                if (requestedVersion > 32)
                     glVersions << requestedVersion;
 
                 // Don't bother with versions below ES 2.0
-                glVersions << 31 << 30 << 20;
+                glVersions << 32 << 31 << 30 << 20;
                 // ES does not support any format option
                 m_format.setOptions(QSurfaceFormat::FormatOptions());
             }
@@ -305,7 +315,7 @@ void QGLXContext::init(QXcbScreen *screen, QPlatformOpenGLContext *share)
 
         // Note that m_format gets updated with the used surface format
         visualInfo = qglx_findVisualInfo(m_display, screen->screenNumber(), &m_format);
-        if (!visualInfo)
+        if (Q_UNLIKELY(!visualInfo))
             qFatal("Could not initialize GLX");
         m_context = glXCreateContext(m_display, visualInfo, m_shareContext, true);
         if (!m_context && m_shareContext) {
@@ -544,10 +554,10 @@ void QGLXContext::swapBuffers(QPlatformSurface *surface)
     }
 }
 
-void (*QGLXContext::getProcAddress(const QByteArray &procName)) ()
+QFunctionPointer QGLXContext::getProcAddress(const char *procName)
 {
 #ifdef QT_STATIC
-    return glXGetProcAddressARB(reinterpret_cast<const GLubyte *>(procName.constData()));
+    return glXGetProcAddressARB(reinterpret_cast<const GLubyte *>(procName));
 #else
     typedef void *(*qt_glXGetProcAddressARB)(const GLubyte *);
     static qt_glXGetProcAddressARB glXGetProcAddressARB = 0;
@@ -558,7 +568,7 @@ void (*QGLXContext::getProcAddress(const QByteArray &procName)) ()
     if (!glXGetProcAddressARB) {
         QList<QByteArray> glxExt = QByteArray(glXGetClientString(m_display, GLX_EXTENSIONS)).split(' ');
         if (glxExt.contains("GLX_ARB_get_proc_address")) {
-#if defined(Q_OS_LINUX) || defined(Q_OS_BSD4)
+#if QT_CONFIG(dlopen)
             void *handle = dlopen(NULL, RTLD_LAZY);
             if (handle) {
                 glXGetProcAddressARB = (qt_glXGetProcAddressARB) dlsym(handle, "glXGetProcAddressARB");
@@ -567,7 +577,7 @@ void (*QGLXContext::getProcAddress(const QByteArray &procName)) ()
             if (!glXGetProcAddressARB)
 #endif
             {
-#ifndef QT_NO_LIBRARY
+#if QT_CONFIG(library)
                 extern const QString qt_gl_library_name();
 //                QLibrary lib(qt_gl_library_name());
                 QLibrary lib(QLatin1String("GL"));
@@ -579,7 +589,7 @@ void (*QGLXContext::getProcAddress(const QByteArray &procName)) ()
     }
     if (!glXGetProcAddressARB)
         return 0;
-    return (void (*)())glXGetProcAddressARB(reinterpret_cast<const GLubyte *>(procName.constData()));
+    return (void (*)())glXGetProcAddressARB(reinterpret_cast<const GLubyte *>(procName));
 #endif
 }
 
@@ -672,14 +682,21 @@ void QGLXContext::queryDummyContext()
     }
 
     QOpenGLContext context;
-    context.create();
-    context.makeCurrent(surface.data());
+    if (!context.create() || !context.makeCurrent(surface.data())) {
+        qWarning("QGLXContext: Failed to create dummy context");
+        m_supportsThreading = false;
+        return;
+    }
 
     m_supportsThreading = true;
 
     if (const char *renderer = (const char *) glGetString(GL_RENDERER)) {
         for (int i = 0; qglx_threadedgl_blacklist_renderer[i]; ++i) {
             if (strstr(renderer, qglx_threadedgl_blacklist_renderer[i]) != 0) {
+                qCDebug(lcQpaGl).nospace() << "Multithreaded OpenGL disabled: "
+                                             "blacklisted renderer \""
+                                          << qglx_threadedgl_blacklist_renderer[i]
+                                          << "\"";
                 m_supportsThreading = false;
                 break;
             }
@@ -689,6 +706,11 @@ void QGLXContext::queryDummyContext()
     if (glxvendor) {
         for (int i = 0; qglx_threadedgl_blacklist_vendor[i]; ++i) {
             if (strstr(glxvendor, qglx_threadedgl_blacklist_vendor[i]) != 0) {
+                qCDebug(lcQpaGl).nospace() << "Multithreaded OpenGL disabled: "
+                                             "blacklisted vendor \""
+                                          << qglx_threadedgl_blacklist_vendor[i]
+                                          << "\"";
+
                 m_supportsThreading = false;
                 break;
             }
@@ -698,6 +720,11 @@ void QGLXContext::queryDummyContext()
     context.doneCurrent();
     if (oldContext && oldSurface)
         oldContext->makeCurrent(oldSurface);
+
+    if (!m_supportsThreading) {
+        qCDebug(lcQpaGl) << "Force-enable multithreaded OpenGL by setting "
+                           "environment variable QT_OPENGL_NO_SANITY_CHECK";
+    }
 }
 
 bool QGLXContext::supportsThreading()
@@ -709,8 +736,8 @@ bool QGLXContext::supportsThreading()
 
 QGLXPbuffer::QGLXPbuffer(QOffscreenSurface *offscreenSurface)
     : QPlatformOffscreenSurface(offscreenSurface)
-    , m_format(offscreenSurface->requestedFormat())
     , m_screen(static_cast<QXcbScreen *>(offscreenSurface->screen()->handle()))
+    , m_format(m_screen->surfaceFormatFor(offscreenSurface->requestedFormat()))
     , m_pbuffer(0)
 {
     GLXFBConfig config = qglx_findConfig(DISPLAY_FROM_XCB(m_screen), m_screen->screenNumber(), m_format);

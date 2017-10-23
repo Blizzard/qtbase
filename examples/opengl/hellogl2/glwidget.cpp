@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -44,6 +54,8 @@
 #include <QCoreApplication>
 #include <math.h>
 
+bool GLWidget::m_transparent = false;
+
 GLWidget::GLWidget(QWidget *parent)
     : QOpenGLWidget(parent),
       m_xRot(0),
@@ -51,10 +63,9 @@ GLWidget::GLWidget(QWidget *parent)
       m_zRot(0),
       m_program(0)
 {
-    m_core = QCoreApplication::arguments().contains(QStringLiteral("--coreprofile"));
+    m_core = QSurfaceFormat::defaultFormat().profile() == QSurfaceFormat::CoreProfile;
     // --transparent causes the clear color to be transparent. Therefore, on systems that
     // support it, the widget will become transparent apart from the logo.
-    m_transparent = QCoreApplication::arguments().contains(QStringLiteral("--transparent"));
     if (m_transparent) {
         QSurfaceFormat fmt = format();
         fmt.setAlphaBufferSize(8);
@@ -117,6 +128,8 @@ void GLWidget::setZRotation(int angle)
 
 void GLWidget::cleanup()
 {
+    if (m_program == nullptr)
+        return;
     makeCurrent();
     m_logoVbo.destroy();
     delete m_program;

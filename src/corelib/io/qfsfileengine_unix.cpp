@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -138,7 +144,7 @@ static inline bool setCloseOnExec(int fd)
 static inline QString msgOpenDirectory()
 {
     const char message[] = QT_TRANSLATE_NOOP("QIODevice", "file to open is a directory");
-#ifndef QT_BOOTSTRAPPED
+#if QT_CONFIG(translation)
     return QIODevice::tr(message);
 #else
     return QLatin1String(message);
@@ -590,6 +596,14 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(FileFlags type) const
     return ret;
 }
 
+QByteArray QFSFileEngine::id() const
+{
+    Q_D(const QFSFileEngine);
+    if (d->fd != -1)
+        return QFileSystemEngine::id(d->fd);
+    return QFileSystemEngine::id(d->fileEntry);
+}
+
 QString QFSFileEngine::fileName(FileName file) const
 {
     Q_D(const QFSFileEngine);
@@ -623,7 +637,7 @@ QString QFSFileEngine::fileName(FileName file) const
 bool QFSFileEngine::isRelativePath() const
 {
     Q_D(const QFSFileEngine);
-    return d->fileEntry.filePath().length() ? d->fileEntry.filePath()[0] != QLatin1Char('/') : true;
+    return d->fileEntry.filePath().length() ? d->fileEntry.filePath().at(0) != QLatin1Char('/') : true;
 }
 
 uint QFSFileEngine::ownerId(FileOwner own) const
@@ -648,7 +662,12 @@ bool QFSFileEngine::setPermissions(uint perms)
 {
     Q_D(QFSFileEngine);
     QSystemError error;
-    if (!QFileSystemEngine::setPermissions(d->fileEntry, QFile::Permissions(perms), error, 0)) {
+    bool ok;
+    if (d->fd != -1)
+        ok = QFileSystemEngine::setPermissions(d->fd, QFile::Permissions(perms), error, 0);
+    else
+        ok = QFileSystemEngine::setPermissions(d->fileEntry, QFile::Permissions(perms), error, 0);
+    if (!ok) {
         setError(QFile::PermissionsError, error.toString());
         return false;
     }
@@ -682,6 +701,19 @@ QDateTime QFSFileEngine::fileTime(FileTime time) const
 
 uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFlags flags)
 {
+#if (defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)) && Q_PROCESSOR_WORDSIZE == 4
+    // The Linux mmap2 system call on 32-bit takes a page-shifted 32-bit
+    // integer so the maximum offset is 1 << (32+12) (the shift is always 12,
+    // regardless of the actual page size). Unfortunately, the mmap64()
+    // function is known to be broken in all Linux libcs (glibc, uclibc, musl
+    // and Bionic): all of them do the right shift, but don't confirm that the
+    // result fits into the 32-bit parameter to the kernel.
+
+    static qint64 MaxFileOffset = (Q_INT64_C(1) << (32+12)) - 1;
+#else
+    static qint64 MaxFileOffset = std::numeric_limits<QT_OFF_T>::max();
+#endif
+
     Q_Q(QFSFileEngine);
     Q_UNUSED(flags);
     if (openMode == QIODevice::NotOpen) {
@@ -689,7 +721,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
         return 0;
     }
 
-    if (offset < 0 || offset != qint64(QT_OFF_T(offset))
+    if (offset < 0 || offset > MaxFileOffset
             || size < 0 || quint64(size) > quint64(size_t(-1))) {
         q->setError(QFile::UnspecifiedError, qt_error_string(int(EINVAL)));
         return 0;

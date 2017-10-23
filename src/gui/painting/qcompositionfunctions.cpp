@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -81,6 +87,36 @@ QT_BEGIN_NAMESPACE
     }\
 }
 
+#if defined __SSE2__
+#  define LOAD(ptr) _mm_loadl_epi64(reinterpret_cast<const __m128i *>(ptr))
+#ifdef Q_PROCESSOR_X86_64
+#  define CONVERT(value) _mm_cvtsi64_si128(value)
+#else
+#  define CONVERT(value) LOAD(&value)
+#endif
+#  define STORE(ptr, value) _mm_storel_epi64(reinterpret_cast<__m128i *>(ptr), value)
+#  define ADD(p, q) _mm_add_epi32(p, q)
+#  define ALPHA(c) _mm_shufflelo_epi16(c, _MM_SHUFFLE(3, 3, 3, 3))
+#  define CONST(n) _mm_shufflelo_epi16(_mm_cvtsi32_si128(n), _MM_SHUFFLE(0, 0, 0, 0))
+#  define INVALPHA(c) _mm_sub_epi32(CONST(65535), ALPHA(c))
+#elif defined __ARM_NEON__
+#  define LOAD(ptr) vreinterpret_u16_u64(vld1_u64(reinterpret_cast<const uint64_t *>(ptr)))
+#  define CONVERT(value) vreinterpret_u16_u64(vmov_n_u64(value))
+#  define STORE(ptr, value) vst1_u64(reinterpret_cast<uint64_t *>(ptr), vreinterpret_u64_u16(value))
+#  define ADD(p, q) vadd_u16(p, q)
+#  define ALPHA(c) vdup_lane_u16(c, 3)
+#  define CONST(n) vdup_n_u16(n)
+#  define INVALPHA(c) vmvn_u16(ALPHA(c))
+#else
+#  define LOAD(ptr) *ptr
+#  define CONVERT(value) value
+#  define STORE(ptr, value) *ptr = value
+#  define ADD(p, q) (p + q)
+#  define ALPHA(c) (c).alpha()
+#  define CONST(n) n
+#  define INVALPHA(c) (65535 - ALPHA(c))
+#endif
+
 void QT_FASTCALL comp_func_solid_Clear(uint *dest, int length, uint, uint const_alpha)
 {
     comp_func_Clear_impl(dest, length, const_alpha);
@@ -93,7 +129,7 @@ void QT_FASTCALL comp_func_solid_Clear_rgb64(QRgba64 *dest, int length, QRgba64,
     else {
         int ialpha = 255 - const_alpha;
         for (int i = 0; i < length; ++i) {
-            dest[i] = multiplyAlpha255(dest[i], ialpha);
+            STORE(&dest[i], multiplyAlpha255(LOAD(&dest[i]), ialpha));
         }
     }
 }
@@ -110,7 +146,7 @@ void QT_FASTCALL comp_func_Clear_rgb64(QRgba64 *dest, const QRgba64 *, int lengt
     else {
         int ialpha = 255 - const_alpha;
         for (int i = 0; i < length; ++i) {
-            dest[i] = multiplyAlpha255(dest[i], ialpha);
+            STORE(&dest[i], multiplyAlpha255(LOAD(&dest[i]), ialpha));
         }
     }
 }
@@ -140,9 +176,9 @@ void QT_FASTCALL comp_func_solid_Source_rgb64(QRgba64 *dest, int length, QRgba64
         qt_memfill64((quint64*)dest, color, length);
     else {
         int ialpha = 255 - const_alpha;
-        color = multiplyAlpha255(color, const_alpha);
+        auto c = multiplyAlpha255(CONVERT(color), const_alpha);
         for (int i = 0; i < length; ++i) {
-            dest[i] = color + multiplyAlpha255(dest[i], ialpha);
+            STORE(&dest[i], ADD(c, multiplyAlpha255(LOAD(&dest[i]), ialpha)));
         }
     }
 }
@@ -168,7 +204,7 @@ void QT_FASTCALL comp_func_Source_rgb64(QRgba64 *Q_DECL_RESTRICT dest, const QRg
     else {
         int ialpha = 255 - const_alpha;
         for (int i = 0; i < length; ++i) {
-            dest[i] = interpolate255(src[i], const_alpha, dest[i], ialpha);
+            STORE(&dest[i], interpolate255(LOAD(&src[i]), const_alpha, LOAD(&dest[i]), ialpha));
         }
     }
 }
@@ -215,10 +251,12 @@ void QT_FASTCALL comp_func_solid_SourceOver_rgb64(QRgba64 *dest, int length, QRg
     if (const_alpha == 255 && color.isOpaque()) {
         qt_memfill64((quint64*)dest, color, length);
     } else {
+        auto c = CONVERT(color);
         if (const_alpha != 255)
-            color = multiplyAlpha255(color, const_alpha);
+            c = multiplyAlpha255(c, const_alpha);
+        auto cAlpha = INVALPHA(c);
         for (int i = 0; i < length; ++i) {
-            dest[i] = color + multiplyAlpha65535(dest[i], 65535 - color.alpha());
+            STORE(&dest[i], ADD(c, multiplyAlpha65535(LOAD(&dest[i]), cAlpha)));
         }
     }
 }
@@ -252,12 +290,12 @@ void QT_FASTCALL comp_func_SourceOver_rgb64(QRgba64 *Q_DECL_RESTRICT dest, const
             if (s.isOpaque())
                 dest[i] = s;
             else if (!s.isTransparent())
-                dest[i] = s + multiplyAlpha65535(dest[i], 65535 - s.alpha());
+                STORE(&dest[i], ADD(CONVERT(s), multiplyAlpha65535(LOAD(&dest[i]), 65535 - s.alpha())));
         }
     } else {
         for (int i = 0; i < length; ++i) {
-            QRgba64 s = multiplyAlpha255(src[i], const_alpha);
-            dest[i] = s + multiplyAlpha65535(dest[i], 65535 - s.alpha());
+            auto s = multiplyAlpha255(LOAD(&src[i]), const_alpha);
+            STORE(&dest[i], ADD(s, multiplyAlpha65535(LOAD(&dest[i]), INVALPHA(s))));
         }
     }
 }
@@ -281,11 +319,12 @@ void QT_FASTCALL comp_func_solid_DestinationOver(uint *dest, int length, uint co
 
 void QT_FASTCALL comp_func_solid_DestinationOver_rgb64(QRgba64 *dest, int length, QRgba64 color, uint const_alpha)
 {
+    auto c = CONVERT(color);
     if (const_alpha != 255)
-        color = multiplyAlpha255(color, const_alpha);
+        c = multiplyAlpha255(c, const_alpha);
     for (int i = 0; i < length; ++i) {
-        QRgba64 d = dest[i];
-        dest[i] = d + multiplyAlpha65535(color, 65535 - d.alpha());
+        auto d = LOAD(&dest[i]);
+        STORE(&dest[i], ADD(d, multiplyAlpha65535(c, INVALPHA(d))));
     }
 }
 
@@ -312,14 +351,14 @@ void QT_FASTCALL comp_func_DestinationOver_rgb64(QRgba64 *Q_DECL_RESTRICT dest, 
 {
     if (const_alpha == 255) {
         for (int i = 0; i < length; ++i) {
-            QRgba64 d = dest[i];
-            dest[i] = d + multiplyAlpha65535(src[i], 65535 - d.alpha());
+            auto d = LOAD(&dest[i]);
+            STORE(&dest[i], ADD(d, multiplyAlpha65535(LOAD(&src[i]), INVALPHA(d))));
         }
     } else {
         for (int i = 0; i < length; ++i) {
-            QRgba64 d = dest[i];
-            QRgba64 s = multiplyAlpha255(src[i], const_alpha);
-            dest[i] = d + multiplyAlpha65535(s, 65535 - d.alpha());
+            auto d = LOAD(&dest[i]);
+            auto s = multiplyAlpha255(LOAD(&src[i]), const_alpha);
+            STORE(&dest[i], ADD(d, multiplyAlpha65535(s, INVALPHA(d))));
         }
     }
 }
@@ -387,15 +426,15 @@ void QT_FASTCALL comp_func_SourceIn_rgb64(QRgba64 *Q_DECL_RESTRICT dest, const Q
 {
     if (const_alpha == 255) {
         for (int i = 0; i < length; ++i) {
-            dest[i] = multiplyAlpha65535(src[i], dest[i].alpha());
+            STORE(&dest[i], multiplyAlpha65535(LOAD(&src[i]), dest[i].alpha()));
         }
     } else {
         uint ca = const_alpha * 257;
-        uint cia = 65535 - ca;
+        auto cia = CONST(65535 - ca);
         for (int i = 0; i < length; ++i) {
-            QRgba64 d = dest[i];
-            QRgba64 s = multiplyAlpha65535(src[i], ca);
-            dest[i] = interpolate65535(s, d.alpha(), d, cia);
+            auto d = LOAD(&dest[i]);
+            auto s = multiplyAlpha65535(LOAD(&src[i]), ca);
+            STORE(&dest[i], interpolate65535(s, ALPHA(d), d, cia));
         }
     }
 }
@@ -425,7 +464,7 @@ void QT_FASTCALL comp_func_solid_DestinationIn_rgb64(QRgba64 *dest, int length, 
     if (const_alpha != 255)
         a = qt_div_65535(a * ca64k) + 65535 - ca64k;
     for (int i = 0; i < length; ++i) {
-        dest[i] = multiplyAlpha65535(dest[i], a);
+        STORE(&dest[i], multiplyAlpha65535(LOAD(&dest[i]), a));
     }
 }
 
@@ -879,14 +918,19 @@ void QT_FASTCALL comp_func_solid_Plus(uint *dest, int length, uint color, uint c
 
 void QT_FASTCALL comp_func_solid_Plus_rgb64(QRgba64 *dest, int length, QRgba64 color, uint const_alpha)
 {
+    auto b = CONVERT(color);
     if (const_alpha == 255) {
         for (int i = 0; i < length; ++i) {
-            dest[i] = addWithSaturation(dest[i], color);
+            auto a = LOAD(&dest[i]);
+            a = addWithSaturation(a, b);
+            STORE(&dest[i], a);
         }
     } else {
         for (int i = 0; i < length; ++i) {
-            QRgba64 d = addWithSaturation(dest[i], color);
-            dest[i] = interpolate255(d, const_alpha, dest[i], 255 - const_alpha);
+            auto a = LOAD(&dest[i]);
+            auto d = addWithSaturation(a, b);
+            a = interpolate255(d, const_alpha, a, 255 - const_alpha);
+            STORE(&dest[i], a);
         }
     }
 }
@@ -918,12 +962,18 @@ void QT_FASTCALL comp_func_Plus_rgb64(QRgba64 *Q_DECL_RESTRICT dest, const QRgba
 {
     if (const_alpha == 255) {
         for (int i = 0; i < length; ++i) {
-            dest[i] = addWithSaturation(dest[i], src[i]);
+            auto a = LOAD(&dest[i]);
+            auto b = LOAD(&src[i]);
+            a = addWithSaturation(a, b);
+            STORE(&dest[i], a);
         }
     } else {
         for (int i = 0; i < length; ++i) {
-            QRgba64 d = addWithSaturation(dest[i], src[i]);
-            dest[i] = interpolate255(d, const_alpha, dest[i], 255 - const_alpha);
+            auto a = LOAD(&dest[i]);
+            auto b = LOAD(&src[i]);
+            auto d = addWithSaturation(a, b);
+            a = interpolate255(d, const_alpha, a, 255 - const_alpha);
+            STORE(&dest[i], a);
         }
     }
 }

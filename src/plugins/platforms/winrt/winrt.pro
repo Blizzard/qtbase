@@ -2,12 +2,13 @@ TARGET = qwinrt
 
 CONFIG -= precompile_header
 
-QT += core-private gui-private platformsupport-private
+QT += \
+    core-private gui-private \
+    fontdatabase_support-private egl_support-private
 
-DEFINES *= QT_NO_CAST_FROM_ASCII __WRL_NO_DEFAULT_LIB__ GL_GLEXT_PROTOTYPES
+DEFINES *= QT_NO_CAST_FROM_ASCII __WRL_NO_DEFAULT_LIB__
 
-LIBS += $$QMAKE_LIBS_CORE -ldwrite -ld3d11
-INCLUDEPATH += $$QT_SOURCE_TREE/src/3rdparty/freetype/include
+LIBS += -lws2_32 -ld3d11
 
 SOURCES = \
     main.cpp  \
@@ -19,7 +20,6 @@ SOURCES = \
     qwinrteventdispatcher.cpp \
     qwinrtfiledialoghelper.cpp \
     qwinrtfileengine.cpp \
-    qwinrtfontdatabase.cpp \
     qwinrtinputcontext.cpp \
     qwinrtintegration.cpp \
     qwinrtmessagedialoghelper.cpp \
@@ -38,7 +38,6 @@ HEADERS = \
     qwinrteventdispatcher.h \
     qwinrtfiledialoghelper.h \
     qwinrtfileengine.h \
-    qwinrtfontdatabase.h \
     qwinrtinputcontext.h \
     qwinrtintegration.h \
     qwinrtmessagedialoghelper.h \
@@ -52,8 +51,9 @@ OTHER_FILES += winrt.json
 WINRT_SDK_VERSION_STRING = $$(UCRTVersion)
 WINRT_SDK_VERSION = $$member($$list($$split(WINRT_SDK_VERSION_STRING, .)), 2)
 lessThan(WINRT_SDK_VERSION, 14322): DEFINES += QT_WINRT_LIMITED_DRAGANDDROP
+greaterThan(WINRT_SDK_VERSION, 14393): DEFINES += QT_WINRT_DISABLE_PHONE_COLORS
 
-*-msvc2013|contains(DEFINES, QT_NO_DRAGANDDROP) {
+contains(DEFINES, QT_NO_DRAGANDDROP) {
     SOURCES -= qwinrtdrag.cpp
     HEADERS -= qwinrtdrag.h
 }

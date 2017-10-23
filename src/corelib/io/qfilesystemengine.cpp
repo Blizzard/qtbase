@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -85,7 +91,7 @@ QString QFileSystemEngine::slowCanonicalized(const QString &path)
                 if (separatorPos != -1) {
                     if (fi.isDir() && !target.endsWith(slash))
                         target.append(slash);
-                    target.append(tmpPath.mid(separatorPos));
+                    target.append(tmpPath.midRef(separatorPos));
                 }
                 tmpPath = QDir::cleanPath(target);
                 separatorPos = 0;
@@ -216,16 +222,29 @@ bool QFileSystemEngine::fillMetaData(int fd, QFileSystemMetaData &data)
     return false;
 }
 
-#if defined(QT_EXT_QNX_READDIR_R)
+#if defined(_DEXTRA_FIRST)
 static void fillStat64fromStat32(struct stat64 *statBuf64, const struct stat &statBuf32)
 {
     statBuf64->st_mode = statBuf32.st_mode;
     statBuf64->st_size = statBuf32.st_size;
+#if _POSIX_VERSION >= 200809L
+    statBuf64->st_ctim = statBuf32.st_ctim;
+    statBuf64->st_mtim = statBuf32.st_mtim;
+    statBuf64->st_atim = statBuf32.st_atim;
+#else
     statBuf64->st_ctime = statBuf32.st_ctime;
     statBuf64->st_mtime = statBuf32.st_mtime;
     statBuf64->st_atime = statBuf32.st_atime;
+#endif
     statBuf64->st_uid = statBuf32.st_uid;
     statBuf64->st_gid = statBuf32.st_gid;
+}
+#endif
+
+#if _POSIX_VERSION >= 200809L
+static qint64 timespecToMSecs(const timespec &spec)
+{
+    return (qint64(spec.tv_sec) * 1000) + (spec.tv_nsec / 1000000);
 }
 #endif
 
@@ -272,16 +291,24 @@ void QFileSystemMetaData::fillFromStatBuf(const QT_STATBUF &statBuffer)
 #endif
 
     // Times
-    creationTime_ = statBuffer.st_ctime ? statBuffer.st_ctime : statBuffer.st_mtime;
-    modificationTime_ = statBuffer.st_mtime;
-    accessTime_ = statBuffer.st_atime;
+#if _POSIX_VERSION >= 200809L
+    modificationTime_ = timespecToMSecs(statBuffer.st_mtim);
+    creationTime_ = timespecToMSecs(statBuffer.st_ctim);
+    if (!creationTime_)
+        creationTime_ = modificationTime_;
+    accessTime_ = timespecToMSecs(statBuffer.st_atim);
+#else
+    creationTime_ = qint64(statBuffer.st_ctime ? statBuffer.st_ctime : statBuffer.st_mtime) * 1000;
+    modificationTime_ = qint64(statBuffer.st_mtime) * 1000;
+    accessTime_ = qint64(statBuffer.st_atime) * 1000;
+#endif
     userId_ = statBuffer.st_uid;
     groupId_ = statBuffer.st_gid;
 }
 
 void QFileSystemMetaData::fillFromDirEnt(const QT_DIRENT &entry)
 {
-#if defined(QT_EXT_QNX_READDIR_R)
+#if defined(_DEXTRA_FIRST)
     knownFlagsMask = 0;
     entryFlags = 0;
     for (dirent_extra *extra = _DEXTRA_FIRST(&entry); _DEXTRA_VALID(extra, &entry);

@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -117,6 +124,11 @@ class QString;
     friend Q_DECL_CONSTEXPR const char *qt_getEnumName(ENUM) Q_DECL_NOEXCEPT { return #ENUM; }
 #define Q_ENUM(x) Q_ENUMS(x) Q_ENUM_IMPL(x)
 #define Q_FLAG(x) Q_FLAGS(x) Q_ENUM_IMPL(x)
+#define Q_ENUM_NS_IMPL(ENUM) \
+    inline Q_DECL_CONSTEXPR const QMetaObject *qt_getEnumMetaObject(ENUM) Q_DECL_NOEXCEPT { return &staticMetaObject; } \
+    inline Q_DECL_CONSTEXPR const char *qt_getEnumName(ENUM) Q_DECL_NOEXCEPT { return #ENUM; }
+#define Q_ENUM_NS(x) Q_ENUMS(x) Q_ENUM_NS_IMPL(x)
+#define Q_FLAG_NS(x) Q_FLAGS(x) Q_ENUM_NS_IMPL(x)
 #define Q_SCRIPTABLE QT_ANNOTATE_FUNCTION(qt_scriptable)
 #define Q_INVOKABLE  QT_ANNOTATE_FUNCTION(qt_invokable)
 #define Q_SIGNAL QT_ANNOTATE_FUNCTION(qt_signal)
@@ -135,34 +147,8 @@ class QString;
 # define QT_TR_FUNCTIONS
 #endif
 
-#if defined(QT_NO_QOBJECT_CHECK)
-/* qmake ignore Q_OBJECT */
-#define Q_OBJECT_CHECK
-#else
-
-/* This is a compile time check that ensures that any class cast with qobject_cast
-   actually contains a Q_OBJECT macro. Note: qobject_cast will fail if a QObject
-   subclass doesn't contain Q_OBJECT.
-
-   In qt_check_for_QOBJECT_macro, we call a dummy templated function with two
-   parameters, the first being "this" and the other the target of the qobject
-   cast. If the types are not identical, we know that a Q_OBJECT macro is missing.
-
-   If you get a compiler error here, make sure that the class you are casting
-   to contains a Q_OBJECT macro.
-*/
-
-/* qmake ignore Q_OBJECT */
-#define Q_OBJECT_CHECK \
-    template <typename ThisObject> inline void qt_check_for_QOBJECT_macro(const ThisObject &_q_argument) const \
-    { int i = qYouForgotTheQ_OBJECT_Macro(this, &_q_argument); i = i + 1; }
-
-template <typename T>
-inline int qYouForgotTheQ_OBJECT_Macro(T, T) { return 0; }
-
-template <typename T1, typename T2>
-inline void qYouForgotTheQ_OBJECT_Macro(T1, T2) {}
-#endif // QT_NO_QOBJECT_CHECK
+// ### Qt6: remove
+#define Q_OBJECT_CHECK  /* empty, unused since Qt 5.2 */
 
 #if defined(Q_CC_INTEL)
 // Cannot redefine the visibility of a method in an exported class
@@ -173,7 +159,7 @@ inline void qYouForgotTheQ_OBJECT_Macro(T1, T2) {}
 
 #if defined(Q_CC_CLANG) && Q_CC_CLANG >= 306
 #  define Q_OBJECT_NO_OVERRIDE_WARNING      QT_WARNING_DISABLE_CLANG("-Winconsistent-missing-override")
-#elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 510
+#elif defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && Q_CC_GNU >= 501
 #  define Q_OBJECT_NO_OVERRIDE_WARNING      QT_WARNING_DISABLE_GCC("-Wsuggest-override")
 #else
 #  define Q_OBJECT_NO_OVERRIDE_WARNING
@@ -188,7 +174,6 @@ inline void qYouForgotTheQ_OBJECT_Macro(T1, T2) {}
 /* qmake ignore Q_OBJECT */
 #define Q_OBJECT \
 public: \
-    Q_OBJECT_CHECK \
     QT_WARNING_PUSH \
     Q_OBJECT_NO_OVERRIDE_WARNING \
     static const QMetaObject staticMetaObject; \
@@ -220,6 +205,13 @@ private: \
     QT_WARNING_POP \
     QT_ANNOTATE_CLASS(qt_qgadget, "") \
     /*end*/
+
+/* qmake ignore Q_NAMESPACE */
+#define Q_NAMESPACE \
+    extern const QMetaObject staticMetaObject; \
+    QT_ANNOTATE_CLASS(qt_qnamespace, "") \
+    /*end*/
+
 #endif // QT_NO_META_MACROS
 
 #else // Q_MOC_RUN
@@ -248,6 +240,11 @@ private: \
 #define Q_SIGNAL Q_SIGNAL
 #define Q_SLOT Q_SLOT
 #endif //Q_MOC_RUN
+
+#ifdef Q_CLANG_QDOC
+#undef Q_GADGET
+#define Q_GADGET
+#endif
 
 #ifndef QT_NO_META_MACROS
 // macro for onaming members
@@ -349,6 +346,7 @@ struct Q_CORE_EXPORT QMetaObject
     const char *className() const;
     const QMetaObject *superClass() const;
 
+    bool inherits(const QMetaObject *metaObject) const Q_DECL_NOEXCEPT;
     QObject *cast(QObject *obj) const;
     const QObject *cast(const QObject *obj) const;
 

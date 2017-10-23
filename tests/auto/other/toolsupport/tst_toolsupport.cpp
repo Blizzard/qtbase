@@ -29,6 +29,16 @@
 
 #include <QtTest>
 
+//
+// Note:
+//
+// When this test here fails and the change leading to the failure
+// intentionally changed a private class, adjust the test here and bump
+// the TypeInformationVersion field in src/corelib/global/qhooks.cpp
+// in the same commit as the modification to the private class.
+//
+
+
 // Don't do this at home. This is test code, not production.
 #define protected public
 #define private public
@@ -114,34 +124,25 @@ void tst_toolsupport::offsets_data()
     {
         QTestData &data = QTest::newRow("QFilePrivate::fileName")
                 << pmm_to_offsetof(&QFilePrivate::fileName);
+#ifdef Q_PROCESSOR_X86
+        // x86 32-bit has weird alignment rules. Refer to QtPrivate::AlignOf in
+        // qglobal.h for more details.
         data << 168 << 248;
+#else
+        data << 172 << 248;
+#endif
     }
 #endif
 
     {
-#ifdef Q_OS_WIN
         QTest::newRow("QDateTimePrivate::m_msecs")
-            << pmm_to_offsetof(&QDateTimePrivate::m_msecs) << 8 << 8;
-        QTest::newRow("QDateTimePrivate::m_spec")
-            << pmm_to_offsetof(&QDateTimePrivate::m_spec) << 16 << 16;
-        QTest::newRow("QDateTimePrivate::m_offsetFromUtc")
-            << pmm_to_offsetof(&QDateTimePrivate::m_offsetFromUtc) << 20 << 20;
-        QTest::newRow("QDateTimePrivate::m_timeZone")
-            << pmm_to_offsetof(&QDateTimePrivate::m_timeZone) << 24 << 24;
+            << pmm_to_offsetof(&QDateTimePrivate::m_msecs) << 0 << 0;
         QTest::newRow("QDateTimePrivate::m_status")
-            << pmm_to_offsetof(&QDateTimePrivate::m_status) << 28 << 32;
-#else
-        QTest::newRow("QDateTimePrivate::m_msecs")
-            << pmm_to_offsetof(&QDateTimePrivate::m_msecs) << 4 << 8;
-        QTest::newRow("QDateTimePrivate::m_spec")
-            << pmm_to_offsetof(&QDateTimePrivate::m_spec) << 12 << 16;
+            << pmm_to_offsetof(&QDateTimePrivate::m_status) << 8 << 8;
         QTest::newRow("QDateTimePrivate::m_offsetFromUtc")
-            << pmm_to_offsetof(&QDateTimePrivate::m_offsetFromUtc) << 16 << 20;
+            << pmm_to_offsetof(&QDateTimePrivate::m_offsetFromUtc) << 12 << 12;
         QTest::newRow("QDateTimePrivate::m_timeZone")
             << pmm_to_offsetof(&QDateTimePrivate::m_timeZone) << 20 << 24;
-        QTest::newRow("QDateTimePrivate::m_status")
-            << pmm_to_offsetof(&QDateTimePrivate::m_status) << 24 << 32;
-#endif
     }
 #endif // RUN_MEMBER_OFFSET_TEST
 }

@@ -1,12 +1,22 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
-** You may use this file under the terms of the BSD license as follows:
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
 ** "Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions are
@@ -96,10 +106,9 @@ LocationDialog::LocationDialog(QWidget *parent)
 
     buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-    typedef void (QComboBox::*QComboIntSignal)(int);
-    connect(formatComboBox, static_cast<QComboIntSignal>(&QComboBox::activated),
+    connect(formatComboBox, QOverload<int>::of(&QComboBox::activated),
             this, &LocationDialog::updateLocationsTable);
-    connect(scopeComboBox, static_cast<QComboIntSignal>(&QComboBox::activated),
+    connect(scopeComboBox, QOverload<int>::of(&QComboBox::activated),
             this, &LocationDialog::updateLocationsTable);
     connect(organizationComboBox->lineEdit(),
             &QLineEdit::editingFinished,
@@ -107,7 +116,7 @@ LocationDialog::LocationDialog(QWidget *parent)
     connect(applicationComboBox->lineEdit(),
             &QLineEdit::editingFinished,
             this, &LocationDialog::updateLocationsTable);
-    connect(applicationComboBox, static_cast<QComboIntSignal>(&QComboBox::activated),
+    connect(applicationComboBox, QOverload<int>::of(&QComboBox::activated),
             this, &LocationDialog::updateLocationsTable);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

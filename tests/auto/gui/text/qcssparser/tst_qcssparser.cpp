@@ -1,40 +1,32 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 #include <QtTest/QtTest>
 #include <QtXml/QtXml>
-#if defined(Q_OS_WINCE)
-#include <QtGui/QFontDatabase>
-#endif
 #include <QtGui/QFontInfo>
 #include <QtGui/QFontMetrics>
 
@@ -43,10 +35,6 @@
 class tst_QCssParser : public QObject
 {
     Q_OBJECT
-
-public slots:
-    void initTestCase();
-    void cleanupTestCase();
 
 private slots:
     void scanner_data();
@@ -90,41 +78,16 @@ private slots:
     void extractBorder();
     void noTextDecoration();
     void quotedAndUnquotedIdentifiers();
-
-private:
-#if defined(Q_OS_WINCE)
-    int m_timesFontId;
-#endif
 };
-
-void tst_QCssParser::initTestCase()
-{
-#if defined(Q_OS_WINCE)
-    QFontDatabase fontDB;
-    m_timesFontId = -1;
-    if (!fontDB.families().contains("Times New Roman")) {
-        m_timesFontId = QFontDatabase::addApplicationFont("times.ttf");
-        QVERIFY(m_timesFontId != -1);
-    }
-#endif
-}
-
-void tst_QCssParser::cleanupTestCase()
-{
-#if defined(Q_OS_WINCE)
-    if (m_timesFontId != -1)
-        QFontDatabase::removeApplicationFont(m_timesFontId);
-#endif
-}
 
 void tst_QCssParser::scanner_data()
 {
     QTest::addColumn<QString>("input");
     QTest::addColumn<QString>("output");
 
-#if defined(Q_OS_ANDROID)
+#if defined(Q_OS_ANDROID) || defined(Q_OS_WINRT)
     QDir d(":/");
-#elif !defined(Q_OS_IRIX) && !defined(Q_OS_WINCE)
+#elif !defined(Q_OS_IRIX)
     QDir d(SRCDIR);
 #else
     QDir d(QDir::current());
@@ -150,10 +113,14 @@ static const char *tokenName(QCss::TokenType t)
         case QCss::CDC: return "CDC";
         case QCss::INCLUDES: return "INCLUDES";
         case QCss::DASHMATCH: return "DASHMATCH";
+        case QCss::BEGINSWITH: return "BEGINSWITH";
+        case QCss::ENDSWITH: return "ENDSWITH";
+        case QCss::CONTAINS: return "CONTAINS";
         case QCss::LBRACE: return "LBRACE";
         case QCss::PLUS: return "PLUS";
         case QCss::GREATER: return "GREATER";
         case QCss::COMMA: return "COMMA";
+        case QCss::TILDE: return "TILDE";
         case QCss::STRING: return "STRING";
         case QCss::INVALID: return "INVALID";
         case QCss::IDENT: return "IDENT";
@@ -185,7 +152,7 @@ static void debug(const QVector<QCss::Symbol> &symbols, int index = -1)
 {
     qDebug() << "all symbols:";
     for (int i = 0; i < symbols.count(); ++i)
-        qDebug() << "(" << i << "); Token:" << tokenName(symbols.at(i).token) << "; Lexem:" << symbols.at(i).lexem();
+        qDebug() << '(' << i << "); Token:" << tokenName(symbols.at(i).token) << "; Lexem:" << symbols.at(i).lexem();
     if (index != -1)
         qDebug() << "failure at index" << index;
 }
@@ -514,7 +481,7 @@ void tst_QCssParser::selector_data()
         QCss::BasicSelector basic;
 
         basic.elementName = "p";
-        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfPreceeds;
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfDirectAdjecent;
         sel.basicSelectors << basic;
 
         basic = QCss::BasicSelector();
@@ -606,14 +573,29 @@ void tst_QCssParser::selector_data()
         QCss::BasicSelector basic;
 
         basic.elementName = "e";
-        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfPreceeds;
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfDirectAdjecent;
         sel.basicSelectors << basic;
 
         basic.elementName = "f";
         basic.relationToNext = QCss::BasicSelector::NoRelation;
         sel.basicSelectors << basic;
 
-        QTest::newRow("precede") << QString("e + f") << sel;
+        QTest::newRow("lastsibling") << QString("e + f") << sel;
+    }
+
+    {
+        QCss::Selector sel;
+        QCss::BasicSelector basic;
+
+        basic.elementName = "e";
+        basic.relationToNext = QCss::BasicSelector::MatchNextSelectorIfIndirectAdjecent;
+        sel.basicSelectors << basic;
+
+        basic.elementName = "f";
+        basic.relationToNext = QCss::BasicSelector::NoRelation;
+        sel.basicSelectors << basic;
+
+        QTest::newRow("previoussibling") << QString("e ~ f") << sel;
     }
 
     {
@@ -652,11 +634,11 @@ void tst_QCssParser::selector_data()
         QCss::AttributeSelector attrSel;
         attrSel.name = "foo";
         attrSel.value = "warning";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchIncludes;
         basic.attributeSelectors << attrSel;
         sel.basicSelectors << basic;
 
-        QTest::newRow("attr-contains") << QString("e[foo~=\"warning\"]") << sel;
+        QTest::newRow("attr-includes") << QString("e[foo~=\"warning\"]") << sel;
     }
 
     {
@@ -667,11 +649,26 @@ void tst_QCssParser::selector_data()
         QCss::AttributeSelector attrSel;
         attrSel.name = "lang";
         attrSel.value = "en";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchBeginsWith;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchDashMatch;
         basic.attributeSelectors << attrSel;
         sel.basicSelectors << basic;
 
-        QTest::newRow("attr-contains") << QString("e[lang|=\"en\"]") << sel;
+        QTest::newRow("attr-dash") << QString("e[lang|=\"en\"]") << sel;
+    }
+
+    {
+        QCss::Selector sel;
+        QCss::BasicSelector basic;
+
+        basic.elementName = "e";
+        QCss::AttributeSelector attrSel;
+        attrSel.name = "foo";
+        attrSel.value = "warning";
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        basic.attributeSelectors << attrSel;
+        sel.basicSelectors << basic;
+
+        QTest::newRow("attr-contains") << QString("e[foo*=\"warning\"]") << sel;
     }
 
     {
@@ -682,7 +679,7 @@ void tst_QCssParser::selector_data()
 
         QCss::AttributeSelector attrSel;
         attrSel.name = "class";
-        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchContains;
+        attrSel.valueMatchCriterium = QCss::AttributeSelector::MatchIncludes;
         attrSel.value = "warning";
         basic.attributeSelectors.append(attrSel);
 
@@ -847,6 +844,7 @@ void tst_QCssParser::colorValue_data()
     QTest::newRow("hsla") << "color: hsva(10, 20, 30, 40)" << QColor::fromHsv(10, 20, 30, 40);
     QTest::newRow("invalid1") << "color: rgb(why, does, it, always, rain, on, me)" << QColor();
     QTest::newRow("invalid2") << "color: rgba(i, meant, norway)" << QColor();
+    QTest::newRow("invalid3") << "color: rgb(21)" << QColor();
     QTest::newRow("role") << "color: palette(base)" << qApp->palette().color(QPalette::Base);
     QTest::newRow("role2") << "color: palette( window-text ) " << qApp->palette().color(QPalette::WindowText);
     QTest::newRow("transparent") << "color: transparent" << QColor(Qt::transparent);
@@ -916,21 +914,37 @@ void tst_QCssParser::marginValue_data()
     int ex = QFontMetrics(f).xHeight();
     int em = QFontMetrics(f).height();
 
+    const QString ex1234 = QString::number(ex) + QLatin1Char(' ') + QString::number(2 * ex)
+        + QLatin1Char(' ') + QString::number(3 * ex) + QLatin1Char(' ')
+        + QString::number(4 * ex);
+    const QString em2ex4 = QLatin1String("1 ") + QString::number(2*em) + QLatin1String(" 3 ")
+        + QString::number(4 * ex);
+
     QTest::newRow("one value") << "margin: 1px" << "1 1 1 1";
     QTest::newRow("two values") << "margin: 1px 2px" << "1 2 1 2";
     QTest::newRow("three value") << "margin: 1px 2px 3px" << "1 2 3 2";
     QTest::newRow("four values") << "margin: 1px 2px 3px 4px" << "1 2 3 4";
     QTest::newRow("default px") << "margin: 1 2 3 4" << "1 2 3 4";
     QTest::newRow("no unit") << "margin: 1 2 3 4" << "1 2 3 4";
-    QTest::newRow("em") << "margin: 1ex 2ex 3ex 4ex" << QString("%1 %2 %3 %4").arg(ex).arg(2*ex).arg(3*ex).arg(4*ex);
-    QTest::newRow("ex") << "margin: 1 2em 3px 4ex" << QString("%1 %2 %3 %4").arg(1).arg(2*em).arg(3).arg(4*ex);
+    QTest::newRow("em") << "margin: 1ex 2ex 3ex 4ex"
+        << (QString::number(ex) + QLatin1Char(' ') + QString::number(2 * ex)
+            + QLatin1Char(' ') + QString::number(3 * ex) + QLatin1Char(' ')
+            + QString::number(4 * ex));
+    QTest::newRow("ex") << "margin: 1 2em 3px 4ex"
+        << (QLatin1String("1 ") + QString::number(2 * em) + QLatin1String(" 3 ")
+           + QString::number(4 * ex));
 
     f.setPointSize(20);
     f.setBold(true);
     ex = QFontMetrics(f).xHeight();
     em = QFontMetrics(f).height();
-    QTest::newRow("em2") << "font: bold 20pt; margin: 1ex 2ex 3ex 4ex" << QString("%1 %2 %3 %4").arg(ex).arg(2*ex).arg(3*ex).arg(4*ex);
-    QTest::newRow("ex2") << "margin: 1 2em 3px 4ex; font-size: 20pt; font-weight: bold;" << QString("%1 %2 %3 %4").arg(1).arg(2*em).arg(3).arg(4*ex);
+    QTest::newRow("em2") << "font: bold 20pt; margin: 1ex 2ex 3ex 4ex"
+        << (QString::number(ex) + QLatin1Char(' ') + QString::number(2 * ex)
+            + QLatin1Char(' ') + QString::number(3 * ex) + QLatin1Char(' ')
+            + QString::number(4 * ex));
+    QTest::newRow("ex2") << "margin: 1 2em 3px 4ex; font-size: 20pt; font-weight: bold;"
+        << (QLatin1String("1 ") + QString::number(2 * em) + QLatin1String(" 3 ")
+            + QString::number(4 * ex));
 
     QTest::newRow("crap") << "margin: crap" << "0 0 0 0";
 }
@@ -963,7 +977,8 @@ void tst_QCssParser::marginValue()
     int p[4];
     int spacing;
     v.extractBox(m, p, &spacing);
-    QString str = QString("%1 %2 %3 %4").arg(m[0]).arg(m[1]).arg(m[2]).arg(m[3]);
+    QString str = QString::number(m[0]) + QLatin1Char(' ') + QString::number(m[1])
+        + QLatin1Char(' ') + QString::number(m[2]) + QLatin1Char(' ') + QString::number(m[3]);
     QCOMPARE(str, expectedMargin);
     }
 }
@@ -987,11 +1002,20 @@ void tst_QCssParser::styleSelector_data()
     QTest::newRow("attrmatch") << true << QString("[foo=bar]") << QString("<p foo=\"bar\" />") << QString();
     QTest::newRow("noattrmatch") << false << QString("[foo=bar]") << QString("<p foo=\"xyz\" />") << QString();
 
-    QTest::newRow("contains") << true << QString("[foo~=bar]") << QString("<p foo=\"baz bleh bar\" />") << QString();
-    QTest::newRow("notcontains") << false << QString("[foo~=bar]") << QString("<p foo=\"test\" />") << QString();
+    QTest::newRow("includes") << true << QString("[foo~=bar]") << QString("<p foo=\"baz bleh bar\" />") << QString();
+    QTest::newRow("notincludes") << false << QString("[foo~=bar]") << QString("<p foo=\"bazblehbar\" />") << QString();
 
-    QTest::newRow("beingswith") << true << QString("[foo|=bar]") << QString("<p foo=\"bar-bleh\" />") << QString();
-    QTest::newRow("notbeingswith") << false << QString("[foo|=bar]") << QString("<p foo=\"bleh-bar\" />") << QString();
+    QTest::newRow("dashmatch") << true << QString("[foo|=bar]") << QString("<p foo=\"bar-bleh\" />") << QString();
+    QTest::newRow("nodashmatch") << false << QString("[foo|=bar]") << QString("<p foo=\"barbleh\" />") << QString();
+
+    QTest::newRow("beginswith") << true << QString("[foo^=bar]") << QString("<p foo=\"barbleh\" />") << QString();
+    QTest::newRow("nobeginswith") << false << QString("[foo^=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
+
+    QTest::newRow("endswith") << true << QString("[foo$=bar]") << QString("<p foo=\"barbar\" />") << QString();
+    QTest::newRow("noendswith") << false << QString("[foo$=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
+
+    QTest::newRow("contains") << true << QString("[foo*=bar]") << QString("<p foo=\"blehbarbleh\" />") << QString();
+    QTest::newRow("nocontains") << false << QString("[foo*=bar]") << QString("<p foo=\"blehbleh\" />") << QString();
 
     QTest::newRow("attr2") << true << QString("[bar=foo]") << QString("<p bleh=\"bar\" bar=\"foo\" />") << QString();
 
@@ -1072,9 +1096,18 @@ void tst_QCssParser::styleSelector_data()
                                      << QString("<p1 /><p2 />")
                                      << QString("p2");
 
-    QTest::newRow("noprevioussibling") << false << QString("p2 + p1")
+    QTest::newRow("notprevioussibling") << false << QString("p2 + p1")
                                      << QString("<p1 /><p2 />")
                                      << QString("p2");
+
+    QTest::newRow("anyprevioussibling") << true << QString("p1 ~ p3")
+                                     << QString("<p1 /><p2 /><p3 />")
+                                     << QString("p3");
+
+    QTest::newRow("noprevioussibling") << false << QString("p3 ~ p2")
+                                     << QString("<p1 /><p2 /><p3 />")
+                                     << QString("p3");
+
 
     QTest::newRow("ancestry_firstmismatch") << false << QString("parent child[foo=bar]")
                                             << QString("<parent><child /></parent>")
@@ -1090,7 +1123,7 @@ void tst_QCssParser::styleSelector()
     QFETCH(QString, xml);
     QFETCH(QString, elementToCheck);
 
-    QString css = QString("%1 { background-color: green }").arg(selector);
+    const QString css = selector + QLatin1String(" { background-color: green }");
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
@@ -1154,7 +1187,7 @@ void tst_QCssParser::specificity()
 {
     QFETCH(QString, selector);
 
-    QString css = QString("%1 { }").arg(selector);
+    QString css = selector + QLatin1String(" { }");
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
     QVERIFY(parser.parse(&sheet));
@@ -1340,7 +1373,7 @@ void tst_QCssParser::shorthandBackgroundProperty()
     QVERIFY(doc.setContent(QLatin1String("<!DOCTYPE test><test> <dummy/> </test>")));
 
     css.prepend("dummy {");
-    css.append("}");
+    css.append(QLatin1Char('}'));
 
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
@@ -1500,7 +1533,7 @@ void tst_QCssParser::gradient()
     QVERIFY(doc.setContent(QLatin1String("<!DOCTYPE test><test> <dummy/> </test>")));
 
     css.prepend("dummy {");
-    css.append("}");
+    css.append(QLatin1Char('}'));
 
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
@@ -1560,7 +1593,7 @@ void tst_QCssParser::extractFontFamily()
 {
     QFETCH(QString, css);
     css.prepend("dummy {");
-    css.append("}");
+    css.append(QLatin1Char('}'));
 
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
@@ -1618,7 +1651,7 @@ void tst_QCssParser::extractBorder()
     QFETCH(QColor, expectedTopColor);
 
     css.prepend("dummy {");
-    css.append("}");
+    css.append(QLatin1Char('}'));
 
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;

@@ -1,31 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2016 Intel Corporation.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -56,17 +63,11 @@
 
 QT_BEGIN_NAMESPACE
 
-#define QT_ENSURE_PARSED(a) \
-    do { \
-        if (!(a)->d->isParsed) \
-            (a)->d->parse(); \
-    } while (0)
-
 #ifdef Q_OS_WIN
 // sockaddr_in6 size changed between old and new SDK
 // Only the new version is the correct one, so always
 // use this structure.
-#if defined(Q_OS_WINCE) || defined(Q_OS_WINRT)
+#if defined(Q_OS_WINRT)
 #  if !defined(u_char)
 #    define u_char unsigned char
 #  endif
@@ -93,7 +94,7 @@ typedef struct {
 #endif
 
 
-class QHostAddressPrivate
+class QHostAddressPrivate : public QSharedData
 {
 public:
     QHostAddressPrivate();
@@ -102,27 +103,24 @@ public:
     void setAddress(const quint8 *a_);
     void setAddress(const Q_IPV6ADDR &a_);
 
-    bool parse();
+    bool parse(const QString &ipString);
     void clear();
 
-    QString ipString;
     QString scopeId;
 
-    quint32 a;    // IPv4 address
     union {
         Q_IPV6ADDR a6; // IPv6 address
         struct { quint64 c[2]; } a6_64;
         struct { quint32 c[4]; } a6_32;
     };
-    QAbstractSocket::NetworkLayerProtocol protocol;
-
-    bool isParsed;
+    quint32 a;    // IPv4 address
+    qint8 protocol;
 
     friend class QHostAddress;
 };
 
 QHostAddressPrivate::QHostAddressPrivate()
-    : a(0), protocol(QAbstractSocket::UnknownNetworkLayerProtocol), isParsed(true)
+    : a(0), protocol(QAbstractSocket::UnknownNetworkLayerProtocol)
 {
     memset(&a6, 0, sizeof(a6));
 }
@@ -131,7 +129,6 @@ void QHostAddressPrivate::setAddress(quint32 a_)
 {
     a = a_;
     protocol = QAbstractSocket::IPv4Protocol;
-    isParsed = true;
 
     //create mapped address, except for a_ == 0 (any)
     a6_64.c[0] = 0;
@@ -145,29 +142,46 @@ void QHostAddressPrivate::setAddress(quint32 a_)
 
 /// parses v4-mapped addresses or the AnyIPv6 address and stores in \a a;
 /// returns true if the address was one of those
-static bool convertToIpv4(quint32& a, const Q_IPV6ADDR &a6)
+static bool convertToIpv4(quint32& a, const Q_IPV6ADDR &a6, const QHostAddress::ConversionMode mode)
 {
+    if (mode == QHostAddress::StrictConversion)
+        return false;
+
     const uchar *ptr = a6.c;
     if (qFromUnaligned<quint64>(ptr) != 0)
         return false;
-    if (qFromBigEndian<quint32>(ptr + 8) == 0) {
-        // is it AnyIPv6?
-        a = 0;
-        return qFromBigEndian<quint32>(ptr + 12) == 0;
+
+    const quint32 mid = qFromBigEndian<quint32>(ptr + 8);
+    if ((mid == 0xffff) && (mode & QHostAddress::ConvertV4MappedToIPv4)) {
+        a = qFromBigEndian<quint32>(ptr + 12);
+        return true;
     }
-    if (qFromBigEndian<quint32>(ptr + 8) != 0xFFFF)
+    if (mid != 0)
         return false;
-    a = qFromBigEndian<quint32>(ptr + 12);
-    return true;
+
+    const quint32 low = qFromBigEndian<quint32>(ptr + 12);
+    if ((low == 0) && (mode & QHostAddress::ConvertUnspecifiedAddress)) {
+        a = 0;
+        return true;
+    }
+    if ((low == 1) && (mode & QHostAddress::ConvertLocalHost)) {
+        a = INADDR_LOOPBACK;
+        return true;
+    }
+    if ((low != 1) && (mode & QHostAddress::ConvertV4CompatToIPv4)) {
+        a = low;
+        return true;
+    }
+    return false;
 }
 
 void QHostAddressPrivate::setAddress(const quint8 *a_)
 {
     protocol = QAbstractSocket::IPv6Protocol;
-    isParsed = true;
     memcpy(a6.c, a_, sizeof(a6));
     a = 0;
-    convertToIpv4(a, a6);
+    convertToIpv4(a, a6, (QHostAddress::ConvertV4MappedToIPv4
+                          | QHostAddress::ConvertUnspecifiedAddress));
 }
 
 void QHostAddressPrivate::setAddress(const Q_IPV6ADDR &a_)
@@ -177,10 +191,10 @@ void QHostAddressPrivate::setAddress(const Q_IPV6ADDR &a_)
 
 static bool parseIp6(const QString &address, QIPAddressUtils::IPv6Address &addr, QString *scopeId)
 {
-    QString tmp = address;
+    QStringRef tmp(&address);
     int scopeIdPos = tmp.lastIndexOf(QLatin1Char('%'));
     if (scopeIdPos != -1) {
-        *scopeId = tmp.mid(scopeIdPos + 1);
+        *scopeId = tmp.mid(scopeIdPos + 1).toString();
         tmp.chop(tmp.size() - scopeIdPos);
     } else {
         scopeId->clear();
@@ -188,9 +202,8 @@ static bool parseIp6(const QString &address, QIPAddressUtils::IPv6Address &addr,
     return QIPAddressUtils::parseIp6(addr, tmp.constBegin(), tmp.constEnd()) == 0;
 }
 
-Q_NEVER_INLINE bool QHostAddressPrivate::parse()
+bool QHostAddressPrivate::parse(const QString &ipString)
 {
-    isParsed = true;
     protocol = QAbstractSocket::UnknownNetworkLayerProtocol;
     QString a = ipString.simplified();
     if (a.isEmpty())
@@ -218,13 +231,13 @@ void QHostAddressPrivate::clear()
 {
     a = 0;
     protocol = QAbstractSocket::UnknownNetworkLayerProtocol;
-    isParsed = true;
     memset(&a6, 0, sizeof(a6));
 }
 
 
 bool QNetmaskAddress::setAddress(const QString &address)
 {
+    d.detach();
     length = -1;
     QHostAddress other;
     return other.setAddress(address) && setAddress(other);
@@ -232,6 +245,8 @@ bool QNetmaskAddress::setAddress(const QString &address)
 
 bool QNetmaskAddress::setAddress(const QHostAddress &address)
 {
+    d.detach();
+
     static const quint8 zeroes[16] = { 0 };
     union {
         quint32 v4;
@@ -267,21 +282,27 @@ bool QNetmaskAddress::setAddress(const QHostAddress &address)
             d->clear();
             return false;       // invalid IP-style netmask
 
-            // the rest always falls through
         case 254:
             ++netmask;
+            Q_FALLTHROUGH();
         case 252:
             ++netmask;
+            Q_FALLTHROUGH();
         case 248:
             ++netmask;
+            Q_FALLTHROUGH();
         case 240:
             ++netmask;
+            Q_FALLTHROUGH();
         case 224:
             ++netmask;
+            Q_FALLTHROUGH();
         case 192:
             ++netmask;
+            Q_FALLTHROUGH();
         case 128:
             ++netmask;
+            Q_FALLTHROUGH();
         case 0:
             break;
         }
@@ -319,6 +340,7 @@ int QNetmaskAddress::prefixLength() const
 
 void QNetmaskAddress::setPrefixLength(QAbstractSocket::NetworkLayerProtocol proto, int newLength)
 {
+    d.detach();
     length = newLength;
     if (length < 0 || length > (proto == QAbstractSocket::IPv4Protocol ? 32 :
                                 proto == QAbstractSocket::IPv6Protocol ? 128 : -1)) {
@@ -347,6 +369,7 @@ void QNetmaskAddress::setPrefixLength(QAbstractSocket::NetworkLayerProtocol prot
     \class QHostAddress
     \brief The QHostAddress class provides an IP address.
     \ingroup network
+    \ingroup shared
     \inmodule QtNetwork
 
     This class holds an IPv4 or IPv6 address in a platform- and
@@ -370,7 +393,7 @@ void QNetmaskAddress::setPrefixLength(QAbstractSocket::NetworkLayerProtocol prot
 
 /*! \enum QHostAddress::SpecialAddress
 
-    \value Null The null address object. Equivalent to QHostAddress().
+    \value Null The null address object. Equivalent to QHostAddress(). See also QHostAddress::isNull().
     \value LocalHost The IPv4 localhost address. Equivalent to QHostAddress("127.0.0.1").
     \value LocalHostIPv6 The IPv6 localhost address. Equivalent to QHostAddress("::1").
     \value Broadcast The IPv4 broadcast address. Equivalent to QHostAddress("255.255.255.255").
@@ -378,6 +401,20 @@ void QNetmaskAddress::setPrefixLength(QAbstractSocket::NetworkLayerProtocol prot
     \value AnyIPv6 The IPv6 any-address. Equivalent to QHostAddress("::"). A socket bound with this address will listen only on IPv6 interaces.
     \value Any The dual stack any-address. A socket bound with this address will listen on both IPv4 and IPv6 interfaces.
 */
+
+/*! \enum QHostAddress::ConversionModeFlag
+
+    \since 5.8
+
+    \value StrictConversion Don't convert IPv6 addresses to IPv4 when comparing two QHostAddress objects of different protocols, so they will always be considered different.
+    \value ConvertV4MappedToIPv4 Convert IPv4-mapped IPv6 addresses (RFC 4291 sect. 2.5.5.2) when comparing. Therefore QHostAddress("::ffff:192.168.1.1") will compare equal to QHostAddress("192.168.1.1").
+    \value ConvertV4CompatToIPv4 Convert IPv4-compatible IPv6 addresses (RFC 4291 sect. 2.5.5.1) when comparing. Therefore QHostAddress("::192.168.1.1") will compare equal to QHostAddress("192.168.1.1").
+    \value ConvertLocalHost Convert the IPv6 loopback addresses to its IPv4 equivalent when comparing. Therefore e.g. QHostAddress("::1") will compare equal to QHostAddress("127.0.0.1").
+    \value ConvertUnspecifiedAddress All unspecified addresses will compare equal, namely AnyIPv4, AnyIPv6 and Any.
+    \value TolerantConversion Sets all three preceding flags.
+
+    \sa isEqual()
+ */
 
 /*!  Constructs a null host address object, i.e. an address which is not valid for any host or interface.
 
@@ -440,8 +477,7 @@ QHostAddress::QHostAddress(const Q_IPV6ADDR &ip6Addr)
 QHostAddress::QHostAddress(const QString &address)
     : d(new QHostAddressPrivate)
 {
-    d->ipString = address;
-    d->isParsed = false;
+    d->parse(address);
 }
 
 /*!
@@ -469,7 +505,7 @@ QHostAddress::QHostAddress(const struct sockaddr *sockaddr)
     Constructs a copy of the given \a address.
 */
 QHostAddress::QHostAddress(const QHostAddress &address)
-    : d(new QHostAddressPrivate(*address.d.data()))
+    : d(address.d)
 {
 }
 
@@ -479,6 +515,19 @@ QHostAddress::QHostAddress(const QHostAddress &address)
 QHostAddress::QHostAddress(SpecialAddress address)
     : d(new QHostAddressPrivate)
 {
+    setAddress(address);
+}
+
+/*!
+    \overload
+    \since 5.8
+
+    Sets the special address specified by \a address.
+*/
+void QHostAddress::setAddress(SpecialAddress address)
+{
+    d->clear();
+
     Q_IPV6ADDR ip6;
     memset(&ip6, 0, sizeof ip6);
     quint32 ip4 = INADDR_ANY;
@@ -498,7 +547,7 @@ QHostAddress::QHostAddress(SpecialAddress address)
 
     case LocalHostIPv6:
         ip6[15] = 1;
-        // fall through
+        Q_FALLTHROUGH();
     case AnyIPv6:
         d->setAddress(ip6);
         return;
@@ -525,10 +574,11 @@ QHostAddress::~QHostAddress()
 */
 QHostAddress &QHostAddress::operator=(const QHostAddress &address)
 {
-    *d.data() = *address.d.data();
+    d = address.d;
     return *this;
 }
 
+#if QT_DEPRECATED_SINCE(5, 8)
 /*!
     Assigns the host address \a address to this object, and returns a
     reference to this object.
@@ -540,6 +590,28 @@ QHostAddress &QHostAddress::operator=(const QString &address)
     setAddress(address);
     return *this;
 }
+#endif
+
+/*!
+    \since 5.8
+    Assigns the special address \a address to this object, and returns a
+    reference to this object.
+
+    \sa setAddress()
+*/
+QHostAddress &QHostAddress::operator=(SpecialAddress address)
+{
+    setAddress(address);
+    return *this;
+}
+
+/*!
+    \fn void QHostAddress::swap(QHostAddress &other)
+    \since 5.6
+
+    Swaps this host address with \a other. This operation is very fast
+    and never fails.
+*/
 
 /*!
     \fn bool QHostAddress::operator!=(const QHostAddress &other) const
@@ -557,10 +629,13 @@ QHostAddress &QHostAddress::operator=(const QString &address)
 */
 
 /*!
-    Sets the host address to 0.0.0.0.
+    Sets the host address to null.
+
+    \sa QHostAddress::Null
 */
 void QHostAddress::clear()
 {
+    d.detach();
     d->clear();
 }
 
@@ -569,6 +644,7 @@ void QHostAddress::clear()
 */
 void QHostAddress::setAddress(quint32 ip4Addr)
 {
+    d.detach();
     d->setAddress(ip4Addr);
 }
 
@@ -582,6 +658,7 @@ void QHostAddress::setAddress(quint32 ip4Addr)
 */
 void QHostAddress::setAddress(quint8 *ip6Addr)
 {
+    d.detach();
     d->setAddress(ip6Addr);
 }
 
@@ -596,6 +673,7 @@ void QHostAddress::setAddress(quint8 *ip6Addr)
 */
 void QHostAddress::setAddress(const quint8 *ip6Addr)
 {
+    d.detach();
     d->setAddress(ip6Addr);
 }
 
@@ -606,6 +684,7 @@ void QHostAddress::setAddress(const quint8 *ip6Addr)
 */
 void QHostAddress::setAddress(const Q_IPV6ADDR &ip6Addr)
 {
+    d.detach();
     d->setAddress(ip6Addr);
 }
 
@@ -619,8 +698,8 @@ void QHostAddress::setAddress(const Q_IPV6ADDR &ip6Addr)
 */
 bool QHostAddress::setAddress(const QString &address)
 {
-    d->ipString = address;
-    return d->parse();
+    d.detach();
+    return d->parse(address);
 }
 
 /*!
@@ -633,6 +712,7 @@ bool QHostAddress::setAddress(const QString &address)
 */
 void QHostAddress::setAddress(const struct sockaddr *sockaddr)
 {
+    d.detach();
 #ifndef Q_OS_WINRT
     clear();
     if (sockaddr->sa_family == AF_INET)
@@ -680,11 +760,12 @@ quint32 QHostAddress::toIPv4Address() const
 */
 quint32 QHostAddress::toIPv4Address(bool *ok) const
 {
-    QT_ENSURE_PARSED(this);
     quint32 dummy;
     if (ok)
         *ok = d->protocol == QAbstractSocket::IPv4Protocol || d->protocol == QAbstractSocket::AnyIPProtocol
-              || (d->protocol == QAbstractSocket::IPv6Protocol && convertToIpv4(dummy, d->a6));
+              || (d->protocol == QAbstractSocket::IPv6Protocol
+                  && convertToIpv4(dummy, d->a6, ConversionMode(QHostAddress::ConvertV4MappedToIPv4
+                                                                | QHostAddress::ConvertUnspecifiedAddress)));
     return d->a;
 }
 
@@ -693,8 +774,7 @@ quint32 QHostAddress::toIPv4Address(bool *ok) const
 */
 QAbstractSocket::NetworkLayerProtocol QHostAddress::protocol() const
 {
-    QT_ENSURE_PARSED(this);
-    return d->protocol;
+    return QAbstractSocket::NetworkLayerProtocol(d->protocol);
 }
 
 /*!
@@ -713,7 +793,6 @@ QAbstractSocket::NetworkLayerProtocol QHostAddress::protocol() const
 */
 Q_IPV6ADDR QHostAddress::toIPv6Address() const
 {
-    QT_ENSURE_PARSED(this);
     return d->a6;
 }
 
@@ -729,25 +808,17 @@ Q_IPV6ADDR QHostAddress::toIPv6Address() const
 */
 QString QHostAddress::toString() const
 {
-    QT_ENSURE_PARSED(this);
+    QString s;
     if (d->protocol == QAbstractSocket::IPv4Protocol
         || d->protocol == QAbstractSocket::AnyIPProtocol) {
         quint32 i = toIPv4Address();
-        QString s;
         QIPAddressUtils::toString(s, i);
-        return s;
-    }
-
-    if (d->protocol == QAbstractSocket::IPv6Protocol) {
-        QString s;
+    } else if (d->protocol == QAbstractSocket::IPv6Protocol) {
         QIPAddressUtils::toString(s, d->a6.c);
-
         if (!d->scopeId.isEmpty())
             s.append(QLatin1Char('%') + d->scopeId);
-        return s;
     }
-
-    return QString();
+    return s;
 }
 
 /*!
@@ -788,7 +859,6 @@ QString QHostAddress::toString() const
 */
 QString QHostAddress::scopeId() const
 {
-    QT_ENSURE_PARSED(this);
     return (d->protocol == QAbstractSocket::IPv6Protocol) ? d->scopeId : QString();
 }
 
@@ -806,26 +876,80 @@ QString QHostAddress::scopeId() const
 */
 void QHostAddress::setScopeId(const QString &id)
 {
-    QT_ENSURE_PARSED(this);
+    d.detach();
     if (d->protocol == QAbstractSocket::IPv6Protocol)
         d->scopeId = id;
 }
 
 /*!
     Returns \c true if this host address is the same as the \a other address
-    given; otherwise returns \c false.
+    given; otherwise returns \c false. This operator just calls isEqual(other, StrictConversion).
+
+    \sa isEqual()
 */
 bool QHostAddress::operator==(const QHostAddress &other) const
 {
-    QT_ENSURE_PARSED(this);
-    QT_ENSURE_PARSED(&other);
+    return d == other.d || isEqual(other, StrictConversion);
+}
 
-    if (d->protocol == QAbstractSocket::IPv4Protocol)
-        return other.d->protocol == QAbstractSocket::IPv4Protocol && d->a == other.d->a;
-    if (d->protocol == QAbstractSocket::IPv6Protocol) {
-        return other.d->protocol == QAbstractSocket::IPv6Protocol
-               && memcmp(&d->a6, &other.d->a6, sizeof(Q_IPV6ADDR)) == 0;
+/*!
+    \since 5.8
+
+    Returns \c true if this host address is the same as the \a other address
+    given; otherwise returns \c false.
+
+    The parameter \a mode controls which conversions are preformed between addresses
+    of differing protocols. If no \a mode is given, \c TolerantConversion is performed
+    by default.
+
+    \sa ConversionMode, operator==()
+ */
+bool QHostAddress::isEqual(const QHostAddress &other, ConversionMode mode) const
+{
+    if (d == other.d)
+        return true;
+
+    if (d->protocol == QAbstractSocket::IPv4Protocol) {
+        switch (other.d->protocol) {
+        case QAbstractSocket::IPv4Protocol:
+            return d->a == other.d->a;
+        case QAbstractSocket::IPv6Protocol:
+            quint32 a4;
+            return convertToIpv4(a4, other.d->a6, mode) && (a4 == d->a);
+        case QAbstractSocket::AnyIPProtocol:
+            return (mode & QHostAddress::ConvertUnspecifiedAddress) && d->a == 0;
+        case QAbstractSocket::UnknownNetworkLayerProtocol:
+            return false;
+        }
     }
+
+    if (d->protocol == QAbstractSocket::IPv6Protocol) {
+        switch (other.d->protocol) {
+        case QAbstractSocket::IPv4Protocol:
+            quint32 a4;
+            return convertToIpv4(a4, d->a6, mode) && (a4 == other.d->a);
+        case QAbstractSocket::IPv6Protocol:
+            return memcmp(&d->a6, &other.d->a6, sizeof(Q_IPV6ADDR)) == 0;
+        case QAbstractSocket::AnyIPProtocol:
+            return (mode & QHostAddress::ConvertUnspecifiedAddress)
+                    && (other.d->a6_64.c[0] == 0) && (other.d->a6_64.c[1] == 0);
+        case QAbstractSocket::UnknownNetworkLayerProtocol:
+            return false;
+        }
+    }
+
+    if ((d->protocol == QAbstractSocket::AnyIPProtocol)
+            && (mode & QHostAddress::ConvertUnspecifiedAddress)) {
+        switch (other.d->protocol) {
+        case QAbstractSocket::IPv4Protocol:
+            return other.d->a == 0;
+        case QAbstractSocket::IPv6Protocol:
+            return (other.d->a6_64.c[0] == 0) && (other.d->a6_64.c[1] == 0);
+        default:
+            break;
+        }
+    }
+
     return d->protocol == other.d->protocol;
 }
 
@@ -835,7 +959,6 @@ bool QHostAddress::operator==(const QHostAddress &other) const
 */
 bool QHostAddress::operator ==(SpecialAddress other) const
 {
-    QT_ENSURE_PARSED(this);
     quint32 ip4 = INADDR_ANY;
     switch (other) {
     case Null:
@@ -869,13 +992,14 @@ bool QHostAddress::operator ==(SpecialAddress other) const
 }
 
 /*!
-    Returns \c true if this host address is null (INADDR_ANY or in6addr_any).
-    The default constructor creates a null address, and that address is
-    not valid for any host or interface.
+    Returns \c true if this host address is not valid for any host or interface.
+
+    The default constructor creates a null address.
+
+    \sa QHostAddress::Null
 */
 bool QHostAddress::isNull() const
 {
-    QT_ENSURE_PARSED(this);
     return d->protocol == QAbstractSocket::UnknownNetworkLayerProtocol;
 }
 
@@ -900,7 +1024,6 @@ bool QHostAddress::isNull() const
 */
 bool QHostAddress::isInSubnet(const QHostAddress &subnet, int netmask) const
 {
-    QT_ENSURE_PARSED(this);
     if (subnet.protocol() != d->protocol || netmask < 0)
         return false;
 
@@ -999,7 +1122,7 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
         return invalid;
 
     int slash = subnet.indexOf(QLatin1Char('/'));
-    QString netStr = subnet;
+    QStringRef netStr(&subnet);
     if (slash != -1)
         netStr.truncate(slash);
 
@@ -1016,7 +1139,7 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
             netmask = parser.prefixLength();
         } else {
             bool ok;
-            netmask = subnet.mid(slash + 1).toUInt(&ok);
+            netmask = subnet.midRef(slash + 1).toUInt(&ok);
             if (!ok)
                 return invalid;     // failed to parse the subnet
         }
@@ -1030,7 +1153,7 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
             netmask = 128;
 
         QHostAddress net;
-        if (!net.setAddress(netStr))
+        if (!net.setAddress(netStr.toString()))
             return invalid;     // failed to parse the IP
 
         clearBits(net.d->a6.c, netmask, 128);
@@ -1041,11 +1164,11 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
         return invalid;         // invalid netmask
 
     // parse the address manually
-    QStringList parts = netStr.split(QLatin1Char('.'));
+    auto parts = netStr.split(QLatin1Char('.'));
     if (parts.isEmpty() || parts.count() > 4)
         return invalid;         // invalid IPv4 address
 
-    if (parts.last().isEmpty())
+    if (parts.constLast().isEmpty())
         parts.removeLast();
 
     quint32 addr = 0;
@@ -1083,7 +1206,6 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
 */
 bool QHostAddress::isLoopback() const
 {
-    QT_ENSURE_PARSED(this);
     if ((d->a & 0xFF000000) == 0x7F000000)
         return true; // v4 range (including IPv6 wrapped IPv4 addresses)
     if (d->protocol == QAbstractSocket::IPv6Protocol) {
@@ -1109,7 +1231,6 @@ bool QHostAddress::isLoopback() const
 */
 bool QHostAddress::isMulticast() const
 {
-    QT_ENSURE_PARSED(this);
     if ((d->a & 0xF0000000) == 0xE0000000)
         return true; // 224.0.0.0-239.255.255.255 (including v4-mapped IPv6 addresses)
     if (d->protocol == QAbstractSocket::IPv6Protocol)
@@ -1130,12 +1251,36 @@ QDebug operator<<(QDebug d, const QHostAddress &address)
 }
 #endif
 
-uint qHash(const QHostAddress &key, uint seed)
+/*!
+    \since 5.0
+    \relates QHostAddress
+    Returns a hash of the host address \a key, using \a seed to seed the calculation.
+*/
+uint qHash(const QHostAddress &key, uint seed) Q_DECL_NOTHROW
 {
-    // both lines might throw
-    QT_ENSURE_PARSED(&key);
     return qHashBits(key.d->a6.c, 16, seed);
 }
+
+/*!
+    \relates QHostAddress
+    \fn operator==(QHostAddress::SpecialAddress lhs, const QHostAddress &rhs)
+
+    Returns \c true if special address \a lhs is the same as host address \a rhs;
+    otherwise returns \c false.
+
+    \sa isEqual()
+*/
+
+/*!
+    \relates QHostAddress
+    \since 5.9
+    \fn operator!=(QHostAddress::SpecialAddress lhs, const QHostAddress &rhs)
+
+    Returns \c false if special address \a lhs is the same as host address \a rhs;
+    otherwise returns \c true.
+
+    \sa isEqual()
+*/
 
 #ifndef QT_NO_DATASTREAM
 

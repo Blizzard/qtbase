@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -62,10 +68,11 @@ static inline qreal initialGlobalScaleFactor()
         }
     } else {
         if (qEnvironmentVariableIsSet(legacyDevicePixelEnvVar)) {
-            qWarning() << "Warning:" << legacyDevicePixelEnvVar << "is deprecated. Instead use:" << endl
-                       << "   " << autoScreenEnvVar << "to enable platform plugin controlled per-screen factors." << endl
-                       << "   " << screenFactorsEnvVar << "to set per-screen factors." << endl
-                       << "   " << scaleFactorEnvVar << "to set the application global scale factor.";
+            qWarning("Warning: %s is deprecated. Instead use:\n"
+                     "   %s to enable platform plugin controlled per-screen factors.\n"
+                     "   %s to set per-screen factors.\n"
+                     "   %s to set the application global scale factor.",
+                     legacyDevicePixelEnvVar, autoScreenEnvVar, screenFactorsEnvVar, scaleFactorEnvVar);
 
             int dpr = qEnvironmentVariableIntValue(legacyDevicePixelEnvVar);
             if (dpr > 0)
@@ -163,11 +170,11 @@ static inline qreal initialGlobalScaleFactor()
         The QT_SCALE_FACTOR environment variable can be used to set
         a global scale factor for all windows in the processs. This
         is useful for testing and debugging (you can simulate any
-        devicePixelRatio without needing access to sepcial hardware),
+        devicePixelRatio without needing access to special hardware),
         and perhaps also for targeting a specific application to
         a specific display type (embedded use cases).
 
-    2) A per-screen scale factors
+    2) Per-screen scale factors
         Some platform plugins support providing a per-screen scale
         factor based on display density information. These platforms
         include X11, Windows, and Android.
@@ -180,13 +187,13 @@ static inline qreal initialGlobalScaleFactor()
         Enabling either will make QHighDpiScaling call QPlatformScreen::pixelDensity()
         and use the value provided as the scale factor for the screen in
         question. Disabling is done on a 'veto' basis where either the
-        environment or the application source can disable. The intended use
+        environment or the application can disable the scaling. The intended use
         cases are 'My system is not providing correct display density
         information' and 'My application needs to work in display pixels',
         respectively.
 
         The QT_SCREEN_SCALE_FACTORS environment variable can be used to set the screen
-        scale factors manually.Set this to a semicolon-separated
+        scale factors manually. Set this to a semicolon-separated
         list of scale factors (matching the order of QGuiApplications::screens()),
         or to a list of name=value pairs (where name matches QScreen::name()).
 
@@ -261,7 +268,8 @@ void QHighDpiScaling::updateHighDpiScaling()
         return;
 
     if (m_usePixelDensity && !m_pixelDensityScalingActive) {
-        Q_FOREACH (QScreen *screen, QGuiApplication::screens()) {
+        const auto screens = QGuiApplication::screens();
+        for (QScreen *screen : screens) {
             if (!qFuzzyCompare(screenSubfactor(screen->handle()), qreal(1))) {
                 m_pixelDensityScalingActive = true;
                 break;
@@ -270,7 +278,8 @@ void QHighDpiScaling::updateHighDpiScaling()
     }
     if (qEnvironmentVariableIsSet(screenFactorsEnvVar)) {
         int i = 0;
-        Q_FOREACH (const QByteArray &spec, qgetenv(screenFactorsEnvVar).split(';')) {
+        const auto specs = qgetenv(screenFactorsEnvVar).split(';');
+        for (const QByteArray &spec : specs) {
             QScreen *screen = 0;
             int equalsPos = spec.lastIndexOf('=');
             double factor = 0;
@@ -281,7 +290,8 @@ void QHighDpiScaling::updateHighDpiScaling()
                 bool ok;
                 factor = f.toDouble(&ok);
                 if (ok) {
-                    Q_FOREACH (QScreen *s, QGuiApplication::screens()) {
+                    const auto screens = QGuiApplication::screens();
+                    for (QScreen *s : screens) {
                         if (s->name() == QString::fromLocal8Bit(name)) {
                             screen = s;
                             break;
@@ -321,7 +331,8 @@ void QHighDpiScaling::setGlobalFactor(qreal factor)
     m_globalScalingActive = !qFuzzyCompare(factor, qreal(1));
     m_factor = m_globalScalingActive ? factor : qreal(1);
     m_active = m_globalScalingActive || m_screenFactorSet || m_pixelDensityScalingActive;
-    Q_FOREACH (QScreen *screen, QGuiApplication::screens())
+    const auto screens = QGuiApplication::screens();
+    for (QScreen *screen : screens)
          screen->d_func()->updateHighDpi();
 }
 
@@ -332,8 +343,10 @@ static const char scaleFactorProperty[] = "_q_scaleFactor";
 */
 void QHighDpiScaling::setScreenFactor(QScreen *screen, qreal factor)
 {
-    m_screenFactorSet = true;
-    m_active = true;
+    if (!qFuzzyCompare(factor, qreal(1))) {
+        m_screenFactorSet = true;
+        m_active = true;
+    }
     screen->setProperty(scaleFactorProperty, QVariant(factor));
 
     // hack to force re-evaluation of screen geometry

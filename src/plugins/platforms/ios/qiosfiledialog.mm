@@ -1,82 +1,54 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-#include "qiosfiledialog.h"
-
 #import <UIKit/UIKit.h>
 
 #include <QtCore/qstandardpaths.h>
 #include <QtGui/qwindow.h>
+#include <QDebug>
 
-@interface QIOSImagePickerController : UIImagePickerController <UIImagePickerControllerDelegate, UINavigationControllerDelegate> {
-    QIOSFileDialog *m_fileDialog;
-}
-@end
-
-@implementation QIOSImagePickerController
-
-- (id)initWithQIOSFileDialog:(QIOSFileDialog *)fileDialog
-{
-    self = [super init];
-    if (self) {
-        m_fileDialog = fileDialog;
-        [self setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
-        [self setDelegate:self];
-    }
-    return self;
-}
-
-- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info
-{
-    Q_UNUSED(picker);
-    NSURL *url = [info objectForKey:UIImagePickerControllerReferenceURL];
-    QUrl fileUrl = QUrl::fromLocalFile(QString::fromNSString([url description]));
-    m_fileDialog->selectedFilesChanged(QList<QUrl>() << fileUrl);
-    emit m_fileDialog->accept();
-}
-
-- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker
-{
-    Q_UNUSED(picker)
-    emit m_fileDialog->reject();
-}
-
-@end
-
-// --------------------------------------------------------------------------
+#include "qiosfiledialog.h"
+#include "qiosintegration.h"
+#include "qiosoptionalplugininterface.h"
 
 QIOSFileDialog::QIOSFileDialog()
-    : m_viewController(0)
+    : m_viewController(Q_NULLPTR)
 {
 }
 
@@ -98,15 +70,34 @@ bool QIOSFileDialog::show(Qt::WindowFlags windowFlags, Qt::WindowModality window
     bool acceptOpen = options()->acceptMode() == QFileDialogOptions::AcceptOpen;
     QString directory = options()->initialDirectory().toLocalFile();
 
-    if (acceptOpen && directory.startsWith(QLatin1String("assets-library:"))) {
-        m_viewController = [[QIOSImagePickerController alloc] initWithQIOSFileDialog:this];
-        UIWindow *window = parent ? reinterpret_cast<UIView *>(parent->winId()).window
-            : [UIApplication sharedApplication].keyWindow;
-        [window.rootViewController presentViewController:m_viewController animated:YES completion:nil];
-        return true;
-    }
+    if (acceptOpen && directory.startsWith(QLatin1String("assets-library:")))
+        return showImagePickerDialog(parent);
 
     return false;
+}
+
+bool QIOSFileDialog::showImagePickerDialog(QWindow *parent)
+{
+    if (!m_viewController) {
+        QFactoryLoader *plugins = QIOSIntegration::instance()->optionalPlugins();
+        for (int i = 0; i < plugins->metaData().size(); ++i) {
+            QIosOptionalPluginInterface *plugin = qobject_cast<QIosOptionalPluginInterface *>(plugins->instance(i));
+            m_viewController = [plugin->createImagePickerController(this) retain];
+            if (m_viewController)
+                break;
+        }
+    }
+
+    if (!m_viewController) {
+        qWarning() << "QIOSFileDialog: Could not resolve Qt plugin that gives access to photos on iOS";
+        return false;
+    }
+
+    UIWindow *window = parent ? reinterpret_cast<UIView *>(parent->winId()).window
+        : [UIApplication sharedApplication].keyWindow;
+    [window.rootViewController presentViewController:m_viewController animated:YES completion:nil];
+
+    return true;
 }
 
 void QIOSFileDialog::hide()
@@ -120,6 +111,8 @@ void QIOSFileDialog::hide()
     emit directoryEntered(QUrl::fromLocalFile(QDir::currentPath()));
 
     [m_viewController dismissViewControllerAnimated:YES completion:nil];
+    [m_viewController release];
+    m_viewController = Q_NULLPTR;
     m_eventLoop.exit();
 }
 

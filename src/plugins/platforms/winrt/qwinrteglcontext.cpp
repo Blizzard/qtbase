@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -48,8 +51,8 @@
 
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
-#include <QtPlatformSupport/private/qeglconvenience_p.h>
-#include <QtPlatformSupport/private/qeglpbuffer_p.h>
+#include <QtEglSupport/private/qeglconvenience_p.h>
+#include <QtEglSupport/private/qeglpbuffer_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -113,7 +116,7 @@ void QWinRTEGLContext::initialize()
         EGL_NONE,
     };
     g->eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, EGL_DEFAULT_DISPLAY, displayAttributes);
-    if (g->eglDisplay == EGL_NO_DISPLAY)
+    if (Q_UNLIKELY(g->eglDisplay == EGL_NO_DISPLAY))
         qCritical("Failed to initialize EGL display: 0x%x", eglGetError());
 
     // eglInitialize checks for EGL_PLATFORM_ANGLE_ENABLE_AUTOMATIC_TRIM_ANGLE
@@ -135,6 +138,7 @@ void QWinRTEGLContext::initialize()
         EGL_CONTEXT_CLIENT_VERSION, d->format.majorVersion(),
         EGL_CONTEXT_MINOR_VERSION_KHR, d->format.minorVersion(),
         EGL_CONTEXT_FLAGS_KHR, flags,
+        EGL_CONTEXT_OPENGL_NO_ERROR_KHR, true,
         EGL_NONE
     };
     d->eglContext = eglCreateContext(g->eglDisplay, d->eglConfig, d->eglShareContext, attributes);
@@ -195,7 +199,7 @@ QSurfaceFormat QWinRTEGLContext::format() const
     return d->format;
 }
 
-QFunctionPointer QWinRTEGLContext::getProcAddress(const QByteArray &procName)
+QFunctionPointer QWinRTEGLContext::getProcAddress(const char *procName)
 {
     static QHash<QByteArray, QFunctionPointer> standardFuncs;
     if (standardFuncs.isEmpty()) {
@@ -347,7 +351,7 @@ QFunctionPointer QWinRTEGLContext::getProcAddress(const QByteArray &procName)
     if (i != standardFuncs.end())
         return i.value();
 
-    return eglGetProcAddress(procName.constData());
+    return eglGetProcAddress(procName);
 }
 
 EGLDisplay QWinRTEGLContext::display()

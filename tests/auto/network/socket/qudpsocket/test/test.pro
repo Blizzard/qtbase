@@ -15,10 +15,4 @@ win32 {
     DESTDIR = ../
 }
 
-wince* {
-    addApp.files = ../clientserver/clientserver.exe
-    addApp.path = clientserver
-    DEPLOYMENT += addApp
-}
-
 TARGET = tst_qudpsocket

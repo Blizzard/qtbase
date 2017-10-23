@@ -1,31 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -66,6 +72,8 @@ public:
 
     \ingroup basicwidgets
     \inmodule QtWidgets
+
+    \image windows-checkbox.png
 
     A QCheckBox is an option button that can be switched on (checked) or off
     (unchecked). Checkboxes are typically used to represent features in an
@@ -110,18 +118,6 @@ public:
     isOn(), checkState(), autoRepeat(), isExclusiveToggle(), group(),
     setAutoRepeat(), toggle(), pressed(), released(), clicked(), toggled(),
     checkState(), and stateChanged().
-
-    \table 100%
-    \row
-        \li \inlineimage macintosh-checkbox.png Screenshot of a Macintosh style checkbox
-        \li A checkbox shown in the \l{Macintosh Style Widget Gallery}{Macintosh widget style}.
-    \row
-        \li \inlineimage windowsvista-checkbox.png Screenshot of a Windows Vista style checkbox
-        \li A checkbox shown in the \l{Windows Vista Style Widget Gallery}{Windows Vista widget style}.
-    \row
-        \li \inlineimage fusion-checkbox.png Screenshot of a Fusion style checkbox
-        \li A checkbox shown in the \l{Fusion Style Widget Gallery}{Fusion widget style}.
-    \endtable
 
     \sa QAbstractButton, QRadioButton, {fowler}{GUI Design Handbook: Check Box}
 */
@@ -171,10 +167,7 @@ void QCheckBox::initStyleOption(QStyleOptionButton *option) const
     else
         option->state |= d->checked ? QStyle::State_On : QStyle::State_Off;
     if (testAttribute(Qt::WA_Hover) && underMouse()) {
-        if (d->hovering)
-            option->state |= QStyle::State_MouseOver;
-        else
-            option->state &= ~QStyle::State_MouseOver;
+        option->state.setFlag(QStyle::State_MouseOver, d->hovering);
     }
     option->text = d->text;
     option->icon = d->icon;
@@ -201,10 +194,8 @@ QCheckBox::QCheckBox(QWidget *parent)
 */
 
 QCheckBox::QCheckBox(const QString &text, QWidget *parent)
-    : QAbstractButton (*new QCheckBoxPrivate, parent)
+    : QCheckBox(parent)
 {
-    Q_D(QCheckBox);
-    d->init();
     setText(text);
 }
 

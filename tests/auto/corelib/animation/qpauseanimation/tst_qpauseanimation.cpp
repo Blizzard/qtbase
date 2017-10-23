@@ -1,31 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -45,6 +40,16 @@
 
 #ifdef BAD_TIMER_RESOLUTION
 static const char timerError[] = "On this platform, consistent timing is not working properly due to bad timer resolution";
+
+#  define WAIT_FOR_STOPPED(animation, duration) \
+       QTest::qWait(duration); \
+       if (animation.state() != QAbstractAnimation::Stopped) \
+           QEXPECT_FAIL("", timerError, Abort); \
+       QCOMPARE(animation.state(), QAbstractAnimation::Stopped)
+#else
+// Use QTRY_COMPARE with one additional timer tick
+#  define WAIT_FOR_STOPPED(animation, duration) \
+       QTRY_COMPARE_WITH_TIMEOUT(animation.state(), QAbstractAnimation::Stopped, (duration))
 #endif
 
 class TestablePauseAnimation : public QPauseAnimation
@@ -113,11 +118,10 @@ void tst_QPauseAnimation::changeDirectionWhileRunning()
     TestablePauseAnimation animation;
     animation.setDuration(400);
     animation.start();
-    QTest::qWait(100);
-    QVERIFY(animation.state() == QAbstractAnimation::Running);
+    QTRY_COMPARE(animation.state(), QAbstractAnimation::Running);
     animation.setDirection(QAbstractAnimation::Backward);
-    QTest::qWait(animation.totalDuration() + 50);
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
+    const int expectedDuration = animation.totalDuration() + 100;
+    WAIT_FOR_STOPPED(animation, expectedDuration);
 }
 
 void tst_QPauseAnimation::noTimerUpdates_data()
@@ -142,14 +146,9 @@ void tst_QPauseAnimation::noTimerUpdates()
     animation.setDuration(duration);
     animation.setLoopCount(loopCount);
     animation.start();
-    QTest::qWait(animation.totalDuration() + 100);
+    const int expectedDuration = animation.totalDuration() + 150;
+    WAIT_FOR_STOPPED(animation, expectedDuration);
 
-#ifdef BAD_TIMER_RESOLUTION
-    if (animation.state() != QAbstractAnimation::Stopped)
-        QEXPECT_FAIL("", timerError, Abort);
-#endif
-
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
     const int expectedLoopCount = 1 + loopCount;
 
 #ifdef BAD_TIMER_RESOLUTION
@@ -171,19 +170,15 @@ void tst_QPauseAnimation::multiplePauseAnimations()
 
     animation.start();
     animation2.start();
-    QTest::qWait(animation.totalDuration() + 100);
 
-#ifdef BAD_TIMER_RESOLUTION
-    if (animation.state() != QAbstractAnimation::Stopped)
-        QEXPECT_FAIL("", timerError, Abort);
-#endif
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
+    const int expectedDuration = animation.totalDuration() + 150;
+    WAIT_FOR_STOPPED(animation, expectedDuration);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (animation2.state() != QAbstractAnimation::Running)
         QEXPECT_FAIL("", timerError, Abort);
 #endif
-    QVERIFY(animation2.state() == QAbstractAnimation::Running);
+    QCOMPARE(animation2.state(), QAbstractAnimation::Running);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (animation.m_updateCurrentTimeCount != 2)
@@ -197,13 +192,7 @@ void tst_QPauseAnimation::multiplePauseAnimations()
 #endif
     QCOMPARE(animation2.m_updateCurrentTimeCount, 2);
 
-    QTest::qWait(550);
-
-#ifdef BAD_TIMER_RESOLUTION
-    if (animation2.state() != QAbstractAnimation::Stopped)
-        QEXPECT_FAIL("", timerError, Abort);
-#endif
-    QVERIFY(animation2.state() == QAbstractAnimation::Stopped);
+    WAIT_FOR_STOPPED(animation2, 600);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (animation2.m_updateCurrentTimeCount != 3)
@@ -230,18 +219,14 @@ void tst_QPauseAnimation::pauseAndPropertyAnimations()
     QTest::qWait(100);
     animation.start();
 
-    QVERIFY(animation.state() == QAbstractAnimation::Running);
-    QVERIFY(pause.state() == QAbstractAnimation::Running);
+    QCOMPARE(animation.state(), QAbstractAnimation::Running);
+    QCOMPARE(pause.state(), QAbstractAnimation::Running);
     QCOMPARE(pause.m_updateCurrentTimeCount, 2);
 
-    QTest::qWait(animation.totalDuration() + 100);
+    const int expectedDuration = animation.totalDuration() + 150;
+    WAIT_FOR_STOPPED(animation, expectedDuration);
 
-#ifdef BAD_TIMER_RESOLUTION
-    if (animation.state() != QAbstractAnimation::Stopped)
-        QEXPECT_FAIL("", timerError, Abort);
-#endif
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
-    QVERIFY(pause.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(pause.state(), QAbstractAnimation::Stopped);
     QVERIFY(pause.m_updateCurrentTimeCount > 3);
 }
 
@@ -250,10 +235,10 @@ void tst_QPauseAnimation::pauseResume()
     TestablePauseAnimation animation;
     animation.setDuration(400);
     animation.start();
-    QVERIFY(animation.state() == QAbstractAnimation::Running);
+    QCOMPARE(animation.state(), QAbstractAnimation::Running);
     QTest::qWait(200);
     animation.pause();
-    QVERIFY(animation.state() == QAbstractAnimation::Paused);
+    QCOMPARE(animation.state(), QAbstractAnimation::Paused);
     animation.start();
     QTRY_COMPARE(animation.state(), QAbstractAnimation::Stopped);
 
@@ -281,39 +266,39 @@ void tst_QPauseAnimation::sequentialPauseGroup()
     QCOMPARE(animation2.m_updateCurrentTimeCount, 0);
     QCOMPARE(animation3.m_updateCurrentTimeCount, 0);
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(animation1.state() == QAbstractAnimation::Running);
-    QVERIFY(animation2.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation3.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation1.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation2.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation3.state(), QAbstractAnimation::Stopped);
 
     group.setCurrentTime(250);
     QCOMPARE(animation1.m_updateCurrentTimeCount, 2);
     QCOMPARE(animation2.m_updateCurrentTimeCount, 1);
     QCOMPARE(animation3.m_updateCurrentTimeCount, 0);
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(animation1.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation1.state(), QAbstractAnimation::Stopped);
     QCOMPARE((QAbstractAnimation*)&animation2, group.currentAnimation());
-    QVERIFY(animation2.state() == QAbstractAnimation::Running);
-    QVERIFY(animation3.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(animation2.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation3.state(), QAbstractAnimation::Stopped);
 
     group.setCurrentTime(500);
     QCOMPARE(animation1.m_updateCurrentTimeCount, 2);
     QCOMPARE(animation2.m_updateCurrentTimeCount, 2);
     QCOMPARE(animation3.m_updateCurrentTimeCount, 1);
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(animation1.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation2.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation1.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation2.state(), QAbstractAnimation::Stopped);
     QCOMPARE((QAbstractAnimation*)&animation3, group.currentAnimation());
-    QVERIFY(animation3.state() == QAbstractAnimation::Running);
+    QCOMPARE(animation3.state(), QAbstractAnimation::Running);
 
     group.setCurrentTime(750);
 
-    QVERIFY(group.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation1.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation2.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation3.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation1.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation2.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation3.state(), QAbstractAnimation::Stopped);
 
     QCOMPARE(animation1.m_updateCurrentTimeCount, 2);
     QCOMPARE(animation2.m_updateCurrentTimeCount, 2);
@@ -334,22 +319,22 @@ void tst_QPauseAnimation::sequentialGroupWithPause()
 
     group.start();
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(animation.state() == QAbstractAnimation::Running);
-    QVERIFY(pause.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation.state(), QAbstractAnimation::Running);
+    QCOMPARE(pause.state(), QAbstractAnimation::Stopped);
 
     group.setCurrentTime(300);
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(animation.state(), QAbstractAnimation::Stopped);
     QCOMPARE((QAbstractAnimation*)&pause, group.currentAnimation());
-    QVERIFY(pause.state() == QAbstractAnimation::Running);
+    QCOMPARE(pause.state(), QAbstractAnimation::Running);
 
     group.setCurrentTime(600);
 
-    QVERIFY(group.state() == QAbstractAnimation::Stopped);
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
-    QVERIFY(pause.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(group.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(animation.state(), QAbstractAnimation::Stopped);
+    QCOMPARE(pause.state(), QAbstractAnimation::Stopped);
 
     QCOMPARE(pause.m_updateCurrentTimeCount, 2);
 }
@@ -401,46 +386,41 @@ void tst_QPauseAnimation::multipleSequentialGroups()
 
     group.start();
 
-    QVERIFY(group.state() == QAbstractAnimation::Running);
-    QVERIFY(subgroup1.state() == QAbstractAnimation::Running);
-    QVERIFY(subgroup2.state() == QAbstractAnimation::Running);
-    QVERIFY(subgroup3.state() == QAbstractAnimation::Running);
-    QVERIFY(subgroup4.state() == QAbstractAnimation::Running);
+    QCOMPARE(group.state(), QAbstractAnimation::Running);
+    QCOMPARE(subgroup1.state(), QAbstractAnimation::Running);
+    QCOMPARE(subgroup2.state(), QAbstractAnimation::Running);
+    QCOMPARE(subgroup3.state(), QAbstractAnimation::Running);
+    QCOMPARE(subgroup4.state(), QAbstractAnimation::Running);
 
     // This is a pretty long animation so it tends to get rather out of sync
     // when using the consistent timer, so run for an extra half second for good
     // measure...
-    QTest::qWait(group.totalDuration() + 500);
-
-#ifdef BAD_TIMER_RESOLUTION
-    if (group.state() != QAbstractAnimation::Stopped)
-        QEXPECT_FAIL("", timerError, Abort);
-#endif
-    QVERIFY(group.state() == QAbstractAnimation::Stopped);
+    const int expectedDuration = group.totalDuration() + 550;
+    WAIT_FOR_STOPPED(group, expectedDuration);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (subgroup1.state() != QAbstractAnimation::Stopped)
         QEXPECT_FAIL("", timerError, Abort);
 #endif
-    QVERIFY(subgroup1.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(subgroup1.state(), QAbstractAnimation::Stopped);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (subgroup2.state() != QAbstractAnimation::Stopped)
         QEXPECT_FAIL("", timerError, Abort);
 #endif
-    QVERIFY(subgroup2.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(subgroup2.state(), QAbstractAnimation::Stopped);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (subgroup3.state() != QAbstractAnimation::Stopped)
         QEXPECT_FAIL("", timerError, Abort);
 #endif
-    QVERIFY(subgroup3.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(subgroup3.state(), QAbstractAnimation::Stopped);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (subgroup4.state() != QAbstractAnimation::Stopped)
         QEXPECT_FAIL("", timerError, Abort);
 #endif
-    QVERIFY(subgroup4.state() == QAbstractAnimation::Stopped);
+    QCOMPARE(subgroup4.state(), QAbstractAnimation::Stopped);
 
 #ifdef BAD_TIMER_RESOLUTION
     if (pause5.m_updateCurrentTimeCount != 4)
@@ -454,8 +434,9 @@ void tst_QPauseAnimation::zeroDuration()
     TestablePauseAnimation animation;
     animation.setDuration(0);
     animation.start();
-    QTest::qWait(animation.totalDuration() + 100);
-    QVERIFY(animation.state() == QAbstractAnimation::Stopped);
+    const int expectedDuration = animation.totalDuration() + 150;
+    WAIT_FOR_STOPPED(animation, expectedDuration);
+
     QCOMPARE(animation.m_updateCurrentTimeCount, 1);
 }
 
