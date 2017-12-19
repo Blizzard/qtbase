@@ -1123,7 +1123,7 @@ QWheelEvent::QWheelEvent(const QPointF &pos, const QPointF& globalPos,
     The event is propagated up the parent widget chain until a widget
     accepts it or an event filter consumes it.
 
-    The QWidget::setEnable() function can be used to enable or disable
+    The QWidget::setEnabled() function can be used to enable or disable
     mouse and keyboard events for a widget.
 
     The event handlers QWidget::keyPressEvent(), QWidget::keyReleaseEvent(),
@@ -2330,6 +2330,13 @@ QVariant QInputMethodQueryEvent::value(Qt::InputMethodQuery query) const
     cursor and touchpad. Qt recognizes these by their names. Otherwise, if the
     tablet is configured to use the evdev driver, there will be only one device
     and applications may not be able to distinguish the stylus from the eraser.
+
+    \section1 Notes for Windows Users
+
+    Tablet support currently requires the WACOM windows driver providing the DLL
+    \c{wintab32.dll} to be installed. It is contained in older packages,
+    for example \c{pentablet_5.3.5-3.exe}.
+
 */
 
 /*!

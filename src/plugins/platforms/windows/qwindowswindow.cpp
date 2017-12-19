@@ -66,6 +66,7 @@
 #include <qpa/qwindowsysteminterface.h>
 
 #include <QtCore/QDebug>
+#include <QtCore/QLibraryInfo>
 
 #include <dwmapi.h>
 
@@ -895,8 +896,10 @@ void QWindowsBaseWindow::hide_sys() // Normal hide, do not activate other window
 void QWindowsBaseWindow::raise_sys()
 {
     qCDebug(lcQpaWindows) << __FUNCTION__ << this << window();
-    if (window()->type() == Qt::Popup
-        || (window()->flags() & (Qt::WindowStaysOnTopHint | Qt::WindowStaysOnBottomHint)) == 0) {
+    const Qt::WindowType type = window()->type();
+    if (type == Qt::Popup
+        || type == Qt::SubWindow // Special case for QTBUG-63121: MDI subwindows with WindowStaysOnTopHint
+        || !(window()->flags() & Qt::WindowStaysOnBottomHint)) {
         SetWindowPos(handle(), HWND_TOP, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
     }
 }
@@ -904,7 +907,7 @@ void QWindowsBaseWindow::raise_sys()
 void QWindowsBaseWindow::lower_sys()
 {
     qCDebug(lcQpaWindows) << __FUNCTION__ << this << window();
-    if ((window()->flags() & (Qt::WindowStaysOnTopHint | Qt::WindowStaysOnBottomHint)) == 0)
+    if (!(window()->flags() & Qt::WindowStaysOnTopHint))
         SetWindowPos(handle(), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
 }
 
@@ -1495,7 +1498,7 @@ void QWindowsWindow::setGeometry(const QRect &rectIn)
         // achieve that size (for example, window title minimal constraint),
         // notify and warn.
         setGeometry_sys(rect);
-        if (m_data.geometry != rect) {
+        if (m_data.geometry != rect && (isVisible() || QLibraryInfo::isDebugBuild())) {
             qWarning("%s: Unable to set geometry %dx%d+%d+%d on %s/'%s'."
                      " Resulting geometry:  %dx%d+%d+%d "
                      "(frame: %d, %d, %d, %d, custom margin: %d, %d, %d, %d"
@@ -1551,6 +1554,26 @@ void QWindowsWindow::handleResized(int wParam)
     }
 }
 
+void QWindowsWindow::checkForScreenChanged()
+{
+    if (parent())
+        return;
+
+    QPlatformScreen *currentScreen = screen();
+    const auto &screenManager = QWindowsContext::instance()->screenManager();
+    // QTBUG-62971: When dragging a window by its border, detect by mouse position
+    // to prevent it from oscillating between screens when it resizes
+    const QWindowsScreen *newScreen = testFlag(ResizeMoveActive)
+        ? screenManager.screenAtDp(QWindowsCursor::mousePosition())
+        : screenManager.screenForHwnd(m_data.hwnd);
+    if (newScreen != nullptr && newScreen != currentScreen) {
+        qCDebug(lcQpaWindows).noquote().nospace() << __FUNCTION__
+            << ' ' << window() << " \"" << currentScreen->name()
+            << "\"->\"" << newScreen->name() << '"';
+        QWindowSystemInterface::handleWindowScreenChanged(window(), newScreen->screen());
+    }
+}
+
 void QWindowsWindow::handleGeometryChange()
 {
     const QRect previousGeometry = m_data.geometry;
@@ -1565,17 +1588,9 @@ void QWindowsWindow::handleGeometryChange()
         && !(m_data.geometry.width() > previousGeometry.width() || m_data.geometry.height() > previousGeometry.height())) {
         fireExpose(QRect(QPoint(0, 0), m_data.geometry.size()), true);
     }
-    if (!parent() && previousGeometry.topLeft() != m_data.geometry.topLeft()) {
-        QPlatformScreen *currentScreen = screen();
-        const QWindowsScreen *newScreen =
-            QWindowsContext::instance()->screenManager().screenForHwnd(m_data.hwnd);
-        if (newScreen != nullptr && newScreen != currentScreen) {
-            qCDebug(lcQpaWindows).noquote().nospace() << __FUNCTION__
-                << ' ' << window() << " \"" << currentScreen->name()
-                << "\"->\"" << newScreen->name() << '"';
-            QWindowSystemInterface::handleWindowScreenChanged(window(), newScreen->screen());
-        }
-    }
+
+    checkForScreenChanged();
+
     if (testFlag(SynchronousGeometryChangeEvent))
         QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
 

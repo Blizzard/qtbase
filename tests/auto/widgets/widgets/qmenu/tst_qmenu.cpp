@@ -27,6 +27,7 @@
 ****************************************************************************/
 
 #include <QtTest/QtTest>
+#include <QtTest/private/qtesthelpers_p.h>
 #include <qapplication.h>
 #include <QPushButton>
 #include <QMainWindow>
@@ -48,14 +49,10 @@
 
 #include <qpa/qplatformtheme.h>
 
+using namespace QTestPrivate;
+
 Q_DECLARE_METATYPE(Qt::Key);
 Q_DECLARE_METATYPE(Qt::KeyboardModifiers);
-
-static inline void centerOnScreen(QWidget *w, const QSize &size)
-{
-    const QPoint offset = QPoint(size.width() / 2, size.height() / 2);
-    w->move(QGuiApplication::primaryScreen()->availableGeometry().center() - offset);
-}
 
 struct MenuMetrics {
     int fw;
@@ -70,11 +67,6 @@ struct MenuMetrics {
         tearOffHeight = menu->style()->pixelMetric(QStyle::PM_MenuTearoffHeight, nullptr, menu);
     }
 };
-
-static inline void centerOnScreen(QWidget *w)
-{
-    centerOnScreen(w, w->geometry().size());
-}
 
 class tst_QMenu : public QObject
 {
@@ -133,6 +125,7 @@ private slots:
     void menuSize_Scrolling_data();
     void menuSize_Scrolling();
     void tearOffMenuNotDisplayed();
+    void QTBUG_61039_menu_shortcuts();
 
 protected slots:
     void onActivated(QAction*);
@@ -1607,6 +1600,33 @@ void tst_QMenu::tearOffMenuNotDisplayed()
     menu->hideTearOffMenu();
     QVERIFY(!menu->isTearOffMenuVisible());
     QVERIFY(!torn->isVisible());
+}
+
+void tst_QMenu::QTBUG_61039_menu_shortcuts()
+{
+    QAction *actionKamen = new QAction("Action Kamen");
+    actionKamen->setShortcut(QKeySequence(QLatin1String("K")));
+
+    QAction *actionJoe = new QAction("Action Joe");
+    actionJoe->setShortcut(QKeySequence(QLatin1String("Ctrl+J")));
+
+    QMenu menu;
+    menu.addAction(actionKamen);
+    menu.addAction(actionJoe);
+    QVERIFY(!menu.platformMenu());
+
+    QWidget widget;
+    widget.addAction(menu.menuAction());
+    widget.show();
+    QVERIFY(QTest::qWaitForWindowActive(&widget));
+
+    QSignalSpy actionKamenSpy(actionKamen, &QAction::triggered);
+    QTest::keyClick(&widget, Qt::Key_K);
+    QTRY_COMPARE(actionKamenSpy.count(), 1);
+
+    QSignalSpy actionJoeSpy(actionJoe, &QAction::triggered);
+    QTest::keyClick(&widget, Qt::Key_J, Qt::ControlModifier);
+    QTRY_COMPARE(actionJoeSpy.count(), 1);
 }
 
 QTEST_MAIN(tst_QMenu)

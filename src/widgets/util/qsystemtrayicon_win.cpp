@@ -49,7 +49,9 @@
 
 #include <private/qsystemlibrary_p.h>
 #include <private/qguiapplication_p.h>
+#include <private/qhighdpiscaling_p.h>
 #include <qpa/qplatformnativeinterface.h>
+#include <qpa/qplatformscreen.h>
 #include <QSettings>
 #include <QDebug>
 #include <QHash>
@@ -311,9 +313,8 @@ HICON QSystemTrayIconSys::createIcon()
     const QIcon icon = q->icon();
     if (icon.isNull())
         return oldIcon;
-    const QSize requestedSize = QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA
-        ? QSize(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON))
-        : QSize(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+    // When merging this to 5.10, change at src/plugins/platforms/windows/qwindowssystemtrayicon.cpp:351.
+    const QSize requestedSize = QSize(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
     const QSize size = icon.actualSize(requestedSize);
     const QPixmap pm = icon.pixmap(size);
     if (pm.isNull())
@@ -335,6 +336,13 @@ bool QSystemTrayIconSys::winEvent( MSG *m, long *result )
                 Q_ASSERT(q_uNOTIFYICONID == HIWORD(m->lParam));
                 message = LOWORD(m->lParam);
                 gpos = QPoint(GET_X_LPARAM(m->wParam), GET_Y_LPARAM(m->wParam));
+                // Drop this chunk when merging to 5.10; code has been moved to Windows QPA.
+                if (const QScreen *primaryScreen = QGuiApplication::primaryScreen()) {
+                    if (const QPlatformScreen *screen = primaryScreen->handle()->screenForPosition(gpos)) {
+                        gpos = QHighDpi::fromNative(gpos, QHighDpiScaling::factor(screen),
+                                                    screen->geometry().topLeft());
+                    }
+                }
             } else {
                 Q_ASSERT(q_uNOTIFYICONID == m->wParam);
                 message = m->lParam;
