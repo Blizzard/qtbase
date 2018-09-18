@@ -441,7 +441,7 @@ QWindowsEGLContext::QWindowsEGLContext(QWindowsEGLStaticContext *staticContext,
             }
         }
         m_format.setProfile(QSurfaceFormat::NoProfile);
-        m_format.setOptions(QSurfaceFormat::FormatOptions());
+        m_format.setOptions(m_format.options() & QSurfaceFormat::DebugContext);
         QWindowsEGLStaticContext::libEGL.eglMakeCurrent(prevDisplay, prevSurfaceDraw, prevSurfaceRead, prevContext);
     }
     QWindowsEGLStaticContext::libEGL.eglDestroySurface(m_eglDisplay, pbuffer);
