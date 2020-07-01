@@ -826,9 +826,10 @@ QString QAccessibleLineEdit::text(int startOffset, int endOffset) const
 QString QAccessibleLineEdit::textBeforeOffset(int offset, QAccessible::TextBoundaryType boundaryType,
         int *startOffset, int *endOffset) const
 {
-    if (lineEdit()->echoMode() != QLineEdit::Normal) {
-        *startOffset = *endOffset = -1;
-        return QString();
+    if (lineEdit()->echoMode() != QLineEdit::Normal && lineEdit()->echoMode() != QLineEdit::NoEcho) {
+        *startOffset = 0;
+        *endOffset = offset;
+        return QString(*endOffset - *startOffset, QChar::fromLatin1('*'));
     }
     if (offset == -2)
         offset = cursorPosition();
@@ -838,9 +839,10 @@ QString QAccessibleLineEdit::textBeforeOffset(int offset, QAccessible::TextBound
 QString QAccessibleLineEdit::textAfterOffset(int offset, QAccessible::TextBoundaryType boundaryType,
         int *startOffset, int *endOffset) const
 {
-    if (lineEdit()->echoMode() != QLineEdit::Normal) {
-        *startOffset = *endOffset = -1;
-        return QString();
+    if (lineEdit()->echoMode() != QLineEdit::Normal && lineEdit()->echoMode() != QLineEdit::NoEcho) {
+        *startOffset = offset + 1;
+        *endOffset = lineEdit()->displayText().length();
+        return QString(*endOffset - *startOffset, QChar::fromLatin1('*'));
     }
     if (offset == -2)
         offset = cursorPosition();
@@ -850,9 +852,10 @@ QString QAccessibleLineEdit::textAfterOffset(int offset, QAccessible::TextBounda
 QString QAccessibleLineEdit::textAtOffset(int offset, QAccessible::TextBoundaryType boundaryType,
         int *startOffset, int *endOffset) const
 {
-    if (lineEdit()->echoMode() != QLineEdit::Normal) {
-        *startOffset = *endOffset = -1;
-        return QString();
+    if (lineEdit()->echoMode() != QLineEdit::Normal && lineEdit()->echoMode() != QLineEdit::NoEcho) {
+        *startOffset = offset;
+        *endOffset = offset + 1;
+        return QString(*endOffset - *startOffset, QChar::fromLatin1('*'));
     }
     if (offset == -2)
         offset = cursorPosition();
