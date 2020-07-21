@@ -2300,7 +2300,7 @@ QString QAccessibleTextInterface::textAtOffset(int offset, QAccessible::TextBoun
     Q_ASSERT(boundary.position() >= 0);
     *startOffset = boundary.position();
 
-    while (boundary.toNextBoundary() < txt.length()) {
+    while (boundary.toNextBoundary() < txt.length() && boundary.position() >= 0) {
         if ((boundary.boundaryReasons() & (QTextBoundaryFinder::StartOfItem | QTextBoundaryFinder::EndOfItem)))
             break;
     }
