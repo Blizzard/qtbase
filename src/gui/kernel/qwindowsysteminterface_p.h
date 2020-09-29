@@ -286,7 +286,7 @@ public:
              nativeScanCode(0), nativeVirtualKey(0), nativeModifiers(0), nativeEvent(nativeEvent) {
 #ifdef Q_OS_MACOS
             if (nativeEvent) {
-                qt_mac_retain_event(nativeEvent)
+                qt_mac_retain_event(nativeEvent);
             }
 #endif
         }
@@ -299,7 +299,7 @@ public:
              nativeScanCode(nativeSC), nativeVirtualKey(nativeVK), nativeModifiers(nativeMods), nativeEvent(nativeEvent) {
 #ifdef Q_OS_MACOS
             if (nativeEvent) {
-                qt_mac_retain_event(nativeEvent)
+                qt_mac_retain_event(nativeEvent);
             }
 #endif
         }
