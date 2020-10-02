@@ -770,6 +770,9 @@ void QCocoaWindow::windowWillEnterFullScreen()
     if (!isContentView())
         return;
 
+    // Close any popup before entering full screen mode
+    qt_closePopups();
+
     // The NSWindow needs to be resizable, otherwise we'll end up with
     // the normal window geometry, centered in the middle of the screen
     // on a black background. The styleMask will be reset below.
@@ -800,6 +803,9 @@ void QCocoaWindow::windowWillExitFullScreen()
 {
     if (!isContentView())
         return;
+
+    // Close any popup before exiting full screen mode
+    qt_closePopups();
 
     // The NSWindow needs to be resizable, otherwise we'll end up with
     // a weird zoom animation. The styleMask will be reset below.
