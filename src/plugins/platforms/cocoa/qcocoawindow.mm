@@ -1241,6 +1241,9 @@ void QCocoaWindow::windowDidResignKey()
         if (!windowIsPopupType())
             QWindowSystemInterface::handleWindowActivated<QWindowSystemInterface::SynchronousDelivery>(0);
     }
+
+    // Close active popups
+    qt_closePopups();
 }
 
 void QCocoaWindow::windowDidOrderOnScreen()
