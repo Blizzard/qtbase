@@ -85,7 +85,7 @@ struct QWindowCreationContext
 {
     explicit QWindowCreationContext(const QWindow *w, const QScreen *s,
                                     const QRect &geometryIn, const QRect &geometry,
-                                    const QMargins &customMargins,
+                                    const QMargins &customMargins, bool removeFrame,
                                     DWORD style, DWORD exStyle);
     void applyToMinMaxInfo(MINMAXINFO *mmi) const;
 
@@ -104,6 +104,7 @@ struct QWindowCreationContext
     int frameWidth = CW_USEDEFAULT;
     int frameHeight = CW_USEDEFAULT;
     int menuHeight = 0;
+    bool removeFrame = false;
 };
 
 struct QWindowsWindowData
@@ -115,6 +116,7 @@ struct QWindowsWindowData
     HWND hwnd = nullptr;
     bool embedded = false;
     bool hasFrame = false;
+    bool removeFrame = false;
 
     static QWindowsWindowData create(const QWindow *w,
                                      const QWindowsWindowData &parameters,
@@ -295,6 +297,9 @@ public:
 
     QMargins customMargins() const { return m_data.customMargins; }
     void setCustomMargins(const QMargins &m);
+
+    bool removeFrame() const { return m_data.removeFrame; }
+    void setRemoveFrame(bool removeFrame);
 
     void setStyle(unsigned s) const;
     void setExStyle(unsigned s) const;

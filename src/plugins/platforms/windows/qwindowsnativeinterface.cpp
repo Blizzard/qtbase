@@ -155,12 +155,15 @@ void *QWindowsNativeInterface::nativeResourceForCursor(const QByteArray &resourc
 #endif // !QT_NO_CURSOR
 
 static const char customMarginPropertyC[] = "WindowsCustomMargins";
+static const char removeFramePropertyC[] = "WindowsRemoveFrame";
 
 QVariant QWindowsNativeInterface::windowProperty(QPlatformWindow *window, const QString &name) const
 {
     auto *platformWindow = static_cast<QWindowsWindow *>(window);
     if (name == QLatin1String(customMarginPropertyC))
         return QVariant::fromValue(platformWindow->customMargins());
+    if (name == QLatin1String(removeFramePropertyC))
+        return QVariant::fromValue(platformWindow->removeFrame());
     return QVariant();
 }
 
@@ -175,6 +178,8 @@ void QWindowsNativeInterface::setWindowProperty(QPlatformWindow *window, const Q
     auto *platformWindow = static_cast<QWindowsWindow *>(window);
     if (name == QLatin1String(customMarginPropertyC))
         platformWindow->setCustomMargins(qvariant_cast<QMargins>(value));
+    if (name == QLatin1String(removeFramePropertyC))
+        platformWindow->setRemoveFrame(qvariant_cast<bool>(value));
 }
 
 QVariantMap QWindowsNativeInterface::windowProperties(QPlatformWindow *window) const
@@ -182,6 +187,8 @@ QVariantMap QWindowsNativeInterface::windowProperties(QPlatformWindow *window) c
     QVariantMap result;
     const QString customMarginProperty = QLatin1String(customMarginPropertyC);
     result.insert(customMarginProperty, windowProperty(window, customMarginProperty));
+    const QString removeFrameProperty = QLatin1String(removeFramePropertyC);
+    result.insert(removeFrameProperty, windowProperty(window, removeFrameProperty));
     return result;
 }
 

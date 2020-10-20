@@ -777,12 +777,12 @@ QWindowsWindowData
     // Capture events before CreateWindowEx() returns. The context is cleared in
     // the QWindowsWindow constructor.
     const QWindowCreationContextPtr context(new QWindowCreationContext(w, screen, data.geometry,
-                                                                       rect, data.customMargins,
+                                                                       rect, data.customMargins, data.removeFrame,
                                                                        style, exStyle));
     QWindowsContext::instance()->setWindowCreationContext(context);
 
     const bool hasFrame = (style & (WS_DLGFRAME | WS_THICKFRAME));
-    QMargins invMargins = topLevel && hasFrame && QWindowsGeometryHint::positionIncludesFrame(w)
+    QMargins invMargins = topLevel && hasFrame && !context->removeFrame && QWindowsGeometryHint::positionIncludesFrame(w)
             ? invisibleMargins(QPoint(context->frameX, context->frameY)) : QMargins();
 
     qCDebug(lcQpaWindows).nospace()
@@ -791,7 +791,8 @@ QWindowsWindowData
         << context->frameWidth << 'x' <<  context->frameHeight
         << '+' << context->frameX << '+' << context->frameY
         << " custom margins: " << context->customMargins
-        << " invisible margins: " << invMargins;
+        << " invisible margins: " << invMargins
+        << " remove frame: " << context->removeFrame;
 
 
     QPoint pos = calcPosition(w, context, invMargins);
@@ -838,6 +839,7 @@ QWindowsWindowData
     result.embedded = embedded;
     result.hasFrame = hasFrame;
     result.customMargins = context->customMargins;
+    result.removeFrame = context->removeFrame;
 
     return result;
 }
@@ -1247,7 +1249,7 @@ void QWindowsForeignWindow::setVisible(bool visible)
 
 QWindowCreationContext::QWindowCreationContext(const QWindow *w, const QScreen *s,
                                                const QRect &geometryIn, const QRect &geometry,
-                                               const QMargins &cm,
+                                               const QMargins &cm, bool rf,
                                                DWORD style, DWORD exStyle) :
     window(w),
     screen(s),
@@ -1255,8 +1257,9 @@ QWindowCreationContext::QWindowCreationContext(const QWindow *w, const QScreen *
     requestedGeometry(geometry),
     obtainedPos(geometryIn.topLeft()),
     obtainedSize(geometryIn.size()),
-    margins(QWindowsGeometryHint::frame(w, geometry, style, exStyle)),
-    customMargins(cm)
+    margins(rf ? QMargins() : QWindowsGeometryHint::frame(w, geometry, style, exStyle)),
+    customMargins(cm),
+    removeFrame(rf)
 {
     // Geometry of toplevels does not consider window frames.
     // TODO: No concept of WA_wasMoved yet that would indicate a
@@ -1285,7 +1288,8 @@ QWindowCreationContext::QWindowCreationContext(const QWindow *w, const QScreen *
         << " pos incl. frame=" << QWindowsGeometryHint::positionIncludesFrame(w)
         << " frame=" << frameWidth << 'x' << frameHeight << '+'
         << frameX << '+' << frameY
-        << " margins=" << margins << " custom margins=" << customMargins;
+        << " margins=" << margins << " custom margins=" << customMargins
+        << " removeFrame=" << removeFrame;
 }
 
 void QWindowCreationContext::applyToMinMaxInfo(MINMAXINFO *mmi) const
@@ -2453,16 +2457,19 @@ void QWindowsWindow::calculateFullFrameMargins()
 {
     // Normally obtained from WM_NCCALCSIZE. This calculation only works
     // when no native menu is present.
-    const auto systemMargins = testFlag(DisableNonClientScaling)
-        ? QWindowsGeometryHint::frameOnPrimaryScreen(m_data.hwnd)
-        : frameMargins_sys();
+    QMargins systemMargins;
+    if (!m_data.removeFrame) {
+        systemMargins = testFlag(DisableNonClientScaling)
+            ? QWindowsGeometryHint::frameOnPrimaryScreen(m_data.hwnd)
+            : frameMargins_sys();
+    }
     setFullFrameMargins(systemMargins + m_data.customMargins);
 }
 
 QMargins QWindowsWindow::frameMargins() const
 {
     QMargins result = fullFrameMargins();
-    if (isTopLevel() && m_data.hasFrame)
+    if (isTopLevel() && m_data.hasFrame && !m_data.removeFrame)
         result -= invisibleMargins(geometry().topLeft());
     return result;
 }
@@ -2982,6 +2989,15 @@ void QWindowsWindow::setCustomMargins(const QMargins &newCustomMargins)
         qCDebug(lcQpaWindows) << __FUNCTION__ << oldCustomMargins << "->" << newCustomMargins
             << currentFrameGeometry << "->" << newFrame;
         SetWindowPos(m_data.hwnd, nullptr, newFrame.x(), newFrame.y(), newFrame.width(), newFrame.height(), SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+    }
+}
+
+void QWindowsWindow::setRemoveFrame(bool removeFrame)
+{
+    if (removeFrame != m_data.removeFrame) {
+        m_data.removeFrame = removeFrame;
+        // update full frame margins.
+        updateFullFrameMargins();
     }
 }
 
