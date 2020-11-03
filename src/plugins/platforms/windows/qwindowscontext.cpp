@@ -1069,7 +1069,7 @@ static inline bool resizeOnDpiChanged(const QWindow *w)
         case Qt::Sheet:
         case Qt::Drawer:
         case Qt::Tool:
-            result = !w->flags().testFlag(Qt::MSWindowsFixedSizeDialogHint);
+            result = true;
             break;
         default:
             break;
