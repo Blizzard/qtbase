@@ -107,6 +107,15 @@ QWindowsUiaMainProvider::~QWindowsUiaMainProvider()
 void QWindowsUiaMainProvider::notifyFocusChange(QAccessibleEvent *event)
 {
     if (QAccessibleInterface *accessible = event->accessibleInterface()) {
+        // If this is a table/tree/list, raise event for the current cell/item instead.
+        if (accessible->tableInterface()) {
+            for (QAccessibleInterface *cell : accessible->tableInterface()->selectedCells()) {
+                if (cell && cell->state().focused) {
+                    accessible = cell;
+                    break;
+                }
+            }
+        }
         if (QWindowsUiaMainProvider *provider = providerForAccessible(accessible)) {
             QWindowsUiaWrapper::instance()->raiseAutomationEvent(provider, UIA_AutomationFocusChangedEventId);
         }
