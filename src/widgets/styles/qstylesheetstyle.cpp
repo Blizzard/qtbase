@@ -462,12 +462,21 @@ struct QStyleSheetPaletteData : public QSharedData
     QStyleSheetPaletteData(const QBrush &fg, const QBrush &sfg, const QBrush &sbg,
                            const QBrush &abg)
         : foreground(fg), selectionForeground(sfg), selectionBackground(sbg),
-          alternateBackground(abg) { }
+          alternateBackground(abg), placeholderForeground(fg)
+    {
+        // Placeholder text brush should be the same as the foreground brush but with opacity
+        // reduced by 50%. Eventually we should use a stylesheet for this but Qt does not yet
+        // support specifying placeholder text color in stylesheets (QTBUG-89550, QTBUG-93009).
+        QColor color = placeholderForeground.color();
+        color.setAlphaF(color.alphaF() * 0.5f);
+        placeholderForeground.setColor(color);
+    }
 
     QBrush foreground;
     QBrush selectionForeground;
     QBrush selectionBackground;
     QBrush alternateBackground;
+    QBrush placeholderForeground;
 };
 
 struct QStyleSheetGeometryData : public QSharedData
@@ -1431,6 +1440,8 @@ void QRenderRule::configurePalette(QPalette *p, QPalette::ColorRole fr, QPalette
         p->setBrush(QPalette::HighlightedText, pal->selectionForeground);
     if (pal->alternateBackground.style() != Qt::NoBrush)
         p->setBrush(QPalette::AlternateBase, pal->alternateBackground);
+    if (pal->placeholderForeground.style() != Qt::NoBrush)
+        p->setBrush(QPalette::PlaceholderText, pal->placeholderForeground);
 }
 
 void QRenderRule::configurePalette(QPalette *p, QPalette::ColorGroup cg, const QWidget *w, bool embedded)
@@ -1465,6 +1476,8 @@ void QRenderRule::configurePalette(QPalette *p, QPalette::ColorGroup cg, const Q
         p->setBrush(cg, QPalette::HighlightedText, pal->selectionForeground);
     if (pal->alternateBackground.style() != Qt::NoBrush)
         p->setBrush(cg, QPalette::AlternateBase, pal->alternateBackground);
+    if (pal->placeholderForeground.style() != Qt::NoBrush)
+        p->setBrush(cg, QPalette::PlaceholderText, pal->placeholderForeground);
 }
 
 bool QRenderRule::hasModification() const
