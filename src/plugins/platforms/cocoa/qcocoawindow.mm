@@ -554,6 +554,9 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
     if (m_view.window.styleMask & NSWindowStyleMaskFullScreen)
         styleMask |= NSWindowStyleMaskFullScreen;
 
+    if (useFullSizeContentView())
+        styleMask |= NSWindowStyleMaskFullSizeContentView;
+
     return styleMask;
 }
 
@@ -1686,6 +1689,13 @@ bool QCocoaWindow::alwaysShowToolWindow() const
     return qt_mac_resolveOption(false, window(), "_q_macAlwaysShowToolWindow", "");
 }
 
+bool QCocoaWindow::useFullSizeContentView() const
+{
+    // This property has the _q_platform_ prefix to ensure that Qt will propagate
+    // it from the QWindow used by Phoenix to the QSurface used by the QPA.
+    return qt_mac_resolveOption(false, window(), "_q_platform_macFullSizeContentArea", "");
+}
+
 void QCocoaWindow::removeMonitor()
 {
     if (!monitor)
@@ -1773,7 +1783,7 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
     if (!window)
         return;
 
-    if (!m_drawContentBorderGradient) {
+    if (!m_drawContentBorderGradient && !useFullSizeContentView()) {
         window.styleMask = window.styleMask & ~NSWindowStyleMaskTexturedBackground;
         [window.contentView.superview setNeedsDisplay:YES];
         window.titlebarAppearsTransparent = NO;

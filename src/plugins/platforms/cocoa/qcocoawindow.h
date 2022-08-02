@@ -227,6 +227,7 @@ public: // for QNSView
     bool isContentView() const;
 
     bool alwaysShowToolWindow() const;
+    bool useFullSizeContentView() const;
     void removeMonitor();
 
     enum HandleFlags {
