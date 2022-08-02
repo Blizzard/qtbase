@@ -554,6 +554,7 @@ NSUInteger QCocoaWindow::windowStyleMask(Qt::WindowFlags flags)
     if (m_view.window.styleMask & NSWindowStyleMaskFullScreen)
         styleMask |= NSWindowStyleMaskFullScreen;
 
+    // Don't wipe full size content view mask
     if (useFullSizeContentView())
         styleMask |= NSWindowStyleMaskFullSizeContentView;
 
@@ -1691,9 +1692,7 @@ bool QCocoaWindow::alwaysShowToolWindow() const
 
 bool QCocoaWindow::useFullSizeContentView() const
 {
-    // This property has the _q_platform_ prefix to ensure that Qt will propagate
-    // it from the QWindow used by Phoenix to the QSurface used by the QPA.
-    return qt_mac_resolveOption(false, window(), "_q_platform_macFullSizeContentArea", "");
+    return m_view.window.styleMask & NSWindowStyleMaskFullSizeContentView;
 }
 
 void QCocoaWindow::removeMonitor()
