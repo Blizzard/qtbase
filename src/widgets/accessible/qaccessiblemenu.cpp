@@ -46,6 +46,7 @@
 #include <qmenubar.h>
 #endif
 #include <QtWidgets/QAction>
+#include <QtWidgets/QWidgetAction>
 #include <qstyle.h>
 #include <private/qwidget_p.h>
 
@@ -58,11 +59,19 @@ QT_BEGIN_NAMESPACE
 QString qt_accStripAmp(const QString &text);
 QString qt_accHotKey(const QString &text);
 
+QAccessibleInterface *createActionInterface(QWidget *menu, QAction *action)
+{
+    QWidgetAction *widgetAction = qobject_cast<QWidgetAction*>(action);
+    return widgetAction
+        ? new QAccessibleMenuWidgetItem(menu, widgetAction)
+        : new QAccessibleMenuItem(menu, action);
+}
+
 QAccessibleInterface *getOrCreateMenu(QWidget *menu, QAction *action)
 {
     QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(action);
     if (!iface) {
-        iface = new QAccessibleMenuItem(menu, action);
+        iface = createActionInterface(menu, action);
         QAccessible::registerAccessibleInterface(iface);
     }
     return iface;
@@ -385,6 +394,41 @@ QAction *QAccessibleMenuItem::action() const
 QWidget *QAccessibleMenuItem::owner() const
 {
     return m_owner;
+}
+
+QAccessibleMenuWidgetItem::QAccessibleMenuWidgetItem(QWidget *owner, QWidgetAction *action)
+: QAccessibleMenuItem(owner, action), m_action(action)
+{
+}
+
+QAccessibleMenuWidgetItem::~QAccessibleMenuWidgetItem()
+{
+}
+
+QString QAccessibleMenuWidgetItem::text(QAccessible::Text t) const
+{
+    if (!widget()) {
+        return QAccessibleMenuItem::text(t);
+    }
+
+    QString str;
+    switch (t) {
+    case QAccessible::Name:
+        str = widget()->accessibleName();
+        break;
+    case QAccessible::Description:
+        str = widget()->accessibleDescription();
+        break;
+    default:
+        str = QAccessibleMenuItem::text(t);
+        break;
+    }
+    return str;
+}
+
+QWidget *QAccessibleMenuWidgetItem::widget() const
+{
+    return m_action ? m_action->defaultWidget() : nullptr;
 }
 
 #endif // QT_CONFIG(menu)

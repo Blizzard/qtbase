@@ -63,6 +63,7 @@ QT_BEGIN_NAMESPACE
 class QMenu;
 class QMenuBar;
 class QAction;
+class QWidgetAction;
 
 class QAccessibleMenu : public QAccessibleWidget
 {
@@ -121,7 +122,7 @@ public:
     QAccessible::Role role() const override;
     void setText(QAccessible::Text t, const QString & text) override;
     QAccessible::State state() const override;
-    QString text(QAccessible::Text t) const override;
+    virtual QString text(QAccessible::Text t) const override;
 
     // QAccessibleActionInterface
     QStringList actionNames() const override;
@@ -134,6 +135,21 @@ protected:
 private:
     QAction *m_action;
     QPointer<QWidget> m_owner; // can hold either QMenu or the QMenuBar that contains the action
+};
+
+class QAccessibleMenuWidgetItem : public QAccessibleMenuItem
+{
+public:
+    explicit QAccessibleMenuWidgetItem(QWidget *owner, QWidgetAction *w);
+
+    ~QAccessibleMenuWidgetItem();
+
+    QString text(QAccessible::Text t) const override;
+protected:
+    QWidget *widget() const;
+private:
+    QWidgetAction *m_action;
+
 };
 
 #endif // QT_CONFIG(menu)
