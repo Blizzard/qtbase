@@ -105,7 +105,7 @@ class QAccessibleMenuItem : public QAccessibleInterface, public QAccessibleActio
 public:
     explicit QAccessibleMenuItem(QWidget *owner, QAction *w);
 
-    ~QAccessibleMenuItem();
+    virtual ~QAccessibleMenuItem();
     void *interface_cast(QAccessible::InterfaceType t) override;
 
     int childCount() const override;
@@ -145,10 +145,8 @@ public:
     ~QAccessibleMenuWidgetItem();
 
     QString text(QAccessible::Text t) const override;
-protected:
-    QWidget *widget() const;
 private:
-    QWidgetAction *m_action;
+    QWidget *widget() const;
 
 };
 

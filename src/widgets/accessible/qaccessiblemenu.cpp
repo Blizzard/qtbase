@@ -397,7 +397,7 @@ QWidget *QAccessibleMenuItem::owner() const
 }
 
 QAccessibleMenuWidgetItem::QAccessibleMenuWidgetItem(QWidget *owner, QWidgetAction *action)
-: QAccessibleMenuItem(owner, action), m_action(action)
+: QAccessibleMenuItem(owner, action)
 {
 }
 
@@ -428,7 +428,10 @@ QString QAccessibleMenuWidgetItem::text(QAccessible::Text t) const
 
 QWidget *QAccessibleMenuWidgetItem::widget() const
 {
-    return m_action ? m_action->defaultWidget() : nullptr;
+    if (QWidgetAction* wa = qobject_cast<QWidgetAction*>(action())) {
+        return wa->defaultWidget();
+    }
+    return nullptr;
 }
 
 #endif // QT_CONFIG(menu)
