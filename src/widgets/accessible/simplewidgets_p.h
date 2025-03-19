@@ -64,6 +64,7 @@ class QLineEdit;
 class QToolButton;
 class QGroupBox;
 class QProgressBar;
+class QPushButton;
 
 #if QT_CONFIG(abstractbutton)
 class QAccessibleButton : public QAccessibleWidget
@@ -83,6 +84,27 @@ public:
 
 protected:
     QAbstractButton *button() const;
+};
+#endif
+
+#if QT_CONFIG(pushbutton)
+class QAccessiblePushButton : public QAccessibleButton
+{
+public:
+    QAccessiblePushButton(QWidget *w);
+
+    QString text(QAccessible::Text t) const override;
+    QAccessible::State state() const override;
+    QAccessible::Role role() const override;
+
+    int childCount() const override;
+    QAccessibleInterface *child(int index) const override;
+
+    // QAccessibleActionInterface
+    void doAction(const QString &actionName) override;
+
+protected:
+    QPushButton *pushButton() const;
 };
 #endif
 

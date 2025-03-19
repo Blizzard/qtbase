@@ -138,11 +138,6 @@ QString QAccessibleButton::text(QAccessible::Text t) const
     switch (t) {
     case QAccessible::Accelerator:
     {
-#if QT_CONFIG(shortcut) && QT_CONFIG(pushbutton)
-        QPushButton *pb = qobject_cast<QPushButton*>(object());
-        if (pb && pb->isDefault())
-            str = QKeySequence(Qt::Key_Enter).toString(QKeySequence::NativeText);
-#endif
         if (str.isEmpty())
             str = qt_accHotKey(button()->text());
     }
@@ -178,17 +173,6 @@ QAccessible::State QAccessibleButton::state() const
 #endif
     if (b->isDown())
         state.pressed = true;
-#if QT_CONFIG(pushbutton)
-    QPushButton *pb = qobject_cast<QPushButton*>(b);
-    if (pb) {
-        if (pb->isDefault())
-            state.defaultButton = true;
-#if QT_CONFIG(menu)
-        if (pb->menu())
-            state.hasPopup = true;
-#endif
-    }
-#endif
 
     return state;
 }
@@ -221,13 +205,6 @@ QRect QAccessibleButton::rect() const
 QAccessible::Role QAccessibleButton::role() const
 {
     QAbstractButton *ab = button();
-
-#if QT_CONFIG(menu)
-    if (QPushButton *pb = qobject_cast<QPushButton*>(ab)) {
-        if (pb->menu())
-            return QAccessible::ButtonMenu;
-    }
-#endif
 
     if (ab->isCheckable())
         return ab->autoExclusive() ? QAccessible::RadioButton : QAccessible::CheckBox;
@@ -265,13 +242,7 @@ void QAccessibleButton::doAction(const QString &actionName)
         return;
     if (actionName == pressAction() ||
         actionName == showMenuAction()) {
-#if QT_CONFIG(menu)
-        QPushButton *pb = qobject_cast<QPushButton*>(object());
-        if (pb && pb->menu())
-            pb->showMenu();
-        else
-#endif
-            button()->animateClick();
+        button()->animateClick();
     } else if (actionName == toggleAction()) {
         button()->toggle();
     } else {
@@ -289,6 +260,116 @@ QStringList QAccessibleButton::keyBindingsForAction(const QString &actionName) c
     return QStringList();
 }
 #endif // QT_CONFIG(abstractbutton)
+
+#if QT_CONFIG(pushbutton)
+/*!
+  \class QAccessiblePushButton
+  \brief The QAccessiblePushButton class implements the QAccessibleInterface for push buttons.
+  \internal
+
+  \ingroup accessibility
+*/
+
+/*!
+  Creates a QAccessiblePushButton object for \a w.
+*/
+QAccessiblePushButton::QAccessiblePushButton(QWidget *w)
+: QAccessibleButton(w)
+{
+    Q_ASSERT(pushButton());
+}
+
+/*! Returns the button. */
+QPushButton *QAccessiblePushButton::pushButton() const
+{
+    return qobject_cast<QPushButton*>(object());
+}
+
+/*! \reimp */
+QString QAccessiblePushButton::text(QAccessible::Text t) const
+{
+    QString str;
+    switch (t) {
+    case QAccessible::Accelerator:
+    {
+#if QT_CONFIG(shortcut)
+        if (pushButton()->isDefault())
+            str = QKeySequence(Qt::Key_Enter).toString(QKeySequence::NativeText);
+#endif
+    }
+        break;
+    default:
+        break;
+    }
+    if (str.isEmpty())
+        str = QAccessibleButton::text(t);
+    return str;
+}
+
+QAccessible::State QAccessiblePushButton::state() const
+{
+    QAccessible::State st = QAccessibleButton::state();
+    if (pushButton()->isDefault())
+        st.defaultButton = true;
+#if QT_CONFIG(menu)
+    if (pushButton()->menu())
+        st.hasPopup = true;
+#endif
+
+    return st;
+}
+
+int QAccessiblePushButton::childCount() const
+{
+#if QT_CONFIG(menu)
+    return pushButton()->menu() ? 1 : 0;
+#else
+    return 0;
+#endif
+}
+
+QAccessible::Role QAccessiblePushButton::role() const
+{
+#if QT_CONFIG(menu)
+    if (pushButton()->menu())
+        return QAccessible::ButtonMenu;
+#endif
+
+    return QAccessibleButton::role();
+}
+
+QAccessibleInterface *QAccessiblePushButton::child(int index) const
+{
+#if QT_CONFIG(menu)
+    if (index == 0 && pushButton()->menu())
+    {
+        return QAccessible::queryAccessibleInterface(pushButton()->menu());
+    }
+#else
+    Q_UNUSED(index)
+#endif
+    return nullptr;
+}
+
+void QAccessiblePushButton::doAction(const QString &actionName)
+{
+    if (!widget()->isEnabled())
+        return;
+
+    if (actionName == pressAction() ||
+        actionName == showMenuAction()) {
+#if QT_CONFIG(menu)
+        if (pushButton()->menu())
+            pushButton()->showMenu();
+        else
+#endif
+            button()->animateClick();
+    } else {
+        QAccessibleButton::doAction(actionName);
+    }
+}
+
+#endif // QT_CONFIG(pushbutton)
 
 #if QT_CONFIG(toolbutton)
 /*!

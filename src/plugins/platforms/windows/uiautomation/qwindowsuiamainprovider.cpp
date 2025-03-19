@@ -380,7 +380,7 @@ HRESULT QWindowsUiaMainProvider::GetPatternProvider(PATTERNID idPattern, IUnknow
         break;
     case UIA_ExpandCollapsePatternId:
         // Menu items with submenus.
-        if (accessible->role() == QAccessible::MenuItem
+        if (((accessible->role() == QAccessible::MenuItem) || (accessible->role() == QAccessible::ButtonMenu))
                 && accessible->childCount() > 0
                 && accessible->child(0)->role() == QAccessible::PopupMenu) {
             *pRetVal = new QWindowsUiaExpandCollapseProvider(id());
@@ -430,14 +430,13 @@ HRESULT QWindowsUiaMainProvider::GetPropertyValue(PROPERTYID idProp, VARIANT *pR
     case UIA_FrameworkIdPropertyId:
         setVariantString(QStringLiteral("Qt"), pRetVal);
         break;
-    case UIA_ControlTypePropertyId:
-        if (topLevelWindow) {
+    case UIA_ControlTypePropertyId: {
+        // Control type converted from role.
+        auto controlType = roleToControlTypeId(accessible->role());
+        if (topLevelWindow && controlType == UIA_CustomControlTypeId) {
             // Reports a top-level widget as a window, instead of "custom".
             setVariantI4(UIA_WindowControlTypeId, pRetVal);
         } else {
-            // Control type converted from role.
-            auto controlType = roleToControlTypeId(accessible->role());
-
             // The native OSK should be disbled if the Qt OSK is in use,
             // or if disabled via application attribute.
             static bool imModuleEmpty = qEnvironmentVariableIsEmpty("QT_IM_MODULE");
@@ -451,6 +450,7 @@ HRESULT QWindowsUiaMainProvider::GetPropertyValue(PROPERTYID idProp, VARIANT *pR
             setVariantI4(controlType, pRetVal);
         }
         break;
+    }
     case UIA_HelpTextPropertyId:
         setVariantString(accessible->text(QAccessible::Help), pRetVal);
         break;
